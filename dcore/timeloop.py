@@ -16,29 +16,30 @@ class Timestepper(object):
 
 
     def run(self):
-        t = self.t0
-        dt = self.dt
-        tmax = self.tmax
+        state = self.state
+        t = state.t0
+        dt = state.dt
+        tmax = state.tmax
         
-        self.xn.assign(self.x_init)
+        state.xn.assign(state.x_init)
 
-        xstar_fields = self.xstar.split()
-        xp_fields = self.xp.split()
+        xstar_fields = state.xstar.split()
+        xp_fields = state.xp.split()
 
         while(t<tmax - 0.5*dt):
             t += dt 
-            self.apply_forcing(self.xn,self.xstar)
-            self.xnp1.assign(self.xn)
+            self.apply_forcing(state.xn,state.xstar)
+            state.xnp1.assign(state.xn)
             
-            for(k in range(self.maxk)):
-                self.set_ubar()  #computes self.ubar from self.xn and self.xnp1
+            for(k in range(state.maxk)):
+                self.set_ubar()  #computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
                     advection.apply(xstar_fields[index],xp_fields[index]) #advects a field from xstar and puts result in xp
-                for(i in range(self.maxi)):
-                    self.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
-                    self.apply_forcing(self.xp,self.xrhs)
-                    self.xrhs -= self.xnp1
-                    self.linear_system.solve() # solves linear system and places result in self.dy
-                    self.xnp1 += self.dy
+                for(i in range(state.maxi)):
+                    state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
+                    self.apply_forcing(state.xp,state.xrhs)
+                    state.xrhs -= state.xnp1
+                    self.linear_system.solve() # solves linear system and places result in state.dy
+                    state.xnp1 += state.dy
             
-            self.xn.assign(self.xnp1)
+            state.xn.assign(state.xnp1)
