@@ -1,5 +1,3 @@
-from firedrake import *
-
 class Timestepper(object):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
