@@ -12,7 +12,7 @@ class Forcing(object):
         self.state = state
     
     @abstractmethod
-    def apply(self,scale,):
+    def apply(self, scale, x, x_out):
         """
         Function takes x as input, computes F(x) and returns 
         x_out = x + scale*F(x) 
