@@ -57,7 +57,8 @@ class CompressibleForcing(Forcing):
         a = inner(w,F)*dx
         L = (
             -inner(w,cross(Omega,u0))*dx #Coriolis term
-            )
+            
+        )
 
     def apply(self, scaling, x_in, x_out):
 
@@ -71,3 +72,26 @@ class CompressibleForcing(Forcing):
         x_out.assign(x_in)
         uF += self.uF
         
+def exner(theta,rho,state):
+    """
+    Compute the exner function.
+    """
+    R_d = state.R_d
+    p_0 = state.p_0
+    kappa = state.kappa
+       
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
+
+def exner_rho(theta,rho,state):
+    R_d = state.R_d
+    p_0 = state.p_0
+    kappa = state.kappa
+    
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
+
+def exner_theta(theta,rho,state):
+    R_d = state.R_d
+    p_0 = state.p_0
+    kappa = state.kappa
+       
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
