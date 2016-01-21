@@ -61,9 +61,19 @@ class CompressibleForcing(Forcing):
         L = (
             -inner(w,cross(Omega,u0))*dx #Coriolis term
             -div(theta0*w)*pi*dx #pressure gradient (volume integral)
-            +jump(*pi*dx #pressure gradient (volume integral)
+            +jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
+            +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
         )
 
+        bcs = [DirichletBC(V2, 0.0, "bottom"),
+               DirichletBC(V2, 0.0, "top")]
+        
+        u_forcing_problem = LinearVariationalProblem(
+            a,L,self.uF, bcs=bcs
+        ) 
+
+        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+        
     def apply(self, scaling, x_in, x_out):
 
         self.x0.assign(x_in)
