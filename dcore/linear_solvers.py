@@ -3,6 +3,8 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner
 
+from abc import ABCMeta, abstractmethod
+
 class TimesteppingSolver(object):
     """
     Base class for timestepping linear solvers for dcore.
@@ -12,17 +14,15 @@ class TimesteppingSolver(object):
     :arg x_in: :class:`.Function` object for the input
     :arg x_out: :class:`.Function` object for the output
     """
+    __metaclass__ = ABCMeta
 
     def __init__(self, x_in, x_out):
         self.x_in = x_in #get input vector
         self.x_out = x_out #get output vector
-    
+
+    @abstractmethod
     def solve(self):
-        """
-        Function to execute the solver.
-        """
-        #This is a base class so we just copy x_in to x_out
-        self.x_out.assign(x_in)
+        pass
 
 class CompressibleSolver(TimesteppingSolver):
     """
