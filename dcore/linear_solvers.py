@@ -37,7 +37,7 @@ class CompressibleSolver(TimesteppingSolver):
     :arg x_in: :class:`.Function` object for the input
     :arg x_out: :class:`.Function` object for the output
     :arg state: a :class:`.State` object containing everything else.
-    :arg alpha: off-centring parameter from [0,1] (default value 0.5).
+    :arg alpha: off-centering parameter from [0,1] (default value 0.5).
     """
 
     def __init__(self, x_in, x_out, state, alpha = 0.5):
@@ -127,7 +127,7 @@ class CompressibleSolver(TimesteppingSolver):
                 'pc_fieldsplit_schur_fact_type': 'FULL',
                 'pc_fieldsplit_schur_precondition': 'selfp',
                 'fieldsplit_0_ksp_type': 'preonly',
-            'fieldsplit_0_pc_type': 'bjacobi',
+                'fieldsplit_0_pc_type': 'bjacobi',
                 'fieldsplit_0_sub_pc_type': 'ilu',
                 'fieldsplit_1_ksp_type': 'preonly',
                 'fieldsplit_1_pc_type': 'gamg',
