@@ -45,7 +45,10 @@ class State(object):
         :arg theta_expr: This expression will be interpolated to initial theta.
         """
 
-        raise(NotImplementedError)
+        u_init, rho_init, theta_init = self.x_init.split()
+        u_init.project(u_expr)
+        rho_init.project(rho_expr)
+        theta_init.project(theta_expr)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
