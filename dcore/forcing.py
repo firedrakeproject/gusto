@@ -53,11 +53,15 @@ class CompressibleForcing(Forcing):
         self.uF = Function(V2)
 
         Omega = state.Omega
+
+        n = FacetNormal(state.mesh)
+        pi = exner(theta0, rho0, state)
         
         a = inner(w,F)*dx
         L = (
             -inner(w,cross(Omega,u0))*dx #Coriolis term
-            
+            -div(theta0*w)*pi*dx #pressure gradient (volume integral)
+            +jump(*pi*dx #pressure gradient (volume integral)
         )
 
     def apply(self, scaling, x_in, x_out):
@@ -67,7 +71,7 @@ class CompressibleForcing(Forcing):
         self.u_forcing_solver.solve() #places forcing in self.uF
         self.uF.scale(scaling)
         
-        uF, _, _ = split(x_out)
+        uF, _, _ = x_out.split()
 
         x_out.assign(x_in)
         uF += self.uF
