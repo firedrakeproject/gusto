@@ -62,7 +62,7 @@ class CompressibleSolver(TimesteppingSolver):
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
-        n = FacetNormal(mesh)
+        n = FacetNormal(state.mesh)
 
         #Get background fields
         pibar = exner(self.thetabar, self.rhobar, state)
