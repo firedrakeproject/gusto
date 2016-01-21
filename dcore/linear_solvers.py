@@ -13,11 +13,11 @@ class TimesteppingSolver(object):
     :arg x_out: :class:`.Function` object for the output
     """
 
-    def __init__(x_in, x_out):
+    def __init__(self, x_in, x_out):
         self.x_in = x_in #get input vector
         self.x_out = x_out #get output vector
     
-    def solve():
+    def solve(self):
         """
         Function to execute the solver.
         """
