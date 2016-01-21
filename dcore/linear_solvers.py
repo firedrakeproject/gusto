@@ -41,7 +41,7 @@ class CompressibleSolver(TimesteppingSolver):
     """
 
     def __init__(self, x_in, x_out, state, alpha = 0.5):
-        super(CompressibleSolver, self).__init(x_in, x_out)
+        super(CompressibleSolver, self).__init__(x_in, x_out)
 
         self.state = state
         self.alpha = alpha
