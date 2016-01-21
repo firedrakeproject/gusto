@@ -1,4 +1,4 @@
-From firedrake import split, LinearVariationalProblem, \
+from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, FunctionSpace, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner
@@ -40,7 +40,7 @@ class CompressibleSolver(TimesteppingSolver):
     :arg alpha: off-centring parameter from [0,1] (default value 0.5).
     """
 
-    def __init__(x_in, x_out, state, alpha = 0.5):
+    def __init__(self, x_in, x_out, state, alpha = 0.5):
         super(CompressibleSolver, self).__init(x_in, x_out)
 
         self.state = state
@@ -49,7 +49,31 @@ class CompressibleSolver(TimesteppingSolver):
         #setup the solver
         self._setup_solver()
 
-    def _setup_solver:
+   def _exner(self,theta,rho):
+       """
+       Compute the exner function.
+       """
+       R_d = self.state.R_d
+       p_0 = self.state.p_0
+       kappa = self.state.kappa
+       
+       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
+
+   def _exner_rho(self,theta,rho):
+       R_d = self.state.R_d
+       p_0 = self.state.p_0
+       kappa = self.state.kappa
+       
+       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
+
+   def _exner_theta(self,theta,rho):
+       R_d = self.state.R_d
+       p_0 = self.state.p_0
+       kappa = self.state.kappa
+       
+       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
+   
+    def _setup_solver(self):
         state = self.state #just cutting down line length a bit
         beta = state.dt*self.alpha
         
@@ -62,6 +86,11 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = TrialFunctions(M)
 
         n = FacetNormal(mesh)
+
+        #Get background fields
+        pibar = self._exner(self.thetabar, self.rhobar)
+        pibar_rho = self._exner_rho(self.thetabar, self.rhobar)
+        pibar_theta = self._exner_theta(self.thetabar, self.rhobar)
         
         #Analytical elimination of theta
         theta = -u[2]*state.thetabar*beta + theta_in
@@ -126,7 +155,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta_solver = LinearVariationalSolver(theta_problem)
 
         
-    def solve():
+    def solve(self):
         """
         Apply the solver with rhs self.x_in and result self.x_out.
         """
