@@ -70,7 +70,7 @@ class CompressibleSolver(TimesteppingSolver):
             (inner(w , u) - beta*div(theta*w)*pibar)*dx
             + beta*jump(theta*w,n)*avg(pibar)*dS_v
             - beta*div(thetabar*w)*(pibar_theta*theta + pibar_rho*rho)*dx
-            + beta*jump(thetabar*w,n)*avg(pibar_theta*theta + pibar_rho*rho)*dS
+            + beta*jump(thetabar*w,n)*avg(pibar_theta*theta + pibar_rho*rho)*dS_v
             - inner(w, u_in)*dx
             + (phi*rho - beta*inner(grad(phi) , u)*rhobar)*dx
             + jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)
