@@ -5,13 +5,14 @@ class Timestepper(object):
     
     :arg state: a :class:`.State` object
     :arg advection_list a list of tuples (scheme, i), where i is an :class:`.AdvectionScheme` object, and i is the index indicating which component of the mixed function space to advect.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
     """
 
-    def __init__(self, state, advection_list):
+    def __init__(self, state, advection_list, linear_solver):
     
         self.state = state
         self.advection_list = advection_list
-
+        self.linear_solver = linear_solver
 
     def run(self, t, dt, tmax):
         state = self.state
