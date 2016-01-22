@@ -50,6 +50,19 @@ class State(object):
         rho_init.project(rho_expr)
         theta_init.project(theta_expr)
 
+    def set_reference_profiles_from_expressions(rho_expr, theta_expr):
+        """
+        Initialise reference profiles from expressions.
+        :arg rho_expr: This expression will be interpolated to rhoref.
+        :arg theta_expr: This expression will be interpolated to thetaref.
+        """
+
+        self.rhoref = Function(self.V3)
+        self.thetaref = Function(self.Vt)
+
+        self.rho.project(rho_expr)
+        self.theta.project(theta_expr)        
+
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
         Build:
