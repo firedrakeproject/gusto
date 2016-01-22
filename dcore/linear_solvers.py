@@ -3,6 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner
 
+from forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 class TimesteppingSolver(object):
@@ -48,30 +49,6 @@ class CompressibleSolver(TimesteppingSolver):
         
         #setup the solver
         self._setup_solver()
-
-   def _exner(self,theta,rho):
-       """
-       Compute the exner function.
-       """
-       R_d = self.state.R_d
-       p_0 = self.state.p_0
-       kappa = self.state.kappa
-       
-       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
-
-   def _exner_rho(self,theta,rho):
-       R_d = self.state.R_d
-       p_0 = self.state.p_0
-       kappa = self.state.kappa
-       
-       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
-
-   def _exner_theta(self,theta,rho):
-       R_d = self.state.R_d
-       p_0 = self.state.p_0
-       kappa = self.state.kappa
-       
-       return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
    
     def _setup_solver(self):
         state = self.state #just cutting down line length a bit
@@ -85,12 +62,12 @@ class CompressibleSolver(TimesteppingSolver):
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
-        n = FacetNormal(mesh)
+        n = FacetNormal(state.mesh)
 
         #Get background fields
-        pibar = self._exner(self.thetabar, self.rhobar)
-        pibar_rho = self._exner_rho(self.thetabar, self.rhobar)
-        pibar_theta = self._exner_theta(self.thetabar, self.rhobar)
+        pibar = exner(self.thetabar, self.rhobar, state)
+        pibar_rho = exner_rho(self.thetabar, self.rhobar, state)
+        pibar_theta = exner_theta(self.thetabar, self.rhobar, state)
         
         #Analytical elimination of theta
         theta = -u[2]*state.thetabar*beta + theta_in
@@ -99,7 +76,8 @@ class CompressibleSolver(TimesteppingSolver):
             (inner(w , u) - beta*div(theta*w)*pibar)*dx
             + beta*jump(theta*w,n)*avg(pibar)*dS_v
             - beta*div(thetabar*w)*(pibar_theta*theta + pibar_rho*rho)*dx
-            + beta*jump(thetabar*w,n)*avg(pibar_theta*theta + pibar_rho*rho)*dS_v
+            + beta*jump(thetabar*w,n)*avg(
+                pibar_theta*theta + pibar_rho*rho)*dS_v
             - inner(w, u_in)*dx
             + (phi*rho - beta*inner(grad(phi) , u)*rhobar)*dx
             + jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)

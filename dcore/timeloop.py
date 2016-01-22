@@ -6,13 +6,15 @@ class Timestepper(object):
     :arg state: a :class:`.State` object
     :arg advection_list a list of tuples (scheme, i), where i is an :class:`.AdvectionScheme` object, and i is the index indicating which component of the mixed function space to advect.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_list, linear_solver):
+    def __init__(self, state, advection_list, linear_solver, forcing):
     
         self.state = state
         self.advection_list = advection_list
         self.linear_solver = linear_solver
+        self.forcing = forcing
 
     def run(self, t, dt, tmax):
         state = self.state
@@ -24,7 +26,7 @@ class Timestepper(object):
 
         while(t<tmax - 0.5*dt):
             t += dt 
-            self.apply_forcing((1-state.alpha)*dt, state.xn, state.xstar)
+            self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
             
             for(k in range(state.maxk)):
@@ -33,7 +35,7 @@ class Timestepper(object):
                     advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
                 for(i in range(state.maxi)):
                     state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
-                    self.apply_forcing(state.alpha*dt, state.xp, state.xrhs)
+                    self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
                     self.linear_system.solve() # solves linear system and places result in state.dy
                     state.xnp1 += state.dy

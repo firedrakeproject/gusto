@@ -18,7 +18,7 @@ class State(object):
     :arg g: the acceleration due to gravity
     """
 
-    def __init__(mesh, vertical_degree = 1, horizontal_degree = 1,
+    def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
                  family = "RT",
                  dt = 1.0,
                  g = 9.81):
@@ -37,7 +37,7 @@ class State(object):
         #Allocate state
         self._allocate_state()
 
-    def initialise_state_from_expressions(u_expr, rho_expr, theta_expr):
+    def initialise_state_from_expressions(self, u_expr, rho_expr, theta_expr):
         """
         Initialise state variables from expressions.
         :arg u_expr: This expression will be projected to initial u.
@@ -49,6 +49,19 @@ class State(object):
         u_init.project(u_expr)
         rho_init.project(rho_expr)
         theta_init.project(theta_expr)
+
+    def set_reference_profiles_from_expressions(self, rho_expr, theta_expr):
+        """
+        Initialise reference profiles from expressions.
+        :arg rho_expr: This expression will be interpolated to rhoref.
+        :arg theta_expr: This expression will be interpolated to thetaref.
+        """
+
+        self.rhoref = Function(self.V3)
+        self.thetaref = Function(self.Vt)
+
+        self.rho.project(rho_expr)
+        self.theta.project(theta_expr)        
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
