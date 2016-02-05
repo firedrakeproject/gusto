@@ -20,7 +20,7 @@ class Advection(object):
         :arg x: :class:`.Function` object, the input Function.
         :arg x_out: :class:`.Function` object, the output Function.
         """
-        pass
+        pass    
 
 class NoAdvection(Advection):
     """
@@ -30,6 +30,21 @@ class NoAdvection(Advection):
     def __init__(self, state):
         self.state = state
 
+        #create a ubar field even though we don't use it.
+        self.ubar = Function(state.V1)
+
     def apply(self, x_in, x_out):
 
         x_out.assign(x_in)
+
+class LinearAdvection(Advection):
+    """
+    An advection scheme that uses the linearised background state 
+    in evaluation of the advection term.
+    """
+
+    def __init__(self, state, vertical_only = False):
+        self.state = state
+        self.ubar = Function(state.V1)
+
+

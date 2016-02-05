@@ -16,6 +16,17 @@ class Timestepper(object):
         self.linear_solver = linear_solver
         self.forcing = forcing
 
+    def _set_ubar(self):
+        """
+        Update ubar in the advection methods.
+        """
+        
+        un, _, _ = state.xn.split()
+        unp1, _, _ = state.xnp1.split()
+
+        for advection, index in self.advection_list:
+            advection.ubar.assign(un + state.alpha*unp1)
+
     def run(self, t, dt, tmax):
         state = self.state
         
@@ -30,7 +41,7 @@ class Timestepper(object):
             state.xnp1.assign(state.xn)
             
             for(k in range(state.maxk)):
-                self.set_ubar()  #computes state.ubar from state.xn and state.xnp1
+                self._set_ubar()  #computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
                     advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
                 for(i in range(state.maxi)):
