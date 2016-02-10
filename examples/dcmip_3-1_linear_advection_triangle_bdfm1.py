@@ -33,10 +33,16 @@ z_top = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers = nlayers, layer_height = z_top/nlayers,
                     extrusion_type="radial")
 
+# Space for initialising velocity
+W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+#Make a vertical direction for the linearised advection
+k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
+
 state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "BDFM",
               dt = 1.0,
-              g = g)
+              g = g, k=k)
 
 #interpolate initial conditions
 # Initial/current conditions
@@ -44,9 +50,6 @@ u0, theta0, rho0 = Function(state.V2), Function(state.Vt), Function(state.V3)
 
 # Helper string processing
 string_expander = {'lat': "asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))", 'lon': "atan2(x[1], x[0])", 'r': "sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])", 'z': "(sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a)"}
-
-# Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 
 # Set up ICs
 zonal_expr = "u_0*cos(%(lat)s)*(%(r)s/a)"
@@ -104,8 +107,17 @@ rho0.assign(rho_b)
 state.initialise(u0, rho0, theta0)
 state.set_reference_profiles(rho_b, theta_b)
 
+#Set up advection schemes
+advection_list = []
+velocity_advection = NoAdvection(state)
+advection_list.append((velocity_advection, 0))
+rho_advection = LinearAdvection_V3(state, rho_b)
+advection_list.append((rho_advection, 1))
+theta_advection = LinearAdvection_Vt(state, k, theta_b)
+advection_list.append((theta_advection, 2))
+
 #build time stepper
-stepper = Timestepper(state, advection_list)
+stepper = Timestepper(state, advection_list, linear_solver, forcing)
 
 stepper.run(t = 0, dt = 1.25, T = 3600.0)
 

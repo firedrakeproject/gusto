@@ -24,7 +24,7 @@ class State(object):
     def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
                  family = "RT",
                  dt = 1.0,
-                 g = 9.81):
+                 g = 9.81, k = None):
         
         #The mesh
         self.mesh = mesh
@@ -32,6 +32,8 @@ class State(object):
         #parameters
         self.dt = dt
         self.g = g
+        if(k != None):
+            self.k = k
         
         #Build the spaces
         self._build_spaces(mesh, vertical_degree,

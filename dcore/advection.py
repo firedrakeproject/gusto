@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod
+from firedrake import Function, TestFunction, TrialFunction, \
+    LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
+    dx, dot, grad, jump, avg, dS_v, dS_h
 
 class Advection(object):
     """
@@ -31,7 +34,7 @@ class NoAdvection(Advection):
         self.state = state
 
         #create a ubar field even though we don't use it.
-        self.ubar = Function(state.V1)
+        self.ubar = Function(state.V2)
 
     def apply(self, x_in, x_out):
 
@@ -50,16 +53,16 @@ class LinearAdvection_Vt(Advection):
 
     def __init__(self, state, V, qbar, options = None):
         self.state = state
-        self.ubar = Function(state.V1)
+        self.ubar = Function(state.V2)
 
         p = TestFunction(state.Vt)
         q = TrialFunction(state.Vt)
         
-        dq = Function(Vt)
+        dq = Function(state.Vt)
 
         a = p*q*dx
         k = state.k #Upward pointing unit vector
-        L = -p*dot(ubar,k)*dot(k,grad(qbar))*dx
+        L = -p*dot(self.ubar,k)*dot(k,grad(qbar))*dx
 
         aProblem = LinearVariationalProblem(a,L,dq)
         if options == None:
@@ -87,19 +90,20 @@ class LinearAdvection_V3(Advection):
     :arg options: a PETSc options dictionary
     """
 
-    def __init__(self, state, V, qbar, options = None):
+    def __init__(self, state, qbar, options = None):
         self.state = state
-        self.ubar = Function(state.V1)
+        self.ubar = Function(state.V2)
 
-        p = TestFunction(state.Vt)
-        q = TrialFunction(state.Vt)
+        p = TestFunction(state.V3)
+        q = TrialFunction(state.V3)
         
-        dq = Function(Vt)
+        dq = Function(state.V3)
 
-        n = FacetNormals(state.mesh)
+        n = FacetNormal(state.mesh)
         
         a = p*q*dx
-        L = dot(grad(p), ubar)*q*dx - jump(ubar*p, n)*avg(q)*(dS_v + dS_h)
+        L = (dot(grad(p), self.ubar)*q*dx
+             - jump(self.ubar*p, n)*avg(q)*(dS_v + dS_h))
 
         aProblem = LinearVariationalProblem(a,L,dq)
         if options == None:
