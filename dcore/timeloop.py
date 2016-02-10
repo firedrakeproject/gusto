@@ -20,14 +20,15 @@ class Timestepper(object):
         """
         Update ubar in the advection methods.
         """
-        
+
+        state = self.state
         un, _, _ = state.xn.split()
         unp1, _, _ = state.xnp1.split()
 
         for advection, index in self.advection_list:
             advection.ubar.assign(un + state.alpha*unp1)
 
-    def run(self, t, dt, tmax):
+    def run(self, t, tmax):
         state = self.state
         
         state.xn.assign(state.x_init)
@@ -35,6 +36,7 @@ class Timestepper(object):
         xstar_fields = state.xstar.split()
         xp_fields = state.xp.split()
 
+        dt = state.dt
         while(t<tmax - 0.5*dt):
             t += dt 
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)

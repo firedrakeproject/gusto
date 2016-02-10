@@ -35,18 +35,29 @@ mesh = ExtrudedMesh(m, layers = nlayers, layer_height = z_top/nlayers,
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
+W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 #Make a vertical direction for the linearised advection
 k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
 
+traditional_approx = True
+if traditional_approx:
+    f = Function(W_CG1)
+    f.interpolate(Expression("7.292e-5*x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])"))
+    Omega = f*k
+else:
+    Omega = Constant((0.0, 0.0, 7.292e-5))
+
 state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "BDFM",
               dt = 1.0,
+              alpha = 0.5,
               g = g,
               cp = c_p,
               R_d = R_d,
               p_0 = p_0,
-              k=k)
+              k=k,
+              Omega=Omega)
 
 #interpolate initial conditions
 # Initial/current conditions
@@ -123,8 +134,12 @@ advection_list.append((theta_advection, 2))
 #Set up linear solver
 linear_solver = CompressibleSolver(state, alpha = 0.5)
 
-#build time stepper
-stepper = Timestepper(state, advection_list, linear_solver, forcing)
+#Set up forcing
+compressible_forcing = CompressibleForcing(state)
 
-stepper.run(t = 0, dt = dt, T = 3600.0)
+#build time stepper
+stepper = Timestepper(state, advection_list, linear_solver,
+                      compressible_forcing)
+
+stepper.run(t = 0, tmax = 3600.0)
 

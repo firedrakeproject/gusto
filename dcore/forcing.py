@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod
+from firedrake import Function, split, TrialFunction, TestFunction, \
+    FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, \
+    DirichletBC, LinearVariationalProblem, LinearVariationalSolver
 
 class Forcing(object):
     """
@@ -80,7 +83,7 @@ class CompressibleForcing(Forcing):
         self.x0.assign(x_in)
 
         self.u_forcing_solver.solve() #places forcing in self.uF
-        self.uF.scale(scaling)
+        self.uF *= scaling
         
         uF, _, _ = x_out.split()
 

@@ -1,5 +1,6 @@
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
-    FunctionSpace, MixedFunctionSpace, interval, triangle, Function
+    FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
+    Expression
 
 class State(object):
     """
@@ -17,25 +18,29 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg dt: the timestep
     :arg g: the acceleration due to gravity
     """
 
     def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
                  family = "RT",
                  dt = 1.0,
+                 alpha = 0.5,
+                 maxk = 4,
                  g = 9.81,
                  cp = 1004.5,
                  R_d = 287,
                  p_0 = 1000.0 * 100.0,
                  kappa = 2.0/7.0, 
-                 k = None):
+                 k = None,
+                 Omega = None):
         
         #The mesh
         self.mesh = mesh
 
         #parameters
         self.dt = dt
+        self.maxk = maxk
+        self.alpha = alpha
         self.g = g
         self.cp = cp
         self.R_d = R_d
@@ -43,10 +48,19 @@ class State(object):
         self.kappa = kappa
         if(k != None):
             self.k = k
+        if(Omega !=None):
+            self.Omega = Omega
         
         #Build the spaces
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)
+
+        #build the geopotential
+        V = FunctionSpace(mesh, "CG", 1)
+        self.Phi = Function(V).interpolate(Expression("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)",
+                                                      "x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)",
+                                                      "x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+        self.Phi *= g
         
         #Allocate state
         self._allocate_state()
@@ -88,10 +102,8 @@ class State(object):
 
         #horizontal base spaces
         cell = mesh._base_mesh.ufl_cell()
-        print cell, cell.cellname()
         if(cell.cellname() == 'triangle'):
             cell = triangle
-        print cell, type(cell)
         S1 = FiniteElement(family, cell, 2)
         S2 = FiniteElement("DG", cell, 1)
 
