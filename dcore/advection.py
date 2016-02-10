@@ -4,7 +4,7 @@ class Advection(object):
     """
     Base class for advection schemes for dcore.
 
-    :arg state: x :class:`.State` object.
+    :arg state: :class:`.State` object.
     """
     __metaclass__ = ABCMeta
 
@@ -37,14 +37,80 @@ class NoAdvection(Advection):
 
         x_out.assign(x_in)
 
-class LinearAdvection(Advection):
+class LinearAdvection_Vt(Advection):
     """
     An advection scheme that uses the linearised background state 
-    in evaluation of the advection term.
+    in evaluation of the advection term for the Vt temperature space.
+
+    :arg state: :class:`.State` object.
+    :arg qbar: :class:`.Function` object. The reference function that we 
+    are linearising around.
+    :arg options: a PETSc options dictionary
     """
 
-    def __init__(self, state, vertical_only = False):
+    def __init__(self, state, V, qbar, options = None):
         self.state = state
         self.ubar = Function(state.V1)
 
+        p = TestFunction(state.Vt)
+        q = TrialFunction(state.Vt)
+        
+        dq = Function(Vt)
 
+        a = p*q*dx
+        k = state.k #Upward pointing unit vector
+        L = -p*dot(ubar,k)*dot(k,grad(qbar))*dx
+
+        aProblem = LinearVariationalProblem(a,L,dq)
+        if options == None:
+            options = {'ksp_type':'cg',
+                       'pc_type':'bjacobi',
+                       'sub_pc_type':'ilu'}
+            
+        self.solver = LinearVariationalSolver(aProblem,
+                                              solver_parameters = options)
+
+    def apply(self, x_in, x_out):
+        dt = self.state.dt
+        self.solver.solve()
+        x_out.assign(x_in + dt*dq)
+
+
+class LinearAdvection_V3(Advection):
+    """
+    An advection scheme that uses the linearised background state 
+    in evaluation of the advection term for the V3 DG space.
+
+    :arg state: :class:`.State` object.
+    :arg qbar: :class:`.Function` object. The reference function that we 
+    are linearising around.
+    :arg options: a PETSc options dictionary
+    """
+
+    def __init__(self, state, V, qbar, options = None):
+        self.state = state
+        self.ubar = Function(state.V1)
+
+        p = TestFunction(state.Vt)
+        q = TrialFunction(state.Vt)
+        
+        dq = Function(Vt)
+
+        n = FacetNormals(state.mesh)
+        
+        a = p*q*dx
+        L = dot(grad(p), ubar)*q*dx - jump(ubar*p, n)*avg(q)*(dS_v + dS_h)
+
+        aProblem = LinearVariationalProblem(a,L,dq)
+        if options == None:
+            options = {'ksp_type':'cg',
+                       'pc_type':'bjacobi',
+                       'sub_pc_type':'ilu'}
+            
+        self.solver = LinearVariationalSolver(aProblem,
+                                              solver_parameters = options)
+
+    def apply(self, x_in, x_out):
+        dt = self.state.dt
+        self.solver.solve()
+        x_out.assign(x_in + dt*dq)
