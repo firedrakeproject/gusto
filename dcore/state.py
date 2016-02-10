@@ -1,3 +1,6 @@
+from firedrake import FiniteElement, TensorProductElement, HDiv, \
+    FunctionSpace, MixedFunctionSpace, interval, triangle, Function
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
@@ -72,19 +75,38 @@ class State(object):
         mixed function space self.W = (V2,V3,Vt)
         """
 
-        #build spaces V2, V3, Vt
-        raise(NotImplementedError)
+        #horizontal base spaces
+        cell = mesh._base_mesh.ufl_cell()
+        print cell, cell.cellname()
+        if(cell.cellname() == 'triangle'):
+            cell = triangle
+        print cell, type(cell)
+        S1 = FiniteElement(family, cell, 2)
+        S2 = FiniteElement("DG", cell, 1)
 
-        self.V2 = V2
-        self.V3 = V3
-        self.Vt = Vt
-        self.W = MixedFunctionSpace((V2, V3, Vt))
+        #vertical base spaces
+        T0 = FiniteElement("CG", interval, vertical_degree)
+        T1 = FiniteElement("DG", interval, vertical_degree-1)
+
+        #build spaces V2, V3, Vt
+        V2h_elt = HDiv(TensorProductElement(S1, T1))
+        V2t_elt = TensorProductElement(S2, T0)
+        V3_elt = TensorProductElement(S2, T1)
+        V2v_elt = HDiv(V2t_elt)
+        V2_elt = V2h_elt + V2v_elt
+
+        self.Vt = FunctionSpace(mesh, V2t_elt)
+        self.V2 = FunctionSpace(mesh, V2_elt)
+        self.V3 = FunctionSpace(mesh, V3_elt)
+
+        self.W = MixedFunctionSpace((self.V2, self.V3, self.Vt))
 
     def _allocate_state(self):
         """
         Construct Functions to store the state variables.
         """
 
+        W = self.W
         self.xn = Function(W)
         self.x_init = Function(W)
         self.xstar = Function(W)
