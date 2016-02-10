@@ -53,6 +53,7 @@ class CompressibleSolver(TimesteppingSolver):
     def _setup_solver(self):
         state = self.state #just cutting down line length a bit
         beta = state.dt*self.alpha
+        cp = state.cp
         
         #Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(self.x_in)
@@ -73,10 +74,10 @@ class CompressibleSolver(TimesteppingSolver):
         theta = -u[2]*state.thetabar*beta + theta_in
 
         eqn = (
-            (inner(w , u) - beta*div(theta*w)*pibar)*dx
-            + beta*jump(theta*w,n)*avg(pibar)*dS_v
-            - beta*div(thetabar*w)*(pibar_theta*theta + pibar_rho*rho)*dx
-            + beta*jump(thetabar*w,n)*avg(
+            (inner(w , u) - beta*cp*div(theta*w)*pibar)*dx
+            + beta*cp*jump(theta*w,n)*avg(pibar)*dS_v
+            - beta*cp*div(thetabar*w)*(pibar_theta*theta + pibar_rho*rho)*dx
+            + beta*cp*jump(thetabar*w,n)*avg(
                 pibar_theta*theta + pibar_rho*rho)*dS_v
             - inner(w, u_in)*dx
             + (phi*rho - beta*inner(grad(phi) , u)*rhobar)*dx
