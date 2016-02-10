@@ -25,7 +25,7 @@ deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
 u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
 
-m = IcosahedralSphereMesh(radius = a_ref,
+m = IcosahedralSphereMesh(radius = a,
                           refinement_level = refinements)
 
 #build volume mesh
@@ -102,7 +102,7 @@ theta0.assign(theta_b + theta_prime)
 rho0.assign(rho_b)
 
 state.initialise(u0, rho0, theta0)
-set_reference_profiles(self, rho_b, theta_b)
+state.set_reference_profiles(rho_b, theta_b)
 
 #build time stepper
 stepper = Timestepper(state, advection_list)

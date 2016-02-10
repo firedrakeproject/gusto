@@ -53,7 +53,7 @@ class State(object):
         rho_init.project(rho0)
         theta_init.project(theta0)
 
-    def set_reference_profiles_from_expressions(self, rho_ref, theta_ref):
+    def set_reference_profiles(self, rho_ref, theta_ref):
         """
         Initialise reference profiles
         :arg rho_ref: :class:`.Function` object, initial rho
