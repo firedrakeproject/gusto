@@ -62,9 +62,7 @@ class State(object):
 
         #build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
-        self.Phi = Function(V).interpolate(Expression("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)",
-                                                      "x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)",
-                                                      "x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
         self.Phi *= g
         
         #Allocate state

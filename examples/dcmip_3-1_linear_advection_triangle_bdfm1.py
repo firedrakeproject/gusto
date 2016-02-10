@@ -40,13 +40,7 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 #Make a vertical direction for the linearised advection
 k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
 
-traditional_approx = True
-if traditional_approx:
-    f = Function(W_CG1)
-    f.interpolate(Expression("7.292e-5*x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])"))
-    Omega = f*k
-else:
-    Omega = Constant((0.0, 0.0, 7.292e-5))
+Omega = Function(W_VectorCG1).assign(0.0)
 
 state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "BDFM",
@@ -57,7 +51,8 @@ state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               R_d = R_d,
               p_0 = p_0,
               k=k,
-              Omega=Omega)
+              Omega=Omega,
+              Verbose=True)
 
 #interpolate initial conditions
 # Initial/current conditions

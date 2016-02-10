@@ -39,7 +39,7 @@ class Timestepper(object):
         dt = state.dt
         while(t<tmax - 0.5*dt):
             if(state.Verbose):
-                print t, dt
+                print "STEP", t, dt
             
             t += dt
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
