@@ -40,11 +40,11 @@ class Timestepper(object):
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
             
-            for(k in range(state.maxk)):
+            for k in range(state.maxk):
                 self._set_ubar()  #computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
                     advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
-                for(i in range(state.maxi)):
+                for i in range(state.maxi):
                     state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
                     self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
