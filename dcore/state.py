@@ -40,31 +40,31 @@ class State(object):
         #Allocate state
         self._allocate_state()
 
-    def initialise_state_from_expressions(self, u_expr, rho_expr, theta_expr):
+    def initialise(self, u0, rho0, theta0):
         """
         Initialise state variables from expressions.
-        :arg u_expr: This expression will be projected to initial u.
-        :arg rho_expr: This expression will be interpolated to initial rho.
-        :arg theta_expr: This expression will be interpolated to initial theta.
+        :arg u0: :class:`.Function` object, initial u
+        :arg rho0: :class:`.Function` object, initial rho
+        :arg theta0: :class:`.Function` object, initial theta
         """
 
         u_init, rho_init, theta_init = self.x_init.split()
-        u_init.project(u_expr)
-        rho_init.project(rho_expr)
-        theta_init.project(theta_expr)
+        u_init.project(u0)
+        rho_init.project(rho0)
+        theta_init.project(theta0)
 
-    def set_reference_profiles_from_expressions(self, rho_expr, theta_expr):
+    def set_reference_profiles_from_expressions(self, rho_ref, theta_ref):
         """
-        Initialise reference profiles from expressions.
-        :arg rho_expr: This expression will be interpolated to rhoref.
-        :arg theta_expr: This expression will be interpolated to thetaref.
+        Initialise reference profiles
+        :arg rho_ref: :class:`.Function` object, initial rho
+        :arg theta_ref: :class:`.Function` object, initial theta
         """
 
-        self.rhoref = Function(self.V3)
-        self.thetaref = Function(self.Vt)
+        self.rho_b = Function(self.V3)
+        self.theta_b = Function(self.Vt)
 
-        self.rho.project(rho_expr)
-        self.theta.project(theta_expr)        
+        self.rho_b.project(rho_ref)
+        self.theta_b.project(theta_ref)        
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
