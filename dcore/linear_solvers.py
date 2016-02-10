@@ -70,8 +70,9 @@ class CompressibleSolver(TimesteppingSolver):
         pibar_rho = exner_rho(self.thetabar, self.rhobar, state)
         pibar_theta = exner_theta(self.thetabar, self.rhobar, state)
         
-        #Analytical elimination of theta
-        theta = -u[2]*state.thetabar*beta + theta_in
+        #Analytical (approximate) elimination of theta
+        k = state.k #Upward pointing unit vector
+        theta = -dot(k,u)*dot(k,grad(state.thetabar))*beta + theta_in
 
         eqn = (
             (inner(w , u) - beta*cp*div(theta*w)*pibar)*dx
@@ -127,7 +128,8 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(state.Vt)
         
-        theta_eqn = gamma*(theta -u[2]*state.thetabar*beta + theta_in)*dx
+        theta_eqn = gamma*(theta -dot(k,u)*dot(k,grad(state.thetabar))*beta +\
+                           theta_in)*dx
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
                                                  self.theta)
