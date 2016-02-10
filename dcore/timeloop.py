@@ -38,7 +38,10 @@ class Timestepper(object):
 
         dt = state.dt
         while(t<tmax - 0.5*dt):
-            t += dt 
+            if(state.Verbose):
+                print t, dt
+            
+            t += dt
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
             
@@ -50,7 +53,7 @@ class Timestepper(object):
                     state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
                     self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
-                    self.linear_system.solve() # solves linear system and places result in state.dy
+                    self.linear_solver.solve() # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
             
             state.xn.assign(state.xnp1)

@@ -25,14 +25,16 @@ class State(object):
                  family = "RT",
                  dt = 1.0,
                  alpha = 0.5,
-                 maxk = 4,
+                 maxk = 2,
+                 maxi = 2,
                  g = 9.81,
                  cp = 1004.5,
                  R_d = 287,
                  p_0 = 1000.0 * 100.0,
                  kappa = 2.0/7.0, 
                  k = None,
-                 Omega = None):
+                 Omega = None,
+                 Verbose = False):
         
         #The mesh
         self.mesh = mesh
@@ -40,6 +42,7 @@ class State(object):
         #parameters
         self.dt = dt
         self.maxk = maxk
+        self.maxi = maxi
         self.alpha = alpha
         self.g = g
         self.cp = cp
@@ -50,7 +53,9 @@ class State(object):
             self.k = k
         if(Omega !=None):
             self.Omega = Omega
-        
+
+        self.Verbose = Verbose
+            
         #Build the spaces
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)

@@ -58,13 +58,13 @@ class LinearAdvection_Vt(Advection):
         p = TestFunction(state.Vt)
         q = TrialFunction(state.Vt)
         
-        dq = Function(state.Vt)
+        self.dq = Function(state.Vt)
 
         a = p*q*dx
         k = state.k #Upward pointing unit vector
         L = -p*dot(self.ubar,k)*dot(k,grad(qbar))*dx
 
-        aProblem = LinearVariationalProblem(a,L,dq)
+        aProblem = LinearVariationalProblem(a,L,self.dq)
         if options == None:
             options = {'ksp_type':'cg',
                        'pc_type':'bjacobi',
@@ -76,7 +76,7 @@ class LinearAdvection_Vt(Advection):
     def apply(self, x_in, x_out):
         dt = self.state.dt
         self.solver.solve()
-        x_out.assign(x_in + dt*dq)
+        x_out.assign(x_in + dt*self.dq)
 
 
 class LinearAdvection_V3(Advection):
@@ -96,16 +96,16 @@ class LinearAdvection_V3(Advection):
 
         p = TestFunction(state.V3)
         q = TrialFunction(state.V3)
-        
-        dq = Function(state.V3)
+
+        self.dq = Function(state.V3)
 
         n = FacetNormal(state.mesh)
         
         a = p*q*dx
-        L = (dot(grad(p), self.ubar)*q*dx\
-             - jump(self.ubar*p, n)*avg(q)*(dS_v + dS_h))
+        L = (dot(grad(p), self.ubar)*qbar*dx
+             - jump(self.ubar*p, n)*avg(qbar)*(dS_v + dS_h))
 
-        aProblem = LinearVariationalProblem(a,L,dq)
+        aProblem = LinearVariationalProblem(a,L,self.dq)
         if options == None:
             options = {'ksp_type':'cg',
                        'pc_type':'bjacobi',
@@ -117,4 +117,4 @@ class LinearAdvection_V3(Advection):
     def apply(self, x_in, x_out):
         dt = self.state.dt
         self.solver.solve()
-        x_out.assign(x_in + dt*dq)
+        x_out.assign(x_in + dt*self.dq)
