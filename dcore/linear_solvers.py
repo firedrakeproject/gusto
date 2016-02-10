@@ -1,7 +1,8 @@
 from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, FunctionSpace, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
-    div, dx, jump, avg, dS_v, dS_h, inner
+    div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
+    Function
 
 from forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -17,10 +18,6 @@ class TimesteppingSolver(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, x_in, x_out):
-        self.x_in = x_in #get input vector
-        self.x_out = x_out #get output vector
-
     @abstractmethod
     def solve(self):
         pass
@@ -35,18 +32,37 @@ class CompressibleSolver(TimesteppingSolver):
     (2) Solve resulting system for (u,rho) using a Schur preconditioner
     (3) Reconstruct theta
 
-    :arg x_in: :class:`.Function` object for the input
-    :arg x_out: :class:`.Function` object for the output
     :arg state: a :class:`.State` object containing everything else.
     :arg alpha: off-centering parameter from [0,1] (default value 0.5).
     """
 
-    def __init__(self, x_in, x_out, state, alpha = 0.5):
-        super(CompressibleSolver, self).__init__(x_in, x_out)
+    def __init__(self, state, alpha = 0.5, params = None):
 
         self.state = state
         self.alpha = alpha
-        
+
+        if(params == None):
+            self.params={'pc_type': 'fieldsplit',
+                    'pc_fieldsplit_type': 'schur',
+                    'ksp_type': 'gmres',
+                    'ksp_max_it': 100,
+                    'ksp_gmres_restart': 50,
+                    'pc_fieldsplit_schur_fact_type': 'FULL',
+                    'pc_fieldsplit_schur_precondition': 'selfp',
+                    'fieldsplit_0_ksp_type': 'preonly',
+                    'fieldsplit_0_pc_type': 'bjacobi',
+                'fieldsplit_0_sub_pc_type': 'ilu',
+                    'fieldsplit_1_ksp_type': 'preonly',
+                    'fieldsplit_1_pc_type': 'gamg',
+                    'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                    'fieldsplit_1_mg_levels_ksp_max_it': 1,
+                    'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                    'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        else:
+            self.params = params
+            
         #setup the solver
         self._setup_solver()
    
@@ -56,23 +72,25 @@ class CompressibleSolver(TimesteppingSolver):
         cp = state.cp
         
         #Split up the rhs vector (symbolically)
-        u_in, rho_in, theta_in = split(self.x_in)
+        u_in, rho_in, theta_in = split(state.xrhs)
         
         #Build the reduced function space for u,theta
-        M = FunctionSpace((state.V2, state.V3))
+        M = MixedFunctionSpace((state.V2, state.V3))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
         n = FacetNormal(state.mesh)
 
         #Get background fields
-        pibar = exner(self.thetabar, self.rhobar, state)
-        pibar_rho = exner_rho(self.thetabar, self.rhobar, state)
-        pibar_theta = exner_theta(self.thetabar, self.rhobar, state)
+        thetabar = state.thetabar
+        rhobar = state.rhobar
+        pibar = exner(thetabar, rhobar, state)
+        pibar_rho = exner_rho(thetabar, rhobar, state)
+        pibar_theta = exner_theta(thetabar, rhobar, state)
         
         #Analytical (approximate) elimination of theta
         k = state.k #Upward pointing unit vector
-        theta = -dot(k,u)*dot(k,grad(state.thetabar))*beta + theta_in
+        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
         eqn = (
             (inner(w , u) - beta*cp*div(theta*w)*pibar)*dx
@@ -82,7 +100,7 @@ class CompressibleSolver(TimesteppingSolver):
                 pibar_theta*theta + pibar_rho*rho)*dS_v
             - inner(w, u_in)*dx
             + (phi*rho - beta*inner(grad(phi) , u)*rhobar)*dx
-            + jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)
+            + beta*jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)
             - phi*rho_in*dx
         )
 
@@ -98,28 +116,9 @@ class CompressibleSolver(TimesteppingSolver):
         #Solver for u, rho
         urho_problem = LinearVariationalProblem(
             aeqn, Leqn, self.urho, bcs = bcs)
-
-        params={'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'ksp_type': 'gmres',
-                'ksp_max_it': 100,
-                'ksp_gmres_restart': 50,
-                'pc_fieldsplit_schur_fact_type': 'FULL',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'preonly',
-                'fieldsplit_0_pc_type': 'bjacobi',
-                'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'preonly',
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 1,
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
         
         self.urho_solver = LinearVariationalSolver(
-            urho_problem, solver_parameters = params)
+            urho_problem, solver_parameters = self.params)
         
         #Reconstruction of theta
         theta = TrialFunction(state.Vt)
@@ -128,7 +127,7 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(state.Vt)
         
-        theta_eqn = gamma*(theta -dot(k,u)*dot(k,grad(state.thetabar))*beta +\
+        theta_eqn = gamma*(theta -dot(k,u)*dot(k,grad(thetabar))*beta +\
                            theta_in)*dx
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -138,13 +137,13 @@ class CompressibleSolver(TimesteppingSolver):
         
     def solve(self):
         """
-        Apply the solver with rhs self.x_in and result self.x_out.
+        Apply the solver with rhs state.xrhs and result state.dy.
         """
 
         self.urho_solver.solve()
         
         u1, rho1 = self.urho.split()
-        u, rho, theta = self.x_out.split()
+        u, rho, theta = self.state.dy.split()
         u.assign(u1)
         rho.assign(rho1)
 

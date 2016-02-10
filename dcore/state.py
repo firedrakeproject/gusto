@@ -24,7 +24,12 @@ class State(object):
     def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
                  family = "RT",
                  dt = 1.0,
-                 g = 9.81, k = None):
+                 g = 9.81,
+                 cp = 1004.5,
+                 R_d = 287,
+                 p_0 = 1000.0 * 100.0,
+                 kappa = 2.0/7.0, 
+                 k = None):
         
         #The mesh
         self.mesh = mesh
@@ -32,6 +37,10 @@ class State(object):
         #parameters
         self.dt = dt
         self.g = g
+        self.cp = cp
+        self.R_d = R_d
+        self.p_0 = p_0
+        self.kappa = kappa
         if(k != None):
             self.k = k
         
@@ -62,11 +71,11 @@ class State(object):
         :arg theta_ref: :class:`.Function` object, initial theta
         """
 
-        self.rho_b = Function(self.V3)
-        self.theta_b = Function(self.Vt)
+        self.rhobar = Function(self.V3)
+        self.thetabar = Function(self.Vt)
 
-        self.rho_b.project(rho_ref)
-        self.theta_b.project(theta_ref)        
+        self.rhobar.project(rho_ref)
+        self.thetabar.project(theta_ref)        
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """

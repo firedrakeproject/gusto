@@ -102,7 +102,7 @@ class LinearAdvection_V3(Advection):
         n = FacetNormal(state.mesh)
         
         a = p*q*dx
-        L = (dot(grad(p), self.ubar)*q*dx
+        L = (dot(grad(p), self.ubar)*q*dx\
              - jump(self.ubar*p, n)*avg(q)*(dS_v + dS_h))
 
         aProblem = LinearVariationalProblem(a,L,dq)

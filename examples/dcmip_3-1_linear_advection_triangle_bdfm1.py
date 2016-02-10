@@ -42,7 +42,11 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "BDFM",
               dt = 1.0,
-              g = g, k=k)
+              g = g,
+              cp = c_p,
+              R_d = R_d,
+              p_0 = p_0,
+              k=k)
 
 #interpolate initial conditions
 # Initial/current conditions
@@ -116,8 +120,11 @@ advection_list.append((rho_advection, 1))
 theta_advection = LinearAdvection_Vt(state, k, theta_b)
 advection_list.append((theta_advection, 2))
 
+#Set up linear solver
+linear_solver = CompressibleSolver(state, alpha = 0.5)
+
 #build time stepper
 stepper = Timestepper(state, advection_list, linear_solver, forcing)
 
-stepper.run(t = 0, dt = 1.25, T = 3600.0)
+stepper.run(t = 0, dt = dt, T = 3600.0)
 
