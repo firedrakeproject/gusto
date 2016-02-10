@@ -53,15 +53,16 @@ class CompressibleForcing(Forcing):
         self.uF = Function(V2)
 
         Omega = state.Omega
-
+        cp = state.cp
+        
         n = FacetNormal(state.mesh)
         pi = exner(theta0, rho0, state)
         
         a = inner(w,F)*dx
         L = (
             -inner(w,cross(2*Omega,u0))*dx #Coriolis term
-            -div(theta0*w)*pi*dx #pressure gradient (volume integral)
-            +jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
+            -cp*div(theta0*w)*pi*dx #pressure gradient (volume integral)
+            +cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
             +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
         )
 
