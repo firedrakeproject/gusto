@@ -4,7 +4,7 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
 import numpy as np
 
 nlayers = 10 #10 horizontal layers
-refinements = 2 # number of horizontal cells = 20*(4^refinements)
+refinements = 4 # number of horizontal cells = 20*(4^refinements)
 
 #build surface mesh
 a_ref = 6.37122e6
@@ -44,7 +44,7 @@ Omega = Function(W_VectorCG1).assign(0.0)
 
 state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "BDFM",
-              dt = 1.0,
+              dt = 10.0,
               alpha = 0.5,
               g = g,
               cp = c_p,
@@ -52,7 +52,7 @@ state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               p_0 = p_0,
               k=k,
               Omega=Omega,
-              Verbose=True)
+              Verbose=True, dumpfreq=1)
 
 #interpolate initial conditions
 # Initial/current conditions
@@ -143,13 +143,15 @@ params={'pc_type': 'fieldsplit',
         'fieldsplit_1_ksp_max_it': 2,
         "fieldsplit_1_ksp_monitor_true_residual": True,
         'fieldsplit_1_pc_type': 'gamg',
+        'fieldsplit_1_pc_gamg_sym_graph': True,
         'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
         'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
     'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
         'fieldsplit_1_mg_levels_ksp_max_it': 5,
         'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-linear_solver = CompressibleSolver(state, alpha = 0.5, params)
+        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'
+}
+linear_solver = CompressibleSolver(state, alpha = 0.5, params = params)
 
 #Set up forcing
 compressible_forcing = CompressibleForcing(state)

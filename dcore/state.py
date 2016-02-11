@@ -1,6 +1,6 @@
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
-    Expression
+    Expression, File
 
 class State(object):
     """
@@ -85,18 +85,18 @@ class State(object):
         
         self.Files = [0,0,0]
         
-        if !self.dumped:
+        if not self.dumped:
             self.dumpcount = 0
-            for i in range(size(self.dumplist)):
-                if(dumplist[i]):
+            for i in range(len(self.dumplist)):
+                if(self.dumplist[i]):
                     self.Files[i] = File(fieldlist[i]+'.pvd')
                     self.Files[i] << self.xn[i]
         else:
             self.dumpcount += 1
             if(self.dumpcount == self.dumpfreq):
                 self.dumpcount = 0
-                for i in range(size(self.dumplist)):
-                    if(dumplist[i]):
+                for i in range(len(self.dumplist)):
+                    if(self.dumplist[i]):
                         self.Files[i] << self.xn[i]
         
     def initialise(self, u0, rho0, theta0):
