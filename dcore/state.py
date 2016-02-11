@@ -34,7 +34,9 @@ class State(object):
                  kappa = 2.0/7.0, 
                  k = None,
                  Omega = None,
-                 Verbose = False):
+                 Verbose = False,
+                 dumpfreq = 10,
+                 dumplist = (True,True,True)):
         
         #The mesh
         self.mesh = mesh
@@ -55,7 +57,9 @@ class State(object):
             self.Omega = Omega
 
         self.Verbose = Verbose
-            
+        self.dumpfreq = dumpfreq
+        self.dumplist = dumplist
+        
         #Build the spaces
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)
@@ -68,6 +72,33 @@ class State(object):
         #Allocate state
         self._allocate_state()
 
+        self.dumped = False
+
+    def dump(self):
+        """
+        Dump output
+        """
+
+        xn = self.xn.split()
+
+        fieldlist = ('u','rho','theta')
+        
+        self.Files = [0,0,0]
+        
+        if !self.dumped:
+            self.dumpcount = 0
+            for i in range(size(self.dumplist)):
+                if(dumplist[i]):
+                    self.Files[i] = File(fieldlist[i]+'.pvd')
+                    self.Files[i] << self.xn[i]
+        else:
+            self.dumpcount += 1
+            if(self.dumpcount == self.dumpfreq):
+                self.dumpcount = 0
+                for i in range(size(self.dumplist)):
+                    if(dumplist[i]):
+                        self.Files[i] << self.xn[i]
+        
     def initialise(self, u0, rho0, theta0):
         """
         Initialise state variables from expressions.
