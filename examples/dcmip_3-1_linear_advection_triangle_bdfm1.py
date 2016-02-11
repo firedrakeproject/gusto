@@ -127,7 +127,29 @@ theta_advection = LinearAdvection_Vt(state, k, theta_b)
 advection_list.append((theta_advection, 2))
 
 #Set up linear solver
-linear_solver = CompressibleSolver(state, alpha = 0.5)
+params={'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_monitor_true_residual': True,
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0_ksp_type': 'richardson',
+        'fieldsplit_0_ksp_max_it': 2,
+        'fieldsplit_0_pc_type': 'bjacobi',
+        'fieldsplit_0_sub_pc_type': 'ilu',
+        'fieldsplit_1_ksp_type': 'richardson',
+        'fieldsplit_1_ksp_max_it': 2,
+        "fieldsplit_1_ksp_monitor_true_residual": True,
+        'fieldsplit_1_pc_type': 'gamg',
+        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+        'fieldsplit_1_mg_levels_ksp_max_it': 5,
+        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+linear_solver = CompressibleSolver(state, alpha = 0.5, params)
 
 #Set up forcing
 compressible_forcing = CompressibleForcing(state)
