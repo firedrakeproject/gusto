@@ -57,3 +57,4 @@ class Timestepper(object):
                     state.xnp1 += state.dy
             
             state.xn.assign(state.xnp1)
+            state.dump()
