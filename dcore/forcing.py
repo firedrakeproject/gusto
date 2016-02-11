@@ -44,7 +44,7 @@ class CompressibleForcing(Forcing):
         """
         
         state = self.state 
-        V2 = state.V2
+        V2 = state.V[0]
         W = state.W
 
         self.x0 = Function(W) #copy x to here

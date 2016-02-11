@@ -74,8 +74,8 @@ class CompressibleSolver(TimesteppingSolver):
         #Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
         
-        #Build the reduced function space for u,theta
-        M = MixedFunctionSpace((state.V2, state.V3))
+        #Build the reduced function space for u,rho
+        M = MixedFunctionSpace((state.V[0], state.V[1]))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
@@ -121,11 +121,11 @@ class CompressibleSolver(TimesteppingSolver):
             urho_problem, solver_parameters = self.params)
         
         #Reconstruction of theta
-        theta = TrialFunction(state.Vt)
-        gamma = TestFunction(state.Vt)
+        theta = TrialFunction(state.V[2])
+        gamma = TestFunction(state.V[2])
 
         u, rho = self.urho.split()
-        self.theta = Function(state.Vt)
+        self.theta = Function(state.V[2])
         
         theta_eqn = gamma*(theta -dot(k,u)*dot(k,grad(thetabar))*beta +\
                            theta_in)*dx

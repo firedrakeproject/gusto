@@ -56,7 +56,7 @@ state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
 
 #interpolate initial conditions
 # Initial/current conditions
-u0, theta0, rho0 = Function(state.V2), Function(state.Vt), Function(state.V3)
+u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
 
 # Helper string processing
 string_expander = {'lat': "asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))", 'lon': "atan2(x[1], x[0])", 'r': "sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])", 'z': "(sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a)"}
@@ -98,13 +98,13 @@ theta_b_expr = "(%(T_s)s)*pow(p_0/(%(p_s)s), 1.0/kappa)*exp(N*N*%%(z)s/g)" % {'p
 
 rho_expr = "(%(p)s)/(R_d*(%(T_b)s))" % {'p': p_expr, 'T_b': T_b_expr} % string_expander
 
-theta_b = Function(state.Vt)
+theta_b = Function(state.V[2])
 theta_b.interpolate(Expression(theta_b_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 
-rho_b = Function(state.V3)
+rho_b = Function(state.V[1])
 rho_b.interpolate(Expression(rho_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 
-theta_prime = Function(state.Vt)
+theta_prime = Function(state.V[2])
 dis_expr = "a*acos(sin(phi_c)*sin(%(lat)s) + cos(phi_c)*cos(%(lat)s)*cos(%(lon)s - lamda_c))"
 
 theta_prime_expr = "dT*(d*d/(d*d + pow((%(dis)s), 2)))*sin(2*pi*%%(z)s/L_z)" % {'dis': dis_expr} % string_expander

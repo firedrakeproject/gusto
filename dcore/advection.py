@@ -34,7 +34,7 @@ class NoAdvection(Advection):
         self.state = state
 
         #create a ubar field even though we don't use it.
-        self.ubar = Function(state.V2)
+        self.ubar = Function(state.V[0])
 
     def apply(self, x_in, x_out):
 
@@ -53,12 +53,12 @@ class LinearAdvection_Vt(Advection):
 
     def __init__(self, state, V, qbar, options = None):
         self.state = state
-        self.ubar = Function(state.V2)
+        self.ubar = Function(state.V[0])
 
-        p = TestFunction(state.Vt)
-        q = TrialFunction(state.Vt)
+        p = TestFunction(state.V[2])
+        q = TrialFunction(state.V[2])
         
-        self.dq = Function(state.Vt)
+        self.dq = Function(state.V[2])
 
         a = p*q*dx
         k = state.k #Upward pointing unit vector
@@ -92,12 +92,12 @@ class LinearAdvection_V3(Advection):
 
     def __init__(self, state, qbar, options = None):
         self.state = state
-        self.ubar = Function(state.V2)
+        self.ubar = Function(state.V[0])
 
-        p = TestFunction(state.V3)
-        q = TrialFunction(state.V3)
+        p = TestFunction(state.V[1])
+        q = TrialFunction(state.V[1])
 
-        self.dq = Function(state.V3)
+        self.dq = Function(state.V[1])
 
         n = FacetNormal(state.mesh)
         

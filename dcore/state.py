@@ -80,24 +80,28 @@ class State(object):
         """
 
         xn = self.xn.split()
-
         fieldlist = ('u','rho','theta')
         
         self.Files = [0,0,0]
         
         if not self.dumped:
             self.dumpcount = 0
+            self.xout = [0,0,0]
             for i in range(len(self.dumplist)):
                 if(self.dumplist[i]):
+                    (self.xout)[i] = Function(self.V[i])
                     self.Files[i] = File(fieldlist[i]+'.pvd')
-                    self.Files[i] << self.xn[i]
+                    self.xout[i].assign(xn[i])
+                    self.Files[i] << self.xout[i]
         else:
             self.dumpcount += 1
             if(self.dumpcount == self.dumpfreq):
                 self.dumpcount = 0
                 for i in range(len(self.dumplist)):
                     if(self.dumplist[i]):
-                        self.Files[i] << self.xn[i]
+                        self.Files[i] = File(fieldlist[i]+'.pvd')
+                        self.xout[i].assign(xn[i])
+                        self.Files[i] << self.xout[i]
         
     def initialise(self, u0, rho0, theta0):
         """
@@ -119,8 +123,8 @@ class State(object):
         :arg theta_ref: :class:`.Function` object, initial theta
         """
 
-        self.rhobar = Function(self.V3)
-        self.thetabar = Function(self.Vt)
+        self.rhobar = Function(self.V[1])
+        self.thetabar = Function(self.V[2])
 
         self.rhobar.project(rho_ref)
         self.thetabar.project(theta_ref)        
@@ -152,11 +156,12 @@ class State(object):
         V2v_elt = HDiv(V2t_elt)
         V2_elt = V2h_elt + V2v_elt
 
-        self.Vt = FunctionSpace(mesh, V2t_elt)
-        self.V2 = FunctionSpace(mesh, V2_elt)
-        self.V3 = FunctionSpace(mesh, V3_elt)
-
-        self.W = MixedFunctionSpace((self.V2, self.V3, self.Vt))
+        self.V = [0,0,0]
+        self.V[0] = FunctionSpace(mesh, V2_elt)
+        self.V[1] = FunctionSpace(mesh, V3_elt)
+        self.V[2] = FunctionSpace(mesh, V2t_elt)
+        
+        self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
     def _allocate_state(self):
         """

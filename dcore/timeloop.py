@@ -37,6 +37,8 @@ class Timestepper(object):
         xp_fields = state.xp.split()
 
         dt = state.dt
+        state.dump()
+        
         while(t<tmax - 0.5*dt):
             if(state.Verbose):
                 print "STEP", t, dt
