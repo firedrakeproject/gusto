@@ -4,7 +4,7 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
 import numpy as np
 
 nlayers = 10 #10 horizontal layers
-refinements = 4 # number of horizontal cells = 20*(4^refinements)
+refinements = 5 # number of horizontal cells = 20*(4^refinements)
 
 #build surface mesh
 a_ref = 6.37122e6
