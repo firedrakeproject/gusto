@@ -31,8 +31,8 @@ class NoAdvection(Advection):
     """
 
     def __init__(self, state):
-        self.state = state
 
+        super(NoAdvection, self).__init__(state)
         #create a ubar field even though we don't use it.
         self.ubar = Function(state.V[0])
 
@@ -52,7 +52,7 @@ class LinearAdvection_Vt(Advection):
     """
 
     def __init__(self, state, V, qbar, options = None):
-        self.state = state
+        super(LinearAdvection_Vt, self).__init__(state)
         self.ubar = Function(state.V[0])
 
         p = TestFunction(state.V[2])
