@@ -1,3 +1,7 @@
+from firedrake import FiniteElement, TensorProductElement, HDiv, \
+    FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
+    Expression, File
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
@@ -14,54 +18,118 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg dt: the timestep
     :arg g: the acceleration due to gravity
     """
 
     def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
                  family = "RT",
                  dt = 1.0,
-                 g = 9.81):
+                 alpha = 0.5,
+                 maxk = 2,
+                 maxi = 2,
+                 g = 9.81,
+                 cp = 1004.5,
+                 R_d = 287,
+                 p_0 = 1000.0 * 100.0,
+                 kappa = 2.0/7.0, 
+                 k = None,
+                 Omega = None,
+                 Verbose = False,
+                 dumpfreq = 10,
+                 dumplist = (True,True,True)):
         
         #The mesh
         self.mesh = mesh
 
         #parameters
         self.dt = dt
+        self.maxk = maxk
+        self.maxi = maxi
+        self.alpha = alpha
         self.g = g
+        self.cp = cp
+        self.R_d = R_d
+        self.p_0 = p_0
+        self.kappa = kappa
+        if(k != None):
+            self.k = k
+        if(Omega !=None):
+            self.Omega = Omega
+
+        self.Verbose = Verbose
+        self.dumpfreq = dumpfreq
+        self.dumplist = dumplist
         
         #Build the spaces
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)
+
+        #build the geopotential
+        V = FunctionSpace(mesh, "CG", 1)
+        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+        self.Phi *= g
         
         #Allocate state
         self._allocate_state()
 
-    def initialise_state_from_expressions(self, u_expr, rho_expr, theta_expr):
+        self.dumped = False
+
+    def dump(self):
+        """
+        Dump output
+        """
+
+        xn = self.xn.split()
+        fieldlist = ('u','rho','theta')
+        
+        if not self.dumped:
+            self.dumpcount = 0
+            self.Files = [0,0,0]
+            self.xout = [0,0,0]
+            for i in range(len(self.dumplist)):
+                if(self.dumplist[i]):
+                    (self.xout)[i] = Function(self.V[i])
+                    self.Files[i] = File(fieldlist[i]+'.pvd')
+                    self.xout[i].assign(xn[i])
+                    self.Files[i] << self.xout[i]
+            self.dumped = True
+        else:
+            self.dumpcount += 1
+            print self.dumpcount, self.dumpfreq, 'DUMP STATS'
+            if(self.dumpcount == self.dumpfreq):
+                self.dumpcount = 0
+                for i in range(len(self.dumplist)):
+                    if(self.dumplist[i]):
+                        print i
+                        print self.Files[i], self.xout[i]
+                        self.xout[i].assign(xn[i])
+                        self.Files[i] << self.xout[i]
+        
+    def initialise(self, u0, rho0, theta0):
         """
         Initialise state variables from expressions.
-        :arg u_expr: This expression will be projected to initial u.
-        :arg rho_expr: This expression will be interpolated to initial rho.
-        :arg theta_expr: This expression will be interpolated to initial theta.
+        :arg u0: :class:`.Function` object, initial u
+        :arg rho0: :class:`.Function` object, initial rho
+        :arg theta0: :class:`.Function` object, initial theta
         """
 
         u_init, rho_init, theta_init = self.x_init.split()
-        u_init.project(u_expr)
-        rho_init.project(rho_expr)
-        theta_init.project(theta_expr)
+        u_init.project(u0)
+        rho_init.project(rho0)
+        theta_init.project(theta0)
 
-    def set_reference_profiles_from_expressions(self, rho_expr, theta_expr):
+    def set_reference_profiles(self, rho_ref, theta_ref):
         """
-        Initialise reference profiles from expressions.
-        :arg rho_expr: This expression will be interpolated to rhoref.
-        :arg theta_expr: This expression will be interpolated to thetaref.
+        Initialise reference profiles
+        :arg rho_ref: :class:`.Function` object, initial rho
+        :arg theta_ref: :class:`.Function` object, initial theta
         """
 
-        self.rhoref = Function(self.V3)
-        self.thetaref = Function(self.Vt)
+        self.rhobar = Function(self.V[1])
+        self.thetabar = Function(self.V[2])
 
-        self.rho.project(rho_expr)
-        self.theta.project(theta_expr)        
+        self.rhobar.project(rho_ref)
+        self.thetabar.project(theta_ref)        
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
@@ -72,19 +140,37 @@ class State(object):
         mixed function space self.W = (V2,V3,Vt)
         """
 
-        #build spaces V2, V3, Vt
-        raise(NotImplementedError)
+        #horizontal base spaces
+        cell = mesh._base_mesh.ufl_cell()
+        if(cell.cellname() == 'triangle'):
+            cell = triangle
+        S1 = FiniteElement(family, cell, 2)
+        S2 = FiniteElement("DG", cell, 1)
 
-        self.V2 = V2
-        self.V3 = V3
-        self.Vt = Vt
-        self.W = MixedFunctionSpace((V2, V3, Vt))
+        #vertical base spaces
+        T0 = FiniteElement("CG", interval, vertical_degree)
+        T1 = FiniteElement("DG", interval, vertical_degree-1)
+
+        #build spaces V2, V3, Vt
+        V2h_elt = HDiv(TensorProductElement(S1, T1))
+        V2t_elt = TensorProductElement(S2, T0)
+        V3_elt = TensorProductElement(S2, T1)
+        V2v_elt = HDiv(V2t_elt)
+        V2_elt = V2h_elt + V2v_elt
+
+        self.V = [0,0,0]
+        self.V[0] = FunctionSpace(mesh, V2_elt)
+        self.V[1] = FunctionSpace(mesh, V3_elt)
+        self.V[2] = FunctionSpace(mesh, V2t_elt)
+        
+        self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
     def _allocate_state(self):
         """
         Construct Functions to store the state variables.
         """
 
+        W = self.W
         self.xn = Function(W)
         self.x_init = Function(W)
         self.xstar = Function(W)

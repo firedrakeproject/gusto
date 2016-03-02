@@ -16,7 +16,19 @@ class Timestepper(object):
         self.linear_solver = linear_solver
         self.forcing = forcing
 
-    def run(self, t, dt, tmax):
+    def _set_ubar(self):
+        """
+        Update ubar in the advection methods.
+        """
+
+        state = self.state
+        un, _, _ = state.xn.split()
+        unp1, _, _ = state.xnp1.split()
+
+        for advection, index in self.advection_list:
+            advection.ubar.assign(un + state.alpha*unp1)
+
+    def run(self, t, tmax):
         state = self.state
         
         state.xn.assign(state.x_init)
@@ -24,20 +36,27 @@ class Timestepper(object):
         xstar_fields = state.xstar.split()
         xp_fields = state.xp.split()
 
+        dt = state.dt
+        state.dump()
+        
         while(t<tmax - 0.5*dt):
-            t += dt 
+            if(state.Verbose):
+                print "STEP", t, dt
+            
+            t += dt
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
             
-            for(k in range(state.maxk)):
-                self.set_ubar()  #computes state.ubar from state.xn and state.xnp1
+            for k in range(state.maxk):
+                self._set_ubar()  #computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
                     advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
-                for(i in range(state.maxi)):
+                for i in range(state.maxi):
                     state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
                     self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
-                    self.linear_system.solve() # solves linear system and places result in state.dy
+                    self.linear_solver.solve() # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
             
             state.xn.assign(state.xnp1)
+            state.dump()

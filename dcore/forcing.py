@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod
+from firedrake import Function, split, TrialFunction, TestFunction, \
+    FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, \
+    DirichletBC, LinearVariationalProblem, LinearVariationalSolver
 
 class Forcing(object):
     """
@@ -41,16 +44,16 @@ class CompressibleForcing(Forcing):
         """
         
         state = self.state 
-        V2 = state.V2
+        Vu = state.V[0]
         W = state.W
 
         self.x0 = Function(W) #copy x to here
 
         u0,rho0,theta0 = split(self.x0)
         
-        F = TrialFunction(V2)
-        w = TestFunction(V2)
-        self.uF = Function(V2)
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        self.uF = Function(Vu)
 
         Omega = state.Omega
         cp = state.cp
@@ -60,14 +63,14 @@ class CompressibleForcing(Forcing):
         
         a = inner(w,F)*dx
         L = (
-            -inner(w,cross(Omega,u0))*dx #Coriolis term
-            -cp*div(theta0*w)*pi*dx #pressure gradient (volume integral)
-            +cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
+            -inner(w,cross(2*Omega,u0))*dx #Coriolis term
+            +cp*div(theta0*w)*pi*dx #pressure gradient (volume integral)
+            -cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
             +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
         )
 
-        bcs = [DirichletBC(V2, 0.0, "bottom"),
-               DirichletBC(V2, 0.0, "top")]
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
         
         u_forcing_problem = LinearVariationalProblem(
             a,L,self.uF, bcs=bcs
@@ -80,7 +83,7 @@ class CompressibleForcing(Forcing):
         self.x0.assign(x_in)
 
         self.u_forcing_solver.solve() #places forcing in self.uF
-        self.uF.scale(scaling)
+        self.uF *= scaling
         
         uF, _, _ = x_out.split()
 
