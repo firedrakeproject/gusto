@@ -44,16 +44,16 @@ class CompressibleForcing(Forcing):
         """
         
         state = self.state 
-        V2 = state.V[0]
+        Vu = state.V[0]
         W = state.W
 
         self.x0 = Function(W) #copy x to here
 
         u0,rho0,theta0 = split(self.x0)
         
-        F = TrialFunction(V2)
-        w = TestFunction(V2)
-        self.uF = Function(V2)
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        self.uF = Function(Vu)
 
         Omega = state.Omega
         cp = state.cp
@@ -69,8 +69,8 @@ class CompressibleForcing(Forcing):
             +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
         )
 
-        bcs = [DirichletBC(V2, 0.0, "bottom"),
-               DirichletBC(V2, 0.0, "top")]
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
         
         u_forcing_problem = LinearVariationalProblem(
             a,L,self.uF, bcs=bcs
