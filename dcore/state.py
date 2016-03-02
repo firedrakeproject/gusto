@@ -82,10 +82,9 @@ class State(object):
         xn = self.xn.split()
         fieldlist = ('u','rho','theta')
         
-        self.Files = [0,0,0]
-        
         if not self.dumped:
             self.dumpcount = 0
+            self.Files = [0,0,0]
             self.xout = [0,0,0]
             for i in range(len(self.dumplist)):
                 if(self.dumplist[i]):
@@ -101,6 +100,8 @@ class State(object):
                 self.dumpcount = 0
                 for i in range(len(self.dumplist)):
                     if(self.dumplist[i]):
+                        print i
+                        print self.Files[i], self.xout[i]
                         self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
         
