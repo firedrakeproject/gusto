@@ -2,15 +2,17 @@ class Timestepper(object):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
     scheme for the dynamical core.
-    
+
     :arg state: a :class:`.State` object
-    :arg advection_list a list of tuples (scheme, i), where i is an :class:`.AdvectionScheme` object, and i is the index indicating which component of the mixed function space to advect.
+    :arg advection_list a list of tuples (scheme, i), where i is an
+        :class:`.AdvectionScheme` object, and i is the index indicating
+        which component of the mixed function space to advect.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     """
 
     def __init__(self, state, advection_list, linear_solver, forcing):
-    
+
         self.state = state
         self.advection_list = advection_list
         self.linear_solver = linear_solver
@@ -30,7 +32,7 @@ class Timestepper(object):
 
     def run(self, t, tmax):
         state = self.state
-        
+
         state.xn.assign(state.x_init)
 
         xstar_fields = state.xstar.split()
@@ -38,25 +40,26 @@ class Timestepper(object):
 
         dt = state.dt
         state.dump()
-        
-        while(t<tmax - 0.5*dt):
-            if(state.Verbose):
+
+        while t < tmax - 0.5*dt:
+            if state.Verbose:
                 print "STEP", t, dt
-            
+
             t += dt
             self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
-            
+
             for k in range(state.maxk):
-                self._set_ubar()  #computes state.ubar from state.xn and state.xnp1
+                self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
-                    advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
+                    # advects a field from xstar and puts result in xp
+                    advection.apply(xstar_fields[index], xp_fields[index])
                 for i in range(state.maxi):
-                    state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
+                    state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                     self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
-                    self.linear_solver.solve() # solves linear system and places result in state.dy
+                    self.linear_solver.solve()  # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
-            
+
             state.xn.assign(state.xnp1)
             state.dump()

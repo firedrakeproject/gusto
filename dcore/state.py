@@ -1,19 +1,21 @@
+from __future__ import absolute_import
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
     Expression, File
+
 
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`ExtrudedMesh` to use.
-    :arg vertical_degree: integer, the degree for spaces in the vertical 
+    :arg vertical_degree: integer, the degree for spaces in the vertical
     (specifies the degree for the pressure space, other spaces are inferred)
     defaults to 1.
-    :arg horizontal_degree: integer, the degree for spaces in the horizontal 
+    :arg horizontal_degree: integer, the degree for spaces in the horizontal
     (specifies the degree for the pressure space, other spaces are inferred)
     defaults to 1.
-    :arg family: string, specifies the velocity space family to use. 
+    :arg family: string, specifies the velocity space family to use.
     Options:
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
@@ -21,27 +23,27 @@ class State(object):
     :arg g: the acceleration due to gravity
     """
 
-    def __init__(self, mesh, vertical_degree = 1, horizontal_degree = 1,
-                 family = "RT",
-                 dt = 1.0,
-                 alpha = 0.5,
-                 maxk = 2,
-                 maxi = 2,
-                 g = 9.81,
-                 cp = 1004.5,
-                 R_d = 287,
-                 p_0 = 1000.0 * 100.0,
-                 kappa = 2.0/7.0, 
-                 k = None,
-                 Omega = None,
-                 Verbose = False,
-                 dumpfreq = 10,
-                 dumplist = (True,True,True)):
-        
-        #The mesh
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT",
+                 dt=1.0,
+                 alpha=0.5,
+                 maxk=2,
+                 maxi=2,
+                 g=9.81,
+                 cp=1004.5,
+                 R_d=287,
+                 p_0=1000.0 * 100.0,
+                 kappa=2.0/7.0,
+                 k=None,
+                 Omega=None,
+                 Verbose=False,
+                 dumpfreq=10,
+                 dumplist=(True,True,True)):
+
+        # The mesh
         self.mesh = mesh
 
-        #parameters
+        # parameters
         self.dt = dt
         self.maxk = maxk
         self.maxi = maxi
@@ -51,25 +53,25 @@ class State(object):
         self.R_d = R_d
         self.p_0 = p_0
         self.kappa = kappa
-        if(k != None):
+        if k is not None:
             self.k = k
-        if(Omega !=None):
+        if Omega is not None:
             self.Omega = Omega
 
         self.Verbose = Verbose
         self.dumpfreq = dumpfreq
         self.dumplist = dumplist
-        
-        #Build the spaces
-        self._build_spaces(mesh, vertical_degree,
-                          horizontal_degree, family)
 
-        #build the geopotential
+        # Build the spaces
+        self._build_spaces(mesh, vertical_degree,
+                           horizontal_degree, family)
+
+        # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
         self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
         self.Phi *= g
-        
-        #Allocate state
+
+        # Allocate state
         self._allocate_state()
 
         self.dumped = False
@@ -81,7 +83,7 @@ class State(object):
 
         xn = self.xn.split()
         fieldlist = ('u','rho','theta')
-        
+
         if not self.dumped:
             self.dumpcount = 0
             self.Files = [0,0,0]
@@ -104,7 +106,7 @@ class State(object):
                         print self.Files[i], self.xout[i]
                         self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
-        
+
     def initialise(self, u0, rho0, theta0):
         """
         Initialise state variables from expressions.
@@ -129,7 +131,7 @@ class State(object):
         self.thetabar = Function(self.V[2])
 
         self.rhobar.project(rho_ref)
-        self.thetabar.project(theta_ref)        
+        self.thetabar.project(theta_ref)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
@@ -140,18 +142,18 @@ class State(object):
         mixed function space self.W = (V2,V3,Vt)
         """
 
-        #horizontal base spaces
+        # horizontal base spaces
         cell = mesh._base_mesh.ufl_cell()
         if(cell.cellname() == 'triangle'):
             cell = triangle
         S1 = FiniteElement(family, cell, 2)
         S2 = FiniteElement("DG", cell, 1)
 
-        #vertical base spaces
+        # vertical base spaces
         T0 = FiniteElement("CG", interval, vertical_degree)
         T1 = FiniteElement("DG", interval, vertical_degree-1)
 
-        #build spaces V2, V3, Vt
+        # build spaces V2, V3, Vt
         V2h_elt = HDiv(TensorProductElement(S1, T1))
         V2t_elt = TensorProductElement(S2, T0)
         V3_elt = TensorProductElement(S2, T1)
@@ -162,7 +164,7 @@ class State(object):
         self.V[0] = FunctionSpace(mesh, V2_elt)
         self.V[1] = FunctionSpace(mesh, V3_elt)
         self.V[2] = FunctionSpace(mesh, V2t_elt)
-        
+
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
     def _allocate_state(self):
@@ -178,4 +180,3 @@ class State(object):
         self.xnp1 = Function(W)
         self.xrhs = Function(W)
         self.dy = Function(W)
-
