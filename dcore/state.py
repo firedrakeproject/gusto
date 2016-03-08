@@ -95,13 +95,10 @@ class State(object):
             self.dumped = True
         else:
             self.dumpcount += 1
-            print self.dumpcount, self.dumpfreq, 'DUMP STATS'
             if(self.dumpcount == self.dumpfreq):
                 self.dumpcount = 0
                 for i in range(len(self.dumplist)):
                     if(self.dumplist[i]):
-                        print i
-                        print self.Files[i], self.xout[i]
                         self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
         
