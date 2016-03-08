@@ -78,9 +78,9 @@ class CompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
         
-    def apply(self, scaling, x_in, x_out):
+    def apply(self, scaling, x_in, x_nl, x_out):
 
-        self.x0.assign(x_in)
+        self.x0.assign(x_nl)
 
         self.u_forcing_solver.solve() #places forcing in self.uF
         self.uF *= scaling

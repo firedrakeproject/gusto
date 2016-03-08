@@ -44,7 +44,8 @@ class Timestepper(object):
                 print "STEP", t, dt
             
             t += dt
-            self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
+            self.forcing.apply((1-state.alpha)*dt, state.xn, 
+                               state.xn, state.xstar)
             state.xnp1.assign(state.xn)
             
             for k in range(state.maxk):
@@ -53,7 +54,8 @@ class Timestepper(object):
                     advection.apply(xstar_fields[index], xp_fields[index]) #advects a field from xstar and puts result in xp
                 for i in range(state.maxi):
                     state.xrhs.assign(0.) #xrhs is the residual which goes in the linear solve
-                    self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
+                    self.forcing.apply(state.alpha*dt, state.xp, 
+                                       state.xnp1, state.xrhs)
                     state.xrhs -= state.xnp1
                     self.linear_solver.solve() # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
