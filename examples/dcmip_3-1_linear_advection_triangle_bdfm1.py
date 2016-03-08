@@ -121,9 +121,9 @@ state.set_reference_profiles(rho_b, theta_b)
 advection_list = []
 velocity_advection = NoAdvection(state)
 advection_list.append((velocity_advection, 0))
-rho_advection = LinearAdvection_V3(state, rho_b)
+rho_advection = LinearAdvection_V3(state, state.V[1], rho_b)
 advection_list.append((rho_advection, 1))
-theta_advection = LinearAdvection_Vt(state, k, theta_b)
+theta_advection = LinearAdvection_Vt(state, state.V[2], theta_b)
 advection_list.append((theta_advection, 2))
 
 #Set up linear solver

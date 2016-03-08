@@ -46,6 +46,7 @@ class LinearAdvection_Vt(Advection):
     in evaluation of the advection term for the Vt temperature space.
 
     :arg state: :class:`.State` object.
+    :arg V:class:`.FunctionSpace` object. The Function space for temperature.
     :arg qbar: :class:`.Function` object. The reference function that we 
     are linearising around.
     :arg options: a PETSc options dictionary
@@ -55,10 +56,10 @@ class LinearAdvection_Vt(Advection):
         super(LinearAdvection_Vt, self).__init__(state)
         self.ubar = Function(state.V[0])
 
-        p = TestFunction(state.V[2])
-        q = TrialFunction(state.V[2])
+        p = TestFunction(V)
+        q = TrialFunction(V)
         
-        self.dq = Function(state.V[2])
+        self.dq = Function(V)
 
         a = p*q*dx
         k = state.k #Upward pointing unit vector
@@ -82,22 +83,23 @@ class LinearAdvection_Vt(Advection):
 class LinearAdvection_V3(Advection):
     """
     An advection scheme that uses the linearised background state 
-    in evaluation of the advection term for the V3 DG space.
+    in evaluation of the advection term for a DG space.
 
     :arg state: :class:`.State` object.
+    :arg V:class:`.FunctionSpace` object. The DG Function space.
     :arg qbar: :class:`.Function` object. The reference function that we 
     are linearising around.
     :arg options: a PETSc options dictionary
     """
 
-    def __init__(self, state, qbar, options = None):
+    def __init__(self, state, V, qbar, options = None):
         self.state = state
         self.ubar = Function(state.V[0])
 
-        p = TestFunction(state.V[1])
-        q = TrialFunction(state.V[1])
+        p = TestFunction(state.V)
+        q = TrialFunction(state.V)
 
-        self.dq = Function(state.V[1])
+        self.dq = Function(state.V)
 
         n = FacetNormal(state.mesh)
         
