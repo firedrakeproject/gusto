@@ -26,7 +26,7 @@ class Timestepper(object):
         unp1, _, _ = state.xnp1.split()
 
         for advection, index in self.advection_list:
-            advection.ubar.assign(un + state.alpha*unp1)
+            advection.ubar.assign(un + state.alpha*(unp1-un))
 
     def run(self, t, tmax):
         state = self.state
