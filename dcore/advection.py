@@ -65,7 +65,7 @@ class LinearAdvection_Vt(Advection):
         self.dq = Function(state.V[2])
 
         a = p*q*dx
-        k = state.k             # Upward pointing unit vector
+        k = state.parameters.k             # Upward pointing unit vector
         L = -p*dot(self.ubar,k)*dot(k,grad(qbar))*dx
 
         aProblem = LinearVariationalProblem(a,L,self.dq)
@@ -78,7 +78,7 @@ class LinearAdvection_Vt(Advection):
                                               solver_parameters=options)
 
     def apply(self, x_in, x_out):
-        dt = self.state.dt
+        dt = self.state.timestepping.dt
         self.solver.solve()
         x_out.assign(x_in + dt*self.dq)
 
@@ -119,6 +119,6 @@ class LinearAdvection_V3(Advection):
                                               solver_parameters=options)
 
     def apply(self, x_in, x_out):
-        dt = self.state.dt
+        dt = self.state.timestepping.dt
         self.solver.solve()
         x_out.assign(x_in + dt*self.dq)

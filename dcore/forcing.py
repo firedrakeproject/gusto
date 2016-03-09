@@ -57,8 +57,8 @@ class CompressibleForcing(Forcing):
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        Omega = state.Omega
-        cp = state.cp
+        Omega = state.parameters.Omega
+        cp = state.parameters.cp
 
         n = FacetNormal(state.mesh)
         pi = exner(theta0, rho0, state)
@@ -97,24 +97,24 @@ def exner(theta,rho,state):
     """
     Compute the exner function.
     """
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
 
 
 def exner_rho(theta,rho,state):
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
 
 
 def exner_theta(theta,rho,state):
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)

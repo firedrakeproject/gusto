@@ -28,7 +28,7 @@ class Timestepper(object):
         unp1, _, _ = state.xnp1.split()
 
         for advection, index in self.advection_list:
-            advection.ubar.assign(un + state.alpha*unp1)
+            advection.ubar.assign(un + state.timestepping.alpha*unp1)
 
     def run(self, t, tmax):
         state = self.state
@@ -38,25 +38,26 @@ class Timestepper(object):
         xstar_fields = state.xstar.split()
         xp_fields = state.xp.split()
 
-        dt = state.dt
+        dt = state.timestepping.dt
+        alpha = state.timestepping.alpha
         state.dump()
 
         while t < tmax - 0.5*dt:
-            if state.Verbose:
+            if state.output.Verbose:
                 print "STEP", t, dt
 
             t += dt
-            self.forcing.apply((1-state.alpha)*dt, state.xn, state.xstar)
+            self.forcing.apply((1-alpha)*dt, state.xn, state.xstar)
             state.xnp1.assign(state.xn)
 
-            for k in range(state.maxk):
+            for k in range(state.timestepping.maxk):
                 self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
                 for advection, index in self.advection_list:
                     # advects a field from xstar and puts result in xp
                     advection.apply(xstar_fields[index], xp_fields[index])
-                for i in range(state.maxi):
+                for i in range(state.timestepping.maxi):
                     state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
-                    self.forcing.apply(state.alpha*dt, state.xp, state.xrhs)
+                    self.forcing.apply(alpha*dt, state.xp, state.xrhs)
                     state.xrhs -= state.xnp1
                     self.linear_solver.solve()  # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
