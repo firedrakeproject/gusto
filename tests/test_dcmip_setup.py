@@ -6,7 +6,7 @@ import numpy as np
 
 def setup_dcmip():
 
-    nlayers = 2         # 10 horizontal layers
+    nlayers = 2         # 2 horizontal layers
     refinements = 3      # number of horizontal cells = 20*(4^refinements)
 
     # build surface mesh
