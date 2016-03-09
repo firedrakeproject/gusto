@@ -43,7 +43,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
-state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
+state = Compressible3DState(mesh,
                             family="BDFM",
                             dt=10.0,
                             alpha=0.5,
@@ -117,7 +117,7 @@ theta_prime.interpolate(Expression(theta_prime_expr, dT=deltaTheta, d=d, L_z=L_z
 theta0.assign(theta_b + theta_prime)
 rho0.assign(rho_b)
 
-state.initialise(u0, rho0, theta0)
+state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 
 # Set up advection schemes

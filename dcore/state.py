@@ -104,18 +104,13 @@ class State(object):
                         self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
 
-    def initialise(self, u0, rho0, theta0):
+    def initialise(self, initial_conditions):
         """
-        Initialise state variables from expressions.
-        :arg u0: :class:`.Function` object, initial u
-        :arg rho0: :class:`.Function` object, initial rho
-        :arg theta0: :class:`.Function` object, initial theta
+        Initialise state variables
         """
 
-        u_init, rho_init, theta_init = self.x_init.split()
-        u_init.project(u0)
-        rho_init.project(rho0)
-        theta_init.project(theta0)
+        for i in range(self.x_init.function_space().num_sub_spaces()):
+            self.x_init.sub(i).project(initial_conditions[i])
 
     @abstractmethod
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
@@ -138,11 +133,9 @@ class State(object):
         self.xrhs = Function(W)
         self.dy = Function(W)
 
-def Compressible3DState(State):
+class Compressible3DState(State):
 
-    def __init__(self):
-
-        super(Compressible3DState, self).__init__(, mesh, vertical_degree=1, horizontal_degree=1,
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT",
                  dt=1.0,
                  alpha=0.5,
@@ -158,6 +151,25 @@ def Compressible3DState(State):
                  Verbose=False,
                  dumpfreq=10,
                  dumplist=(True,True,True)):
+
+        super(Compressible3DState, self).__init__(mesh, 
+                                                  vertical_degree, 
+                                                  horizontal_degree,
+                                                  family,
+                                                  dt,
+                                                  alpha,
+                                                  maxk,
+                                                  maxi,
+                                                  g,
+                                                  cp,
+                                                  R_d,
+                                                  p_0,
+                                                  kappa,
+                                                  k,
+                                                  Omega,
+                                                  Verbose,
+                                                  dumpfreq,
+                                                  dumplist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
