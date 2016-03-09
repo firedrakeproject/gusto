@@ -46,4 +46,4 @@ install:
 
 script:
   - make lint
-  - py.test --travis -v test
+  - py.test -v test
