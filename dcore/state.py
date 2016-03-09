@@ -122,6 +122,29 @@ class State(object):
         rho_init.project(rho0)
         theta_init.project(theta0)
 
+    @abstractmethod
+    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+        """
+        Build function spaces:
+        """
+        pass
+
+    def _allocate_state(self):
+        """
+        Construct Functions to store the state variables.
+        """
+
+        W = self.W
+        self.xn = Function(W)
+        self.x_init = Function(W)
+        self.xstar = Function(W)
+        self.xp = Function(W)
+        self.xnp1 = Function(W)
+        self.xrhs = Function(W)
+        self.dy = Function(W)
+
+def Compressible3DState(State):
+
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
         Initialise reference profiles
@@ -168,17 +191,3 @@ class State(object):
         self.V[2] = FunctionSpace(mesh, V2t_elt)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
-
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
-
-        W = self.W
-        self.xn = Function(W)
-        self.x_init = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.dy = Function(W)
