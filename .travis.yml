@@ -46,4 +46,4 @@ install:
 
 script:
   - make lint
-  - py.test -v test
+  - py.test -v tests
