@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
     Expression, File
@@ -22,6 +23,7 @@ class State(object):
     "BDFM": The BDFM family
     :arg g: the acceleration due to gravity
     """
+    __metaclass__ = ABCMeta
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT",
