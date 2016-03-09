@@ -133,6 +133,7 @@ class State(object):
         self.xrhs = Function(W)
         self.dy = Function(W)
 
+
 class Compressible3DState(State):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
@@ -152,8 +153,8 @@ class Compressible3DState(State):
                  dumpfreq=10,
                  dumplist=(True,True,True)):
 
-        super(Compressible3DState, self).__init__(mesh, 
-                                                  vertical_degree, 
+        super(Compressible3DState, self).__init__(mesh,
+                                                  vertical_degree,
                                                   horizontal_degree,
                                                   family,
                                                   dt,
