@@ -68,11 +68,6 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                            horizontal_degree, family)
 
-        # build the geopotential
-        V = FunctionSpace(mesh, "CG", 1)
-        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-        self.Phi *= g
-
         # Allocate state
         self._allocate_state()
 
@@ -144,6 +139,30 @@ class State(object):
         self.dy = Function(W)
 
 def Compressible3DState(State):
+
+    def __init__(self):
+
+        super(Compressible3DState, self).__init__(, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT",
+                 dt=1.0,
+                 alpha=0.5,
+                 maxk=2,
+                 maxi=2,
+                 g=9.81,
+                 cp=1004.5,
+                 R_d=287,
+                 p_0=1000.0 * 100.0,
+                 kappa=2.0/7.0,
+                 k=None,
+                 Omega=None,
+                 Verbose=False,
+                 dumpfreq=10,
+                 dumplist=(True,True,True)):
+
+        # build the geopotential
+        V = FunctionSpace(mesh, "CG", 1)
+        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+        self.Phi *= g
 
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
