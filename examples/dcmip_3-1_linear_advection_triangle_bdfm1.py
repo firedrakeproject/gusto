@@ -43,17 +43,19 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="BDFM",
-              dt=10.0,
-              alpha=0.5,
-              g=g,
-              cp=c_p,
-              R_d=R_d,
-              p_0=p_0,
-              k=k,
-              Omega=Omega,
-              Verbose=True, dumpfreq=1)
+state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
+                            family="BDFM",
+                            dt=10.0,
+                            alpha=0.5,
+                            g=g,
+                            cp=c_p,
+                            R_d=R_d,
+                            p_0=p_0,
+                            k=k,
+                            Omega=Omega,
+                            Verbose=True, dumpfreq=1)
+
+state.fieldlist = ('u', 'rho', 'theta')
 
 # interpolate initial conditions
 # Initial/current conditions

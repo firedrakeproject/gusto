@@ -79,7 +79,7 @@ class State(object):
         """
 
         xn = self.xn.split()
-        fieldlist = ('u','rho','theta')
+        fieldlist = self.fieldlist
 
         if not self.dumped:
             self.dumpcount = 0
