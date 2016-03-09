@@ -24,9 +24,9 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT",
-                 timestepping = None,
-                 output = None,
-                 parameters = None):
+                 timestepping=None,
+                 output=None,
+                 parameters=None):
 
         self.timestepping = timestepping
         self.output = output

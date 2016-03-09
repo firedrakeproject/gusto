@@ -16,6 +16,7 @@ class Configuration(object):
         self.__getattribute__(name)
         object.__setattr__(self, name, value)
 
+
 class TimesteppingParameters(Configuration):
 
     """
@@ -30,6 +31,7 @@ class TimesteppingParameters(Configuration):
 
         super(TimesteppingParameters, self).__init__(**kwargs)
 
+
 class OutputParameters(Configuration):
 
     """
@@ -42,6 +44,7 @@ class OutputParameters(Configuration):
         self.dumplist = (True,True,True)
 
         super(OutputParameters, self).__init__(**kwargs)
+
 
 class CompressibleParameters(Configuration):
 
@@ -61,7 +64,7 @@ class CompressibleParameters(Configuration):
 
         super(CompressibleParameters, self).__init__(**kwargs)
 
-### Example configuration starts here.
+# Example configuration starts here.
 
 if __name__=="__main__":
 
@@ -69,10 +72,10 @@ if __name__=="__main__":
 
         #: Documentation for myparam
         myparam = None
-    
+
         #: As in GEM, manual suggests 0.1
         dt = 0.1
 
-    c = MyConfiguration(dt=2)
+    c = MyConfiguration(dt = 2)
 
     print c.dt
