@@ -43,9 +43,9 @@ parameters = CompressibleParameters(k=k, Omega=Omega)
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="BDFM",
-              timestepping = timestepping,
-              output = output,
-              parameters = parameters)
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters)
 
 # interpolate initial conditions
 g = parameters.g

@@ -66,7 +66,7 @@ class CompressibleParameters(Configuration):
 
 # Example configuration starts here.
 
-if __name__=="__main__":
+if __name__ == "__main__":
 
     class MyConfiguration(Configuration):
 
@@ -76,6 +76,6 @@ if __name__=="__main__":
         #: As in GEM, manual suggests 0.1
         dt = 0.1
 
-    c = MyConfiguration(dt = 2)
+    c = MyConfiguration(dt=2)
 
     print c.dt
