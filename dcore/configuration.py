@@ -63,19 +63,3 @@ class CompressibleParameters(Configuration):
         self.Omega = None
 
         super(CompressibleParameters, self).__init__(**kwargs)
-
-# Example configuration starts here.
-
-if __name__ == "__main__":
-
-    class MyConfiguration(Configuration):
-
-        #: Documentation for myparam
-        myparam = None
-
-        #: As in GEM, manual suggests 0.1
-        dt = 0.1
-
-    c = MyConfiguration(dt=2)
-
-    print c.dt
