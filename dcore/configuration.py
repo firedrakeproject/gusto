@@ -4,16 +4,16 @@ Some simple tools for making model configuration nicer.
 
 
 class Configuration(object):
+
     def __init__(self, **kwargs):
 
-        self.__setattr__ = self._proto__setattr__
         for name, value in kwargs.iteritems():
-            print name, value
             self.__setattr__(name, value)
 
-    def _proto__setattr__(self, name, value):
+    def __setattr__(self, name, value):
         """Cause setting an unknown attribute to be an error"""
-        self.__getattribute__(name)
+        if not hasattr(self, name):
+            raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
         object.__setattr__(self, name, value)
 
 
@@ -22,14 +22,10 @@ class TimesteppingParameters(Configuration):
     """
     Timestepping parameters for dcore
     """
-
-    def __init__(self, **kwargs):
-        self.dt = None
-        self.alpha = 0.5
-        self.maxk = 2
-        self.maxi = 2
-
-        super(TimesteppingParameters, self).__init__(**kwargs)
+    dt = None
+    alpha = 0.5
+    maxk = 2
+    maxi = 2
 
 
 class OutputParameters(Configuration):
@@ -38,12 +34,9 @@ class OutputParameters(Configuration):
     Output parameters for dcore
     """
 
-    def __init__(self, **kwargs):
-        self.Verbose = False
-        self.dumpfreq = 10
-        self.dumplist = (True,True,True)
-
-        super(OutputParameters, self).__init__(**kwargs)
+    Verbose = False
+    dumpfreq = 10
+    dumplist = (True,True,True)
 
 
 class CompressibleParameters(Configuration):
@@ -52,14 +45,11 @@ class CompressibleParameters(Configuration):
     Physical parameters for 3d Compressible Euler
     """
 
-    def __init__(self, **kwargs):
-        self.g = 9.81
-        self.N = 0.01
-        self.cp = 1004.5
-        self.R_d = 287.
-        self.p_0 = 1000.0*1000.0
-        self.kappa = 2.0/7.0
-        self.k = None
-        self.Omega = None
-
-        super(CompressibleParameters, self).__init__(**kwargs)
+    g = 9.81
+    N = 0.01
+    cp = 1004.5
+    R_d = 287.
+    p_0 = 1000.0*1000.0
+    kappa = 2.0/7.0
+    k = None
+    Omega = None
