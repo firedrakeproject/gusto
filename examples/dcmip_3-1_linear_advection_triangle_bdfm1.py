@@ -36,7 +36,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # Make a vertical direction for the linearised advection
 k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
