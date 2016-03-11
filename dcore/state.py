@@ -86,8 +86,8 @@ class State(object):
         Initialise state variables
         """
 
-        for i in range(self.x_init.function_space().num_sub_spaces()):
-            self.x_init.sub(i).project(initial_conditions[i])
+        for x, ic in zip(self.x_init.split(), initial_conditions):
+            x.project(ic)
 
     @abstractmethod
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
