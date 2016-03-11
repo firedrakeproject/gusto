@@ -69,8 +69,8 @@ class CompressibleSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        beta = state.dt*state.alpha
-        cp = state.cp
+        beta = state.timestepping.dt*state.timestepping.alpha
+        cp = state.parameters.cp
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
@@ -90,7 +90,7 @@ class CompressibleSolver(TimesteppingSolver):
         pibar_theta = exner_theta(thetabar, rhobar, state)
 
         # Analytical (approximate) elimination of theta
-        k = state.k             # Upward pointing unit vector
+        k = state.parameters.k             # Upward pointing unit vector
         theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
         eqn = (
