@@ -223,3 +223,18 @@ class Compressible3DState(State):
         self.V[2] = FunctionSpace(mesh, V2t_elt)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
+
+
+class ShallowWaterState(State):
+
+    def _build_spaces(self, mesh, vertical, degree, family):
+
+        cell = mesh.ufl_cell().cellname()
+
+        V1_elt = FiniteElement(family, cell, degree)
+
+        self.V = [0,0]
+        self.V[0] = FunctionSpace(mesh,V1_elt)
+        self.V[1] = FunctionSpace(mesh,"DG",degree-1)
+
+        self.W = MixedFunctionSpace((self.V[0], self.V[1]))
