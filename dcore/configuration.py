@@ -53,3 +53,12 @@ class CompressibleParameters(Configuration):
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
     k = None  # vertical direction
     Omega = None  # rotation vector
+
+
+class ShallowWaterParameters(Configuration):
+
+    """
+    Physical parameters for 3d Compressible Euler
+    """
+    g = 9.806
+    Omega = 7.292e-5  # rotation rate

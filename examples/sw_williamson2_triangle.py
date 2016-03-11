@@ -1,6 +1,6 @@
 from dcore import *
-from firedrake import IcosahedralSphereMesh, Expression, \
-    VectorFunctionSpace
+from firedrake import IcosahedralSphereMesh, Expression
+
 
 refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -15,19 +15,19 @@ global_normal = Expression(("x[0]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
                             "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])"))
 mesh.init_cell_orientations(global_normal)
 
-# Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-# Make a vertical direction for the linearised advection
-k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
-
-Omega = Function(W_VectorCG1).assign(0.0)
+timestepping = TimesteppingParameters()
+output = OutputParameters()
+parameters = ShallowWaterParameters()
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
-                          family="BDM")
+                          family="BDM",
+                          timestepping=timestepping,
+                          output=output,
+                          parameters=parameters)
 
-g = 9.806
-Omega = 7.292e-5
+g = parameters.g
+Omega = parameters.Omega
+
 # interpolate initial conditions
 # Initial/current conditions
 u0, D0 = Function(state.V[0]), Function(state.V[1])

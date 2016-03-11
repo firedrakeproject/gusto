@@ -9,7 +9,7 @@ class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
 
-    :arg mesh: The :class:`ExtrudedMesh` to use.
+    :arg mesh: The :class:`Mesh` to use.
     :arg vertical_degree: integer, the degree for spaces in the vertical
     (specifies the degree for the pressure space, other spaces are inferred)
     defaults to 1.
@@ -21,6 +21,10 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
+    :arg timestepping: class containing timestepping parameters
+    :arg output: class containing output parameters
+    :arg parameters: class containing physical parameters
+
     """
     __metaclass__ = ABCMeta
 
