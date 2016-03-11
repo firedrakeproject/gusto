@@ -1,5 +1,6 @@
 from dcore import *
-from firedrake import IcosahedralSphereMesh, Expression
+from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
+    Constant, as_vector
 
 def setup_sw():
 
@@ -25,14 +26,16 @@ def setup_sw():
                               output=output,
                               parameters=parameters)
 
-    g = parameters.g
-    Omega = parameters.Omega
-
     # interpolate initial conditions
-    # Initial/current conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
-    uexpr = Expression(("-u_0*x[1]/R", "u_0*x[0]/R", "0.0"), u_0=u_0, R=R)
-    Dexpr = Expression("h0 - ((R * Omega * u_0 + u_0*u_0/2.0)*(x[2]*x[2]/(R*R)))/g", h0=2940, R=R, Omega=Omega, u_0=u_0, g=g)
+    x = SpatialCoordinate(mesh)
+    u_max = Constant(u_0)
+    R = Constant(R)
+    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    h0 = Constant(2940)
+    Omega = Constant(parameters.Omega)
+    g = Constant(parameters.g)
+    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
