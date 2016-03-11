@@ -46,17 +46,19 @@ def setup_dcmip():
 
     Omega = Function(W_VectorCG1).assign(0.0)
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="BDFM",
-                  dt=dt,
-                  alpha=0.5,
-                  g=g,
-                  cp=c_p,
-                  R_d=R_d,
-                  p_0=p_0,
-                  k=k,
-                  Omega=Omega,
-                  Verbose=True, dumpfreq=1)
+    state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
+                                family="BDFM",
+                                dt=dt,
+                                alpha=0.5,
+                                g=g,
+                                cp=c_p,
+                                R_d=R_d,
+                                p_0=p_0,
+                                k=k,
+                                Omega=Omega,
+                                Verbose=True, dumpfreq=1)
+
+    state.fieldlist = ('u', 'rho', 'theta')
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -103,7 +105,7 @@ def setup_dcmip():
     theta0.assign(theta_b + theta_prime)
     rho0.assign(rho_b)
 
-    state.initialise(u0, rho0, theta0)
+    state.initialise([u0, rho0, theta0])
     state.set_reference_profiles(rho_b, theta_b)
 
     # Set up advection schemes
