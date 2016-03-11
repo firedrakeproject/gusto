@@ -20,47 +20,20 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg g: the acceleration due to gravity
     """
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT",
-                 dt=1.0,
-                 alpha=0.5,
-                 maxk=2,
-                 maxi=2,
-                 g=9.81,
-                 cp=1004.5,
-                 R_d=287,
-                 p_0=1000.0 * 100.0,
-                 kappa=2.0/7.0,
-                 k=None,
-                 Omega=None,
-                 Verbose=False,
-                 dumpfreq=10,
-                 dumplist=(True,True,True)):
+                 timestepping=None,
+                 output=None,
+                 parameters=None):
+
+        self.timestepping = timestepping
+        self.output = output
+        self.parameters = parameters
 
         # The mesh
         self.mesh = mesh
-
-        # parameters
-        self.dt = dt
-        self.maxk = maxk
-        self.maxi = maxi
-        self.alpha = alpha
-        self.g = g
-        self.cp = cp
-        self.R_d = R_d
-        self.p_0 = p_0
-        self.kappa = kappa
-        if k is not None:
-            self.k = k
-        if Omega is not None:
-            self.Omega = Omega
-
-        self.Verbose = Verbose
-        self.dumpfreq = dumpfreq
-        self.dumplist = dumplist
 
         # Build the spaces
         self._build_spaces(mesh, vertical_degree,
@@ -69,7 +42,7 @@ class State(object):
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
         self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-        self.Phi *= g
+        self.Phi *= parameters.g
 
         # Allocate state
         self._allocate_state()
@@ -88,8 +61,8 @@ class State(object):
             self.dumpcount = 0
             self.Files = [0,0,0]
             self.xout = [0,0,0]
-            for i in range(len(self.dumplist)):
-                if(self.dumplist[i]):
+            for i, dump in enumerate(self.output.dumplist):
+                if(dump):
                     (self.xout)[i] = Function(self.V[i])
                     self.Files[i] = File(fieldlist[i]+'.pvd')
                     self.xout[i].assign(xn[i])
@@ -97,11 +70,11 @@ class State(object):
             self.dumped = True
         else:
             self.dumpcount += 1
-            print self.dumpcount, self.dumpfreq, 'DUMP STATS'
-            if(self.dumpcount == self.dumpfreq):
+            print self.dumpcount, self.output.dumpfreq, 'DUMP STATS'
+            if(self.dumpcount == self.output.dumpfreq):
                 self.dumpcount = 0
-                for i in range(len(self.dumplist)):
-                    if(self.dumplist[i]):
+                for i, dump in enumerate(self.output.dumplist):
+                    if(dump):
                         print i
                         print self.Files[i], self.xout[i]
                         self.xout[i].assign(xn[i])

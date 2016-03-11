@@ -13,12 +13,6 @@ def setup_dcmip():
     a_ref = 6.37122e6
     X = 125.0  # Reduced-size Earth reduction factor
     a = a_ref/X
-    g = 9.81
-    N = 0.01  # Brunt-Vaisala frequency (1/s)
-    p_0 = 1000.0 * 100.0  # Reference pressure (Pa, not hPa)
-    c_p = 1004.5  # SHC of dry air at constant pressure (J/kg/K)
-    R_d = 287.0  # Gas constant for dry air (J/kg/K)
-    kappa = 2.0/7.0  # R_d/c_p
     T_eq = 300.0  # Isothermal atmospheric temperature (K)
     p_eq = 1000.0 * 100.0  # Reference surface pressure at the equator
     d = 5000.0  # Width parameter for Theta'
@@ -27,7 +21,6 @@ def setup_dcmip():
     deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
     L_z = 20000.0  # Vertical wave length of the Theta' perturbation
     u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
-    dt = 10.0 # timestep
 
     m = IcosahedralSphereMesh(radius=a,
                               refinement_level=refinements)
@@ -46,17 +39,23 @@ def setup_dcmip():
 
     Omega = Function(W_VectorCG1).assign(0.0)
 
+    timestepping = TimesteppingParameters(dt=10.0)
+    output = OutputParameters(Verbose=True, dumpfreq=1)
+    parameters = CompressibleParameters(k=k, Omega=Omega)
+
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="BDFM",
-                  dt=dt,
-                  alpha=0.5,
-                  g=g,
-                  cp=c_p,
-                  R_d=R_d,
-                  p_0=p_0,
-                  k=k,
-                  Omega=Omega,
-                  Verbose=True, dumpfreq=1)
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters)
+
+    # interpolate initial conditions
+    g = parameters.g
+    c_p = parameters.cp
+    N = parameters.N
+    p_0 = parameters.p_0
+    R_d = parameters.R_d
+    kappa = parameters.kappa
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -149,7 +148,7 @@ def setup_dcmip():
     stepper = Timestepper(state, advection_list, linear_solver,
                           compressible_forcing)
 
-    return stepper, dt
+    return stepper, timestepping.dt
 
 def run_dcmip():
 
