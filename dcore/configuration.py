@@ -45,12 +45,11 @@ class CompressibleParameters(Configuration):
     """
     Physical parameters for 3d Compressible Euler
     """
-
-    g = 9.81 
-    N = 0.01 # Brunt-Vaisala frequency (1/s)
-    cp = 1004.5 # specific heat capacity of dry air at const. pressure (J/kg/K)
-    R_d = 287. # Gas constant for dry air (J/kg/K)
-    kappa = 2.0/7.0 # R_d/c_p
-    p_0 = 1000.0*100.0 # reference pressure (Pa, not hPa)
-    k = None # vertical direction
-    Omega = None # rotation vector
+    g = 9.81
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
+    R_d = 287.  # Gas constant for dry air (J/kg/K)
+    kappa = 2.0/7.0  # R_d/c_p
+    p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
+    k = None  # vertical direction
+    Omega = None  # rotation vector
