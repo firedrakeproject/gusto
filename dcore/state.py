@@ -178,14 +178,17 @@ class Compressible3DState(State):
 
 class ShallowWaterState(State):
 
-    def _build_spaces(self, mesh, vertical, degree, family):
+    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+
+        if vertical_degree is not None:
+            raise ValueError('Mesh is not extruded in the vertical for shallow water')
 
         cell = mesh.ufl_cell().cellname()
 
-        V1_elt = FiniteElement(family, cell, degree)
+        V1_elt = FiniteElement(family, cell, horizontal_degree)
 
         self.V = [0,0]
         self.V[0] = FunctionSpace(mesh,V1_elt)
-        self.V[1] = FunctionSpace(mesh,"DG",degree-1)
+        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree-1)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))

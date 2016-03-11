@@ -23,7 +23,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
-state = ShallowWaterState(mesh, vertical_degree=1, horizontal_degree=1,
+state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                           family="BDM")
 
 g = 9.806
