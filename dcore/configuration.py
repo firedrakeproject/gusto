@@ -8,6 +8,7 @@ class Configuration(object):
     def __init__(self, **kwargs):
 
         for name, value in kwargs.iteritems():
+            print name, value
             self.__setattr__(name, value)
 
     def __setattr__(self, name, value):
@@ -49,7 +50,7 @@ class CompressibleParameters(Configuration):
     N = 0.01
     cp = 1004.5
     R_d = 287.
-    p_0 = 1000.0*1000.0
+    p_0 = 1000.0*100.0
     kappa = 2.0/7.0
     k = None
     Omega = None
