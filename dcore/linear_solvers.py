@@ -36,13 +36,11 @@ class CompressibleSolver(TimesteppingSolver):
     (3) Reconstruct theta
 
     :arg state: a :class:`.State` object containing everything else.
-    :arg alpha: off-centering parameter from [0,1] (default value 0.5).
     """
 
-    def __init__(self, state, alpha=0.5, params=None):
+    def __init__(self, state, params=None):
 
         self.state = state
-        self.alpha = alpha
 
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
@@ -71,7 +69,7 @@ class CompressibleSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        beta = state.dt*self.alpha
+        beta = state.dt*state.alpha
         cp = state.cp
 
         # Split up the rhs vector (symbolically)

@@ -38,8 +38,12 @@ before_install:
   - pip install flake8
 
 install:
-  # Eventually we will want to install firedrake here.
-  - true
+  - curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
+  - python ./firedrake-install --disable-ssh --minimal-petsc
+  - . ./firedrake/bin/activate
+  - pip install pytest
+  - export PYTHONPATH=`pwd`:$PYTHONPATH
 
 script:
   - make lint
+  - py.test -v tests

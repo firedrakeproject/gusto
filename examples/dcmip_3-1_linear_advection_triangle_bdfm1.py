@@ -154,7 +154,7 @@ params = {'pc_type': 'fieldsplit',
           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, alpha=0.5, params=params)
+linear_solver = CompressibleSolver(state, params=params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
