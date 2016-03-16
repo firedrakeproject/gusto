@@ -30,7 +30,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # Make a vertical direction for the linearised advection
 k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
@@ -41,11 +40,13 @@ timestepping = TimesteppingParameters(dt=10.0)
 output = OutputParameters(Verbose=True, dumpfreq=1)
 parameters = CompressibleParameters(k=k, Omega=Omega)
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="BDFM",
-              timestepping=timestepping,
-              output=output,
-              parameters=parameters)
+state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
+                            family="BDFM",
+                            timestepping=timestepping,
+                            output=output,
+                            parameters=parameters)
+
+state.fieldlist = ('u', 'rho', 'theta')
 
 # interpolate initial conditions
 g = parameters.g
@@ -114,7 +115,7 @@ theta_prime.interpolate(Expression(theta_prime_expr, dT=deltaTheta, d=d, L_z=L_z
 theta0.assign(theta_b + theta_prime)
 rho0.assign(rho_b)
 
-state.initialise(u0, rho0, theta0)
+state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 
 # Set up advection schemes

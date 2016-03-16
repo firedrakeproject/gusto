@@ -43,11 +43,13 @@ def setup_dcmip():
     output = OutputParameters(Verbose=True, dumpfreq=1)
     parameters = CompressibleParameters(k=k, Omega=Omega)
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="BDFM",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters)
+    state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
+                                family="BDFM",
+                                timestepping=timestepping,
+                                output=output,
+                                parameters=parameters)
+
+    state.fieldlist = ('u', 'rho', 'theta')
 
     # interpolate initial conditions
     g = parameters.g
@@ -102,7 +104,7 @@ def setup_dcmip():
     theta0.assign(theta_b + theta_prime)
     rho0.assign(rho_b)
 
-    state.initialise(u0, rho0, theta0)
+    state.initialise([u0, rho0, theta0])
     state.set_reference_profiles(rho_b, theta_b)
 
     # Set up advection schemes

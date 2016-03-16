@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
     Expression, File
@@ -8,7 +9,7 @@ class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
 
-    :arg mesh: The :class:`ExtrudedMesh` to use.
+    :arg mesh: The :class:`Mesh` to use.
     :arg vertical_degree: integer, the degree for spaces in the vertical
     (specifies the degree for the pressure space, other spaces are inferred)
     defaults to 1.
@@ -20,7 +21,12 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
+    :arg timestepping: class containing timestepping parameters
+    :arg output: class containing output parameters
+    :arg parameters: class containing physical parameters
+
     """
+    __metaclass__ = ABCMeta
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT",
@@ -39,11 +45,6 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                            horizontal_degree, family)
 
-        # build the geopotential
-        V = FunctionSpace(mesh, "CG", 1)
-        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-        self.Phi *= parameters.g
-
         # Allocate state
         self._allocate_state()
 
@@ -55,7 +56,7 @@ class State(object):
         """
 
         xn = self.xn.split()
-        fieldlist = ('u','rho','theta')
+        fieldlist = self.fieldlist
 
         if not self.dumped:
             self.dumpcount = 0
@@ -80,18 +81,56 @@ class State(object):
                         self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
 
-    def initialise(self, u0, rho0, theta0):
+    def initialise(self, initial_conditions):
         """
-        Initialise state variables from expressions.
-        :arg u0: :class:`.Function` object, initial u
-        :arg rho0: :class:`.Function` object, initial rho
-        :arg theta0: :class:`.Function` object, initial theta
+        Initialise state variables
         """
 
-        u_init, rho_init, theta_init = self.x_init.split()
-        u_init.project(u0)
-        rho_init.project(rho0)
-        theta_init.project(theta0)
+        for x, ic in zip(self.x_init.split(), initial_conditions):
+            x.project(ic)
+
+    @abstractmethod
+    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+        """
+        Build function spaces:
+        """
+        pass
+
+    def _allocate_state(self):
+        """
+        Construct Functions to store the state variables.
+        """
+
+        W = self.W
+        self.xn = Function(W)
+        self.x_init = Function(W)
+        self.xstar = Function(W)
+        self.xp = Function(W)
+        self.xnp1 = Function(W)
+        self.xrhs = Function(W)
+        self.dy = Function(W)
+
+
+class Compressible3DState(State):
+
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT",
+                 timestepping=None,
+                 output=None,
+                 parameters=None):
+
+        super(Compressible3DState, self).__init__(mesh,
+                                                  vertical_degree,
+                                                  horizontal_degree,
+                                                  family,
+                                                  timestepping,
+                                                  output,
+                                                  parameters)
+
+        # build the geopotential
+        V = FunctionSpace(mesh, "CG", 1)
+        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+        self.Phi *= parameters.g
 
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
@@ -140,16 +179,20 @@ class State(object):
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
 
-        W = self.W
-        self.xn = Function(W)
-        self.x_init = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.dy = Function(W)
+class ShallowWaterState(State):
+
+    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+
+        if vertical_degree is not None:
+            raise ValueError('Mesh is not extruded in the vertical for shallow water')
+
+        cell = mesh.ufl_cell().cellname()
+
+        V1_elt = FiniteElement(family, cell, horizontal_degree)
+
+        self.V = [0,0]
+        self.V[0] = FunctionSpace(mesh,V1_elt)
+        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree-1)
+
+        self.W = MixedFunctionSpace((self.V[0], self.V[1]))
