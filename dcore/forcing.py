@@ -17,15 +17,16 @@ class Forcing(object):
         self.state = state
 
     @abstractmethod
-    def apply(self, scale, x, x_out):
+    def apply(self, scale, x, x_nl, x_out):
         """
-        Function takes x as input, computes F(x) and returns
-        x_out = x + scale*F(x)
+        Function takes x as input, computes F(x_nl) and returns
+        x_out = x + scale*F(x_nl)
         as output.
 
         :arg scale: parameter to scale the output by.
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        :arg x: :class:`.Function` object
+        :arg x_nl: :class:`.Function` object
+        :arg x_out: :class:`.Function` object
         """
         pass
 
