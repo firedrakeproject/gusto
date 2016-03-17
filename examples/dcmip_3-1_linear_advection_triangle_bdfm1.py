@@ -37,7 +37,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 Omega = Function(W_VectorCG1).assign(0.0)
 
 timestepping = TimesteppingParameters(dt=10.0)
-output = OutputParameters(Verbose=True, dumpfreq=1)
+output = OutputParameters(Verbose=True, dumpfreq=1, dumplist=[True,True,True], dirname='dcmip')
 parameters = CompressibleParameters(k=k, Omega=Omega)
 
 state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,

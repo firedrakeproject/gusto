@@ -17,7 +17,7 @@ def setup_sw():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters()
-    output = OutputParameters()
+    output = OutputParameters(dumplist=(True,True), dirname='tests/sw')
     parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,

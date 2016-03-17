@@ -16,7 +16,7 @@ global_normal = Expression(("x[0]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
 mesh.init_cell_orientations(global_normal)
 
 timestepping = TimesteppingParameters()
-output = OutputParameters()
+output = OutputParameters(dumplist=(True,True), dirname='sw_williamson2')
 parameters = ShallowWaterParameters()
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,

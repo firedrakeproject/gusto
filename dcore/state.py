@@ -1,4 +1,6 @@
 from __future__ import absolute_import
+from os.path import isdir
+from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
@@ -55,31 +57,28 @@ class State(object):
         Dump output
         """
 
-        xn = self.xn.split()
-        fieldlist = self.fieldlist
+        self.field_dict = {name: func for (name, func) in
+                           zip(self.fieldlist, self.xn.split())}
+        dumpdir = "results/" + self.output.dirname
 
         if not self.dumped:
+            if isdir(dumpdir):
+                exit("directory already exists!")
             self.dumpcount = 0
-            self.Files = [0,0,0]
-            self.xout = [0,0,0]
-            for i, dump in enumerate(self.output.dumplist):
+            self.Files = {}
+            for field, dump in zip(self.fieldlist, self.output.dumplist):
                 if(dump):
-                    (self.xout)[i] = Function(self.V[i])
-                    self.Files[i] = File(fieldlist[i]+'.pvd')
-                    self.xout[i].assign(xn[i])
-                    self.Files[i] << self.xout[i]
+                    self.Files[field] = File("%s/%s.pvd" % (dumpdir, field))
+                    self.Files[field] << self.field_dict[field]
             self.dumped = True
         else:
             self.dumpcount += 1
             print self.dumpcount, self.output.dumpfreq, 'DUMP STATS'
             if(self.dumpcount == self.output.dumpfreq):
                 self.dumpcount = 0
-                for i, dump in enumerate(self.output.dumplist):
+                for field, dump in zip(self.fieldlist, self.output.dumplist):
                     if(dump):
-                        print i
-                        print self.Files[i], self.xout[i]
-                        self.xout[i].assign(xn[i])
-                        self.Files[i] << self.xout[i]
+                        self.Files[field] << self.field_dict[field]
 
     def initialise(self, initial_conditions):
         """
