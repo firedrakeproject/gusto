@@ -17,7 +17,7 @@ def setup():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dumplist=(False,True), dumpfreq=10)
+    output = OutputParameters(dumplist=(False,True), dumpfreq=150)
     parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
@@ -30,10 +30,7 @@ def setup():
     u0, D0 = Function(state.V[0]), Function(state.V[1])
     x = SpatialCoordinate(mesh)
     uexpr = as_vector([-x[1], x[0], 0.0])
-    h0 = Constant(1000)
     Dexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
@@ -50,7 +47,7 @@ def run():
     state = setup()
     
     dt = state.timestepping.dt
-    tmax = 1.
+    tmax = pi/2.
     t = 0.
     D_advection = DGAdvection(state)
 
@@ -66,6 +63,15 @@ def run():
         state.xn.assign(state.xnp1)
         state.dump()
 
+    return state.xn.split()[1]
+
 def test_dgadvection():
 
-    run()
+    D = run()
+    Dend = Function(D.function_space())
+    x = SpatialCoordinate(D.function_space().mesh())
+    Dexpr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
+    Dend.interpolate(Dexpr)
+    Derr = Function(D.function_space()).assign(Dend - D)
+    assert(Derr.dat.data.max() < 1.e-2)
+    assert(abs(Derr.dat.data.max()) < 1.5e-2)
