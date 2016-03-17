@@ -152,7 +152,6 @@ class DGAdvection(Advection):
 
     def apply(self, x_in, x_out):
 
-        print "UBAR:", self.ubar.dat.data.min(), self.ubar.dat.data.max()
         # SSPRK Stage 1
         self.D1.assign(x_in)
         self.DGsolver.solve()
