@@ -4,6 +4,7 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 import numpy as np
 
+
 def setup_dcmip():
 
     nlayers = 2         # 2 horizontal layers
@@ -32,24 +33,23 @@ def setup_dcmip():
 
     # Space for initialising velocity
     W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
 
     # Make a vertical direction for the linearised advection
     k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
 
     Omega = Function(W_VectorCG1).assign(0.0)
 
+    fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)
-    output = OutputParameters(Verbose=True, dumpfreq=1)
+    output = OutputParameters(Verbose=True, dumpfreq=1, dirname='tests/dcmip')
     parameters = CompressibleParameters(k=k, Omega=Omega)
 
     state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
                                 family="BDFM",
                                 timestepping=timestepping,
                                 output=output,
-                                parameters=parameters)
-
-    state.fieldlist = ('u', 'rho', 'theta')
+                                parameters=parameters,
+                                fieldlist=fieldlist)
 
     # interpolate initial conditions
     g = parameters.g
@@ -67,13 +67,6 @@ def setup_dcmip():
     string_expander = {'lat': "asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))", 'lon': "atan2(x[1], x[0])", 'r': "sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])", 'z': "(sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a)"}
 
     # Set up ICs
-    zonal_expr = "u_0*cos(%(lat)s)*(%(r)s/a)"
-    sph_vel_expander = {'zonal': zonal_expr}
-    cartesian_u_expr_hz = "-(%(zonal)s)*sin(%%(lon)s)" % sph_vel_expander % string_expander
-    cartesian_v_expr_hz = "(%(zonal)s)*cos(%%(lon)s)" % sph_vel_expander % string_expander
-    cartesian_w_expr_hz = "0.0"
-    u0_hz_expr = Expression((cartesian_u_expr_hz, cartesian_v_expr_hz, cartesian_w_expr_hz), a=a, u_0=u_0)
-    u0_hz = Function(W_VectorCG1).interpolate(u0_hz_expr)
 
     G = g*g/(N*N*c_p)  # seems better than copy-pasting the string into code below...
     T_s_expr = "G + (T_eq - G)*exp(-((u_0*u_0*N*N)/(4*g*g))*(cos(2*%(lat)s) - 1.0))" % string_expander
@@ -115,7 +108,7 @@ def setup_dcmip():
     advection_list.append((rho_advection, 1))
     theta_advection = LinearAdvection_Vt(state, k, theta_b)
     advection_list.append((theta_advection, 2))
-    
+
     # Set up linear solver
     params = {'pc_type': 'fieldsplit',
               'pc_fieldsplit_type': 'schur',
@@ -140,7 +133,7 @@ def setup_dcmip():
               'fieldsplit_1_mg_levels_ksp_max_it': 5,
               'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
               'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-    
+
     linear_solver = CompressibleSolver(state, params=params)
 
     # Set up forcing
@@ -152,10 +145,12 @@ def setup_dcmip():
 
     return stepper, timestepping.dt
 
+
 def run_dcmip():
 
     stepper, dt = setup_dcmip()
     stepper.run(t=0, tmax=dt)
+
 
 def test_dcmip_runs():
 

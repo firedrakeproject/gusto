@@ -172,11 +172,12 @@ class DGAdvection(Advection):
 
         self.advect(x_in, x_out)
 
+
 class EmbeddedDGAdvection(DGAdvection):
 
-    def __init__(self, state, V, Vdg, scheme='ssprk3'):
+    def __init__(self, state, Vdg, scheme='ssprk3'):
 
-        super(EmbeddedDGAdvection, self).__init__(state, Vdg)
+        super(EmbeddedDGAdvection, self).__init__(state, Vdg, scheme)
         self.Vdg = Vdg
 
     def apply(self, x_in, x_out):

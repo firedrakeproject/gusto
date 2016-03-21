@@ -1,7 +1,8 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, assemble, dx
+    as_vector
 from math import pi
+
 
 def setup():
 
@@ -16,15 +17,17 @@ def setup():
                                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])"))
     mesh.init_cell_orientations(global_normal)
 
+    fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dumplist=(False,True), dumpfreq=150)
+    output = OutputParameters(dumpfreq=150, dirname='tests/DGAdv')
     parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                               family="BDM",
                               timestepping=timestepping,
                               output=output,
-                              parameters=parameters)
+                              parameters=parameters,
+                              fieldlist=fieldlist)
 
     # interpolate initial conditions
     CG = FunctionSpace(mesh, "CG", 1)
@@ -39,22 +42,20 @@ def setup():
 
     state.initialise([u0, Ddg, Dcg])
 
-    # names of fields to dump
-    state.fieldlist = ['u', 'D']
-
     return state, Ddg.function_space(), Dcg
+
 
 def run():
 
     state, Vdg, Dcg = setup()
     state.fieldlist.append('dcg')
-    state.field_dict['dcg']=Dcg
-    
+    state.field_dict['dcg'] = Dcg
+
     dt = state.timestepping.dt
     tmax = pi/2.
     t = 0.
     Ddg_advection = DGAdvection(state, Vdg)
-    Dcg_advection = EmbeddedDGAdvection(state, Dcg.function_space(), Vdg)
+    Dcg_advection = EmbeddedDGAdvection(state, Vdg)
     Dcgp1 = Function(Dcg.function_space())
 
     state.xn.assign(state.x_init)
@@ -74,11 +75,11 @@ def run():
 
     return state.xn.split()[1]
 
+
 def test_dgadvection():
 
     D = run()
     Dend = Function(D.function_space())
-    x = SpatialCoordinate(D.function_space().mesh())
     Dexpr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
     Dend.interpolate(Dexpr)
     Derr = Function(D.function_space()).assign(Dend - D)
