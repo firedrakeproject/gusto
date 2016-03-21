@@ -27,40 +27,49 @@ def setup():
                               parameters=parameters)
 
     # interpolate initial conditions
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    CG = FunctionSpace(mesh, "CG", 1)
+    u0, Ddg, Dcg = Function(state.V[0]), Function(state.V[1]), Function(CG)
     x = SpatialCoordinate(mesh)
     uexpr = as_vector([-x[1], x[0], 0.0])
     Dexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
 
     u0.project(uexpr)
-    D0.interpolate(Dexpr)
+    Ddg.interpolate(Dexpr)
+    Dcg.interpolate(Dexpr)
 
-    state.initialise([u0, D0])
+    state.initialise([u0, Ddg, Dcg])
 
     # names of fields to dump
-    state.fieldlist = ('u', 'D')
+    state.fieldlist = ['u', 'D']
 
-    return state
+    return state, Ddg.function_space(), Dcg
 
 def run():
 
-    state = setup()
+    state, Vdg, Dcg = setup()
+    state.fieldlist.append('dcg')
+    state.field_dict['dcg']=Dcg
     
     dt = state.timestepping.dt
     tmax = pi/2.
     t = 0.
-    D_advection = DGAdvection(state)
+    Ddg_advection = DGAdvection(state, Vdg)
+    Dcg_advection = EmbeddedDGAdvection(state, Dcg.function_space(), Vdg)
+    Dcgp1 = Function(Dcg.function_space())
 
     state.xn.assign(state.x_init)
-    xn_fields = state.xn.split()
-    xnp1_fields = state.xnp1.split()
-    D_advection.ubar.assign(xn_fields[0])
+    xn_fields = [state.xn.split()[1], Dcg]
+    xnp1_fields = [state.xnp1.split()[1], Dcgp1]
+    Ddg_advection.ubar.assign(state.xn.split()[0])
+    Dcg_advection.ubar.assign(state.xn.split()[0])
     state.dump()
 
     while t < tmax - 0.5*dt:
         t += dt
-        D_advection.apply(xn_fields[1], xnp1_fields[1])
+        Ddg_advection.apply(xn_fields[0], xnp1_fields[0])
+        Dcg_advection.apply(xn_fields[1], xnp1_fields[1])
         state.xn.assign(state.xnp1)
+        xn_fields[1].assign(xnp1_fields[1])
         state.dump()
 
     return state.xn.split()[1]

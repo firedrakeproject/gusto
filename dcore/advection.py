@@ -119,18 +119,20 @@ class LinearAdvection_V3(Advection):
 
 class DGAdvection(Advection):
 
-    def __init__(self, state):
+    def __init__(self, state, V, scheme='ssprk3'):
 
         super(DGAdvection, self).__init__(state)
 
+        element = V.fiat_element
+        assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
+        self.advect = getattr(self, scheme)
         dt = state.timestepping.dt
 
         # by convention the last space is the DG space
-        DGSpace = state.V[-1]
-        phi = TestFunction(DGSpace)
-        D = TrialFunction(DGSpace)
-        self.D1 = Function(DGSpace)
-        self.dD = Function(DGSpace)
+        phi = TestFunction(V)
+        D = TrialFunction(V)
+        self.D1 = Function(V)
+        self.dD = Function(V)
 
         n = FacetNormal(state.mesh)
         # ( dot(v, n) + |dot(v, n)| )/2.0
@@ -150,7 +152,7 @@ class DGAdvection(Advection):
                                                     'pc_type':'bjacobi',
                                                     'sub_pc_type': 'ilu'})
 
-    def apply(self, x_in, x_out):
+    def ssprk3(self, x_in, x_out):
 
         # SSPRK Stage 1
         self.D1.assign(x_in)
@@ -165,3 +167,21 @@ class DGAdvection(Advection):
         self.DGsolver.solve()
 
         x_out.assign((1.0/3.0)*x_in + (2.0/3.0)*self.dD)
+
+    def apply(self, x_in, x_out):
+
+        self.advect(x_in, x_out)
+
+class EmbeddedDGAdvection(DGAdvection):
+
+    def __init__(self, state, V, Vdg, scheme='ssprk3'):
+
+        super(EmbeddedDGAdvection, self).__init__(state, Vdg)
+        self.Vdg = Vdg
+
+    def apply(self, x_in, x_out):
+
+        x_in_dg = Function(self.Vdg).interpolate(x_in)
+        x_out_dg = Function(self.Vdg)
+        self.advect(x_in_dg, x_out_dg)
+        x_out.interpolate(x_out_dg)
