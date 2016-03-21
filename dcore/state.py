@@ -26,6 +26,7 @@ class State(object):
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
+    :arg fieldlist: list of prognostic field names
 
     """
     __metaclass__ = ABCMeta
@@ -34,11 +35,16 @@ class State(object):
                  family="RT",
                  timestepping=None,
                  output=None,
-                 parameters=None):
+                 parameters=None,
+                 fieldlist=None):
 
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
+        if fieldlist is None:
+            raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
+        else:
+            self.fieldlist = fieldlist
 
         # The mesh
         self.mesh = mesh
@@ -57,6 +63,10 @@ class State(object):
         Dump output
         """
 
+        # default behaviour is to dump all prognostic fields
+        if self.output.dumplist is None:
+            self.output.dumplist = self.fieldlist
+
         self.field_dict = {name: func for (name, func) in
                            zip(self.fieldlist, self.xn.split())}
         dumpdir = "results/" + self.output.dirname
@@ -66,8 +76,7 @@ class State(object):
                 exit("directory already exists!")
             self.dumpcount = 0
             self.Files = {}
-            for field, dump in zip(self.fieldlist, self.output.dumplist):
-                if(dump):
+            for field in self.output.dumplist:
                     self.Files[field] = File("%s/%s.pvd" % (dumpdir, field))
                     self.Files[field] << self.field_dict[field]
             self.dumped = True
@@ -76,8 +85,7 @@ class State(object):
             print self.dumpcount, self.output.dumpfreq, 'DUMP STATS'
             if(self.dumpcount == self.output.dumpfreq):
                 self.dumpcount = 0
-                for field, dump in zip(self.fieldlist, self.output.dumplist):
-                    if(dump):
+                for field in self.output.dumplist:
                         self.Files[field] << self.field_dict[field]
 
     def initialise(self, initial_conditions):
@@ -116,7 +124,8 @@ class Compressible3DState(State):
                  family="RT",
                  timestepping=None,
                  output=None,
-                 parameters=None):
+                 parameters=None,
+                 fieldlist=None):
 
         super(Compressible3DState, self).__init__(mesh,
                                                   vertical_degree,
@@ -124,7 +133,8 @@ class Compressible3DState(State):
                                                   family,
                                                   timestepping,
                                                   output,
-                                                  parameters)
+                                                  parameters,
+                                                  fieldlist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)

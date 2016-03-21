@@ -36,17 +36,19 @@ k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
+fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0)
-output = OutputParameters(Verbose=True, dumpfreq=1, dumplist=[True,True,True], dirname='dcmip')
+output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip')
 parameters = CompressibleParameters(k=k, Omega=Omega)
 
 state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
                             family="BDFM",
                             timestepping=timestepping,
                             output=output,
-                            parameters=parameters)
+                            parameters=parameters,
+                            fieldlist=fieldlist)
 
-state.fieldlist = ('u', 'rho', 'theta')
+state.fieldlist = fieldlist
 
 # interpolate initial conditions
 g = parameters.g
