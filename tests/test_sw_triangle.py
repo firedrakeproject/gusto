@@ -2,6 +2,7 @@ from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 
+
 def setup_sw():
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
@@ -16,6 +17,7 @@ def setup_sw():
                                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])"))
     mesh.init_cell_orientations(global_normal)
 
+    fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters()
     output = OutputParameters(dumplist=(True,True), dirname='tests/sw')
     parameters = ShallowWaterParameters()
@@ -24,7 +26,8 @@ def setup_sw():
                               family="BDM",
                               timestepping=timestepping,
                               output=output,
-                              parameters=parameters)
+                              parameters=parameters,
+                              fieldlist=fieldlist)
 
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
@@ -42,12 +45,11 @@ def setup_sw():
 
     state.initialise([u0, D0])
 
-    # names of fields to dump
-    state.fieldlist = ('u', 'D')
 
 def run_sw():
 
     setup_sw()
+
 
 def test_sw_setup():
 
