@@ -4,8 +4,8 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 import numpy as np
 
-nlayers = 10         # 10 horizontal layers
-refinements = 5      # number of horizontal cells = 20*(4^refinements)
+nlayers = 2         # 10 horizontal layers
+refinements = 3      # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -47,8 +47,6 @@ state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
                             output=output,
                             parameters=parameters,
                             fieldlist=fieldlist)
-
-state.fieldlist = fieldlist
 
 # interpolate initial conditions
 g = parameters.g

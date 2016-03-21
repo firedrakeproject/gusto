@@ -15,15 +15,17 @@ global_normal = Expression(("x[0]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
                             "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])"))
 mesh.init_cell_orientations(global_normal)
 
+fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters()
-output = OutputParameters(dumplist=(True,True), dirname='sw_williamson2')
+output = OutputParameters(dirname='sw_williamson2')
 parameters = ShallowWaterParameters()
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                           family="BDM",
                           timestepping=timestepping,
                           output=output,
-                          parameters=parameters)
+                          parameters=parameters,
+                          fieldlist=fieldlist)
 
 g = parameters.g
 Omega = parameters.Omega
@@ -44,6 +46,3 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 
 state.initialise([u0, D0])
-
-# names of fields to dump
-state.fieldlist = ('u', 'D')
