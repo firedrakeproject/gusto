@@ -8,7 +8,6 @@ class Configuration(object):
     def __init__(self, **kwargs):
 
         for name, value in kwargs.iteritems():
-            print name, value
             self.__setattr__(name, value)
 
     def __setattr__(self, name, value):
@@ -37,7 +36,8 @@ class OutputParameters(Configuration):
 
     Verbose = False
     dumpfreq = 10
-    dumplist = (True,True,True)
+    dumplist = None
+    dirname = None
 
 
 class CompressibleParameters(Configuration):
