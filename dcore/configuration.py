@@ -38,6 +38,9 @@ class OutputParameters(Configuration):
     dumpfreq = 10
     dumplist = None
     dirname = None
+    #: Should the output fields be interpolated or projected to
+    #: a linear space?  Default is interpolation.
+    project_fields = False
 
 
 class CompressibleParameters(Configuration):

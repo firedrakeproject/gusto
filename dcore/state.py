@@ -1,5 +1,6 @@
 from __future__ import absolute_import
-from os.path import isdir
+from os import path
+import itertools
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
@@ -58,7 +59,7 @@ class State(object):
         self.field_dict = {name: func for (name, func) in
                            zip(self.fieldlist, self.xn.split())}
 
-        self.dumped = False
+        self.dumpfile = None
 
     def dump(self):
         """
@@ -69,26 +70,25 @@ class State(object):
         if self.output.dumplist is None:
             self.output.dumplist = self.fieldlist
 
-        dumpdir = "results/" + self.output.dirname
+        funcs = self.xn.split()
+        to_dump = []
+        for name, f in zip(self.fieldlist, funcs):
+            if name in self.output.dumplist:
+                to_dump.append(f)
+            f.rename(name=name)
 
-        if not self.dumped:
-            if isdir(dumpdir):
-                exit("directory already exists!")
-            self.dumpcount = 0
-            self.Files = {}
-            for field in self.output.dumplist:
-                print field
-                self.Files[field] = File("%s/%s.pvd" % (dumpdir, field))
-                self.Files[field] << self.field_dict[field]
-            self.dumped = True
-        else:
-            self.dumpcount += 1
-            print self.dumpcount, self.output.dumpfreq, 'DUMP STATS'
-            if(self.dumpcount == self.output.dumpfreq):
-                self.dumpcount = 0
-                for field in self.output.dumplist:
-                    print field
-                    self.Files[field] << self.field_dict[field]
+        dumpdir = path.join("results", self.output.dirname)
+
+        outfile = path.join(dumpdir, "field_output.pvd")
+        if self.dumpfile is None:
+            if path.exists(dumpdir):
+                exit("results directory '%s' already exists" % dumpdir)
+            self.dumpcount = itertools.count()
+            self.dumpfile = File(outfile, project_output=self.output.project_fields)
+
+        if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+            self.dumpfile.write(*funcs)
+
 
     def initialise(self, initial_conditions):
         """
