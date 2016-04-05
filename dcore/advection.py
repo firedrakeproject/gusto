@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, jump, avg, dS, dS_v, dS_h, action
+    dx, dot, grad, jump, avg, dS, dS_v, dS_h, action, File
 
 
 class Advection(object):
@@ -185,4 +185,4 @@ class EmbeddedDGAdvection(DGAdvection):
         x_in_dg = Function(self.Vdg).interpolate(x_in)
         x_out_dg = Function(self.Vdg)
         self.advect(x_in_dg, x_out_dg)
-        x_out.interpolate(x_out_dg)
+        x_out.project(x_out_dg)

@@ -40,7 +40,7 @@ def setup():
     Ddg.interpolate(Dexpr)
     Dcg.interpolate(Dexpr)
 
-    state.initialise([u0, Ddg, Dcg])
+    state.initialise([u0, Ddg])
 
     return state, Ddg.function_space(), Dcg
 
@@ -52,7 +52,8 @@ def run():
     state.field_dict['dcg'] = Dcg
 
     dt = state.timestepping.dt
-    tmax = pi/2.
+#    tmax = pi/2.
+    tmax = pi/4.
     t = 0.
     Ddg_advection = DGAdvection(state, Vdg)
     Dcg_advection = EmbeddedDGAdvection(state, Vdg)
