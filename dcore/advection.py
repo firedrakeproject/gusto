@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, jump, avg, dS, dS_v, dS_h, action, File
+    dx, dot, grad, jump, avg, dS, dS_v, dS_h, action
 
 
 class Advection(object):
@@ -119,13 +119,12 @@ class LinearAdvection_V3(Advection):
 
 class DGAdvection(Advection):
 
-    def __init__(self, state, V, scheme='ssprk3'):
+    def __init__(self, state, V):
 
         super(DGAdvection, self).__init__(state)
 
         element = V.fiat_element
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
-        self.advect = getattr(self, scheme)
         dt = state.timestepping.dt
 
         # by convention the last space is the DG space
@@ -152,8 +151,7 @@ class DGAdvection(Advection):
                                                     'pc_type':'bjacobi',
                                                     'sub_pc_type': 'ilu'})
 
-    def ssprk3(self, x_in, x_out):
-
+    def apply(self, x_in, x_out):
         # SSPRK Stage 1
         self.D1.assign(x_in)
         self.DGsolver.solve()
@@ -167,22 +165,3 @@ class DGAdvection(Advection):
         self.DGsolver.solve()
 
         x_out.assign((1.0/3.0)*x_in + (2.0/3.0)*self.dD)
-
-    def apply(self, x_in, x_out):
-
-        self.advect(x_in, x_out)
-
-
-class EmbeddedDGAdvection(DGAdvection):
-
-    def __init__(self, state, Vdg, scheme='ssprk3'):
-
-        super(EmbeddedDGAdvection, self).__init__(state, Vdg, scheme)
-        self.Vdg = Vdg
-
-    def apply(self, x_in, x_out):
-
-        x_in_dg = Function(self.Vdg).interpolate(x_in)
-        x_out_dg = Function(self.Vdg)
-        self.advect(x_in_dg, x_out_dg)
-        x_out.project(x_out_dg)
