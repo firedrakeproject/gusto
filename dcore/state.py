@@ -89,7 +89,6 @@ class State(object):
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*funcs)
 
-
     def initialise(self, initial_conditions):
         """
         Initialise state variables
