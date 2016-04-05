@@ -1,7 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, \
-    DirichletBC, LinearVariationalProblem, LinearVariationalSolver
+    DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
+    Projector
 
 class Forcing(object):
     """
@@ -57,16 +58,21 @@ class CompressibleForcing(Forcing):
 
         Omega = state.Omega
         cp = state.cp
+        g = state.g
         
         n = FacetNormal(state.mesh)
-        pi = exner(theta0, rho0, state)
+
+        pi = Function(state.V[1])
+        self.PiProjector = Projector(exner(theta0, rho0, state),
+                                     pi)
         
         a = inner(w,F)*dx
         L = (
             -inner(w,cross(2*Omega,u0))*dx #Coriolis term
             +cp*div(theta0*w)*pi*dx #pressure gradient (volume integral)
             -cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
-            +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
+            -g*inner(w,state.zhat)*dx
+            #+div(w)*state.Phi*dx #gravity term (Phi is geopotential)
         )
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
@@ -81,7 +87,10 @@ class CompressibleForcing(Forcing):
     def apply(self, scaling, x_in, x_nl, x_out):
 
         self.x0.assign(x_nl)
+        up, rhop, thetap = self.x0.split()
+        print "mins", thetap.dat.data.min(), rhop.dat.data.min()
 
+        self.PiProjector.project()
         self.u_forcing_solver.solve() #places forcing in self.uF
         self.uF *= scaling
         
