@@ -74,7 +74,7 @@ class State(object):
         krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
         klhs = inner(w,u)*dx
         solve(klhs == krhs, self.k)
-        
+
         #Allocate state
         self._allocate_state()
 

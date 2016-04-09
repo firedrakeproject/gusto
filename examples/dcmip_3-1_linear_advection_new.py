@@ -69,9 +69,9 @@ Tb = Function(W_CG1).interpolate(G*(1-exp(N**2*z/g) + Ts*exp(N**2*z/g)))
 #surface pressure
 ps = Function(W_CG1).interpolate(p_eq*(Ts/T_eq)**(1.0/kappa))
 #Background pressure
-p = Function(W_CG1).interpolate(p_eq*(Tb/T_eq)**(1.0/kappa)*exp(-g*z/G/R_d))
+p = Function(W_CG1).interpolate(ps*(G/Ts*exp(-N**2*z/g)+1-G/Ts)**(1/kappa))
 #Background potential temperature
-thetab = Function(W_CG1).interpolate(Ts*(p_0/ps)**kappa*exp(N**2/g*z))
+thetab = Function(W_CG1).interpolate(Ts*(p_0/ps)**kappa*exp(N**2*z/g))
 rhob = Function(W_CG1).interpolate(p/R_d/Tb)
 
 theta_b = Function(state.V[2]).interpolate(thetab)
