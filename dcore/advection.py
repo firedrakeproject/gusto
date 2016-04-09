@@ -96,10 +96,10 @@ class LinearAdvection_V3(Advection):
         self.state = state
         self.ubar = Function(state.V[0])
 
-        p = TestFunction(state.V)
-        q = TrialFunction(state.V)
+        p = TestFunction(V)
+        q = TrialFunction(V)
 
-        self.dq = Function(state.V)
+        self.dq = Function(V)
 
         n = FacetNormal(state.mesh)
         

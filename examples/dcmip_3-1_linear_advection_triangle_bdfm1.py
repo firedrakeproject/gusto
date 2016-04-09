@@ -1,10 +1,12 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
+from firedrake import par_loop, WRITE, READ
+
 import numpy as np
 
 nlayers = 10 #10 horizontal layers
-refinements = 5 # number of horizontal cells = 20*(4^refinements)
+refinements = 4 # number of horizontal cells = 20*(4^refinements)
 
 #build surface mesh
 a_ref = 6.37122e6
@@ -116,6 +118,63 @@ rho0.assign(rho_b)
 
 state.initialise(u0, rho0, theta0)
 state.set_reference_profiles(rho_b, theta_b)
+
+W_VectorDG0 = VectorFunctionSpace(mesh, "DG", 0)
+# Build new extruded coordinate function space
+zhat = Function(W_VectorDG0)
+
+par_loop("""
+double v0[3];
+double v1[3];
+double n[3];
+double com[3];
+double dot;
+double norm;
+norm = 0.0;
+dot = 0.0;
+// form "x1 - x0" and "x2 - x0" of cell base
+for (int i=0; i<3; ++i) {
+    v0[i] = coords[2][i] - coords[0][i];
+    v1[i] = coords[4][i] - coords[0][i];
+}
+
+for (int i=0; i<3; ++i) {
+    com[i] = 0.0;
+}
+
+// take cross-product to form normal vector
+n[0] = v0[1] * v1[2] - v0[2] * v1[1];
+n[1] = v0[2] * v1[0] - v0[0] * v1[2];
+n[2] = v0[0] * v1[1] - v0[1] * v1[0];
+
+// get (scaled) centre-of-mass of cell
+for (int i=0; i<6; ++i) {
+    com[0] += coords[i][0];
+    com[1] += coords[i][1];
+    com[2] += coords[i][2];
+}
+
+// is the normal pointing outwards or inwards w.r.t. origin?
+for (int i=0; i<3; ++i) {
+    dot += com[i]*n[i];
+}
+
+for (int i=0; i<3; ++i) {
+    norm += n[i]*n[i];
+}
+
+// normalise normal vector and multiply by -1 if dot product was < 0
+norm = sqrt(norm);
+norm *= (dot < 0.0 ? -1.0 : 1.0);
+
+for (int i=0; i<3; ++i) {
+    normals[0][i] = n[i] / norm;
+}
+""", dx,
+         {'normals': (zhat, WRITE),
+          'coords': (mesh.coordinates, READ)})
+
+state.zhat = zhat
 
 #Set up advection schemes
 advection_list = []
