@@ -40,8 +40,10 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
-#Make a vertical direction for the linearised advection
-k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
+#Create polar coordinates
+z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a",a=a)) #Since we use a CG1 field, this is constant on layers
+lat = Function(W_CG1).interpolate(Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))"))
+lon = Function(W_CG1).interpolate(Expression("atan2(x[1], x[0])"))
 
 state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               family = "BDM",
@@ -51,24 +53,19 @@ state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               cp = c_p,
               R_d = R_d,
               p_0 = p_0,
-              k=k,
+              z=z,
               Omega=Omega,
               Verbose=True, dumpfreq=1)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
 
-#Create polar coordinates
-z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a",a=a)) #Since we use a CG1 field, this is constant on layers
-lat = Function(W_CG1).interpolate(Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))"))
-lon = Function(W_CG1).interpolate(Expression("atan2(x[1], x[0])"))
-
 #Initial conditions without u0
 #Surface temperature
 G = g**2/N**2/c_p
 Ts = Function(W_CG1).assign(G) 
 #Background temperature
-Tb = Function(W_CG1).interpolate(G*(1-exp(N**2/g*z) + Ts*exp(N**2/g*z)))
+Tb = Function(W_CG1).interpolate(G*(1-exp(N**2*z/g) + Ts*exp(N**2*z/g)))
 #surface pressure
 ps = Function(W_CG1).interpolate(p_eq*(Ts/T_eq)**(1.0/kappa))
 #Background pressure

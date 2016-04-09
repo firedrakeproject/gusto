@@ -71,7 +71,7 @@ class CompressibleForcing(Forcing):
             -inner(w,cross(2*Omega,u0))*dx #Coriolis term
             +cp*div(theta0*w)*pi*dx #pressure gradient (volume integral)
             -cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient (surface integral)
-            +div(w)*state.Phi*dx #gravity term (Phi is geopotential)
+            -g*inner(w,state.k)*dx #gravity term (Phi is geopotential)
         )
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),

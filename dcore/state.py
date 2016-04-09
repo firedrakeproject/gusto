@@ -1,6 +1,7 @@
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
-    Expression, File
+    Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
+    ds_tb, dx, solve
 
 class State(object):
     """
@@ -32,7 +33,7 @@ class State(object):
                  R_d = 287,
                  p_0 = 1000.0 * 100.0,
                  kappa = 2.0/7.0, 
-                 k = None,
+                 z = None,
                  Omega = None,
                  Verbose = False,
                  dumpfreq = 10,
@@ -51,8 +52,7 @@ class State(object):
         self.R_d = R_d
         self.p_0 = p_0
         self.kappa = kappa
-        if(k != None):
-            self.k = k
+        self.z = z
         if(Omega !=None):
             self.Omega = Omega
 
@@ -64,10 +64,16 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)
 
-        #build the geopotential
-        V = FunctionSpace(mesh, "CG", 1)
-        self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-        self.Phi *= g
+        #build the vertical normal
+        w = TestFunction(self.V[0])
+        u = TrialFunction(self.V[0])
+
+        self.k = Function(self.V[0])
+        
+        n = FacetNormal(self.mesh)
+        krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
+        klhs = inner(w,u)*dx
+        solve(klhs == krhs, self.k)
         
         #Allocate state
         self._allocate_state()
@@ -141,12 +147,12 @@ class State(object):
         cell = mesh._base_mesh.ufl_cell()
         if(cell.cellname() == 'triangle'):
             cell = triangle
-        S1 = FiniteElement(family, cell, 2)
-        S2 = FiniteElement("DG", cell, 1)
+        S1 = FiniteElement(family, cell, horizontal_degree+1)
+        S2 = FiniteElement("DG", cell, horizontal_degree)
 
         #vertical base spaces
-        T0 = FiniteElement("CG", interval, vertical_degree)
-        T1 = FiniteElement("DG", interval, vertical_degree-1)
+        T0 = FiniteElement("CG", interval, vertical_degree+1)
+        T1 = FiniteElement("DG", interval, vertical_degree)
 
         #build spaces V2, V3, Vt
         V2h_elt = HDiv(TensorProductElement(S1, T1))
