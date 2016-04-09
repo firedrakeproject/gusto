@@ -1,6 +1,7 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
+from firedrake import exp,asin
 import numpy as np
 
 nlayers = 10 #10 horizontal layers
@@ -39,6 +40,9 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
+#Make a vertical direction for the linearised advection
+k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
+
 state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               family = "BDM",
               dt = 10.0,
@@ -57,15 +61,12 @@ u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[
 #Create polar coordinates
 z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a",a=a)) #Since we use a CG1 field, this is constant on layers
 lat = Function(W_CG1).interpolate(Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))"))
-lon = Function(W_CG1).interpolate(Expansion("atan2(x[1], x[0])"))
-
-#Make a vertical direction for the linearised advection
-k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
+lon = Function(W_CG1).interpolate(Expression("atan2(x[1], x[0])"))
 
 #Initial conditions without u0
 #Surface temperature
 G = g**2/N**2/c_p
-Ts = Function(W_CG1).interpolate(G) 
+Ts = Function(W_CG1).assign(G) 
 #Background temperature
 Tb = Function(W_CG1).interpolate(G*(1-exp(N**2/g*z) + Ts*exp(N**2/g*z)))
 #surface pressure
