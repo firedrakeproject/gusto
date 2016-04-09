@@ -62,17 +62,17 @@ u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[
 
 #Initial conditions without u0
 #Surface temperature
-G = g**2/N**2/c_p
+G = g**2/(N**2*c_p)
 Ts = Function(W_CG1).assign(G) 
 #Background temperature
 Tb = Function(W_CG1).interpolate(G*(1-exp(N**2*z/g) + Ts*exp(N**2*z/g)))
 #surface pressure
 ps = Function(W_CG1).interpolate(p_eq*(Ts/T_eq)**(1.0/kappa))
 #Background pressure
-p = Function(W_CG1).interpolate(ps*(G/Ts*exp(-N**2*z/g)+1-G/Ts)**(1/kappa))
+p = Function(W_CG1).interpolate(ps*(G/Ts*exp(-N**2*z/g)+1-G/Ts)**(1.0/kappa))
 #Background potential temperature
-thetab = Function(W_CG1).interpolate(Ts*(p_0/ps)**kappa*exp(N**2*z/g))
-rhob = Function(W_CG1).interpolate(p/R_d/Tb)
+thetab = Function(W_CG1).interpolate(Tb*(p_0/p)**kappa)
+rhob = Function(W_CG1).interpolate(p/(R_d*Tb))
 
 theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1]).project(rhob)
