@@ -25,7 +25,7 @@ lamda_c = 2.0*np.pi/3.0  # Longitudinal centerpoint of Theta'
 phi_c = 0.0  # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
-u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
+u_0 = 0.0 #20.0  # Maximum amplitude of the zonal wind (m/s)
 
 m = IcosahedralSphereMesh(radius = a,
                           refinement_level = refinements)
@@ -96,22 +96,28 @@ p_s_expr = "p_eq*exp(((u_0*u_0)/(4.0*G*R_d))*(cos(2*%%(lat)s) - 1.0))*pow((%(T_s
 
 p_expr = "(%(p_s)s)*pow((G/(%(T_s)s))*exp(-N*N*%%(z)s/g) + 1.0 - (G/(%(T_s)s)), 1.0/kappa)" % {'p_s': p_s_expr, 'T_s': T_s_expr} % string_expander
 
-theta_b_expr = "(%(T_s)s)*pow(p_0/(%(p_s)s), 1.0/kappa)*exp(N*N*%%(z)s/g)" % {'p_s': p_s_expr, 'T_s': T_s_expr} % string_expander
+theta_b_expr = "(%(T_s)s)*pow(p_0/(%(p_s)s), kappa)*exp(N*N*%%(z)s/g)" % {'p_s': p_s_expr, 'T_s': T_s_expr} % string_expander
 
 rho_expr = "(%(p)s)/(R_d*(%(T_b)s))" % {'p': p_expr, 'T_b': T_b_expr} % string_expander
 
-theta_b = Function(state.V[2])
-theta_b.interpolate(Expression(theta_b_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 
+thetab = Function(W_CG1)
+thetab.interpolate(Expression(theta_b_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
+theta_b = Function(state.V[2]).interpolate(thetab)
+
+rhob = Function(W_CG1)
+rhob.interpolate(Expression(rho_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 rho_b = Function(state.V[1])
-rho_b.interpolate(Expression(rho_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
+rho_b.project(rhob)
 
 theta_prime = Function(state.V[2])
 dis_expr = "a*acos(sin(phi_c)*sin(%(lat)s) + cos(phi_c)*cos(%(lat)s)*cos(%(lon)s - lamda_c))"
 
 theta_prime_expr = "dT*(d*d/(d*d + pow((%(dis)s), 2)))*sin(2*pi*%%(z)s/L_z)" % {'dis': dis_expr} % string_expander
 
-theta_prime.interpolate(Expression(theta_prime_expr, dT=deltaTheta, d=d, L_z=L_z, a=a, phi_c=phi_c, lamda_c=lamda_c))
+thetaprime = Function(W_CG1)
+thetaprime.interpolate(Expression(theta_prime_expr, dT=deltaTheta, d=d, L_z=L_z, a=a, phi_c=phi_c, lamda_c=lamda_c))
+theta_prime.interpolate(thetaprime)
 
 theta0.assign(theta_b + theta_prime)
 rho0.assign(rho_b)

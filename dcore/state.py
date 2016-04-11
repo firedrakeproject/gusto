@@ -34,6 +34,7 @@ class State(object):
                  p_0 = 1000.0 * 100.0,
                  kappa = 2.0/7.0, 
                  z = None,
+                 k = None,
                  Omega = None,
                  Verbose = False,
                  dumpfreq = 10,
@@ -68,13 +69,15 @@ class State(object):
         w = TestFunction(self.V[0])
         u = TrialFunction(self.V[0])
 
-        self.k = Function(self.V[0])
-        
-        n = FacetNormal(self.mesh)
-        krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
-        klhs = inner(w,u)*dx
-        solve(klhs == krhs, self.k)
-
+        if(k==None):
+            self.k = Function(self.V[0])        
+            n = FacetNormal(self.mesh)
+            krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
+            klhs = inner(w,u)*dx
+            solve(klhs == krhs, self.k)
+        else:
+            self.k = k
+            
         #Allocate state
         self._allocate_state()
 

@@ -62,9 +62,10 @@ class CompressibleForcing(Forcing):
         
         n = FacetNormal(state.mesh)
 
-        pi = Function(state.V[1])
-        self.PiProjector = Projector(exner(theta0, rho0, state),
-                                     pi)
+        #gpi = Function(state.V[1])
+        #gself.PiProjector = Projector(exner(theta0, rho0, state),
+        #g                             pi)
+        pi = exner(theta0, rho0, state)
         
         a = inner(w,F)*dx
         L = (
@@ -89,7 +90,6 @@ class CompressibleForcing(Forcing):
         up, rhop, thetap = self.x0.split()
         print "mins", thetap.dat.data.min(), rhop.dat.data.min()
 
-        self.PiProjector.project()
         self.u_forcing_solver.solve() #places forcing in self.uF
         self.uF *= scaling
         
