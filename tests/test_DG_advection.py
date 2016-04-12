@@ -5,7 +5,7 @@ import itertools
 from math import pi
 
 
-def setup_DGadvection(dirname):
+def setup_DGadvection(dirname, vector=False):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
     R = 1.
@@ -31,89 +31,77 @@ def setup_DGadvection(dirname):
                               fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0, Ddg = Function(state.V[0], name="velocity"), Function(state.V[1], name="D")
-    VectorDGSpace = VectorFunctionSpace(mesh, "DG", 1)
-    vdg = Function(VectorDGSpace, name="v")
+    u0 = Function(state.V[0], name="velocity")
     x = SpatialCoordinate(mesh)
     uexpr = as_vector([-x[1], x[0], 0.0])
-    Dexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-    vexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
-
     u0.project(uexpr)
-    vdg.interpolate(vexpr)
-    Ddg.interpolate(Dexpr)
 
-    return state, u0, Ddg, vdg
+    if vector:
+        VectorDGSpace = VectorFunctionSpace(mesh, "DG", 1)
+        f = Function(VectorDGSpace, name="f")
+        fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
+        f_end = Function(VectorDGSpace)
+        f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
+    else:
+        f = Function(state.V[1], name='f')
+        fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
+        f_end = Function(state.V[1])
+        f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
+
+    f.interpolate(fexpr)
+    f_end.interpolate(f_end_expr)
+
+    return state, u0, f, f_end
 
 
-def run(continuity):
+def run(continuity=False, vector=False):
 
-    state, u0, Ddg, vdg = setup_DGadvection(dirname="DGAdvection/continuity" + str(continuity))
+    state, u0, f, f_end = setup_DGadvection(dirname="DGAdvection/continuity" + str(continuity))
 
     dt = state.timestepping.dt
     tmax = pi/4.
     t = 0.
-    Ddg_advection = DGAdvection(state, Ddg.function_space(), continuity=continuity)
-    vdg_advection = DGAdvection(state, vdg.function_space(), continuity=continuity)
+    f_advection = DGAdvection(state, f.function_space(), continuity=continuity)
 
-    Ddgp1 = Function(Ddg.function_space())
-    vdgp1 = Function(vdg.function_space())
-    Ddg_advection.ubar.assign(u0)
-    vdg_advection.ubar.assign(u0)
+    fp1 = Function(f.function_space())
+    f_advection.ubar.assign(u0)
 
     dumpcount = itertools.count()
     outfile = File(state.output.dirname+".pvd")
-    outfile.write(Ddg, vdg)
+    outfile.write(f)
 
     while t < tmax + 0.5*dt:
         t += dt
         for i in range(2):
-            Ddg_advection.apply(Ddg, Ddgp1)
-            Ddg.assign(Ddgp1)
-            vdg_advection.apply(vdg, vdgp1)
-            vdg.assign(vdgp1)
+            f_advection.apply(f, fp1)
+            f.assign(fp1)
 
         if(next(dumpcount) % state.output.dumpfreq) == 0:
-            outfile.write(Ddg, vdg)
+            outfile.write(f)
 
-    return Ddg, vdg
-
-
-def test_dgadvection():
-
-    D, v = run(continuity=False)
-    Dend = Function(D.function_space())
-    Dexpr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
-    Dend.interpolate(Dexpr)
-    Derr = Function(D.function_space()).assign(Dend - D)
-    Vend = Function(v.function_space())
-    Vexpr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
-    Vend.interpolate(Vexpr)
-    Verr = Function(v.function_space()).assign(Vend - v)
-
-    errfile = File("errF.pvd")
-    errfile.write(Derr,Verr)
-    print abs(Derr.dat.data.max())
-    print abs(Verr.dat.data.max())
-    assert(abs(Derr.dat.data.max()) < 1.5e-2)
-    assert(abs(Verr.dat.data.max()) < 1.5e-2)
+    f_err = Function(f.function_space()).assign(f_end - f)
+    return f_err
 
 
-def test_dgadvection_continuity():
+def test_dgadvection_scalar():
 
-    D, v = run(continuity=True)
-    Dend = Function(D.function_space())
-    Dexpr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
-    Dend.interpolate(Dexpr)
-    Derr = Function(D.function_space()).assign(Dend - D)
-    Vend = Function(v.function_space())
-    Vexpr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
-    Vend.interpolate(Vexpr)
-    Verr = Function(v.function_space()).assign(Vend - v)
+    f_err = run()
+    assert(abs(f_err.dat.data.max()) < 1.5e-2)
 
-    errfile = File("errT.pvd")
-    errfile.write(Derr,Verr)
-    print abs(Derr.dat.data.max())
-    print abs(Verr.dat.data.max())
-    assert(abs(Derr.dat.data.max()) < 1.5e-2)
-    assert(abs(Verr.dat.data.max()) < 1.5e-2)
+
+def test_dgadvection_continuity_scalar():
+
+    f_err = run(continuity=True)
+    assert(abs(f_err.dat.data.max()) < 1.5e-2)
+
+
+def test_dgadvection_vector():
+
+    f_err = run(vector=True)
+    assert(abs(f_err.dat.data.max()) < 1.5e-2)
+
+
+def test_dgadvection_continuity_vector():
+
+    f_err = run(continuity=True, vector=True)
+    assert(abs(f_err.dat.data.max()) < 1.5e-2)
