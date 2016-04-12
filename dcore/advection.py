@@ -119,6 +119,19 @@ class LinearAdvection_V3(Advection):
 
 class DGAdvection(Advection):
 
+    """
+    DG 3 step SSPRK advection scheme that can be applied to a scalar 
+    or vector field
+
+    :arg state: :class:`.State` object.
+    :arg V: function space of advected field - should be DG
+    :arg continuity: optional boolean
+         if True, the advection equation is of the form:
+         D_t + (u.\nabla)D = 0
+         if False, the advection equations in of the form:
+         D_t +\nabla .(uD) = 0
+    """
+
     def __init__(self, state, V, continuity=False):
 
         super(DGAdvection, self).__init__(state)
