@@ -120,7 +120,7 @@ class LinearAdvection_V3(Advection):
 class DGAdvection(Advection):
 
     """
-    DG 3 step SSPRK advection scheme that can be applied to a scalar 
+    DG 3 step SSPRK advection scheme that can be applied to a scalar
     or vector field
 
     :arg state: :class:`.State` object.
