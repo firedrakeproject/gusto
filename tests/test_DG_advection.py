@@ -20,13 +20,11 @@ def setup_DGadvection(dirname, vector=False):
     fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dumpfreq=150, dirname='results/tests/'+dirname)
-    parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                               family="BDM",
                               timestepping=timestepping,
                               output=output,
-                              parameters=parameters,
                               fieldlist=fieldlist)
 
     # interpolate initial conditions
