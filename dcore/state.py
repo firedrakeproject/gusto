@@ -87,7 +87,7 @@ class State(object):
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
-            self.dumpfile.write(*funcs)
+            self.dumpfile.write(*to_dump)
 
     def initialise(self, initial_conditions):
         """
