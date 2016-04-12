@@ -125,11 +125,11 @@ class DGAdvection(Advection):
 
     :arg state: :class:`.State` object.
     :arg V: function space of advected field - should be DG
-    :arg continuity: optional boolean
-         if True, the advection equation is of the form:
-         D_t + (u.\nabla)D = 0
-         if False, the advection equations in of the form:
-         D_t +\nabla .(uD) = 0
+    :arg continuity: optional boolean.
+         If ``True``, the advection equation is of the form:
+         :math: `D_t + (u \cdot \nabla)D = 0`.
+         If ``False``, the advection equations is of the form:
+         :math: `D_t +\nabla \cdot(uD) = 0`.
     """
 
     def __init__(self, state, V, continuity=False):
