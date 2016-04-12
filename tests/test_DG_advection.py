@@ -13,9 +13,7 @@ def setup_DGadvection(dirname, vector=False):
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
-    global_normal = Expression(("x[0]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
-                                "x[1]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
-                                "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])"))
+    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
     mesh.init_cell_orientations(global_normal)
 
     fieldlist = ['u','D']
