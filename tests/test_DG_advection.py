@@ -2,6 +2,7 @@ from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     as_vector, VectorFunctionSpace, File
 import itertools
+import pytest
 from math import pi
 
 
@@ -81,25 +82,9 @@ def run(continuity=False, vector=False):
     return f_err
 
 
-def test_dgadvection_scalar():
+@pytest.mark.parametrize("vector", [False, True], ids=["scalar", "vector"])
+@pytest.mark.parametrize("continuity", [False, True])
+def test_dgadvection(vector, continuity):
 
-    f_err = run()
-    assert(abs(f_err.dat.data.max()) < 1.5e-2)
-
-
-def test_dgadvection_continuity_scalar():
-
-    f_err = run(continuity=True)
-    assert(abs(f_err.dat.data.max()) < 1.5e-2)
-
-
-def test_dgadvection_vector():
-
-    f_err = run(vector=True)
-    assert(abs(f_err.dat.data.max()) < 1.5e-2)
-
-
-def test_dgadvection_continuity_vector():
-
-    f_err = run(continuity=True, vector=True)
+    f_err = run(vector, continuity)
     assert(abs(f_err.dat.data.max()) < 1.5e-2)
