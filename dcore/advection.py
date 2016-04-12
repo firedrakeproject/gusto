@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, jump, avg, dS, dS_v, dS_h, action
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer
 
 
 class Advection(object):
@@ -119,7 +119,7 @@ class LinearAdvection_V3(Advection):
 
 class DGAdvection(Advection):
 
-    def __init__(self, state, V):
+    def __init__(self, state, V, continuity=False):
 
         super(DGAdvection, self).__init__(state)
 
@@ -127,7 +127,6 @@ class DGAdvection(Advection):
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
         dt = state.timestepping.dt
 
-        # by convention the last space is the DG space
         phi = TestFunction(V)
         D = TrialFunction(V)
         self.D1 = Function(V)
@@ -137,9 +136,13 @@ class DGAdvection(Advection):
         # ( dot(v, n) + |dot(v, n)| )/2.0
         un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
 
-        a_mass = phi*D*dx
+        a_mass = inner(phi,D)*dx
 
-        a_int = dot(grad(phi), -self.ubar*D)*dx
+        if continuity:
+            a_int = -inner(div(outer(phi,self.ubar)),D)*dx
+        else:
+            a_int = -inner(grad(phi), outer(D, self.ubar))*dx
+
         a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*dS
         arhs = a_mass - dt*(a_int + a_flux)
 
