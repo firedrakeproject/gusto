@@ -6,7 +6,7 @@ import pytest
 from math import pi
 
 
-def setup_DGadvection(dirname, vector=False):
+def setup_DGadvection(vector=False):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
     R = 1.
@@ -19,12 +19,10 @@ def setup_DGadvection(dirname, vector=False):
 
     fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dumpfreq=150, dirname='results/tests/'+dirname)
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                               family="BDM",
                               timestepping=timestepping,
-                              output=output,
                               fieldlist=fieldlist)
 
     # interpolate initial conditions
@@ -51,9 +49,9 @@ def setup_DGadvection(dirname, vector=False):
     return state, u0, f, f_end
 
 
-def run(continuity=False, vector=False):
+def run(dirname, continuity=False, vector=False):
 
-    state, u0, f, f_end = setup_DGadvection(dirname="DGAdvection/continuity" + str(continuity))
+    state, u0, f, f_end = setup_DGadvection(vector)
 
     dt = state.timestepping.dt
     tmax = pi/4.
@@ -64,7 +62,7 @@ def run(continuity=False, vector=False):
     f_advection.ubar.assign(u0)
 
     dumpcount = itertools.count()
-    outfile = File(state.output.dirname+".pvd")
+    outfile = File(path.join(dirname, "field_output.pvd"))
     outfile.write(f)
 
     while t < tmax + 0.5*dt:
@@ -73,16 +71,17 @@ def run(continuity=False, vector=False):
             f_advection.apply(f, fp1)
             f.assign(fp1)
 
-        if(next(dumpcount) % state.output.dumpfreq) == 0:
+        if(next(dumpcount) % 150) == 0:
             outfile.write(f)
 
     f_err = Function(f.function_space()).assign(f_end - f)
     return f_err
 
 
-@pytest.mark.parametrize("vector", [False, True], ids=["scalar", "vector"])
+@pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-def test_dgadvection(vector, continuity):
+def test_dgadvection(tmpdir, vector, continuity):
 
-    f_err = run(vector, continuity)
+    dirname = str(tmpdir)
+    f_err = run(dirname, vector, continuity)
     assert(abs(f_err.dat.data.max()) < 1.5e-2)
