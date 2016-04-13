@@ -185,6 +185,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         state = self.state
         f = state.f
         H = state.parameters.H
+        g = state.parameters.g
         beta = state.timestepping.dt*state.timestepping.alpha
         
         # Split up the rhs vector (symbolically)
@@ -197,7 +198,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         outward_normals = CellNormal(state.mesh)
         perp = lambda u: cross(outward_normals, u)
         eqn = (
-            inner(w, u) + beta*f*inner(w, perp(u))
+            inner(w, u) + beta*f*inner(w, perp(u)) - beta*g*div(w)*D
             - inner(w, u_in)
             + phi*D + beta*H*phi*div(u)
             - phi*D_in
