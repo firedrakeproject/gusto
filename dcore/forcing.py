@@ -119,3 +119,41 @@ def exner_theta(theta,rho,state):
     kappa = state.parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
+
+class ShallowWaterForcing(Forcing):
+
+    def __init__(self, state):
+        self.state = state
+
+        g = state.parameters.g
+
+        Vu = state.V[0]
+        W = state.W
+
+        self.x0 = Function(W)   # copy x to here
+
+        u0, D0 = split(self.x0)
+
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        self.uF = Function(Vu)
+
+        a = inner(w, F)*dx
+        L = g*div(w)*D0*dx
+        
+        u_forcing_problem = LinearVariationalProblem(
+            a, L, self.uF)
+
+        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out):
+
+        self.x0.assign(x_nl)
+
+        self.u_forcing_solver.solve()  # places forcing in self.uF
+        self.uF *= scaling
+
+        uF, _ = x_out.split()
+
+        x_out.assign(x_in)
+        uF += self.uF

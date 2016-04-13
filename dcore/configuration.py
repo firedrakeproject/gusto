@@ -35,7 +35,7 @@ class OutputParameters(Configuration):
     """
 
     Verbose = False
-    dumpfreq = 10
+    dumpfreq = 1
     dumplist = None
     dirname = None
     #: Should the output fields be interpolated or projected to
@@ -63,5 +63,6 @@ class ShallowWaterParameters(Configuration):
     """
     Physical parameters for 3d Compressible Euler
     """
-    g = 9.806
+    g = 9.80616
     Omega = 7.292e-5  # rotation rate
+    H = None  # mean depth

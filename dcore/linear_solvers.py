@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function
+    Function, cross, CellNormal
 
 from dcore.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -19,6 +19,35 @@ class TimesteppingSolver(object):
     :arg x_out: :class:`.Function` object for the output
     """
     __metaclass__ = ABCMeta
+
+    def __init__(self, state, params=None):
+
+        self.state = state
+
+        if params is None:
+            self.params = {'pc_type': 'fieldsplit',
+                           'pc_fieldsplit_type': 'schur',
+                           'ksp_type': 'gmres',
+                           'ksp_max_it': 100,
+                           'ksp_gmres_restart': 50,
+                           'pc_fieldsplit_schur_fact_type': 'FULL',
+                           'pc_fieldsplit_schur_precondition': 'selfp',
+                           'fieldsplit_0_ksp_type': 'preonly',
+                           'fieldsplit_0_pc_type': 'bjacobi',
+                           'fieldsplit_0_sub_pc_type': 'ilu',
+                           'fieldsplit_1_ksp_type': 'preonly',
+                           'fieldsplit_1_pc_type': 'gamg',
+                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
+                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        else:
+            self.params = params
+
+        # setup the solver
+        self._setup_solver()
 
     @abstractmethod
     def solve(self):
@@ -148,3 +177,50 @@ class CompressibleSolver(TimesteppingSolver):
 
         self.theta_solver.solve()
         theta.assign(self.theta)
+
+class ShallowWaterSolver(TimesteppingSolver):
+
+    def _setup_solver(self):
+
+        state = self.state
+        f = state.f
+        H = state.parameters.H
+        beta = state.timestepping.dt*state.timestepping.alpha
+        
+        # Split up the rhs vector (symbolically)
+        u_in, D_in = split(state.xrhs)
+
+        W = state.W
+        w, phi = TestFunctions(W)
+        u, D = TrialFunctions(W)
+        
+        outward_normals = CellNormal(state.mesh)
+        perp = lambda u: cross(outward_normals, u)
+        eqn = (
+            inner(w, u) + beta*f*inner(w, perp(u))
+            - inner(w, u_in)
+            + phi*D + beta*H*phi*div(u)
+            - phi*D_in
+        )*dx
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put result of u rho solver
+        self.uD = Function(W)
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(
+            aeqn, Leqn, self.state.dy)
+
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.params)
+
+    def solve(self):
+        """
+        Apply the solver with rhs state.xrhs and result state.dy.
+        """
+
+        self.uD_solver.solve()
+
+ 
