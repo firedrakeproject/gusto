@@ -41,6 +41,8 @@ class OutputParameters(Configuration):
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
+    #: Dump error fields for steady state simulation. Default is no.
+    steady_state_dump_err = False
 
 
 class CompressibleParameters(Configuration):

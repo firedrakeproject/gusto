@@ -75,6 +75,13 @@ class State(object):
                 to_dump.append(f)
             f.rename(name=name)
 
+        if self.output.steady_state_dump_err:
+            init_funcs = self.x_init.split()
+            for name, f, f_init in zip(self.fieldlist, funcs, init_funcs):
+                if name in self.output.dumplist:
+                    err = Function(f.function_space(), name=name+'err').assign(f-f_init)
+                    to_dump.append(err)
+
         dumpdir = path.join("results", self.output.dirname)
 
         outfile = path.join(dumpdir, "field_output.pvd")

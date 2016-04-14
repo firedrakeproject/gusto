@@ -178,6 +178,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta_solver.solve()
         theta.assign(self.theta)
 
+
 class ShallowWaterSolver(TimesteppingSolver):
 
     def _setup_solver(self):
@@ -187,14 +188,14 @@ class ShallowWaterSolver(TimesteppingSolver):
         H = state.parameters.H
         g = state.parameters.g
         beta = state.timestepping.dt*state.timestepping.alpha
-        
+
         # Split up the rhs vector (symbolically)
         u_in, D_in = split(state.xrhs)
 
         W = state.W
         w, phi = TestFunctions(W)
         u, D = TrialFunctions(W)
-        
+
         outward_normals = CellNormal(state.mesh)
         perp = lambda u: cross(outward_normals, u)
         eqn = (
@@ -223,5 +224,3 @@ class ShallowWaterSolver(TimesteppingSolver):
         """
 
         self.uD_solver.solve()
-
- 
