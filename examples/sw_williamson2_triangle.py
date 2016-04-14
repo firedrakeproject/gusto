@@ -3,7 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 
-refinements = 4  # number of horizontal cells = 20*(4^refinements)
+refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 2000.

@@ -5,7 +5,8 @@ from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
-    Expression, File
+    Expression, File, CellNormal, grad, cross, solve, inner, dx, \
+    TestFunction, TrialFunction, TestFunctions, TrialFunctions, div
 
 
 class State(object):
@@ -204,10 +205,43 @@ class ShallowWaterState(State):
 
         cell = mesh.ufl_cell().cellname()
 
-        V1_elt = FiniteElement(family, cell, horizontal_degree)
+        V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
         self.V = [0,0]
         self.V[0] = FunctionSpace(mesh,V1_elt)
-        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree-1)
+        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))
+
+    def initialise(self, initial_conditions=None, streamfunction=None):
+        """
+        Initialise state variables
+        """
+
+        if streamfunction is not None:
+            u0, D0 = self.x_init.split()
+            
+            # u0 is gradperp(streamfunction)
+            outward_normals = CellNormal(self.mesh)
+            perp = lambda u: cross(outward_normals, u)
+            gradperp = lambda psi: perp(grad(psi))
+            w = TestFunction(self.V[0])
+            u = TrialFunction(self.V[0])
+            u0.project(gradperp(streamfunction))
+            
+            # solve elliptic problem for D0
+            g = self.parameters.g
+            f = self.f
+            W = self.W
+            w, phi = TestFunctions(W)
+            v, D = TrialFunctions(W)
+            vD = Function(W)
+            a = (inner(w, v) + div(w)*D + phi*div(v))*dx
+            L = (f/g)*inner(grad(phi),perp(u0))*dx
+
+            solve(a == L, vD)
+            v1, D1 = vD.split()
+            D0.assign(D1)
+            
+        else:
+            super(ShallowWaterState, self).initialise(initial_conditions)
