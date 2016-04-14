@@ -93,17 +93,15 @@ class CompressibleSolver(TimesteppingSolver):
         theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
         eqn = (
-            (inner(w , u) - beta*cp*div(theta*w)*pibar)*dx
+            inner(w , (u - u_in))*dx
+            - beta*cp*div(theta*w)*pibar*dx
             + beta*cp*jump(theta*w,n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pibar_theta*theta*dx
-            #- beta*cp*div(thetabar*dot(w,k)*k)*pibar_theta*theta*dx
-            + beta*cp*jump(thetabar*w,n)*avg(pibar_theta*theta)*dS_v
+            #+ beta*cp*jump(thetabar*w,n)*avg(pibar_theta*theta)*dS_v
             - beta*cp*div(thetabar*w)*pibar_rho*rho*dx
             + beta*cp*jump(thetabar*w,n)*avg(pibar_rho*rho)*dS_v
-            - inner(w, u_in)*dx
-            + (phi*rho - beta*inner(grad(phi) , u)*rhobar)*dx
+            + (phi*(rho - rho_in) - beta*inner(grad(phi) , u)*rhobar)*dx
             + beta*jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)
-            - phi*rho_in*dx
         )
 
         aeqn = lhs(eqn)
@@ -129,8 +127,9 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(state.V[2])
         
-        theta_eqn = gamma*(theta -dot(k,u)*dot(k,grad(thetabar))*beta +\
-                           theta_in)*dx
+        theta_eqn = gamma*(theta - theta_in - 
+                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
                                                  self.theta)

@@ -1,3 +1,4 @@
+
 from dcore import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
@@ -11,7 +12,7 @@ refinements = 3 # number of horizontal cells = 20*(4^refinements)
 a_ref = 6.37122e6
 X = 125.0  # Reduced-size Earth reduction factor
 a = a_ref/X
-g = 9.81
+g = 9.810616
 N = 0.01  # Brunt-Vaisala frequency (1/s)
 p_0 = 1000.0 * 100.0  # Reference pressure (Pa, not hPa)
 c_p = 1004.5  # SHC of dry air at constant pressure (J/kg/K)
@@ -19,12 +20,13 @@ R_d = 287.0  # Gas constant for dry air (J/kg/K)
 kappa = 2.0/7.0  # R_d/c_p
 T_eq = 300.0  # Isothermal atmospheric temperature (K)
 p_eq = 1000.0 * 100.0  # Reference surface pressure at the equator
+u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
+
 d = 5000.0  # Width parameter for Theta'
 lamda_c = 2.0*np.pi/3.0  # Longitudinal centerpoint of Theta'
 phi_c = 0.0  # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
-u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
 
 m = IcosahedralSphereMesh(radius = a,
                           refinement_level = refinements)
@@ -45,6 +47,11 @@ z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[
 lat = Function(W_CG1).interpolate(Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))"))
 lon = Function(W_CG1).interpolate(Expression("atan2(x[1], x[0])"))
 
+k = Function(W_VectorCG1).interpolate(
+    Expression(("x[0]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
+               "x[1]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
+                "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])")))
+
 state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               family = "BDM",
               dt = 10.0,
@@ -54,6 +61,7 @@ state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               R_d = R_d,
               p_0 = p_0,
               z=z,
+              k=k,
               Omega=Omega,
               Verbose=True, dumpfreq=1)
 
@@ -63,16 +71,36 @@ u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[
 #Initial conditions without u0
 #Surface temperature
 G = g**2/(N**2*c_p)
-Ts = Function(W_CG1).assign(G) 
-#Background temperature
-Tb = Function(W_CG1).interpolate(G*(1-exp(N**2*z/g) + Ts*exp(N**2*z/g)))
+Ts = Function(W_CG1).assign(T_eq) 
+
 #surface pressure
-ps = Function(W_CG1).interpolate(p_eq*(Ts/T_eq)**(1.0/kappa))
+psexp = p_eq*((Ts/T_eq)**(1.0/kappa))
+
+ps = Function(W_CG1).interpolate(psexp)
+
 #Background pressure
-p = Function(W_CG1).interpolate(ps*(G/Ts*exp(-N**2*z/g)+1-G/Ts)**(1.0/kappa))
+pexp = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
+
+p = Function(W_CG1).interpolate(pexp)
+
+#Background temperature
+#Tbexp = Ts*(p/ps)**kappa/(Ts/G*((p/ps)**kappa - 1) + 1)
+Tbexp = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
+
+Tb = Function(W_CG1).interpolate(Tbexp)
+
 #Background potential temperature
-thetab = Function(W_CG1).interpolate(Tb*(p_0/p)**kappa)
-rhob = Function(W_CG1).interpolate(p/(R_d*Tb))
+thetabexp = Tb*(p_0/p)**kappa
+
+thetab = Function(W_CG1).interpolate(thetabexp)
+
+print thetab.dat.data.min()
+
+rhoexp = p/(R_d*Tb)
+
+rhob = Function(W_CG1).interpolate(rhoexp)
+
+print rhob.dat.data.min()
 
 theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1]).project(rhob)
