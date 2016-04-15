@@ -2,7 +2,7 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
-from firedrake import exp,asin
+from firedrake import exp, acos, cos, sin
 import numpy as np
 
 nlayers = 10 #10 horizontal layers
@@ -105,7 +105,16 @@ print rhob.dat.data.min()
 theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1]).project(rhob)
 
-theta0.assign(theta_b)
+sin_tmp = sin(lat) * sin(phi_c)
+cos_tmp = cos(lat) * cos(phi_c)
+
+r  = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c)) 
+
+s = (d**2)/(d**2 + r**2)
+
+theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
+
+theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
 state.initialise(u0, rho0, theta0)
