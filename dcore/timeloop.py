@@ -24,8 +24,8 @@ class Timestepper(object):
         """
 
         state = self.state
-        un, _, _ = state.xn.split()
-        unp1, _, _ = state.xnp1.split()
+        un = state.xn.split()[0]
+        unp1 = state.xnp1.split()[0]
 
         for advection, index in self.advection_list:
             advection.ubar.assign(un + state.timestepping.alpha*unp1)
