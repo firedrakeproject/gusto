@@ -3,7 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 
-refinements = 3  # number of horizontal cells = 20*(4^refinements)
+refinements = 5  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 2000.
@@ -52,7 +52,7 @@ else:
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     h0 = Constant(H)
     g = Constant(parameters.g)
-    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
