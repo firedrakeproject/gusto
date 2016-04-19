@@ -127,9 +127,9 @@ class DGAdvection(Advection):
     :arg V: function space of advected field - should be DG
     :arg continuity: optional boolean.
          If ``True``, the advection equation is of the form:
-         :math: `D_t + (u \cdot \nabla)D = 0`.
-         If ``False``, the advection equations is of the form:
          :math: `D_t +\nabla \cdot(uD) = 0`.
+         If ``False``, the advection equations is of the form:
+         :math: `D_t + (u \cdot \nabla)D = 0`.
     """
 
     def __init__(self, state, V, continuity=False):
@@ -152,9 +152,9 @@ class DGAdvection(Advection):
         a_mass = inner(phi,D)*dx
 
         if continuity:
-            a_int = -inner(div(outer(phi,self.ubar)),D)*dx
-        else:
             a_int = -inner(grad(phi), outer(D, self.ubar))*dx
+        else:
+            a_int = -inner(div(outer(phi,self.ubar)),D)*dx
 
         a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*dS
         arhs = a_mass - dt*(a_int + a_flux)
