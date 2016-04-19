@@ -225,8 +225,6 @@ class ShallowWaterState(State):
             outward_normals = CellNormal(self.mesh)
             perp = lambda u: cross(outward_normals, u)
             gradperp = lambda psi: perp(grad(psi))
-            w = TestFunction(self.V[0])
-            u = TrialFunction(self.V[0])
             u0.project(gradperp(streamfunction))
             
             # solve elliptic problem for D0

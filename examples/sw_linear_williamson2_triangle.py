@@ -17,7 +17,7 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
-output = OutputParameters(dirname='sw_linear_williamson2', steady_state_dump_err=True)
+output = OutputParameters(dirname='sw_linear_w2_nopsi', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
@@ -37,14 +37,25 @@ x = SpatialCoordinate(mesh)
 fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
 state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+u_max = Constant(u_0)
 
 # interpolate initial conditions
 # Initial/current conditions
-u_max = Constant(u_0)
-psiexpr = -u_max*x[2]
-V = FunctionSpace(mesh, "CG", 2)
-psi = Function(V).interpolate(psiexpr)
-state.initialise(streamfunction = psi)
+init_from_psi = False
+if init_from_psi:
+    psiexpr = -u_max*x[2]
+    V = FunctionSpace(mesh, "CG", 2)
+    psi = Function(V).interpolate(psiexpr)
+    state.initialise(streamfunction=psi)
+else:
+    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    h0 = Constant(H)
+    g = Constant(parameters.g)
+    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    u0.project(uexpr)
+    D0.interpolate(Dexpr)
+    state.initialise([u0, D0])
 
 advection_list = []
 velocity_advection = NoAdvection(state)
