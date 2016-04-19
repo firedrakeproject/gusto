@@ -2,9 +2,7 @@ from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     as_vector, VectorFunctionSpace, File
 import itertools
-import pytest
 from math import pi
-from numpy import cos, sin, arcsin, arctan2
 
 continuity = True
 vector = False

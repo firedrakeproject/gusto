@@ -192,11 +192,10 @@ class EmbeddedDGAdvection(Advection):
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
-        
+
     def apply(self, x_in, x_out):
 
         self.dgadvection.ubar.assign(self.ubar)
         self.xdg_in.interpolate(x_in)
         self.dgadvection.apply(self.xdg_in, self.xdg_out)
         x_out.project(self.xdg_out)
-
