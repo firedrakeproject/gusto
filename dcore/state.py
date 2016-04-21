@@ -90,7 +90,7 @@ class State(object):
 
         xn = self.xn.split()
         fieldlist = ('u','rho','theta')
-        
+        meanfields = (False,self.rhobar,self.thetabar)
         if not self.dumped:
             self.dumpcount = 0
             self.Files = [0,0,0]
@@ -99,7 +99,10 @@ class State(object):
                 if(self.dumplist[i]):
                     (self.xout)[i] = Function(self.V[i])
                     self.Files[i] = File(fieldlist[i]+'.pvd')
-                    self.xout[i].assign(xn[i])
+                    if(meanfields[i]):
+                        self.xout[i].assign(xn[i] - meanfields[i])
+                    else:
+                        self.xout[i].assign(xn[i])
                     self.Files[i] << self.xout[i]
             self.dumped = True
         else:
@@ -108,7 +111,10 @@ class State(object):
                 self.dumpcount = 0
                 for i in range(len(self.dumplist)):
                     if(self.dumplist[i]):
-                        self.xout[i].assign(xn[i])
+                        if(meanfields[i]):
+                            self.xout[i].assign(xn[i] - meanfields[i])
+                        else:
+                            self.xout[i].assign(xn[i])
                         self.Files[i] << self.xout[i]
         
     def initialise(self, u0, rho0, theta0):
