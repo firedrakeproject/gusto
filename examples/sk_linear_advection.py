@@ -102,27 +102,12 @@ PiSolver.solve()
 
 v, Pi = w.split()
 
-data = Pi.dat.data
-print data.max(), data.min()
-
-File('Theta.pvd').write(theta_b)
-File('Pi.pvd').write(Pi)
-
-rho_b.interpolate(p_0*Pi**((1-kappa)/kappa)/R_d/thetab)
-
-print rho_b.dat.data.max(), rho_b.dat.data.min(), 'rho'
-
-v.assign(1.0)
-File('V.pvd').write(v)
-
 x = Function(W_CG1).interpolate(Expression("x[0]"))
 a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(2*np.pi*z/H)/(1 + (x - L/2))
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
-data = rho0.dat.data
-print data.max(), data.min()
 
 state.initialise(u0, rho0, theta0)
 state.set_reference_profiles(rho_b, theta_b)
