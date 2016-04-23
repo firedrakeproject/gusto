@@ -69,12 +69,14 @@ class CompressibleForcing(Forcing):
         
         a = inner(w,F)*dx
         L = (
-            -inner(w,cross(2*Omega,u0))*dx #Coriolis term
             +cp*div(theta0*w)*pi*dx #pressure gradient [volume]
             -cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient [surface]
             -g*inner(w,state.k)*dx #gravity term
         )
 
+        if(Omega != None):
+            L -= inner(w,cross(2*Omega,u0))*dx #Coriolis term
+        
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
         

@@ -36,6 +36,7 @@ class State(object):
                  z = None,
                  k = None,
                  Omega = None,
+                 Hydrostatic = True,
                  Verbose = False,
                  dumpfreq = 10,
                  dumplist = (True,True,True)):
@@ -54,8 +55,7 @@ class State(object):
         self.p_0 = p_0
         self.kappa = kappa
         self.z = z
-        if(Omega !=None):
-            self.Omega = Omega
+        self.Omega = Omega
 
         self.Verbose = Verbose
         self.dumpfreq = dumpfreq
@@ -65,24 +65,25 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                           horizontal_degree, family)
 
-        #build the vertical normal
-        w = TestFunction(self.V[0])
-        u = TrialFunction(self.V[0])
+        
 
         if(k==None):
-            self.k = Function(self.V[0])        
+            #build the vertical normal
+            w = TestFunction(self.Vv)
+            u = TrialFunction(self.Vv)
+            self.k = Function(self.Vv)
             n = FacetNormal(self.mesh)
             krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
             klhs = inner(w,u)*dx
             solve(klhs == krhs, self.k)
         else:
             self.k = k
-            
+
         #Allocate state
         self._allocate_state()
 
         self.dumped = False
-
+        
     def dump(self):
         """
         Dump output
@@ -156,6 +157,8 @@ class State(object):
         cell = mesh._base_mesh.ufl_cell()
         if(cell.cellname() == 'triangle'):
             cell = triangle
+        if(cell.cellname() == 'interval'):
+            cell = interval
         S1 = FiniteElement(family, cell, horizontal_degree+1)
         S2 = FiniteElement("DG", cell, horizontal_degree)
 
@@ -174,6 +177,8 @@ class State(object):
         self.V[0] = FunctionSpace(mesh, V2_elt)
         self.V[1] = FunctionSpace(mesh, V3_elt)
         self.V[2] = FunctionSpace(mesh, V2t_elt)
+
+        self.Vv = FunctionSpace(mesh, V2v_elt)
         
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
