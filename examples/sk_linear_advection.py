@@ -4,10 +4,10 @@ from firedrake import Mesh, Expression, \
 from firedrake import exp, acos, cos, sin, ds_b
 import numpy as np
 
-nlayers = 10 #10 horizontal layers
-refinements = 3 # number of horizontal cells = 2**refinements
+nlayers = 50 #horizontal layers
+columns = 50 # number of columns
 L = 3.0e5
-m = PeriodicIntervalMesh(2**refinements, L)
+m = PeriodicIntervalMesh(columns, L)
 
 #build volume mesh
 H = 1.0e4  # Height position of the model top
@@ -32,7 +32,7 @@ c_p = 1004.5  # SHC of dry air at constant pressure (J/kg/K)
 R_d = 287.0  # Gas constant for dry air (J/kg/K)
 kappa = 2.0/7.0  # R_d/c_p
 
-state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
+state = State(mesh,vertical_degree = 1, horizontal_degree = 1,
               family = "CG",
               dt = 10.0,
               alpha = 0.5,
@@ -43,14 +43,14 @@ state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
               z=z,
               k=k,
               Omega=Omega,
-              Verbose=True, dumpfreq=1)
+              Verbose=True, dumpfreq=10)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
-thetab = Tsurf*exp(N**2*g*z)
+thetab = Tsurf*exp(N**2*z/g)
 
 theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1])
@@ -64,7 +64,7 @@ n = FacetNormal(mesh)
 
 alhs = (
     (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(v)*dx
+    + dpi*div(theta_b*v)*dx
 )
 
 arhs = (
@@ -74,38 +74,40 @@ arhs = (
 bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "top")]
 
 w = Function(W)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs, nest = False)
+PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
 params={'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
         'ksp_type': 'gmres',
+        'ksp_monitor_true_residual': True,
         'ksp_max_it': 100,
         'ksp_gmres_restart': 50,
         'pc_fieldsplit_schur_fact_type': 'FULL',
         'pc_fieldsplit_schur_precondition': 'selfp',
-        'fieldsplit_0_ksp_type': 'preonly',
+        'fieldsplit_0_ksp_type': 'richardson',
+        'fieldsplit_0_ksp_max_it': 5,
         'fieldsplit_0_pc_type': 'bjacobi',
         'fieldsplit_0_sub_pc_type': 'ilu',
-        'fieldsplit_1_ksp_type': 'preonly',
-        'fieldsplit_1_pc_type': 'gamg',
-        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-        'fieldsplit_1_mg_levels_ksp_max_it': 1,
-        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        'fieldsplit_1_ksp_type': 'richardson',
+        'fieldsplit_1_ksp_max_it': 5,
+        "fieldsplit_1_ksp_monitor_true_residual": True,
+        'fieldsplit_1_pc_type': 'bjacobi',
+        'fieldsplit_1_sub_pc_type': 'ilu'
+}
 
 PiSolver = LinearVariationalSolver(PiProblem,
                                    solver_parameters = params)
 
 PiSolver.solve()
-
 v, Pi = w.split()
 
-x = Function(W_CG1).interpolate(Expression("x[0]"))
+rho_b.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
+
+W_DG1 = FunctionSpace(mesh, "DG", 1)
+x = Function(W_DG1).interpolate(Expression("x[0]"))
 a = 5.0e3
 deltaTheta = 1.0e-2
-theta_pert = deltaTheta*sin(2*np.pi*z/H)/(1 + (x - L/2))
+theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
@@ -147,7 +149,8 @@ schur_params={'pc_type': 'fieldsplit',
         'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'
 }
 
-linear_solver = CompressibleSolver(state, alpha = 0.5)
+linear_solver = CompressibleSolver(state, alpha = 0.5,
+                                   params = schur_params)
 
 #Set up forcing
 compressible_forcing = CompressibleForcing(state)

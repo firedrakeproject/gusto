@@ -91,7 +91,7 @@ class State(object):
 
         xn = self.xn.split()
         fieldlist = ('u','rho','theta')
-        meanfields = (False,self.rhobar,self.thetabar)
+        meanfields = (False, self.rhobar,self.thetabar)
         if not self.dumped:
             self.dumpcount = 0
             self.Files = [0,0,0]
@@ -127,9 +127,9 @@ class State(object):
         """
 
         u_init, rho_init, theta_init = self.x_init.split()
-        u_init.project(u0)
-        rho_init.project(rho0)
-        theta_init.project(theta0)
+        u_init.assign(u0)
+        rho_init.assign(rho0)
+        theta_init.assign(theta0)
 
     def set_reference_profiles(self, rho_ref, theta_ref):
         """

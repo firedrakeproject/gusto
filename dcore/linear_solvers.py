@@ -2,7 +2,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, FunctionSpace, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function
+    Function, Expression
 
 from forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -110,8 +110,8 @@ class CompressibleSolver(TimesteppingSolver):
         #Place to put result of u rho solver
         self.urho = Function(M)
         #Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
-               DirichletBC(M.sub(0), 0.0, "top")]
+        bcs = [DirichletBC(M.sub(0), Expression(("0.0","0.0")), "bottom"),
+               DirichletBC(M.sub(0), Expression(("0.0","0.0")), "top")]
         
         #Solver for u, rho
         urho_problem = LinearVariationalProblem(
