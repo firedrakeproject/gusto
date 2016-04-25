@@ -112,8 +112,10 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), Expression(("0.0","0.0")), "bottom"),
-               DirichletBC(M.sub(0), Expression(("0.0","0.0")), "top")]
+        dim = M.sub(0).ufl_element().value_shape()[0]
+        bc = ("0.0",)*dim
+        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
+               DirichletBC(M.sub(0), Expression(bc), "top")]
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
