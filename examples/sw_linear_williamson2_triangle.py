@@ -3,7 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 
-refinements = 5  # number of horizontal cells = 20*(4^refinements)
+refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 2000.
@@ -17,7 +17,7 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
-output = OutputParameters(dirname='sw_linear_w2_nopsi', steady_state_dump_err=True)
+output = OutputParameters(dirname='sw_linear_w2_r3_nopsi', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,

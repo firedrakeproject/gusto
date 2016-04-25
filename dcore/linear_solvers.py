@@ -199,7 +199,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         outward_normals = CellNormal(state.mesh)
         perp = lambda u: cross(outward_normals, u)
         eqn = (
-            inner(w, u) + beta*f*inner(w, perp(u)) - beta*g*div(w)*D
+            inner(w, u) - beta*g*div(w)*D
             - inner(w, u_in)
             + phi*D + beta*H*phi*div(u)
             - phi*D_in
