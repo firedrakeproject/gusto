@@ -19,7 +19,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters()
-    output = OutputParameters(dumplist=(True,True), dirname=dirname)
+    output = OutputParameters(dumplist=(True,True), dirname=dirname+"/sw")
     parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
