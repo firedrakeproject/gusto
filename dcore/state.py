@@ -106,7 +106,7 @@ class State(object):
         """
 
         for x, ic in zip(self.x_init.split(), initial_conditions):
-            x.project(ic)
+            x.assign(ic)
 
     @abstractmethod
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
