@@ -5,10 +5,10 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 10 #10 horizontal layers
-refinements = 3 # number of horizontal cells = 20*(4^refinements)
+nlayers = 10  # 10 horizontal layers
+refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
-#build surface mesh
+# build surface mesh
 a_ref = 6.37122e6
 X = 125.0  # Reduced-size Earth reduction factor
 a = a_ref/X
@@ -28,12 +28,12 @@ phi_c = 0.0  # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
 
-m = IcosahedralSphereMesh(radius = a,
-                          refinement_level = refinements)
+m = IcosahedralSphereMesh(radius=a,
+                          refinement_level=refinements)
 
-#build volume mesh
+# build volume mesh
 z_top = 1.0e4  # Height position of the model top
-mesh = ExtrudedMesh(m, layers = nlayers, layer_height = z_top/nlayers,
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
                     extrusion_type="radial")
 
 # Space for initialising velocity
@@ -42,8 +42,8 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 Omega = Function(W_VectorCG1).assign(0.0)
 
-#Create polar coordinates
-z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a",a=a)) #Since we use a CG1 field, this is constant on layers
+# Create polar coordinates
+z = Function(W_CG1).interpolate(Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a",a=a))  # Since we use a CG1 field, this is constant on layers
 lat = Function(W_CG1).interpolate(Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))"))
 lon = Function(W_CG1).interpolate(Expression("atan2(x[1], x[0])"))
 
@@ -52,44 +52,34 @@ k = Function(W_VectorCG1).interpolate(
                "x[1]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])")))
 
-state = State(mesh,vertical_degree = 0, horizontal_degree = 0,
-              family = "BDM",
-              dt = 10.0,
-              alpha = 0.5,
-              g = g,
-              cp = c_p,
-              R_d = R_d,
-              p_0 = p_0,
-              z=z,
-              k=k,
-              Omega=Omega,
-              Verbose=True, dumpfreq=1)
+state = State(mesh, vertical_degree=0, horizontal_degree=0,
+              family="BDM")
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
 
-#Initial conditions without u0
-#Surface temperature
+# Initial conditions without u0
+# Surface temperature
 G = g**2/(N**2*c_p)
-Ts = Function(W_CG1).assign(T_eq) 
+Ts = Function(W_CG1).assign(T_eq)
 
-#surface pressure
+# surface pressure
 psexp = p_eq*((Ts/T_eq)**(1.0/kappa))
 
 ps = Function(W_CG1).interpolate(psexp)
 
-#Background pressure
+# Background pressure
 pexp = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
 
 p = Function(W_CG1).interpolate(pexp)
 
-#Background temperature
-#Tbexp = Ts*(p/ps)**kappa/(Ts/G*((p/ps)**kappa - 1) + 1)
+# Background temperature
+# Tbexp = Ts*(p/ps)**kappa/(Ts/G*((p/ps)**kappa - 1) + 1)
 Tbexp = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
 
 Tb = Function(W_CG1).interpolate(Tbexp)
 
-#Background potential temperature
+# Background potential temperature
 thetabexp = Tb*(p_0/p)**kappa
 
 thetab = Function(W_CG1).interpolate(thetabexp)
@@ -108,7 +98,7 @@ rho_b = Function(state.V[1]).project(rhob)
 sin_tmp = sin(lat) * sin(phi_c)
 cos_tmp = cos(lat) * cos(phi_c)
 
-r  = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c)) 
+r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
 
 s = (d**2)/(d**2 + r**2)
 
@@ -120,7 +110,7 @@ rho0.assign(rho_b)
 state.initialise(u0, rho0, theta0)
 state.set_reference_profiles(rho_b, theta_b)
 
-#Set up advection schemes
+# Set up advection schemes
 advection_list = []
 velocity_advection = NoAdvection(state)
 advection_list.append((velocity_advection, 0))
@@ -129,40 +119,38 @@ advection_list.append((rho_advection, 1))
 theta_advection = LinearAdvection_Vt(state, state.V[2], theta_b)
 advection_list.append((theta_advection, 2))
 
-#Set up linear solver
-schur_params={'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'schur',
-        'ksp_type': 'gmres',
-        'ksp_monitor_true_residual': True,
-        'ksp_max_it': 100,
-        'ksp_gmres_restart': 50,
-        'pc_fieldsplit_schur_fact_type': 'FULL',
-        'pc_fieldsplit_schur_precondition': 'selfp',
-        'fieldsplit_0_ksp_type': 'richardson',
-        'fieldsplit_0_ksp_max_it': 5,
-        'fieldsplit_0_pc_type': 'bjacobi',
-        'fieldsplit_0_sub_pc_type': 'ilu',
-        'fieldsplit_1_ksp_type': 'richardson',
-        'fieldsplit_1_ksp_max_it': 5,
-        "fieldsplit_1_ksp_monitor_true_residual": True,
-        'fieldsplit_1_pc_type': 'gamg',
-        'fieldsplit_1_pc_gamg_sym_graph': True,
-        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-        'fieldsplit_1_mg_levels_ksp_max_it': 5,
-        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'
-}
+# Set up linear solver
+schur_params = {'pc_type': 'fieldsplit',
+                'pc_fieldsplit_type': 'schur',
+                'ksp_type': 'gmres',
+                'ksp_monitor_true_residual': True,
+                'ksp_max_it': 100,
+                'ksp_gmres_restart': 50,
+                'pc_fieldsplit_schur_fact_type': 'FULL',
+                'pc_fieldsplit_schur_precondition': 'selfp',
+                'fieldsplit_0_ksp_type': 'richardson',
+                'fieldsplit_0_ksp_max_it': 5,
+                'fieldsplit_0_pc_type': 'bjacobi',
+                'fieldsplit_0_sub_pc_type': 'ilu',
+                'fieldsplit_1_ksp_type': 'richardson',
+                'fieldsplit_1_ksp_max_it': 5,
+                "fieldsplit_1_ksp_monitor_true_residual": True,
+                'fieldsplit_1_pc_type': 'gamg',
+                'fieldsplit_1_pc_gamg_sym_graph': True,
+                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, alpha = 0.5, params = schur_params)
+linear_solver = CompressibleSolver(state, alpha=0.5, params=schur_params)
 
-#Set up forcing
+# Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-#build time stepper
+# build time stepper
 stepper = Timestepper(state, advection_list, linear_solver,
                       compressible_forcing)
 
-stepper.run(t = 0, tmax = 3600.0)
-
+stepper.run(t=0, tmax=3600.0)

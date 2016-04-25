@@ -6,8 +6,8 @@ from firedrake import par_loop, WRITE, READ
 
 import numpy as np
 
-nlayers = 10 #10 horizontal layers
-refinements = 4 # number of horizontal cells = 20*(4^refinements)
+nlayers = 10  # 10 horizontal layers
+refinements = 4  # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -20,7 +20,7 @@ lamda_c = 2.0*np.pi/3.0  # Longitudinal centerpoint of Theta'
 phi_c = 0.0  # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
-u_0 = 0.0 #20.0  # Maximum amplitude of the zonal wind (m/s)
+u_0 = 0.0  # Maximum amplitude of the zonal wind (m/s)
 
 m = IcosahedralSphereMesh(radius=a,
                           refinement_level=refinements)
@@ -183,7 +183,7 @@ for (int i=0; i<3; ++i) {
 
 state.zhat = zhat
 
-#Set up advection schemes
+# Set up advection schemes
 advection_list = []
 velocity_advection = NoAdvection(state)
 advection_list.append((velocity_advection, 0))
