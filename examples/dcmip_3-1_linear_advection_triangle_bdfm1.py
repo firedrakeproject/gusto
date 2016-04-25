@@ -126,6 +126,8 @@ rho0.assign(rho_b)
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 
+state.output.meanfields = [None, rho_b, theta_b]
+
 W_VectorDG0 = VectorFunctionSpace(mesh, "DG", 0)
 # Build new extruded coordinate function space
 zhat = Function(W_VectorDG0)

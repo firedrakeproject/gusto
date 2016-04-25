@@ -83,10 +83,18 @@ class State(object):
 
         funcs = self.xn.split()
         to_dump = []
+
         for name, f in zip(self.fieldlist, funcs):
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
+
+        for field, meanfield in zip(funcs, self.output.meanfields):
+            if meanfield is not None:
+                diff = Function(
+                    field.function_space(),
+                    name=f.name+"_perturbation").assign(field - meanfield)
+                to_dump.append(diff)
 
         dumpdir = path.join("results", self.output.dirname)
 

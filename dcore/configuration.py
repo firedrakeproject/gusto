@@ -41,6 +41,10 @@ class OutputParameters(Configuration):
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
+    #: Can be a list of fields for computing perturbations.
+    #: Must be in the same order as fieldlist with entry None
+    #: if a particular perturbation field is not required.
+    meanfields = None
 
 
 class CompressibleParameters(Configuration):
