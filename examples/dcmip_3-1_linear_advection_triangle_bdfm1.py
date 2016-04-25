@@ -32,6 +32,8 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
+# Space for initialising reference profiles of theta and rho
+W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # Make a vertical direction for the linearised advection
 k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
@@ -41,14 +43,14 @@ Omega = Function(W_VectorCG1).assign(0.0)
 fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0)
 output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip')
-parameters = CompressibleParameters(k=k, Omega=Omega)
+parameters = CompressibleParameters()
 
-state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="BDFM",
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            fieldlist=fieldlist)
+state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
+                          family="BDFM", k=k, Omega=Omega,
+                          timestepping=timestepping,
+                          output=output,
+                          parameters=parameters,
+                          fieldlist=fieldlist)
 
 # interpolate initial conditions
 g = parameters.g
