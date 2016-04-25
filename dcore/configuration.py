@@ -56,6 +56,7 @@ class CompressibleParameters(Configuration):
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
     k = None  # vertical direction
     Omega = None  # rotation vector
+    z = None
 
 
 class ShallowWaterParameters(Configuration):

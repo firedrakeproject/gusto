@@ -55,19 +55,17 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                            horizontal_degree, family)
 
-        if(k==None):
-            #build the vertical normal
+        if self.parameters.k is None:
+            # build the vertical normal
             w = TestFunction(self.Vv)
             u = TrialFunction(self.Vv)
-            self.k = Function(self.Vv)
+            self.parameters.k = Function(self.Vv)
             n = FacetNormal(self.mesh)
-            krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
+            krhs = -div(w)*self.parameters.z*dx + inner(w,n)*self.parameters.z*ds_tb
             klhs = inner(w,u)*dx
-            solve(klhs == krhs, self.k)
-        else:
-            self.k = k
+            solve(klhs == krhs, self.parameters.k)
 
-        #Allocate state
+        # Allocate state
         self._allocate_state()
         self.field_dict = {name: func for (name, func) in
                            zip(self.fieldlist, self.xn.split())}
@@ -187,7 +185,7 @@ class Compressible3DState(State):
         S1 = FiniteElement(family, cell, horizontal_degree+1)
         S2 = FiniteElement("DG", cell, horizontal_degree)
 
-        #vertical base spaces
+        # vertical base spaces
         T0 = FiniteElement("CG", interval, vertical_degree+1)
         T1 = FiniteElement("DG", interval, vertical_degree)
 

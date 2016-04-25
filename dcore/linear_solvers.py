@@ -94,15 +94,15 @@ class CompressibleSolver(TimesteppingSolver):
         theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
         eqn = (
-            inner(w , (u - u_in))*dx
+            inner(w, (u - u_in))*dx
             - beta*cp*div(theta*w)*pibar*dx
             + beta*cp*jump(theta*w,n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pibar_theta*theta*dx
-            #+ beta*cp*jump(thetabar*w,n)*avg(pibar_theta*theta)*dS_v
+            # + beta*cp*jump(thetabar*w,n)*avg(pibar_theta*theta)*dS_v
             - beta*cp*div(thetabar*w)*pibar_rho*rho*dx
             + beta*cp*jump(thetabar*w,n)*avg(pibar_rho*rho)*dS_v
-            + (phi*(rho - rho_in) - beta*inner(grad(phi) , u)*rhobar)*dx
-            + beta*jump(phi*u , n)*avg(rhobar)*(dS_v + dS_h)
+            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+            + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
         aeqn = lhs(eqn)
@@ -111,11 +111,11 @@ class CompressibleSolver(TimesteppingSolver):
         # Place to put result of u rho solver
         self.urho = Function(M)
 
-        #Boundary conditions (assumes extruded mesh)
+        # Boundary conditions (assumes extruded mesh)
         bcs = [DirichletBC(M.sub(0), Expression(("0.0","0.0")), "bottom"),
                DirichletBC(M.sub(0), Expression(("0.0","0.0")), "top")]
-        
-        #Solver for u, rho
+
+        # Solver for u, rho
         urho_problem = LinearVariationalProblem(
             aeqn, Leqn, self.urho, bcs=bcs)
 
@@ -128,8 +128,8 @@ class CompressibleSolver(TimesteppingSolver):
 
         u, rho = self.urho.split()
         self.theta = Function(state.V[2])
-        
-        theta_eqn = gamma*(theta - theta_in - 
+
+        theta_eqn = gamma*(theta - theta_in -
                            dot(k,u)*dot(k,grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),

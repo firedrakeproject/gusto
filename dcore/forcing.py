@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
-    FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, \
+    FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     Projector
 
@@ -62,24 +62,23 @@ class CompressibleForcing(Forcing):
         Omega = state.parameters.Omega
         cp = state.parameters.cp
         g = state.parameters.g
-        
+
         n = FacetNormal(state.mesh)
 
         pi = Function(state.V[1])
         self.PiProjector = Projector(exner(theta0, rho0, state),
                                      pi)
-        #pi = exner(theta0, rho0, state)
-        
+
         a = inner(w,F)*dx
         L = (
-            +cp*div(theta0*w)*pi*dx #pressure gradient [volume]
-            -cp*jump(w*theta0,n)*avg(pi)*dS_v #pressure gradient [surface]
-            -g*inner(w,state.k)*dx #gravity term
+            + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
+            - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
+            - g*inner(w,state.k)*dx  # gravity term
         )
 
-        if(Omega != None):
-            L -= inner(w,cross(2*Omega,u0))*dx #Coriolis term
-        
+        if Omega is not None:
+            L -= inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
 
@@ -88,14 +87,14 @@ class CompressibleForcing(Forcing):
         )
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
-        
+
     def apply(self, scaling, x_in, x_nl, x_out):
 
         self.x0.assign(x_nl)
         self.PiProjector.project()
-        self.u_forcing_solver.solve() #places forcing in self.uF
+        self.u_forcing_solver.solve()  # places forcing in self.uF
         self.uF *= scaling
-        
+
         u_out, _, _ = x_out.split()
 
         x_out.assign(x_in)
