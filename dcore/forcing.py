@@ -1,8 +1,10 @@
+from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     Projector
+
 
 class Forcing(object):
     """
@@ -14,19 +16,21 @@ class Forcing(object):
 
     def __init__(self, state):
         self.state = state
-    
+
     @abstractmethod
-    def apply(self, scale, x, x_out):
+    def apply(self, scale, x, x_nl, x_out):
         """
-        Function takes x as input, computes F(x) and returns 
-        x_out = x + scale*F(x) 
+        Function takes x as input, computes F(x_nl) and returns
+        x_out = x + scale*F(x_nl)
         as output.
 
         :arg scale: parameter to scale the output by.
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        :arg x: :class:`.Function` object
+        :arg x_nl: :class:`.Function` object
+        :arg x_out: :class:`.Function` object
         """
         pass
+
 
 class CompressibleForcing(Forcing):
     """
@@ -38,27 +42,26 @@ class CompressibleForcing(Forcing):
 
         self._build_forcing_solver()
 
-
     def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
         """
-        
-        state = self.state 
+
+        state = self.state
         Vu = state.V[0]
         W = state.W
 
-        self.x0 = Function(W) #copy x to here
+        self.x0 = Function(W)   # copy x to here
 
         u0,rho0,theta0 = split(self.x0)
-        
+
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        Omega = state.Omega
-        cp = state.cp
-        g = state.g
+        Omega = state.parameters.Omega
+        cp = state.parameters.cp
+        g = state.parameters.g
         
         n = FacetNormal(state.mesh)
 
@@ -79,10 +82,10 @@ class CompressibleForcing(Forcing):
         
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
-        
+
         u_forcing_problem = LinearVariationalProblem(
             a,L,self.uF, bcs=bcs
-        ) 
+        )
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
         
@@ -98,26 +101,29 @@ class CompressibleForcing(Forcing):
         x_out.assign(x_in)
         u_out += self.uF
 
+
 def exner(theta,rho,state):
     """
     Compute the exner function.
     """
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
-       
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
 
+
 def exner_rho(theta,rho,state):
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
-    
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
 
+
 def exner_theta(theta,rho,state):
-    R_d = state.R_d
-    p_0 = state.p_0
-    kappa = state.kappa
-       
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)

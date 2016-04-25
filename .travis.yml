@@ -1,0 +1,49 @@
+sudo: false
+notifications:
+  irc:
+    channels: "chat.freenode.net#firedrake"
+    skip_join: true
+    on_success: change
+    on_failure: always
+    template: "%{repository}#%{build_number} (%{branch} - %{commit} : %{author}): %{message} | %{build_url}"
+
+language: python
+python: "2.7"
+addons:
+  apt:
+    packages:
+        - build-essential
+        - python-dev
+        - git
+        - mercurial
+        - python-pip
+        - python-scipy
+        - libopenmpi-dev
+        - openmpi-bin
+        - libblas-dev
+        - liblapack-dev
+        - gfortran
+        - libspatialindex-dev
+os:
+  - linux
+
+env:
+  global:
+    - CC=mpicc
+
+before_install:
+  - pip install -U pip
+  - pip install -U virtualenv
+  - pip install pep8-naming
+  - pip install flake8
+
+install:
+  - curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
+  - python ./firedrake-install --disable-ssh --minimal-petsc
+  - . ./firedrake/bin/activate
+  - pip install pytest
+  - export PYTHONPATH=`pwd`:$PYTHONPATH
+
+script:
+  - make lint
+  - py.test -v tests
