@@ -58,16 +58,6 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                            horizontal_degree, family)
 
-        if self.k is None:
-            # build the vertical normal
-            w = TestFunction(self.Vv)
-            u = TrialFunction(self.Vv)
-            self.k = Function(self.Vv)
-            n = FacetNormal(self.mesh)
-            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
-            klhs = inner(w,u)*dx
-            solve(klhs == krhs, self.k)
-
         # Allocate state
         self._allocate_state()
         self.field_dict = {name: func for (name, func) in
@@ -165,6 +155,17 @@ class CompressibleState(State):
         V = FunctionSpace(mesh, "CG", 1)
         self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
         self.Phi *= parameters.g
+
+        if self.k is None:
+            # build the vertical normal
+            w = TestFunction(self.Vv)
+            u = TrialFunction(self.Vv)
+            self.k = Function(self.Vv)
+            n = FacetNormal(self.mesh)
+            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
+            klhs = inner(w,u)*dx
+            solve(klhs == krhs, self.k)
+
 
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
