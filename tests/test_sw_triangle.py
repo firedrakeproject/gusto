@@ -3,7 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 
 
-def setup_sw():
+def setup_sw(dirname):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -19,7 +19,7 @@ def setup_sw():
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters()
-    output = OutputParameters(dumplist=(True,True), dirname='tests/sw')
+    output = OutputParameters(dumplist=(True,True), dirname=dirname)
     parameters = ShallowWaterParameters()
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
@@ -46,11 +46,12 @@ def setup_sw():
     state.initialise([u0, D0])
 
 
-def run_sw():
+def run_sw(dirname):
 
-    setup_sw()
+    setup_sw(dirname)
 
 
-def test_sw_setup():
+def test_sw_setup(tmpdir):
 
-    run_sw()
+    dirname = str(tmpdir)
+    run_sw(dirname)
