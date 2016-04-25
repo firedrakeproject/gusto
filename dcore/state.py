@@ -166,7 +166,6 @@ class CompressibleState(State):
             klhs = inner(w,u)*dx
             solve(klhs == krhs, self.k)
 
-
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
         Initialise reference profiles
