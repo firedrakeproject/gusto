@@ -59,7 +59,7 @@ class LinearAdvection_Vt(Advection):
         self.dq = Function(V)
 
         a = p*q*dx
-        k = state.parameters.k             # Upward pointing unit vector
+        k = state.k             # Upward pointing unit vector
         L = -p*dot(self.ubar,k)*dot(k,grad(qbar))*dx
 
         aProblem = LinearVariationalProblem(a,L,self.dq)

@@ -59,7 +59,7 @@ class CompressibleForcing(Forcing):
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        Omega = state.parameters.Omega
+        Omega = state.Omega
         cp = state.parameters.cp
         g = state.parameters.g
 

@@ -90,7 +90,7 @@ class CompressibleSolver(TimesteppingSolver):
         pibar_theta = exner_theta(thetabar, rhobar, state)
 
         # Analytical (approximate) elimination of theta
-        k = state.parameters.k             # Upward pointing unit vector
+        k = state.k             # Upward pointing unit vector
         theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
         eqn = (

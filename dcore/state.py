@@ -34,12 +34,15 @@ class State(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT",
+                 family="RT", z=None, k=None, Omega=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
                  fieldlist=None):
 
+        self.z = z
+        self.k = k
+        self.Omega = Omega
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
@@ -55,15 +58,15 @@ class State(object):
         self._build_spaces(mesh, vertical_degree,
                            horizontal_degree, family)
 
-        if self.parameters.k is None:
+        if self.k is None:
             # build the vertical normal
             w = TestFunction(self.Vv)
             u = TrialFunction(self.Vv)
-            self.parameters.k = Function(self.Vv)
+            self.k = Function(self.Vv)
             n = FacetNormal(self.mesh)
-            krhs = -div(w)*self.parameters.z*dx + inner(w,n)*self.parameters.z*ds_tb
+            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
             klhs = inner(w,u)*dx
-            solve(klhs == krhs, self.parameters.k)
+            solve(klhs == krhs, self.k)
 
         # Allocate state
         self._allocate_state()
@@ -93,7 +96,7 @@ class State(object):
             if meanfield is not None:
                 diff = Function(
                     field.function_space(),
-                    name=f.name+"_perturbation").assign(field - meanfield)
+                    name=field.name()+"_perturbation").assign(field - meanfield)
                 to_dump.append(diff)
 
         dumpdir = path.join("results", self.output.dirname)
@@ -139,23 +142,24 @@ class State(object):
         self.dy = Function(W)
 
 
-class Compressible3DState(State):
+class CompressibleState(State):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT",
+                 family="RT", z=None, k=None, Omega=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
                  fieldlist=None):
 
-        super(Compressible3DState, self).__init__(mesh,
-                                                  vertical_degree,
-                                                  horizontal_degree,
-                                                  family,
-                                                  timestepping,
-                                                  output,
-                                                  parameters,
-                                                  fieldlist)
+        super(CompressibleState, self).__init__(mesh,
+                                                vertical_degree,
+                                                horizontal_degree,
+                                                family,
+                                                z, k, Omega,
+                                                timestepping,
+                                                output,
+                                                parameters,
+                                                fieldlist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)

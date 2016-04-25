@@ -17,26 +17,34 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 W_CG1 = FunctionSpace(mesh, "CG", 1)
 
-Omega = None
-
 # vertical coordinate and normal
 z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(
-    Expression(("0.","1.")))
+k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
-# Thermodynamic constants
-g = 9.810616
-N = 0.01  # Brunt-Vaisala frequency (1/s)
-p_0 = 1000.0 * 100.0  # Reference pressure (Pa, not hPa)
-c_p = 1004.5  # SHC of dry air at constant pressure (J/kg/K)
-R_d = 287.0  # Gas constant for dry air (J/kg/K)
-kappa = 2.0/7.0  # R_d/c_p
+fieldlist = ['u', 'rho', 'theta']
+timestepping = TimesteppingParameters(dt=10.0)
+output = OutputParameters(dirname='sk_linear', dumplist=['u'])
+parameters = CompressibleParameters()
 
-state = State(mesh,vertical_degree=1, horizontal_degree=1,
-              family="CG")
+state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
+                          family="CG",
+                          z=z, k=k,
+                          timestepping=timestepping,
+                          output=output,
+                          parameters=parameters,
+                          fieldlist=fieldlist)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
+
+# Thermodynamic constants required for setting initial conditions
+# and reference profiles
+g = parameters.g
+N = parameters.N
+p_0 = parameters.p_0
+c_p = parameters.cp
+R_d = parameters.R_d
+kappa = parameters.kappa
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
@@ -100,8 +108,9 @@ theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
-state.initialise(u0, rho0, theta0)
+state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
+state.output.meanfields = [None, state.rhobar, state.thetabar]
 
 # Set up advection schemes
 advection_list = []
@@ -137,8 +146,7 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, alpha=0.5,
-                                   params=schur_params)
+linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
