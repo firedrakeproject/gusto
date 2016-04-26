@@ -59,6 +59,8 @@ class State(object):
 
         # Allocate state
         self._allocate_state()
+        self.field_dict = {name: func for (name, func) in
+                           zip(self.fieldlist, self.xn.split())}
 
         self.dumpfile = None
 

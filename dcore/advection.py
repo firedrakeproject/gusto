@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, jump, avg, dS_v, dS_h
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer
 
 
 class Advection(object):
@@ -15,6 +15,7 @@ class Advection(object):
 
     def __init__(self, state):
         self.state = state
+        self.ubar = Function(state.V[0])
 
     @abstractmethod
     def apply(self, x, x_out):
@@ -32,12 +33,6 @@ class NoAdvection(Advection):
     """
     An non-advection scheme that does nothing.
     """
-
-    def __init__(self, state):
-
-        super(NoAdvection, self).__init__(state)
-        # create a ubar field even though we don't use it.
-        self.ubar = Function(state.V[0])
 
     def apply(self, x_in, x_out):
 
@@ -57,7 +52,6 @@ class LinearAdvection_Vt(Advection):
 
     def __init__(self, state, V, qbar, options=None):
         super(LinearAdvection_Vt, self).__init__(state)
-        self.ubar = Function(state.V[0])
 
         p = TestFunction(state.V[2])
         q = TrialFunction(state.V[2])
@@ -95,8 +89,7 @@ class LinearAdvection_V3(Advection):
     """
 
     def __init__(self, state, qbar, options=None):
-        self.state = state
-        self.ubar = Function(state.V[0])
+        super(LinearAdvection_V3, self).__init__(state)
 
         p = TestFunction(state.V[1])
         q = TrialFunction(state.V[1])
@@ -122,3 +115,69 @@ class LinearAdvection_V3(Advection):
         dt = self.state.timestepping.dt
         self.solver.solve()
         x_out.assign(x_in + dt*self.dq)
+
+
+class DGAdvection(Advection):
+
+    """
+    DG 3 step SSPRK advection scheme that can be applied to a scalar
+    or vector field
+
+    :arg state: :class:`.State` object.
+    :arg V: function space of advected field - should be DG
+    :arg continuity: optional boolean.
+         If ``True``, the advection equation is of the form:
+         :math: `D_t +\nabla \cdot(uD) = 0`.
+         If ``False``, the advection equations is of the form:
+         :math: `D_t + (u \cdot \nabla)D = 0`.
+    """
+
+    def __init__(self, state, V, continuity=False):
+
+        super(DGAdvection, self).__init__(state)
+
+        element = V.fiat_element
+        assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
+        dt = state.timestepping.dt
+
+        phi = TestFunction(V)
+        D = TrialFunction(V)
+        self.D1 = Function(V)
+        self.dD = Function(V)
+
+        n = FacetNormal(state.mesh)
+        # ( dot(v, n) + |dot(v, n)| )/2.0
+        un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
+
+        a_mass = inner(phi,D)*dx
+
+        if continuity:
+            a_int = -inner(grad(phi), outer(D, self.ubar))*dx
+        else:
+            a_int = -inner(div(outer(phi,self.ubar)),D)*dx
+
+        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*dS
+        arhs = a_mass - dt*(a_int + a_flux)
+
+        DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
+                                             self.dD)
+        self.DGsolver = LinearVariationalSolver(DGproblem,
+                                                solver_parameters={
+                                                    'ksp_type':'preonly',
+                                                    'pc_type':'bjacobi',
+                                                    'sub_pc_type': 'ilu'})
+
+    def apply(self, x_in, x_out):
+        # SSPRK Stage 1
+        self.D1.assign(x_in)
+        self.DGsolver.solve()
+        self.D1.assign(self.dD)
+
+        # SSPRK Stage 2
+        self.DGsolver.solve()
+        self.D1.assign(0.75*x_in + 0.25*self.dD)
+
+        # SSPRK Stage 3
+        self.DGsolver.solve()
+
+        x_out.assign((1.0/3.0)*x_in + (2.0/3.0)*self.dD)
