@@ -45,11 +45,11 @@ def setup_dcmip():
     parameters = CompressibleParameters()
 
     state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="BDFM", k=k, Omega=Omega,
-                                timestepping=timestepping,
-                                output=output,
-                                parameters=parameters,
-                                fieldlist=fieldlist)
+                              family="BDFM", k=k, Omega=Omega,
+                              timestepping=timestepping,
+                              output=output,
+                              parameters=parameters,
+                              fieldlist=fieldlist)
 
     # interpolate initial conditions
     g = parameters.g
