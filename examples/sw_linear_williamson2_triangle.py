@@ -17,14 +17,16 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
-output = OutputParameters(dirname='sw_linear_w2_tst', steady_state_dump_err=True)
+output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
+diagnostics = ShallowWaterDiagnostics()
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
+                          diagnostics=diagnostics,
                           fieldlist=fieldlist)
 
 g = parameters.g
@@ -41,21 +43,13 @@ u_max = Constant(u_0)
 
 # interpolate initial conditions
 # Initial/current conditions
-init_from_psi = True
-if init_from_psi:
-    psiexpr = -u_max*x[2]
-    V = FunctionSpace(mesh, "CG", 2)
-    psi = Function(V).interpolate(psiexpr)
-    state.initialise(streamfunction=psi)
-else:
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    h0 = Constant(H)
-    g = Constant(parameters.g)
-    Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
-    u0.project(uexpr)
-    D0.interpolate(Dexpr)
-    state.initialise([u0, D0])
+u0, D0 = Function(state.V[0]), Function(state.V[1])
+uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+g = Constant(parameters.g)
+Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
+u0.project(uexpr)
+D0.interpolate(Dexpr)
+state.initialise([u0, D0])
 
 advection_list = []
 velocity_advection = NoAdvection(state)

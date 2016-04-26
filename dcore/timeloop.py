@@ -42,7 +42,7 @@ class Timestepper(object):
         alpha = state.timestepping.alpha
         state.dump()
 
-        while t < tmax - 0.5*dt:
+        while t < tmax + 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -65,5 +65,4 @@ class Timestepper(object):
 
             state.xn.assign(state.xnp1)
             state.dump()
-
-        return state.l2err, state.minerr, state.maxerr
+        state.diagnostic_dump()

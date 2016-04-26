@@ -1,13 +1,12 @@
 from __future__ import absolute_import
 from os import path
 import itertools
+import json
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
-    Expression, File, CellNormal, grad, cross, solve, inner, dx, \
-    TestFunctions, TrialFunctions, div, assemble, dot
-from math import sqrt
+    Expression, File
 
 
 class State(object):
@@ -39,11 +38,13 @@ class State(object):
                  timestepping=None,
                  output=None,
                  parameters=None,
+                 diagnostics=None,
                  fieldlist=None):
 
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
+        self.diagnostics = diagnostics
         if fieldlist is None:
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
         else:
@@ -71,44 +72,44 @@ class State(object):
             self.output.dumplist = self.fieldlist
 
         funcs = self.xn.split()
+        field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
         to_dump = []
-        for name, f in zip(self.fieldlist, funcs):
+        for name, f in field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
 
-        err_fields = []
         if self.output.steady_state_dump_err:
             init_funcs = self.x_init.split()
             for name, f, f_init in zip(self.fieldlist, funcs, init_funcs):
                 if name in self.output.dumplist:
                     err = Function(f.function_space(), name=name+'err').assign(f-f_init)
-                    err_fields.append(err)
+                    field_dict[name+"err"] = err
                     to_dump.append(err)
 
-        dumpdir = path.join("results", self.output.dirname)
+        self.dumpdir = path.join("results", self.output.dirname)
 
-        outfile = path.join(dumpdir, "field_output.pvd")
+        outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if path.exists(dumpdir):
-                exit("results directory '%s' already exists" % dumpdir)
+            if path.exists(self.dumpdir):
+                exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
 
-        self.l2err = {}
-        self.maxerr = {}
-        self.minerr = {}
-        for name in self.fieldlist:
-            self.l2err[name]=[]
-            self.maxerr[name]=[]
-            self.minerr[name]=[]
+            self.diagnostic_data = {}
+            for name in field_dict.keys():
+                self.diagnostic_data[name] = {"l2":[]}
+
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
 
-            for name, err, init in zip(self.fieldlist, err_fields, init_funcs):
-                self.l2err[name].append(sqrt(assemble(dot(err, err)*dx)/assemble(dot(init, init)*dx)))
-                self.maxerr[name].append(err.dat.data.max())
-                self.minerr[name].append(err.dat.data.min())
+            for name, field in field_dict.iteritems():
+                self.diagnostic_data[name]["l2"].append(self.diagnostics.l2(field))
+
+    def diagnostic_dump(self):
+
+        with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
+            f.write(json.dumps(self.diagnostic_data, indent=4))
 
     def initialise(self, initial_conditions):
         """
@@ -227,34 +228,3 @@ class ShallowWaterState(State):
         self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))
-
-    def initialise(self, initial_conditions=None, streamfunction=None):
-        """
-        Initialise state variables
-        """
-
-        if streamfunction is not None:
-            u0, D0 = self.x_init.split()
-
-            # u0 is gradperp(streamfunction)
-            outward_normals = CellNormal(self.mesh)
-            perp = lambda u: cross(outward_normals, u)
-            gradperp = lambda psi: perp(grad(psi))
-            u0.project(gradperp(streamfunction))
-
-            # solve elliptic problem for D0
-            g = self.parameters.g
-            f = self.f
-            W = self.W
-            w, phi = TestFunctions(W)
-            v, D = TrialFunctions(W)
-            vD = Function(W)
-            a = (inner(w, v) + div(w)*D + phi*div(v))*dx
-            L = (f/g)*inner(grad(phi),perp(u0))*dx
-
-            solve(a == L, vD)
-            v1, D1 = vD.split()
-            D0.assign(D1)
-
-        else:
-            super(ShallowWaterState, self).initialise(initial_conditions)
