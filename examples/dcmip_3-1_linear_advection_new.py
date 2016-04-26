@@ -1,4 +1,3 @@
-
 from dcore import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
@@ -52,8 +51,16 @@ k = Function(W_VectorCG1).interpolate(
                "x[1]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])",
                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])")))
 
-state = State(mesh, vertical_degree=0, horizontal_degree=0,
-              family="BDM")
+fieldlist = ['u','rho','theta']
+timestepping = TimesteppingParameters(dt=10.0)
+output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
+parameters = CompressibleParameters()
+state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
+                          family="BDM", k=k, z=z,
+                          timestepping=timestepping,
+                          output=output,
+                          parameters=parameters,
+                          fieldlist=fieldlist)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
@@ -107,7 +114,7 @@ theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
-state.initialise(u0, rho0, theta0)
+state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 
 # Set up advection schemes
@@ -144,7 +151,7 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, alpha=0.5, params=schur_params)
+linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
