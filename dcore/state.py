@@ -6,7 +6,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
     Expression, File, CellNormal, grad, cross, solve, inner, dx, \
-    TestFunction, TrialFunction, TestFunctions, TrialFunctions, div
+    TestFunctions, TrialFunctions, div, assemble, dot
+from math import sqrt
 
 
 class State(object):
@@ -76,11 +77,13 @@ class State(object):
                 to_dump.append(f)
             f.rename(name=name)
 
+        err_fields = []
         if self.output.steady_state_dump_err:
             init_funcs = self.x_init.split()
             for name, f, f_init in zip(self.fieldlist, funcs, init_funcs):
                 if name in self.output.dumplist:
                     err = Function(f.function_space(), name=name+'err').assign(f-f_init)
+                    err_fields.append(err)
                     to_dump.append(err)
 
         dumpdir = path.join("results", self.output.dirname)
@@ -92,8 +95,20 @@ class State(object):
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
 
+        self.l2err = {}
+        self.maxerr = {}
+        self.minerr = {}
+        for name in self.fieldlist:
+            self.l2err[name]=[]
+            self.maxerr[name]=[]
+            self.minerr[name]=[]
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
+
+            for name, err, init in zip(self.fieldlist, err_fields, init_funcs):
+                self.l2err[name].append(sqrt(assemble(dot(err, err)*dx)/assemble(dot(init, init)*dx)))
+                self.maxerr[name].append(err.dat.data.max())
+                self.minerr[name].append(err.dat.data.min())
 
     def initialise(self, initial_conditions):
         """
@@ -220,13 +235,13 @@ class ShallowWaterState(State):
 
         if streamfunction is not None:
             u0, D0 = self.x_init.split()
-            
+
             # u0 is gradperp(streamfunction)
             outward_normals = CellNormal(self.mesh)
             perp = lambda u: cross(outward_normals, u)
             gradperp = lambda psi: perp(grad(psi))
             u0.project(gradperp(streamfunction))
-            
+
             # solve elliptic problem for D0
             g = self.parameters.g
             f = self.f
@@ -240,6 +255,6 @@ class ShallowWaterState(State):
             solve(a == L, vD)
             v1, D1 = vD.split()
             D0.assign(D1)
-            
+
         else:
             super(ShallowWaterState, self).initialise(initial_conditions)

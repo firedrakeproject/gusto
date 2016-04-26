@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, cross, CellNormal
+    Function
 
 from dcore.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -184,7 +184,6 @@ class ShallowWaterSolver(TimesteppingSolver):
     def _setup_solver(self):
 
         state = self.state
-        f = state.f
         H = state.parameters.H
         g = state.parameters.g
         beta = state.timestepping.dt*state.timestepping.alpha
@@ -196,8 +195,6 @@ class ShallowWaterSolver(TimesteppingSolver):
         w, phi = TestFunctions(W)
         u, D = TrialFunctions(W)
 
-        outward_normals = CellNormal(state.mesh)
-        perp = lambda u: cross(outward_normals, u)
         eqn = (
             inner(w, u) - beta*g*div(w)*D
             - inner(w, u_in)

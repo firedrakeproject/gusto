@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
-    DirichletBC, LinearVariationalProblem, LinearVariationalSolver, perp, \
+    DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     CellNormal, dot, dS
 
 
@@ -148,8 +148,7 @@ class ShallowWaterForcing(Forcing):
         a = inner(w, F)*dx
         L = (
             (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
-            - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS
-            )
+            - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
 
         u_forcing_problem = LinearVariationalProblem(
             a, L, self.uF)

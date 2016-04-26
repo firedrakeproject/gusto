@@ -65,3 +65,5 @@ class Timestepper(object):
 
             state.xn.assign(state.xnp1)
             state.dump()
+
+        return state.l2err, state.minerr, state.maxerr

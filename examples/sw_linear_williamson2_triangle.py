@@ -17,7 +17,7 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
-output = OutputParameters(dirname='sw_linear_w2_r3_nopsi', steady_state_dump_err=True)
+output = OutputParameters(dirname='sw_linear_w2_tst', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
@@ -41,7 +41,7 @@ u_max = Constant(u_0)
 
 # interpolate initial conditions
 # Initial/current conditions
-init_from_psi = False
+init_from_psi = True
 if init_from_psi:
     psiexpr = -u_max*x[2]
     V = FunctionSpace(mesh, "CG", 2)
