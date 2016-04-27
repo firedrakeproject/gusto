@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from os import path
 import itertools
+from collections import defaultdict
+from functools import partial
 import json
 from sys import exit
 from abc import ABCMeta, abstractmethod
@@ -87,6 +89,7 @@ class State(object):
                 if name in self.output.dumplist:
                     err = Function(f.function_space(), name=name+'err').assign(f-f_init)
                     field_dict[name+"err"] = err
+                    self.diagnostics.register([name+"err"])
                     to_dump.append(err)
 
         self.dumpdir = path.join("results", self.output.dirname)
@@ -97,18 +100,14 @@ class State(object):
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
-
-            if self.diagnostics is not None:
-                self.diagnostic_data = {}
-                for name in field_dict.keys():
-                    self.diagnostic_data[name] = {"l2":[]}
+            self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
 
-            if self.diagnostics is not None:
-                for name, field in field_dict.iteritems():
-                    self.diagnostic_data[name]["l2"].append(self.diagnostics.l2(field))
+            for name in self.diagnostics.fields:
+                data = self.diagnostics.l2(field_dict[name])
+                self.diagnostic_data[name]["l2"].append(data)
 
     def diagnostic_dump(self):
 

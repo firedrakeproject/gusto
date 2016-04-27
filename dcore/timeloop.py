@@ -65,5 +65,4 @@ class Timestepper(object):
 
             state.xn.assign(state.xnp1)
             state.dump()
-        if state.diagnostics is not None:
-            state.diagnostic_dump()
+        state.diagnostic_dump()

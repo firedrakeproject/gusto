@@ -11,7 +11,7 @@ day = 24.*60.*60.
 u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=refinements)
+                             refinement_level=refinements, degree=3)
 global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
@@ -20,6 +20,7 @@ timestepping = TimesteppingParameters(dt=3600.)
 output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
 diagnostics = ShallowWaterDiagnostics()
+diagnostics.register(fieldlist)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
