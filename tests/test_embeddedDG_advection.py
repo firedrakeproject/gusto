@@ -10,7 +10,7 @@ def setup_DGadvection(element, vector=False):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
     R = 1.
-    dt = pi/3*0.001
+    dt = pi/3*0.01
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
@@ -80,7 +80,7 @@ def run(dirname, element, continuity=False, vector=False):
             f_advection.apply(f, fp1)
             f.assign(fp1)
 
-        if(next(dumpcount) % 150) == 0:
+        if(next(dumpcount) % 15) == 0:
             outfile.write(f)
 
     f_err = Function(f.function_space()).assign(f_end - f)
@@ -94,4 +94,4 @@ def test_embedded_dg(tmpdir, vector, element, continuity):
 
     dirname = str(tmpdir)
     f_err = run(dirname, vector, element, continuity)
-    assert(abs(f_err.dat.data.max()) < 1.5e-2)
+    assert(abs(f_err.dat.data.max()) < 2.5e-2)
