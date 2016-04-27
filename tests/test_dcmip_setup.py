@@ -5,7 +5,7 @@ from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
 import numpy as np
 
 
-def setup_dcmip():
+def setup_dcmip(dirname):
 
     nlayers = 2         # 2 horizontal layers
     refinements = 3      # number of horizontal cells = 20*(4^refinements)
@@ -41,7 +41,7 @@ def setup_dcmip():
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)
-    output = OutputParameters(Verbose=True, dumpfreq=1, dirname='tests/dcmip')
+    output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
     parameters = CompressibleParameters(k=k, Omega=Omega)
 
     state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
@@ -146,12 +146,13 @@ def setup_dcmip():
     return stepper, timestepping.dt
 
 
-def run_dcmip():
+def run_dcmip(dirname):
 
-    stepper, dt = setup_dcmip()
+    stepper, dt = setup_dcmip(dirname)
     stepper.run(t=0, tmax=dt)
 
 
-def test_dcmip_runs():
+def test_dcmip_runs(tmpdir):
 
-    run_dcmip()
+    dirname = str(tmpdir)
+    run_dcmip(dirname)
