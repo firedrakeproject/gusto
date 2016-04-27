@@ -98,15 +98,17 @@ class State(object):
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
 
-            self.diagnostic_data = {}
-            for name in field_dict.keys():
-                self.diagnostic_data[name] = {"l2":[]}
+            if self.diagnostics is not None:
+                self.diagnostic_data = {}
+                for name in field_dict.keys():
+                    self.diagnostic_data[name] = {"l2":[]}
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
 
-            for name, field in field_dict.iteritems():
-                self.diagnostic_data[name]["l2"].append(self.diagnostics.l2(field))
+            if self.diagnostics is not None:
+                for name, field in field_dict.iteritems():
+                    self.diagnostic_data[name]["l2"].append(self.diagnostics.l2(field))
 
     def diagnostic_dump(self):
 
@@ -152,14 +154,14 @@ class Compressible3DState(State):
                  parameters=None,
                  fieldlist=None):
 
-        super(Compressible3DState, self).__init__(mesh,
-                                                  vertical_degree,
-                                                  horizontal_degree,
-                                                  family,
-                                                  timestepping,
-                                                  output,
-                                                  parameters,
-                                                  fieldlist)
+        super(Compressible3DState, self).__init__(mesh=mesh,
+                                                  vertical_degree=vertical_degree,
+                                                  horizontal_degree=horizontal_degree,
+                                                  family=family,
+                                                  timestepping=timestepping,
+                                                  output=output,
+                                                  parameters=parameters,
+                                                  fieldlist=fieldlist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
