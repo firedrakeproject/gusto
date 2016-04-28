@@ -40,12 +40,14 @@ fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0)
 output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip')
 parameters = CompressibleParameters(k=k, Omega=Omega)
+diagnostics = Diagnostics(fieldlist)
 
 state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
                             family="BDFM",
                             timestepping=timestepping,
                             output=output,
                             parameters=parameters,
+                            diagnostics=diagnostics,
                             fieldlist=fieldlist)
 
 # interpolate initial conditions

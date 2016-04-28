@@ -4,14 +4,15 @@ from math import sqrt
 
 class Diagnostics(object):
 
-    def __init__(self):
-        self.fields = []
+    def __init__(self, fieldlist=None):
+
+        if fieldlist is not None:
+            self.fields = fieldlist
+        else:
+            self.fields = []
 
     def register(self, fieldlist):
         self.fields += fieldlist
-
-
-class ShallowWaterDiagnostics(Diagnostics):
 
     @staticmethod
     def l2(f):

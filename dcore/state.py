@@ -30,6 +30,7 @@ class State(object):
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
+    :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
 
     """
@@ -151,6 +152,7 @@ class Compressible3DState(State):
                  timestepping=None,
                  output=None,
                  parameters=None,
+                 diagnostics=None,
                  fieldlist=None):
 
         super(Compressible3DState, self).__init__(mesh=mesh,
@@ -160,6 +162,7 @@ class Compressible3DState(State):
                                                   timestepping=timestepping,
                                                   output=output,
                                                   parameters=parameters,
+                                                  diagnostics=diagnostics,
                                                   fieldlist=fieldlist)
 
         # build the geopotential

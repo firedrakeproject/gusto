@@ -19,8 +19,7 @@ fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
 output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err=True)
 parameters = ShallowWaterParameters(H=H)
-diagnostics = ShallowWaterDiagnostics()
-diagnostics.register(fieldlist)
+diagnostics = Diagnostics(fieldlist)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
