@@ -90,7 +90,7 @@ class State(object):
                 if name in self.output.dumplist:
                     err = Function(f.function_space(), name=name+'err').assign(f-f_init)
                     field_dict[name+"err"] = err
-                    self.diagnostics.register([name+"err"])
+                    self.diagnostics.register(name+"err")
                     to_dump.append(err)
 
         self.dumpdir = path.join("results", self.output.dirname)

@@ -4,15 +4,16 @@ from math import sqrt
 
 class Diagnostics(object):
 
-    def __init__(self, fieldlist=None):
+    def __init__(self, *fields):
 
-        if fieldlist is not None:
-            self.fields = fieldlist
-        else:
-            self.fields = []
+        self.fields = list(fields)
 
-    def register(self, fieldlist):
-        self.fields += fieldlist
+    def register(self, *fields):
+
+        fset = set(self.fields)
+        for f in fields:
+            if f not in fset:
+                self.fields.append(f)
 
     @staticmethod
     def l2(f):

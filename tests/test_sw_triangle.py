@@ -21,7 +21,7 @@ def setup_sw(dirname):
     timestepping = TimesteppingParameters()
     output = OutputParameters(dumplist=(True,True), dirname=dirname+"/sw")
     parameters = ShallowWaterParameters()
-    diagnostics = Diagnostics(fieldlist)
+    diagnostics = Diagnostics(*fieldlist)
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                               family="BDM",

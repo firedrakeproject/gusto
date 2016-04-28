@@ -19,7 +19,7 @@ fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=900.)
 output = OutputParameters(dirname='sw_williamson2')
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(fieldlist)
+diagnostics = Diagnostics(*fieldlist)
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
                           family="BDM",
