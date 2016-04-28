@@ -23,7 +23,7 @@ def setup_sw(dirname):
     parameters = ShallowWaterParameters()
     diagnostics = Diagnostics(*fieldlist)
 
-    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
+    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
                               timestepping=timestepping,
                               output=output,
