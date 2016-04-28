@@ -1,6 +1,6 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector
+    Constant, as_vector, VectorFunctionSpace
 from math import pi
 
 refinements = 3  # number of horizontal cells = 20*(4^refinements)
@@ -17,11 +17,11 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=900.)
-output = OutputParameters(dirname='sw_williamson2')
+output = OutputParameters(dirname='sw_williamson2', steady_state_dump_err={'D':True,'u':True})
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
+state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
                           timestepping=timestepping,
                           output=output,
@@ -53,9 +53,10 @@ D0.interpolate(Dexpr)
 
 state.initialise([u0, D0])
 advection_list = []
-velocity_advection = NoAdvection(state)
+Vdg = VectorFunctionSpace(mesh, "DG", 1)
+velocity_advection = EmbeddedDGAdvection(state, state.V[0], Vdg, continuity=False)
 advection_list.append((velocity_advection, 0))
-D_advection = NoAdvection(state)
+D_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((D_advection, 1))
 
 linear_solver = ShallowWaterSolver(state)
@@ -67,4 +68,4 @@ sw_forcing = ShallowWaterForcing(state)
 stepper = Timestepper(state, advection_list, linear_solver,
                       sw_forcing)
 
-stepper.run(t=0, tmax=9000.)
+stepper.run(t=0, tmax=5*day)
