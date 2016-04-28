@@ -10,6 +10,7 @@ def setup_sk(dirname):
     columns = 30  # number of columns
     L = 1.e5
     m = PeriodicIntervalMesh(columns, L)
+    dt = 15.0
 
     # build volume mesh
     H = 1.0e4  # Height position of the model top
@@ -24,7 +25,7 @@ def setup_sk(dirname):
     k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=15.0)
+    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_linear", dumplist=['u'], dumpfreq=150)
     diagnostics = Diagnostics(*fieldlist)
     parameters = CompressibleParameters()
@@ -159,13 +160,13 @@ def setup_sk(dirname):
     stepper = Timestepper(state, advection_list, linear_solver,
                           compressible_forcing)
 
-    return stepper
+    return stepper, dt
 
 
 def run_sk_linear(dirname):
 
-    stepper = setup_sk(dirname)
-    stepper.run(t=0, tmax=dt)
+    stepper, tmax = setup_sk(dirname)
+    stepper.run(t=0, tmax=tmax)
 
 
 def test_sk(tmpdir):
