@@ -20,7 +20,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=3600.)
-    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_dump_err=True)
+    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_dump_err={'u':True,'D':True}, dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
@@ -69,7 +69,7 @@ def setup_sw(dirname):
     stepper = Timestepper(state, advection_list, linear_solver,
                           sw_forcing)
 
-    return stepper, 5*day
+    return stepper, 2*day
 
 
 def run_sw(dirname):

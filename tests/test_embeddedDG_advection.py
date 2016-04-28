@@ -6,7 +6,7 @@ import pytest
 from math import pi
 
 
-def setup_DGadvection(vector=False):
+def setup_DGadvection(element, vector=False):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
     R = 1.
@@ -32,31 +32,40 @@ def setup_DGadvection(vector=False):
     u0.project(uexpr)
 
     if vector:
-        VectorDGSpace = VectorFunctionSpace(mesh, "DG", 1)
-        f = Function(VectorDGSpace, name="f")
+        if element is "BDM":
+            BrokenSpace = FunctionSpace(mesh, element, 2)
+        else:
+            BrokenSpace = VectorFunctionSpace(mesh, "DG", 1)
+        Space = VectorFunctionSpace(mesh, "CG", 1)
+        f = Function(Space, name="f")
         fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
-        f_end = Function(VectorDGSpace)
+        f_end = Function(Space)
         f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
     else:
-        f = Function(state.V[1], name='f')
+        if element is "BDM":
+            BrokenSpace = FunctionSpace(mesh, element, 2)
+        else:
+            BrokenSpace = FunctionSpace(mesh, "DG", 1)
+        Space = FunctionSpace(mesh, "CG", 1)
+        f = Function(Space, name='f')
         fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-        f_end = Function(state.V[1])
+        f_end = Function(Space)
         f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
 
     f.interpolate(fexpr)
     f_end.interpolate(f_end_expr)
 
-    return state, u0, f, f_end
+    return state, BrokenSpace, u0, f, f_end
 
 
-def run(dirname, continuity=False, vector=False):
+def run(dirname, element, continuity=False, vector=False):
 
-    state, u0, f, f_end = setup_DGadvection(vector)
+    state, dgfunctionspace, u0, f, f_end = setup_DGadvection(element, vector)
 
     dt = state.timestepping.dt
     tmax = pi/4.
     t = 0.
-    f_advection = DGAdvection(state, f.function_space(), continuity=continuity)
+    f_advection = EmbeddedDGAdvection(state, f.function_space(), dgfunctionspace, continuity=continuity)
 
     fp1 = Function(f.function_space())
     f_advection.ubar.assign(u0)
@@ -80,8 +89,9 @@ def run(dirname, continuity=False, vector=False):
 
 @pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-def test_dgadvection(tmpdir, vector, continuity):
+@pytest.mark.parametrize("element", ["BDM","DG"])
+def test_embedded_dg(tmpdir, vector, element, continuity):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, vector, continuity)
+    f_err = run(dirname, vector, element, continuity)
     assert(abs(f_err.dat.data.max()) < 2.5e-2)

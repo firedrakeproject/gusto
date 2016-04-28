@@ -8,7 +8,8 @@ from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
-    Expression, File
+    Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
+    ds_tb, dx, solve
 
 
 class State(object):
@@ -37,13 +38,16 @@ class State(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT",
+                 family="RT", z=None, k=None, Omega=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  fieldlist=None):
 
+        self.z = z
+        self.k = k
+        self.Omega = Omega
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
@@ -84,14 +88,28 @@ class State(object):
                 to_dump.append(f)
             f.rename(name=name)
 
-        if self.output.steady_state_dump_err:
-            init_funcs = self.x_init.split()
-            for name, f, f_init in zip(self.fieldlist, funcs, init_funcs):
-                if name in self.output.dumplist:
-                    err = Function(f.function_space(), name=name+'err').assign(f-f_init)
-                    field_dict[name+"err"] = err
-                    self.diagnostics.register(name+"err")
-                    to_dump.append(err)
+        steady_state_dump_err = self.output.steady_state_dump_err
+        for field in self.fieldlist:
+            steady_state_dump_err.setdefault(field, False)
+        for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
+            if steady_state_dump_err[name]:
+                err = Function(f.function_space(), name=name+'err').assign(f-f_init)
+                field_dict[name+"err"] = err
+                self.diagnostics.register(name+"err")
+                to_dump.append(err)
+
+        meanfields = self.output.meanfields
+        for field in self.fieldlist:
+            meanfields.setdefault(None)
+        for name, meanfield in meanfields.iteritems():
+            if meanfield is not None:
+                field = field_dict[name]
+                diff = Function(
+                    field.function_space(),
+                    name=field.name()+"_perturbation").assign(field - meanfield)
+                self.diagnostics.register(name+"perturbation")
+                field_dict[name+"perturbation"] = diff
+                to_dump.append(diff)
 
         self.dumpdir = path.join("results", self.output.dirname)
 
@@ -121,10 +139,11 @@ class State(object):
         """
 
         for x, ic in zip(self.x_init.split(), initial_conditions):
-            x.project(ic)
+            x.assign(ic)
 
     @abstractmethod
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+
         """
         Build function spaces:
         """
@@ -145,30 +164,41 @@ class State(object):
         self.dy = Function(W)
 
 
-class Compressible3DState(State):
+class CompressibleState(State):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT",
+                 family="RT", z=None, k=None, Omega=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  fieldlist=None):
 
-        super(Compressible3DState, self).__init__(mesh=mesh,
-                                                  vertical_degree=vertical_degree,
-                                                  horizontal_degree=horizontal_degree,
-                                                  family=family,
-                                                  timestepping=timestepping,
-                                                  output=output,
-                                                  parameters=parameters,
-                                                  diagnostics=diagnostics,
-                                                  fieldlist=fieldlist)
+        super(CompressibleState, self).__init__(mesh=mesh,
+                                                vertical_degree=vertical_degree,
+                                                horizontal_degree=horizontal_degree,
+                                                family=family,
+                                                z=z, k=k, Omega=Omega,
+                                                timestepping=timestepping,
+                                                output=output,
+                                                parameters=parameters,
+                                                diagnostics=diagnostics,
+                                                fieldlist=fieldlist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
         self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
         self.Phi *= parameters.g
+
+        if self.k is None:
+            # build the vertical normal
+            w = TestFunction(self.Vv)
+            u = TrialFunction(self.Vv)
+            self.k = Function(self.Vv)
+            n = FacetNormal(self.mesh)
+            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
+            klhs = inner(w,u)*dx
+            solve(klhs == krhs, self.k)
 
     def set_reference_profiles(self, rho_ref, theta_ref):
         """
@@ -196,12 +226,14 @@ class Compressible3DState(State):
         cell = mesh._base_mesh.ufl_cell()
         if(cell.cellname() == 'triangle'):
             cell = triangle
-        S1 = FiniteElement(family, cell, 2)
-        S2 = FiniteElement("DG", cell, 1)
+        if(cell.cellname() == 'interval'):
+            cell = interval
+        S1 = FiniteElement(family, cell, horizontal_degree+1)
+        S2 = FiniteElement("DG", cell, horizontal_degree)
 
         # vertical base spaces
-        T0 = FiniteElement("CG", interval, vertical_degree)
-        T1 = FiniteElement("DG", interval, vertical_degree-1)
+        T0 = FiniteElement("CG", interval, vertical_degree+1)
+        T1 = FiniteElement("DG", interval, vertical_degree)
 
         # build spaces V2, V3, Vt
         V2h_elt = HDiv(TensorProductElement(S1, T1))
@@ -214,6 +246,8 @@ class Compressible3DState(State):
         self.V[0] = FunctionSpace(mesh, V2_elt)
         self.V[1] = FunctionSpace(mesh, V3_elt)
         self.V[2] = FunctionSpace(mesh, V2t_elt)
+
+        self.Vv = FunctionSpace(mesh, V2v_elt)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 

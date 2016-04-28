@@ -17,7 +17,7 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=3600.)
-output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err=True)
+output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err={'u':True, 'D':True})
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 

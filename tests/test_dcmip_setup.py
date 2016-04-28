@@ -42,16 +42,16 @@ def setup_dcmip(dirname):
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)
     output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
-    parameters = CompressibleParameters(k=k, Omega=Omega)
+    parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
 
-    state = Compressible3DState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="BDFM",
-                                timestepping=timestepping,
-                                output=output,
-                                parameters=parameters,
-                                diagnostics=diagnostics,
-                                fieldlist=fieldlist)
+    state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
+                              family="BDFM", k=k, Omega=Omega,
+                              timestepping=timestepping,
+                              output=output,
+                              parameters=parameters,
+                              diagnostics=diagnostics,
+                              fieldlist=fieldlist)
 
     # interpolate initial conditions
     g = parameters.g
@@ -106,9 +106,9 @@ def setup_dcmip(dirname):
     advection_list = []
     velocity_advection = NoAdvection(state)
     advection_list.append((velocity_advection, 0))
-    rho_advection = LinearAdvection_V3(state, rho_b)
+    rho_advection = LinearAdvection_V3(state, state.V[1], rho_b)
     advection_list.append((rho_advection, 1))
-    theta_advection = LinearAdvection_Vt(state, k, theta_b)
+    theta_advection = LinearAdvection_Vt(state, state.V[2], theta_b)
     advection_list.append((theta_advection, 2))
 
     # Set up linear solver

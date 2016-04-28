@@ -41,23 +41,23 @@ class OutputParameters(Configuration):
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
-    #: Dump error fields for steady state simulation. Default is no.
-    steady_state_dump_err = False
+    #: Dump error fields for steady state simulation. Default is False.
+    steady_state_dump_err = {}
+    #: Dictionary of fields for computing perturbations. Default is False.
+    meanfields = {}
 
 
 class CompressibleParameters(Configuration):
 
     """
-    Physical parameters for 3d Compressible Euler
+    Physical parameters for Compressible Euler
     """
-    g = 9.81
+    g = 9.810616
     N = 0.01  # Brunt-Vaisala frequency (1/s)
     cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    k = None  # vertical direction
-    Omega = None  # rotation vector
 
 
 class ShallowWaterParameters(Configuration):
