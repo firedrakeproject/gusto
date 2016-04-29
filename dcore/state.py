@@ -88,9 +88,8 @@ class State(object):
                 to_dump.append(f)
             f.rename(name=name)
 
-        steady_state_dump_err = self.output.steady_state_dump_err
-        for field in self.fieldlist:
-            steady_state_dump_err.setdefault(field, False)
+        steady_state_dump_err = defaultdict(bool)
+        steady_state_dump_err.update(self.output.steady_state_dump_err)
         for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
             if steady_state_dump_err[name]:
                 err = Function(f.function_space(), name=name+'err').assign(f-f_init)
@@ -98,9 +97,8 @@ class State(object):
                 self.diagnostics.register(name+"err")
                 to_dump.append(err)
 
-        meanfields = self.output.meanfields
-        for field in self.fieldlist:
-            meanfields.setdefault(None)
+        meanfields = defaultdict(lambda: None)
+        meanfields.update(self.output.meanfields)
         for name, meanfield in meanfields.iteritems():
             if meanfield is not None:
                 field = field_dict[name]
