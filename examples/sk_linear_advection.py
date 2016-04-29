@@ -110,7 +110,7 @@ rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
-state.output.meanfields = [None, state.rhobar, state.thetabar]
+state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
 advection_list = []

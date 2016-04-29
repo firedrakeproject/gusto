@@ -43,6 +43,7 @@ Omega = Function(W_VectorCG1).assign(0.0)
 fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0)
 output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip')
+diagnostics = Diagnostics(*fieldlist)
 parameters = CompressibleParameters()
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
@@ -50,6 +51,7 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
+                          diagnostics=diagnostics,
                           fieldlist=fieldlist)
 
 # interpolate initial conditions
@@ -128,7 +130,7 @@ rho0.assign(rho_b)
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 
-state.output.meanfields = [None, rho_b, theta_b]
+state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
 
 W_VectorDG0 = VectorFunctionSpace(mesh, "DG", 0)
 # Build new extruded coordinate function space

@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    Projector
+    CellNormal, dot, dS, Projector
 
 
 class Forcing(object):
@@ -126,3 +126,49 @@ def exner_theta(theta,rho,state):
     kappa = state.parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
+
+
+class ShallowWaterForcing(Forcing):
+
+    def __init__(self, state):
+        self.state = state
+
+        g = state.parameters.g
+        f = state.f
+
+        Vu = state.V[0]
+        W = state.W
+
+        self.x0 = Function(W)   # copy x to here
+
+        u0, D0 = split(self.x0)
+        n = FacetNormal(state.mesh)
+        un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
+
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        self.uF = Function(Vu)
+
+        outward_normals = CellNormal(state.mesh)
+        perp = lambda u: cross(outward_normals, u)
+        a = inner(w, F)*dx
+        L = (
+            (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
+            - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
+
+        u_forcing_problem = LinearVariationalProblem(
+            a, L, self.uF)
+
+        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out):
+
+        self.x0.assign(x_nl)
+
+        self.u_forcing_solver.solve()  # places forcing in self.uF
+        self.uF *= scaling
+
+        uF, _ = x_out.split()
+
+        x_out.assign(x_in)
+        uF += self.uF

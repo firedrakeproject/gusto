@@ -1,6 +1,9 @@
 from __future__ import absolute_import
 from os import path
 import itertools
+from collections import defaultdict
+from functools import partial
+import json
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
@@ -28,6 +31,7 @@ class State(object):
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
+    :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
 
     """
@@ -38,6 +42,7 @@ class State(object):
                  timestepping=None,
                  output=None,
                  parameters=None,
+                 diagnostics=None,
                  fieldlist=None):
 
         self.z = z
@@ -46,6 +51,7 @@ class State(object):
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
+        self.diagnostics = diagnostics
         if fieldlist is None:
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
         else:
@@ -75,31 +81,55 @@ class State(object):
             self.output.dumplist = self.fieldlist
 
         funcs = self.xn.split()
+        field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
         to_dump = []
-
-        for name, f in zip(self.fieldlist, funcs):
+        for name, f in field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
 
-        for field, meanfield in zip(funcs, self.output.meanfields):
+        steady_state_dump_err = defaultdict(bool)
+        steady_state_dump_err.update(self.output.steady_state_dump_err)
+        for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
+            if steady_state_dump_err[name]:
+                err = Function(f.function_space(), name=name+'err').assign(f-f_init)
+                field_dict[name+"err"] = err
+                self.diagnostics.register(name+"err")
+                to_dump.append(err)
+
+        meanfields = defaultdict(lambda: None)
+        meanfields.update(self.output.meanfields)
+        for name, meanfield in meanfields.iteritems():
             if meanfield is not None:
+                field = field_dict[name]
                 diff = Function(
                     field.function_space(),
                     name=field.name()+"_perturbation").assign(field - meanfield)
+                self.diagnostics.register(name+"perturbation")
+                field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
 
-        dumpdir = path.join("results", self.output.dirname)
+        self.dumpdir = path.join("results", self.output.dirname)
 
-        outfile = path.join(dumpdir, "field_output.pvd")
+        outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if path.exists(dumpdir):
-                exit("results directory '%s' already exists" % dumpdir)
+            if path.exists(self.dumpdir):
+                exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
+            self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
+
+            for name in self.diagnostics.fields:
+                data = self.diagnostics.l2(field_dict[name])
+                self.diagnostic_data[name]["l2"].append(data)
+
+    def diagnostic_dump(self):
+
+        with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
+            f.write(json.dumps(self.diagnostic_data, indent=4))
 
     def initialise(self, initial_conditions):
         """
@@ -139,17 +169,19 @@ class CompressibleState(State):
                  timestepping=None,
                  output=None,
                  parameters=None,
+                 diagnostics=None,
                  fieldlist=None):
 
-        super(CompressibleState, self).__init__(mesh,
-                                                vertical_degree,
-                                                horizontal_degree,
-                                                family,
-                                                z, k, Omega,
-                                                timestepping,
-                                                output,
-                                                parameters,
-                                                fieldlist)
+        super(CompressibleState, self).__init__(mesh=mesh,
+                                                vertical_degree=vertical_degree,
+                                                horizontal_degree=horizontal_degree,
+                                                family=family,
+                                                z=z, k=k, Omega=Omega,
+                                                timestepping=timestepping,
+                                                output=output,
+                                                parameters=parameters,
+                                                diagnostics=diagnostics,
+                                                fieldlist=fieldlist)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
@@ -227,10 +259,10 @@ class ShallowWaterState(State):
 
         cell = mesh.ufl_cell().cellname()
 
-        V1_elt = FiniteElement(family, cell, horizontal_degree)
+        V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
         self.V = [0,0]
         self.V[0] = FunctionSpace(mesh,V1_elt)
-        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree-1)
+        self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))

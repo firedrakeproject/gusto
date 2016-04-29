@@ -20,6 +20,35 @@ class TimesteppingSolver(object):
     """
     __metaclass__ = ABCMeta
 
+    def __init__(self, state, params=None):
+
+        self.state = state
+
+        if params is None:
+            self.params = {'pc_type': 'fieldsplit',
+                           'pc_fieldsplit_type': 'schur',
+                           'ksp_type': 'gmres',
+                           'ksp_max_it': 100,
+                           'ksp_gmres_restart': 50,
+                           'pc_fieldsplit_schur_fact_type': 'FULL',
+                           'pc_fieldsplit_schur_precondition': 'selfp',
+                           'fieldsplit_0_ksp_type': 'preonly',
+                           'fieldsplit_0_pc_type': 'bjacobi',
+                           'fieldsplit_0_sub_pc_type': 'ilu',
+                           'fieldsplit_1_ksp_type': 'preonly',
+                           'fieldsplit_1_pc_type': 'gamg',
+                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
+                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        else:
+            self.params = params
+
+        # setup the solver
+        self._setup_solver()
+
     @abstractmethod
     def solve(self):
         pass
@@ -153,3 +182,47 @@ class CompressibleSolver(TimesteppingSolver):
 
         self.theta_solver.solve()
         theta.assign(self.theta)
+
+
+class ShallowWaterSolver(TimesteppingSolver):
+
+    def _setup_solver(self):
+
+        state = self.state
+        H = state.parameters.H
+        g = state.parameters.g
+        beta = state.timestepping.dt*state.timestepping.alpha
+
+        # Split up the rhs vector (symbolically)
+        u_in, D_in = split(state.xrhs)
+
+        W = state.W
+        w, phi = TestFunctions(W)
+        u, D = TrialFunctions(W)
+
+        eqn = (
+            inner(w, u) - beta*g*div(w)*D
+            - inner(w, u_in)
+            + phi*D + beta*H*phi*div(u)
+            - phi*D_in
+        )*dx
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put result of u rho solver
+        self.uD = Function(W)
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(
+            aeqn, Leqn, self.state.dy)
+
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.params)
+
+    def solve(self):
+        """
+        Apply the solver with rhs state.xrhs and result state.dy.
+        """
+
+        self.uD_solver.solve()

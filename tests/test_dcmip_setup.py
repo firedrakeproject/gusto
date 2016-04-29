@@ -43,12 +43,14 @@ def setup_dcmip(dirname):
     timestepping = TimesteppingParameters(dt=10.0)
     output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
     parameters = CompressibleParameters()
+    diagnostics = Diagnostics(*fieldlist)
 
     state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                               family="BDFM", k=k, Omega=Omega,
                               timestepping=timestepping,
                               output=output,
                               parameters=parameters,
+                              diagnostics=diagnostics,
                               fieldlist=fieldlist)
 
     # interpolate initial conditions

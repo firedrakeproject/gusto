@@ -35,22 +35,22 @@ class OutputParameters(Configuration):
     """
 
     Verbose = False
-    dumpfreq = 10
+    dumpfreq = 1
     dumplist = None
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
-    #: Can be a list of fields for computing perturbations.
-    #: Must be in the same order as fieldlist with entry None
-    #: if a particular perturbation field is not required.
-    meanfields = [None, None, None]
+    #: Dump error fields for steady state simulation. Default is False.
+    steady_state_dump_err = {}
+    #: Dictionary of fields for computing perturbations. Default is False.
+    meanfields = {}
 
 
 class CompressibleParameters(Configuration):
 
     """
-    Physical parameters for 3d Compressible Euler
+    Physical parameters for Compressible Euler
     """
     g = 9.810616
     N = 0.01  # Brunt-Vaisala frequency (1/s)
@@ -65,5 +65,6 @@ class ShallowWaterParameters(Configuration):
     """
     Physical parameters for 3d Compressible Euler
     """
-    g = 9.806
+    g = 9.80616
     Omega = 7.292e-5  # rotation rate
+    H = None  # mean depth
