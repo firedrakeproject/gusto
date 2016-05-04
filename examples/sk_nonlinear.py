@@ -23,7 +23,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=3.0)
-output = OutputParameters(dirname='sk_nh_u20_tst', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='sk_nh_u20', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]

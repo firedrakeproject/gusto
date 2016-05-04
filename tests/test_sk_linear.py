@@ -29,6 +29,7 @@ def setup_sk(dirname):
     output = OutputParameters(dirname=dirname+"/sk_linear", dumplist=['u'], dumpfreq=150)
     diagnostics = Diagnostics(*fieldlist)
     parameters = CompressibleParameters()
+    diagnostic_fields = [CourantNumber()]
 
     state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                               family="CG",
@@ -37,7 +38,8 @@ def setup_sk(dirname):
                               output=output,
                               parameters=parameters,
                               diagnostics=diagnostics,
-                              fieldlist=fieldlist)
+                              fieldlist=fieldlist,
+                              diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
     u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
