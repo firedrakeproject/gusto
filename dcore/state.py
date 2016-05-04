@@ -87,6 +87,8 @@ class State(object):
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
+        for name, f in self.diagnostic_fields.diagnostic_field_dict.iteritems():
+            to_dump.append(f)
 
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
@@ -110,7 +112,6 @@ class State(object):
                 to_dump.append(diff)
 
         self.dumpdir = path.join("results", self.output.dirname)
-
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
             if path.exists(self.dumpdir):
@@ -120,6 +121,10 @@ class State(object):
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+
+            if 'Courant' in self.diagnostic_fields.diagnostic_field_dict.keys():
+                self.diagnostic_fields.Courant(self)
+
             self.dumpfile.write(*to_dump)
 
             for name in self.diagnostics.fields:

@@ -156,7 +156,7 @@ class DGAdvection(Advection):
         else:
             a_int = -inner(div(outer(phi,self.ubar)),D)*dx
 
-        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*dS
+        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*(dS_v+dS_h)
         arhs = a_mass - dt*(a_int + a_flux)
 
         DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
