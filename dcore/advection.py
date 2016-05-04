@@ -128,7 +128,7 @@ class DGAdvection(Advection):
     :arg continuity: optional boolean.
          If ``True``, the advection equation is of the form:
          :math: `D_t +\nabla \cdot(uD) = 0`.
-         If ``False``, the advection equations is of the form:
+         If ``False``, the advection equation is of the form:
          :math: `D_t + (u \cdot \nabla)D = 0`.
     """
 
@@ -139,6 +139,11 @@ class DGAdvection(Advection):
         element = V.fiat_element
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
         dt = state.timestepping.dt
+
+        if V.extruded:
+            surface_measure = (dS_h + dS_v)
+        else:
+            surface_measure = dS
 
         phi = TestFunction(V)
         D = TrialFunction(V)
@@ -156,7 +161,7 @@ class DGAdvection(Advection):
         else:
             a_int = -inner(div(outer(phi,self.ubar)),D)*dx
 
-        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*(dS_v+dS_h)
+        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*surface_measure
         arhs = a_mass - dt*(a_int + a_flux)
 
         DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
@@ -185,7 +190,7 @@ class DGAdvection(Advection):
 
 class EmbeddedDGAdvection(Advection):
 
-    def __init__(self, state, V, Vdg, continuity):
+    def __init__(self, state, Vdg, continuity):
 
         super(EmbeddedDGAdvection, self).__init__(state)
         self.dgadvection = DGAdvection(state, Vdg, continuity)
