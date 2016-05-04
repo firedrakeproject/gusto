@@ -1,4 +1,6 @@
-from firedrake import assemble, dot, dx, FunctionSpace, Function, TestFunction, sqrt
+from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
+    TestFunction, Constant
+from abc import ABCMeta, abstractmethod
 
 
 class Diagnostics(object):
@@ -19,19 +21,32 @@ class Diagnostics(object):
         return sqrt(assemble(dot(f, f)*dx))
 
 
-class DiagnosticFields(object):
+class DiagnosticField(object):
 
-    def __init__(self, state, diagnostic_field_dict):
+    __meteclass__ = ABCMeta
 
-        self.diagnostic_field_dict = diagnostic_field_dict
-        if 'Courant' in diagnostic_field_dict.keys():
-            DG0 = FunctionSpace(state.mesh, "DG", 0)
-            self.diagnostic_field_dict['Courant'] = Function(DG0, name='Courant')
-            phiC = TestFunction(DG0)
-            self.Area = assemble(phiC*dx)
+    @abstractmethod
+    def compute(self, state):
+        """ Compute the diagnostic field from the current state"""
+        pass
 
-    def Courant(self, state):
 
+class CourantNumber(DiagnosticField):
+
+    def area(self, mesh):
+        if hasattr(self, "_area"):
+            return self._area
+        V = FunctionSpace(mesh, "DG", 0)
+        self._area = assemble(TestFunction(V)*dx)
+        return self._area
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name="CourantNumber")
+        return self._field
+
+    def compute(self, state):
         u = state.field_dict['u']
-        dt = state.timestepping.dt
-        self.diagnostic_field_dict['Courant'].project(sqrt(dot(u,u))/sqrt(self.Area)*dt)
+        dt = Constant(state.timestepping.dt)
+        return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)

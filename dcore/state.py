@@ -43,7 +43,8 @@ class State(object):
                  output=None,
                  parameters=None,
                  diagnostics=None,
-                 fieldlist=None):
+                 fieldlist=None,
+                 diagnostic_fields=[]):
 
         self.z = z
         self.k = k
@@ -56,6 +57,7 @@ class State(object):
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
         else:
             self.fieldlist = fieldlist
+            self.diagnostic_fields = diagnostic_fields
 
         # The mesh
         self.mesh = mesh
@@ -87,8 +89,8 @@ class State(object):
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
-        for name, f in self.diagnostic_fields.diagnostic_field_dict.iteritems():
-            to_dump.append(f)
+        for diagnostic in self.diagnostic_fields:
+            to_dump.append(diagnostic.compute(self))
 
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
@@ -121,9 +123,6 @@ class State(object):
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
-
-            if 'Courant' in self.diagnostic_fields.diagnostic_field_dict.keys():
-                self.diagnostic_fields.Courant(self)
 
             self.dumpfile.write(*to_dump)
 
@@ -175,7 +174,8 @@ class CompressibleState(State):
                  output=None,
                  parameters=None,
                  diagnostics=None,
-                 fieldlist=None):
+                 fieldlist=None,
+                 diagnostic_fields=[]):
 
         super(CompressibleState, self).__init__(mesh=mesh,
                                                 vertical_degree=vertical_degree,
@@ -186,7 +186,8 @@ class CompressibleState(State):
                                                 output=output,
                                                 parameters=parameters,
                                                 diagnostics=diagnostics,
-                                                fieldlist=fieldlist)
+                                                fieldlist=fieldlist,
+                                                diagnostic_fields=diagnostic_fields)
 
         # build the geopotential
         V = FunctionSpace(mesh, "CG", 1)
