@@ -1,6 +1,6 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, Constant
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 
 class Diagnostics(object):
@@ -23,15 +23,24 @@ class Diagnostics(object):
 
 class DiagnosticField(object):
 
-    __meteclass__ = ABCMeta
+    __metaclass__ = ABCMeta
+
+    @abstractproperty
+    def name(self):
+        """The name of this diagnostic field"""
+        pass
 
     @abstractmethod
     def compute(self, state):
         """ Compute the diagnostic field from the current state"""
         pass
 
+    def __call__(self, state):
+        return self.compute(state)
+
 
 class CourantNumber(DiagnosticField):
+    name = "CourantNumber"
 
     def area(self, mesh):
         if hasattr(self, "_area"):
@@ -43,7 +52,7 @@ class CourantNumber(DiagnosticField):
     def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name="CourantNumber")
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
         return self._field
 
     def compute(self, state):

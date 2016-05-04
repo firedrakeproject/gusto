@@ -90,7 +90,7 @@ class State(object):
                 to_dump.append(f)
             f.rename(name=name)
         for diagnostic in self.diagnostic_fields:
-            to_dump.append(diagnostic.compute(self))
+            to_dump.append(diagnostic(self))
 
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
