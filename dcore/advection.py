@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS_v, dS_h, action, inner, outer
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer
 
 
 class Advection(object):
@@ -140,6 +140,11 @@ class DGAdvection(Advection):
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
         dt = state.timestepping.dt
 
+        if V.extruded:
+            surface_measure = (dS_h + dS_v)
+        else:
+            surface_measure = dS
+
         phi = TestFunction(V)
         D = TrialFunction(V)
         self.D1 = Function(V)
@@ -156,7 +161,7 @@ class DGAdvection(Advection):
         else:
             a_int = -inner(div(outer(phi,self.ubar)),D)*dx
 
-        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*(dS_v+dS_h)
+        a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*surface_measure
         arhs = a_mass - dt*(a_int + a_flux)
 
         DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
