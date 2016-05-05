@@ -122,9 +122,10 @@ class State(object):
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
             self.dumpfile.write(*to_dump)
 
-            for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(field_dict[name])
-                self.diagnostic_data[name]["l2"].append(data)
+            if(self.diagnostics != None):
+                for name in self.diagnostics.fields:
+                    data = self.diagnostics.l2(field_dict[name])
+                    self.diagnostic_data[name]["l2"].append(data)
 
     def diagnostic_dump(self):
 
