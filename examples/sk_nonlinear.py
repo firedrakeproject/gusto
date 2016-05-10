@@ -22,10 +22,11 @@ z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nh_u20', dumpfreq=10, dumplist=['u'])
+timestepping = TimesteppingParameters(dt=3.0)
+output = OutputParameters(dirname='sk_nh_u20', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
+diagnostic_fields = [CourantNumber()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           family="CG",
@@ -34,7 +35,8 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           output=output,
                           parameters=parameters,
                           diagnostics=diagnostics,
-                          fieldlist=fieldlist)
+                          fieldlist=fieldlist,
+                          diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
