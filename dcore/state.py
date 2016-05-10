@@ -4,6 +4,7 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
+from dcore.diagnostics import Diagnostics
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
@@ -51,11 +52,14 @@ class State(object):
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
-        self.diagnostics = diagnostics
         if fieldlist is None:
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
         else:
             self.fieldlist = fieldlist
+        if diagnostics is not None:
+            self.diagnostics = diagnostics
+        else:
+            self.diagnostics = Diagnostics(*fieldlist)
 
         # The mesh
         self.mesh = mesh
