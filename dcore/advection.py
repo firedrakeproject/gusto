@@ -188,19 +188,17 @@ class DGAdvection(Advection):
         x_out.assign((1.0/3.0)*x_in + (2.0/3.0)*self.dD)
 
 
-class EmbeddedDGAdvection(Advection):
+class EmbeddedDGAdvection(DGAdvection):
 
     def __init__(self, state, Vdg, continuity):
 
-        super(EmbeddedDGAdvection, self).__init__(state)
-        self.dgadvection = DGAdvection(state, Vdg, continuity)
+        super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity)
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
 
     def apply(self, x_in, x_out):
 
-        self.dgadvection.ubar.assign(self.ubar)
         self.xdg_in.interpolate(x_in)
-        self.dgadvection.apply(self.xdg_in, self.xdg_out)
+        super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out)
         x_out.project(self.xdg_out)
