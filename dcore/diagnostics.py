@@ -44,10 +44,11 @@ class CourantNumber(DiagnosticField):
 
     def area(self, mesh):
         if hasattr(self, "_area"):
-            return self._area
-        V = FunctionSpace(mesh, "DG", 0)
-        self._area = assemble(TestFunction(V)*dx)
-        return self._area
+            return assemble(self.expr)
+        self.V = FunctionSpace(mesh, "DG", 0)
+        self.expr = TestFunction(self.V)*dx
+        self._area = assemble(self.expr)
+        return 
 
     def field(self, mesh):
         if hasattr(self, "_field"):
