@@ -132,13 +132,13 @@ class DGAdvection(Advection):
          :math: `D_t + (u \cdot \nabla)D = 0`.
     """
 
-    def __init__(self, state, V, continuity=False):
+    def __init__(self, state, V, scale, continuity=False):
 
         super(DGAdvection, self).__init__(state)
 
         element = V.fiat_element
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
-        dt = state.timestepping.dt
+        dt = scale*state.timestepping.dt
 
         if V.extruded:
             surface_measure = (dS_h + dS_v)
