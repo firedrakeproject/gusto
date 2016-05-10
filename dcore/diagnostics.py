@@ -48,7 +48,7 @@ class CourantNumber(DiagnosticField):
         self.V = FunctionSpace(mesh, "DG", 0)
         self.expr = TestFunction(self.V)*dx
         self._area = assemble(self.expr)
-        return 
+        return self._area
 
     def field(self, mesh):
         if hasattr(self, "_field"):
