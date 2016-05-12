@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer, sign, cross, CellNormal, lhs, rhs
 
 
 class Advection(object):
@@ -202,3 +202,38 @@ class EmbeddedDGAdvection(DGAdvection):
         self.xdg_in.interpolate(x_in)
         super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out)
         x_out.project(self.xdg_out)
+
+
+class EulerPoincareForm(Advection):
+
+    def __init__(self, state, V):
+        super(EulerPoincareForm, self).__init__(state)
+
+        dt = state.timestepping.dt
+        w = TestFunction(V)
+        u = TrialFunction(V)
+        self.u0 = Function(V)
+        ustar = 0.5*(self.u0 + u)
+        n = FacetNormal(state.mesh)
+        Upwind = 0.5*(sign(dot(self.ubar, n))+1)
+
+        outward_normals = CellNormal(state.mesh)
+        perp = lambda u: cross(outward_normals, u)
+        perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
+        Eqn = (
+            (inner(w, u-self.u0)
+             - dt*inner(w, div(perp(ustar))*perp(self.ubar))
+             - dt*div(w)*inner(ustar, self.ubar))*dx
+            - dt*inner(jump(inner(w, perp(self.ubar)),n), perp_u_upwind)*dS
+            + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*dS
+        )
+        a = lhs(Eqn)
+        L = rhs(Eqn)
+        self.u1 = Function(V)
+        uproblem = LinearVariationalProblem(a, L, self.u1)
+        self.usolver = LinearVariationalSolver(uproblem)
+
+    def apply(self, x_in, x_out):
+        self.u0.assign(x_in)
+        self.usolver.solve()
+        x_out.assign(self.u1)
