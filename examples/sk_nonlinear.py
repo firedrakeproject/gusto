@@ -5,7 +5,7 @@ from firedrake import exp, sin, ds_b
 import numpy as np
 
 nlayers = 10  # horizontal layers
-columns = 300  # number of columns
+columns = 150  # number of columns
 L = 3.0e5
 m = PeriodicIntervalMesh(columns, L)
 
@@ -23,9 +23,10 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nh_u20', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='sk_nh_EP2', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
+diagnostics_fields = [CourantNumber()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           family="CG",
@@ -34,7 +35,8 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           output=output,
                           parameters=parameters,
                           diagnostics=diagnostics,
-                          fieldlist=fieldlist)
+                          fieldlist=fieldlist,
+                          diagnostic_fields=diagnostics_fields)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
@@ -118,7 +120,7 @@ state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 # Set up advection schemes
 Vtdg = FunctionSpace(mesh, "DG", 2)
 advection_list = []
-velocity_advection = NoAdvection(state)
+velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
