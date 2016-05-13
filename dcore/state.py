@@ -95,6 +95,8 @@ class State(object):
             f.rename(name=name)
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
+            self.diagnostics.register(diagnostic(self).name)
+            field_dict[diagnostic(self).name] = diagnostic(self)
 
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)

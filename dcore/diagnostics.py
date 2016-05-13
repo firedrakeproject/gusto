@@ -1,5 +1,5 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant
+    TestFunction, Constant, div
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -60,3 +60,42 @@ class CourantNumber(DiagnosticField):
         u = state.field_dict['u']
         dt = Constant(state.timestepping.dt)
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
+
+
+class Divergence(DiagnosticField):
+    name = "Divergence"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.field_dict['u']
+        return self.field(state.mesh).project(div(u))
+
+
+class Vorticity(DiagnosticField):
+    name = "Vorticity"
+
+    def field(self, mesh, V):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(V, name=self.name)
+        return self._field
+
+    def solver(self, state):
+        V = FunctionSpace(state.mesh, "CG", 2)
+        u = state.field_dict['u']
+        gamma = TestFunction(V)
+        eta = TrialFunction(V)
+        a = gamma*eta*dx
+        L = -inner(curl(gamma), u)*dx
+        prob = LinearVariationalProblem(a, L, self._field)
+        self.solver(prob)
+
+    def compute(self, state):
+
+        self.solver.solve()
+        return self.field(state.mesh)

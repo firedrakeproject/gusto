@@ -17,9 +17,10 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=900.)
-output = OutputParameters(dirname='sw_williamson2', steady_state_dump_err={'D':True,'u':True})
+output = OutputParameters(dirname='sw_williamson2_diags', steady_state_dump_err={'D':True,'u':True})
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
+diagnostic_fields = [CourantNumber(), Divergence(), Vorticity()]
 
 state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
@@ -27,7 +28,8 @@ state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           output=output,
                           parameters=parameters,
                           diagnostics=diagnostics,
-                          fieldlist=fieldlist)
+                          fieldlist=fieldlist,
+                          diagnostic_fields=diagnostic_fields)
 
 g = parameters.g
 Omega = parameters.Omega
@@ -54,7 +56,7 @@ D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 advection_list = []
 Vdg = VectorFunctionSpace(mesh, "DG", 1)
-velocity_advection = EmbeddedDGAdvection(state, state.V[0], Vdg, continuity=False)
+velocity_advection = EmbeddedDGAdvection(state, state.V[0], continuity=False)
 advection_list.append((velocity_advection, 0))
 D_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((D_advection, 1))
