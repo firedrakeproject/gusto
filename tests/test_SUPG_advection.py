@@ -6,7 +6,7 @@ import pytest
 from math import pi
 
 
-def setup_SUPGadvection():
+def setup_SUPGadvection(direction):
 
     nlayers = 100  # horizontal layers
     columns = 100  # number of columns
@@ -40,11 +40,15 @@ def setup_SUPGadvection():
     uexpr = as_vector([1.0, 0.0])
     u0.project(uexpr)
 
-    f = Function(state.V[2], name='f')
+    if direction is None:
+        space = W_CG1
+    else:
+        space = state.V[2]
+    f = Function(space, name='f')
     x = SpatialCoordinate(mesh)
     f_expr = sin(2*pi*x[0])*sin(2*pi*x[1])
     f.interpolate(f_expr)
-    f_end = Function(state.V[2])
+    f_end = Function(space)
     f_end_expr = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
     f_end.interpolate(f_end_expr)
 
@@ -53,7 +57,7 @@ def setup_SUPGadvection():
 
 def run(dirname, direction):
 
-    state, u0, f, f_end = setup_SUPGadvection()
+    state, u0, f, f_end = setup_SUPGadvection(direction)
 
     dt = state.timestepping.dt
     tmax = 2.5
