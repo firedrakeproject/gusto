@@ -19,7 +19,7 @@ diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "sw_W2_ref%s_dt%s" %(ref_level, dt)
+    dirname = "sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
@@ -35,7 +35,6 @@ for ref_level, dt in ref_dt.iteritems():
                               parameters=parameters,
                               diagnostics=diagnostics,
                               fieldlist=fieldlist)
-
 
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
