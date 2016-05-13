@@ -74,6 +74,7 @@ class CompressibleForcing(Forcing):
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
             - g*inner(w,state.k)*dx  # gravity term
+            - 0.5*div(w)*inner(u0, u0)*dx
         )
 
         if Omega is not None:
