@@ -2,9 +2,8 @@ from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
-
 # setup resolution and timestepping parameters for convergence test
-ref_dt = {3:3000., 4:1500., 5:750., 6:375.}
+ref_dt = {3:1500., 4:750., 5:375., 6:187.5}
 
 # setup shallow water parameters
 R = 6371220.
@@ -19,7 +18,7 @@ diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "sw_W2_ref%s_dt%s" %(ref_level, dt)
+    dirname = "sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
@@ -36,19 +35,18 @@ for ref_level, dt in ref_dt.iteritems():
                               diagnostics=diagnostics,
                               fieldlist=fieldlist)
 
-
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
     x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
-    R = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    R0 = Constant(R)
+    uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
     h0 = Constant(H)
     Omega = Constant(parameters.Omega)
     g = Constant(parameters.g)
-    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
     # Coriolis expression
-    fexpr = 2*Omega*x[2]/R
+    fexpr = 2*Omega*x[2]/R0
     V = FunctionSpace(mesh, "CG", 1)
     state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
 
