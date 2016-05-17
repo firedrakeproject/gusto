@@ -8,8 +8,8 @@ from math import pi
 
 def setup_SUPGadvection(direction):
 
-    nlayers = 100  # horizontal layers
-    columns = 100  # number of columns
+    nlayers = 25  # horizontal layers
+    columns = 25  # number of columns
     L = 1.0
     m = PeriodicIntervalMesh(columns, L)
 
@@ -25,7 +25,7 @@ def setup_SUPGadvection(direction):
     k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
     fieldlist = ['u','rho', 'theta']
-    timestepping = TimesteppingParameters(dt=0.005)
+    timestepping = TimesteppingParameters(dt=0.01)
     parameters = CompressibleParameters()
 
     state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
@@ -69,17 +69,19 @@ def run(dirname, direction):
 
     dumpcount = itertools.count()
     outfile = File(path.join(dirname, "field_output.pvd"))
-    outfile.write(f)
+    outfile.write(f, f_end)
 
     while t < tmax + 0.5*dt:
         t += dt
         f_advection.apply(f, fp1)
         f.assign(fp1)
 
-        if(next(dumpcount) % 80) == 0:
-            outfile.write(f)
+        if(next(dumpcount) % 10) == 0:
+            outfile.write(f, f_end)
 
     f_err = Function(f.function_space()).assign(f_end - f)
+    errfile = File(path.join(dirname, "ferr.pvd"))
+    errfile.write(f, f_end, f_err)
     return f_err
 
 
@@ -88,4 +90,4 @@ def test_supgadvection(tmpdir, direction):
 
     dirname = str(tmpdir)
     f_err = run(dirname, direction)
-    assert(abs(f_err.dat.data.max()) < 5.0e-2)
+    assert(abs(f_err.dat.data.max()) < 7.0e-2)
