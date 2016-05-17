@@ -1,5 +1,9 @@
+from __future__ import absolute_import
+from abc import ABCMeta, abstractmethod
 
-class Diffusion(object):    """
+
+class Diffusion(object):
+    """
     Base class for diffusion schemes for dcore.
 
     :arg state: :class:`.State` object.
@@ -29,4 +33,3 @@ class NoDiffusion(Diffusion):
     def apply(self, x_in, x_out):
 
         x_out.assign(x_in)
-
