@@ -23,7 +23,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nh_EP_SUPG2', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -124,7 +124,7 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-theta_advection = SUPGAdvection(state, state.V[2], direction=1)
+theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
 advection_list.append((theta_advection, 2))
 
 # Set up linear solver
