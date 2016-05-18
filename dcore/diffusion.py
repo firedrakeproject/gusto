@@ -1,5 +1,8 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
+from firedrake import FunctionSpace, TestFunction, TrialFunction, \
+    Function, assemble, inner, outer, grad, avg, sqrt, dx, dS_h, dS_v, \
+    FacetNormal, LinearVariationalProblem, LinearVariationalSolver, action
 
 
 class Diffusion(object):
@@ -25,11 +28,45 @@ class Diffusion(object):
         pass
 
 
-class NoDiffusion(Diffusion):
-    """
-    An non-diffusion scheme that does nothing.
-    """
+class InteriorPenulty(Diffusion):
+
+    def __init__(self, state, V, direction=[1,2], params=None):
+        super(InteriorPenulty, self).__init__(state)
+
+        dt = state.timestepping.dt
+        params = params.copy() if params else {}
+
+        # if mu not provided then set to 1/dx
+        if 'mu' not in params.keys():
+            Vdg = FunctionSpace(state.mesh, "DG", 0)
+            area = assemble(TestFunction(Vdg)*dx)
+            print area.dat.data.min(), area.dat.data.max()
+            params.setdefault('mu', 1./sqrt(area.dat.data.max()))
+
+        kappa = params['kappa']
+        mu = params['mu']
+        gamma = TestFunction(V)
+        phi = TrialFunction(V)
+        self.phi1 = Function(V)
+        n = FacetNormal(state.mesh)
+        a = inner(gamma,phi)*dx + dt*inner(grad(gamma), grad(phi)*kappa)*dx
+
+        def get_flux_form(dS, M):
+
+            fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
+                      - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
+                      + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
+            return fluxes
+
+        if 1 in direction:
+            a += dt*get_flux_form(dS_v, kappa)
+        if 2 in direction:
+            a += dt*get_flux_form(dS_h, kappa)
+        L = inner(gamma,phi)*dx
+        problem = LinearVariationalProblem(a, action(L,self.phi1), self.phi1)
+        self.solver = LinearVariationalSolver(problem)
 
     def apply(self, x_in, x_out):
-
-        x_out.assign(x_in)
+        self.phi1.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.phi1)
