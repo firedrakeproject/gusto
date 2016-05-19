@@ -256,11 +256,11 @@ class SUPGAdvection(Advection):
 
     :arg state: :class:`.State` object.
     :arg V:class:`.FunctionSpace` object. The advected field function space.
-    :arg direction: list containing the directions in which the function 
-    space is discontinuous. 1 corresponds to the vertical direction, 2 to 
+    :arg direction: list containing the directions in which the function
+    space is discontinuous. 1 corresponds to the vertical direction, 2 to
     the horizontal direction
-    :arg supg_params: dictionary containing SUPG parameters tau for each 
-    direction. If not supplied tau is set to dt/sqrt(15.) as recommended 
+    :arg supg_params: dictionary containing SUPG parameters tau for each
+    direction. If not supplied tau is set to dt/sqrt(15.) as recommended
     in **ref**
     """
     def __init__(self, state, V, direction=None, supg_params=None):
