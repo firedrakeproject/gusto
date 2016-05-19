@@ -258,6 +258,13 @@ class SUPGAdvection(Advection):
         params.setdefault('a0', dt/sqrt(15.))
         params.setdefault('a1', dt/sqrt(15.))
 
+        if direction is None:
+            surface_measure = (dS_v + dS_h)
+        elif direction is 1:
+            surface_measure = dS_v
+        elif direction is 2:
+            surface_measure = dS_h
+
         gamma = TestFunction(V)
         theta = TrialFunction(V)
         self.theta0 = Function(V)
@@ -279,9 +286,9 @@ class SUPGAdvection(Advection):
             (gammaSU*(theta - self.theta0)
              + dt*gammaSU*dot(self.ubar, grad(thetastar)))*dx
             + dt*dot(jump(gammaSU), (un('+')*thetastar('+')
-                     - un('-')*thetastar('-')))*dS_v
+                     - un('-')*thetastar('-')))*surface_measure
             - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
+                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*surface_measure
         )
         a = lhs(Eqn)
         L = rhs(Eqn)
