@@ -31,15 +31,15 @@ class Diffusion(object):
 class InteriorPenulty(Diffusion):
     """
     Interior penulty diffusion method
-    
+
     :arg state: :class:`.State` object.
     :arg V: Function space of diffused field
-    :arg direction: list containing directions in which function space 
+    :arg direction: list containing directions in which function space
     is discontinuous: 1 corresponds to vertical, 2 to horizontal.
     :arg params: dictionary containing the interior penulty parameters
-    mu and kappa where mu is the penulty weighting function, proportional 
-    to 1/dx (if not supplied this is set to a default value based on the 
-    max area of a cell), and kappa is the diffusion parameter which must 
+    mu and kappa where mu is the penulty weighting function, proportional
+    to 1/dx (if not supplied this is set to a default value based on the
+    max area of a cell), and kappa is the diffusion parameter which must
     be specified.
 
     """
