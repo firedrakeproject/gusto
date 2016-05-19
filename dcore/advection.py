@@ -250,7 +250,19 @@ class EulerPoincareForm(Advection):
 
 
 class SUPGAdvection(Advection):
+    """
+    An SUPG advection scheme that applies DG upwinding in the direction
+    specified by the direction arg.
 
+    :arg state: :class:`.State` object.
+    :arg V:class:`.FunctionSpace` object. The advected field function space.
+    :arg direction: list containing the directions in which the function 
+    space is discontinuous. 1 corresponds to the vertical direction, 2 to 
+    the horizontal direction
+    :arg supg_params: dictionary containing SUPG parameters tau for each 
+    direction. If not supplied tau is set to dt/sqrt(15.) as recommended 
+    in **ref**
+    """
     def __init__(self, state, V, direction=None, supg_params=None):
         super(SUPGAdvection, self).__init__(state)
         dt = state.timestepping.dt
