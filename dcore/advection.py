@@ -258,13 +258,6 @@ class SUPGAdvection(Advection):
         params.setdefault('a0', dt/sqrt(15.))
         params.setdefault('a1', dt/sqrt(15.))
 
-        if direction is None:
-            surface_measure = (dS_v + dS_h)
-        elif direction is 1:
-            surface_measure = dS_v
-        elif direction is 2:
-            surface_measure = dS_h
-
         gamma = TestFunction(V)
         theta = TrialFunction(V)
         self.theta0 = Function(V)
@@ -272,8 +265,8 @@ class SUPGAdvection(Advection):
 
         # make SUPG test function
         taus = [params["a0"], params["a1"]]
-        if direction is not None:
-            taus[direction] = 0.0
+        for i in direction:
+            taus[i] = 0.0
         tau = Constant(((taus[0], 0.), (0., taus[1])))
 
         dgamma = dot(dot(self.ubar, tau), grad(gamma))
@@ -283,13 +276,24 @@ class SUPGAdvection(Advection):
         un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
 
         Eqn = (
-            (gammaSU*(theta - self.theta0)
-             + dt*gammaSU*dot(self.ubar, grad(thetastar)))*dx
-            + dt*dot(jump(gammaSU), (un('+')*thetastar('+')
-                     - un('-')*thetastar('-')))*surface_measure
-            - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*surface_measure
-        )
+            gammaSU*(theta - self.theta0)
+            + dt*gammaSU*dot(self.ubar, grad(thetastar)))*dx
+
+        if 1 in direction:
+            Eqn += (
+                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
+                                       - un('-')*thetastar('-')))*dS_v
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
+                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
+            )
+        if 2 in direction:
+            Eqn += (
+                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
+                                       - un('-')*thetastar('-')))*dS_h
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
+                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_h
+            )
+
         a = lhs(Eqn)
         L = rhs(Eqn)
         self.theta1 = Function(V)
