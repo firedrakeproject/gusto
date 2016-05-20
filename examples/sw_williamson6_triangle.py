@@ -75,4 +75,4 @@ sw_forcing = ShallowWaterForcing(state)
 stepper = Timestepper(state, advection_list, linear_solver,
                       sw_forcing)
 
-stepper.run(t=0, tmax=5*day)
+stepper.run(t=0, tmax=14*day)
