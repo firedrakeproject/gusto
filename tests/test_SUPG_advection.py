@@ -40,7 +40,7 @@ def setup_SUPGadvection(direction):
     uexpr = as_vector([1.0, 0.0])
     u0.project(uexpr)
 
-    if direction is None:
+    if len(direction) == 0:
         space = W_CG1
     else:
         space = state.V[2]
@@ -85,7 +85,7 @@ def run(dirname, direction):
     return f_err
 
 
-@pytest.mark.parametrize("direction", [None, 1])
+@pytest.mark.parametrize("direction", [[], [1]])
 def test_supgadvection(tmpdir, direction):
 
     dirname = str(tmpdir)
