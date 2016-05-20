@@ -284,14 +284,14 @@ class SUPGAdvection(Advection):
                 dt*dot(jump(gammaSU), (un('+')*thetastar('+')
                                        - un('-')*thetastar('-')))*dS_v
                 - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
             )
         if 2 in direction:
             Eqn += (
                 dt*dot(jump(gammaSU), (un('+')*thetastar('+')
                                        - un('-')*thetastar('-')))*dS_h
                 - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                  + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_h
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_h
             )
 
         a = lhs(Eqn)
