@@ -1,5 +1,5 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant, div
+    TestFunction, TrialFunction, Constant, div, LinearVariationalProblem, LinearVariationalSolver, inner, cross, grad, dx, CellNormal
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -79,23 +79,61 @@ class Divergence(DiagnosticField):
 class Vorticity(DiagnosticField):
     name = "Vorticity"
 
-    def field(self, mesh, V):
+    def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
+        V = FunctionSpace(mesh, "CG", 2)
         self._field = Function(V, name=self.name)
         return self._field
 
     def solver(self, state):
-        V = FunctionSpace(state.mesh, "CG", 2)
+        if hasattr(self, "_solver"):
+            return self._solver
         u = state.field_dict['u']
+        V = self.field(state.mesh).function_space()
         gamma = TestFunction(V)
         eta = TrialFunction(V)
+        outward_normals = CellNormal(state.mesh)
+        gradperp = lambda psi: cross(outward_normals, grad(psi))
         a = gamma*eta*dx
-        L = -inner(curl(gamma), u)*dx
-        prob = LinearVariationalProblem(a, L, self._field)
-        self.solver(prob)
+        L = -inner(gradperp(gamma), u)*dx
+        prob = LinearVariationalProblem(a, L, self.field(state.mesh))
+        self._solver = LinearVariationalSolver(prob)
+        return self._solver
 
     def compute(self, state):
 
-        self.solver.solve()
+        self.solver(state).solve()
+        return self.field(state.mesh)
+
+
+class PotentialVorticity(DiagnosticField):
+    name = "PotentialVorticity"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        V = FunctionSpace(mesh, "CG", 2)
+        self._field = Function(V, name=self.name)
+        return self._field
+
+    def solver(self, state):
+        if hasattr(self, "_solver"):
+            return self._solver
+        u = state.field_dict['u']
+        D = state.field_dict['D']
+        V = self.field(state.mesh).function_space()
+        gamma = TestFunction(V)
+        q = TrialFunction(V)
+        outward_normals = CellNormal(state.mesh)
+        gradperp = lambda psi: cross(outward_normals, grad(psi))
+        a = gamma*q*D*dx
+        L = (-inner(gradperp(gamma), u) + gamma*state.f)*dx
+        prob = LinearVariationalProblem(a, L, self.field(state.mesh))
+        self._solver = LinearVariationalSolver(prob)
+        return self._solver
+
+    def compute(self, state):
+
+        self.solver(state).solve()
         return self.field(state.mesh)
