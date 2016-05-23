@@ -15,7 +15,7 @@ u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber(), Divergence()]
+diagnostic_fields = [CourantNumber(), Divergence(), Vorticity(), PotentialVorticity()]
 
 for ref_level, dt in ref_dt.iteritems():
 
@@ -71,4 +71,4 @@ for ref_level, dt in ref_dt.iteritems():
     stepper = Timestepper(state, advection_list, linear_solver,
                           sw_forcing)
 
-    stepper.run(t=0, tmax=5*day)
+    stepper.run(t=0, tmax=5*dt)

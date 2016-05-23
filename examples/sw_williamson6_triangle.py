@@ -1,7 +1,6 @@
 from dcore import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector, VectorFunctionSpace, cos, sin
-from math import pi
 
 refinements = 5  # number of horizontal cells = 20*(4^refinements)
 
@@ -53,8 +52,8 @@ fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
 state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
 
-VX=VectorFunctionSpace(mesh, "Lagrange", 1)
-u_init=Function(VX).interpolate(uexpr)
+VX = VectorFunctionSpace(mesh, "Lagrange", 1)
+u_init = Function(VX).interpolate(uexpr)
 u0.project(u_init)
 D0.interpolate(Dexpr)
 
