@@ -175,20 +175,23 @@ class State(object):
 
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
-        outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
         if self.dumpfile is None:
             if path.exists(self.dumpdir):
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
-            self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
+
+        if len(self.output.dumplist_latlon) > 0:
+            outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
+            self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             self.dumpfile.write(*to_dump)
 
-            self.dumpfile_latlon.write(*to_dump_latlon)
+            if len(self.output.dumplist_latlon) > 0:
+                self.dumpfile_latlon.write(*to_dump_latlon)
 
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(field_dict[name])

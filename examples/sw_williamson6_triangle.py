@@ -18,9 +18,9 @@ timestepping = TimesteppingParameters(dt=120.)
 output = OutputParameters(dirname='sw_rossby_wave_ll', dumpfreq=1, dumplist_latlon=['D'])
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber()]#, Divergence(), Vorticity(), PotentialVorticity()]
+diagnostic_fields = [CourantNumber()]
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
+state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
                           timestepping=timestepping,
                           output=output,
@@ -60,7 +60,6 @@ D0.interpolate(Dexpr)
 Vdg = VectorFunctionSpace(mesh, "DG", 2)
 state.initialise([u0, D0])
 advection_list = []
-#velocity_advection = EulerPoincareForm(state, state.V[0])
 velocity_advection = NoAdvection(state)
 advection_list.append((velocity_advection, 0))
 D_advection = DGAdvection(state, state.V[1], continuity=True)
