@@ -85,75 +85,74 @@ class CourantNumber(DiagnosticField):
 class Divergence(DiagnosticField):
     name = "Divergence"
 
-    def field(self, mesh):
+    def field(self, mesh, space):
         if hasattr(self, "_field"):
             return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        self._field = Function(space, name=self.name)
         return self._field
 
     def compute(self, state):
         u = state.field_dict['u']
-        return self.field(state.mesh).project(div(u))
+        # the convention is that the correct space for the divergence
+        # is the last one in state.V
+        return self.field(state.mesh, state.V[-1]).project(div(u))
 
 
 class Vorticity(DiagnosticField):
     name = "Vorticity"
 
-    def field(self, mesh):
+    def field(self, mesh, space):
         if hasattr(self, "_field"):
             return self._field
-        V = FunctionSpace(mesh, "CG", 2)
-        self._field = Function(V, name=self.name)
+        self._field = Function(space, name=self.name)
         return self._field
 
-    def solver(self, state):
+    def solver(self, state, V):
         if hasattr(self, "_solver"):
             return self._solver
         u = state.field_dict['u']
-        V = self.field(state.mesh).function_space()
         gamma = TestFunction(V)
         eta = TrialFunction(V)
         outward_normals = CellNormal(state.mesh)
         gradperp = lambda psi: cross(outward_normals, grad(psi))
         a = gamma*eta*dx
         L = -inner(gradperp(gamma), u)*dx
-        prob = LinearVariationalProblem(a, L, self.field(state.mesh))
+        prob = LinearVariationalProblem(a, L, self.field(state.mesh, V))
         self._solver = LinearVariationalSolver(prob)
         return self._solver
 
     def compute(self, state):
+        # the convention is that the correct space for the divergence
+        # is the last one in state.V. The correct vorticity space has
+        # degree 1 higher than the divergence space and is continuous.
+        V = FunctionSpace(state.mesh, "CG", state.V[-1].ufl_element().degree()+1)
+        self.solver(state, V).solve()
+        return self.field(state.mesh, V)
 
-        self.solver(state).solve()
-        return self.field(state.mesh)
 
-
-class PotentialVorticity(DiagnosticField):
+class PotentialVorticity(Vorticity):
     name = "PotentialVorticity"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        V = FunctionSpace(mesh, "CG", 2)
-        self._field = Function(V, name=self.name)
-        return self._field
-
-    def solver(self, state):
+    def solver(self, state, V):
         if hasattr(self, "_solver"):
             return self._solver
         u = state.field_dict['u']
         D = state.field_dict['D']
-        V = self.field(state.mesh).function_space()
         gamma = TestFunction(V)
         q = TrialFunction(V)
         outward_normals = CellNormal(state.mesh)
         gradperp = lambda psi: cross(outward_normals, grad(psi))
         a = gamma*q*D*dx
         L = (-inner(gradperp(gamma), u) + gamma*state.f)*dx
-        prob = LinearVariationalProblem(a, L, self.field(state.mesh))
+        prob = LinearVariationalProblem(a, L, self.field(state.mesh, V))
         self._solver = LinearVariationalSolver(prob)
         return self._solver
 
     def compute(self, state):
 
-        self.solver(state).solve()
-        return self.field(state.mesh)
+        # the convention is that the correct space for the divergence
+        # is the last one in state.V. The correct vorticity space has
+        # degree 1 higher than the divergence space and is continuous.
+        V = FunctionSpace(state.mesh, "CG", state.V[-1].ufl_element().degree()+1)
+        self.solver(state, V).solve()
+        return self.field(state.mesh, V)

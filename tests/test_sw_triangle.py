@@ -98,4 +98,4 @@ def test_sw_setup(tmpdir):
 
     # Check divergence:
     for div in data["Divergence"]["max"]:
-        assert div < 1.e-6
+        assert div < 1.5e-6
