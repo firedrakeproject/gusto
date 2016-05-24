@@ -88,6 +88,8 @@ class State(object):
         if self.output.dumplist is None:
             self.output.dumplist = self.fieldlist
 
+        # if there are fields to be dumped in latlon coordinates,
+        # setup the latlon coordinate mesh
         if len(self.output.dumplist_latlon) > 0:
             field_dict_ll = {}
             coords_orig = self.mesh.coordinates
@@ -140,14 +142,9 @@ class State(object):
         funcs = self.xn.split()
         field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
         to_dump = []
-        to_dump_latlon = []
         for name, f in field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
-            if name in self.output.dumplist_latlon:
-                f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-                field_dict_ll[name] = f_ll
-                to_dump_latlon.append(f_ll)
             f.rename(name=name)
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
@@ -173,6 +170,13 @@ class State(object):
                 field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
 
+        # make functions on latlon mesh, as specified by dumplist_latlon
+        to_dump_latlon = []
+        if name in self.output.dumplist_latlon:
+            f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            field_dict_ll[name] = f_ll
+            to_dump_latlon.append(f_ll)
+
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
@@ -182,6 +186,7 @@ class State(object):
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
+        # make output file for fields on latlon mesh if required
         if len(self.output.dumplist_latlon) > 0:
             outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
             self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)

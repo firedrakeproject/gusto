@@ -19,7 +19,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters()
-    output = OutputParameters(dumplist=(True,True), dirname=dirname+"/sw")
+    output = OutputParameters(dumplist_latlon=['D'], dirname=dirname+"/sw")
     parameters = ShallowWaterParameters()
     diagnostics = Diagnostics(*fieldlist)
 
