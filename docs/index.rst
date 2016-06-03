@@ -1,4 +1,4 @@
-.. title:: The Firedrake project
+.. title:: Gusto: The Firedrake dynamical core toolkit
 
 .. only:: html
 
