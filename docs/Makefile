@@ -49,13 +49,13 @@ publish: html
 # Note that godaddy don't currently do rsync, unfortunately.
 # The raw IP address is used to circumvent some dns fiddling which
 # Imperial's ICT department are doing.
-	scp -r build/html/* 'o3ce6600@146.255.44.1:html/'
+	scp -r build/html/* 'o3ce6600@146.255.44.1:html/gusto/'
 
 scp:
 # Note that godaddy don't currently do rsync, unfortunately.
 # The raw IP address is used to circumvent some dns fiddling which
 # Imperial's ICT department are doing.
-	scp -r build/html/* 'o3ce6600@146.255.44.1:html/'
+	scp -r build/html/* 'o3ce6600@146.255.44.1:html/gusto/'
 
 livehtml: html
 	python server.py
