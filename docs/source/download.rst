@@ -22,4 +22,4 @@ Visualisation software
 Gusto can output data in VTK format, suitable for viewing in
 Paraview.  On Ubuntu and similar systems, you can obtain Paraview by
 installing the ``paraview`` package.  On Mac OS, the easiest approach
-is to download a binary from the `paraview website <http://www.paraview.org>`_.
+is to download a binary from the `Paraview website <http://www.paraview.org>`_.
