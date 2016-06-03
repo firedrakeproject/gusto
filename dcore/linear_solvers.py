@@ -130,7 +130,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         pi = pibar_theta*theta + pibar_rho*rho
 
-        #vertical projection
+        # vertical projection
         def V(u):
             return k*inner(u,k)
 
