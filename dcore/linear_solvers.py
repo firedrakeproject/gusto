@@ -122,24 +122,24 @@ class CompressibleSolver(TimesteppingSolver):
         k = state.k             # Upward pointing unit vector
         theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
 
-        #Only include theta' (rather than pi') in the vertical
-        #component of the gradient
+        # Only include theta' (rather than pi') in the vertical
+        # component of the gradient
 
-        #the pi prime term (here, bars are for mean and no bars are
-        #for linear perturbations
+        # the pi prime term (here, bars are for mean and no bars are
+        # for linear perturbations
 
         pi = pibar_theta*theta + pibar_rho*rho
 
         #vertical projection
         def V(u):
             return k*inner(u,k)
-        
+
         eqn = (
             inner(w, (u - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dx
-            #following does nothing but is preserved in the comments
-            #to remind us why (because V(w) is purely vertical.
-            #+ beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+            # following does nothing but is preserved in the comments
+            # to remind us why (because V(w) is purely vertical.
+            # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pi*dx
             + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_v
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
