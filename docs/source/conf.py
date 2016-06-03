@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Firedrake documentation build configuration file, created by
+# Gusto documentation build configuration file, created by
 # sphinx-quickstart on Sat Jun 29 19:06:45 2013.
 #
 # This file is execfile()d with the current directory set to its containing dir.
@@ -49,7 +49,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Gusto'
-copyright = u'2013, Imperial College London and others'
+copyright = u'2016, Imperial College London and others'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -172,7 +172,7 @@ html_show_sphinx = False
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Firedrakedoc'
+htmlhelp_basename = 'Gustodoc'
 
 
 # -- Options for LaTeX output --------------------------------------------
@@ -192,8 +192,8 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-    ('index', 'Firedrake.tex', u'Firedrake Documentation',
-     u'the Firedrake team', 'manual'),
+    ('index', 'Gusto.tex', u'Gusto Documentation',
+     u'the Gusto team', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -222,7 +222,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'firedrake', u'Gusto Documentation',
+    ('index', 'gusto', u'Gusto Documentation',
      [u'the Gusto team'], 1)
 ]
 

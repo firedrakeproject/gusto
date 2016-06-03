@@ -14,9 +14,14 @@
    Introduction
    ------------
 
+.. only:: html
+	  
+   Gusto: The Firedrake Dynamical Core Toolkit
+   ===========================================
+   
 Gusto is a dynamical core library using compatible finite element
 methods developed in the Gung Ho project, and built using the
-`Firedrake <http://firedrakeproject.org>'_ finite element code
+`Firedrake <http://firedrakeproject.org>`_ finite element code
 generation library. Gusto is a core Firedrake application package.
 
 .. only:: latex
