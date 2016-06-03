@@ -112,7 +112,7 @@ s = (d**2)/(d**2 + r**2)
 
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
-theta0.interpolate(theta_b)# + theta_pert)
+theta0.interpolate(theta_b)  # + theta_pert)
 rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])
