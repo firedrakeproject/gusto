@@ -23,4 +23,4 @@ generation library. Gusto is a core Firedrake application package.
 
   .. toctree::
  
-     team
+     teamgrid

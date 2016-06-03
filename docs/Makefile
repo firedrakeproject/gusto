@@ -43,7 +43,7 @@ help:
 
 TARGETS = html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
 
-GENERATED_FILES = source/teamgrid.rst source/demos
+GENERATED_FILES = source/teamgrid.rst # source/demos
 
 publish: html
 # Note that godaddy don't currently do rsync, unfortunately.
@@ -75,8 +75,9 @@ copy_demos:
 source/teamgrid.rst: source/team.py
 	cd source; python team.py
 
-apidoc: $(GENERATED_FILES) copy_demos
-	sphinx-apidoc ../firedrake -o source/ -f -T
+apidoc: $(GENERATED_FILES) # copy_demos
+	true
+	#sphinx-apidoc ../dcore -o source/ -f -T
 
 clean:
 	-rm -rf $(BUILDDIR)/*
@@ -86,7 +87,7 @@ buildhtml: apidoc
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 
 html: apidoc buildhtml
-	cp source/demos/*.py source/demos/*.geo $(BUILDDIR)/html/demos
+# 	cp source/demos/*.py source/demos/*.geo $(BUILDDIR)/html/demos
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
