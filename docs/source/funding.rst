@@ -42,9 +42,6 @@ NERC grant `NE/M013634/1 <http://gotw.nerc.ac.uk/list_full.asp?pcode=NE%2FM01363
 NERC grant `NE/K012544/1 <http://gotw.nerc.ac.uk/list_full.asp?pcode=NE%2FK012533%2F1>`_:
   Improving prediction of fronts.
    
-NERC grant `NE/K006789/1 <http://gtr.rcuk.ac.uk/project/68AD0B6D-91D1-45D5-9C8A-991518BF028E>`_:
-  Gung Ho Phase 2 - developing a new UK weather and climate model.
-   
 EPSRC grant `EP/L000407/1 <http://gow.epsrc.ac.uk/NGBOViewGrant.aspx?GrantRef=EP/L000407/1>`_:
   Platform: underpinning technologies for finite element simulation.
 
