@@ -22,11 +22,15 @@
   :height: 60px
   :target: http://www.imperial.ac.uk
 
+.. |Grantham| image:: /images/grantham.*
+  :height: 60px
+  :target: http://www.imperial.ac.uk/climatechange
+
 .. only:: html
 
-  +---------------------------+---------+--------+
-  | |Imperial College London| | |EPSRC| | |NERC| |
-  +---------------------------+---------+--------+
+  +---------------------------+------------+---------+--------+
+  | |Imperial College London| | |Grantham| | |EPSRC| | |NERC| |
+  +---------------------------+------------+---------+--------+
 
   and in particular by the following grants:
 
