@@ -1,11 +1,11 @@
 from dcore import *
-from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
+from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 10  # 10 horizontal layers
-refinements = 4  # number of horizontal cells = 20*(4^refinements)
+nlayers = 25  # 10 horizontal layers
+refinements = 5  # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -27,9 +27,9 @@ phi_c = 0.0  # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0  # Maximum amplitude of Theta' (K)
 L_z = 20000.0  # Vertical wave length of the Theta' perturbation
 
-m = IcosahedralSphereMesh(radius=a,
-                          refinement_level=refinements,
-                          degree=3)
+m = CubedSphereMesh(radius=a,
+                    refinement_level=refinements,
+                    degree=3)
 
 # build volume mesh
 z_top = 1.0e4  # Height position of the model top
@@ -57,7 +57,7 @@ timestepping = TimesteppingParameters(dt=10.0)
 output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
 parameters = CompressibleParameters()
 state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
-                          family="BDM", k=k, z=z,
+                          family="RTCF", k=k, z=z,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
@@ -112,7 +112,7 @@ s = (d**2)/(d**2 + r**2)
 
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
-theta0.interpolate(theta_b) + theta_pert)
+theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])
