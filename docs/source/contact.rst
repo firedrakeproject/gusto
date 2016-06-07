@@ -28,7 +28,7 @@ Much of the day to day development discussion for Gusto specifically,
 and Firedrake generally, take place on `IRC`_.  You can find us in the
 ``#firedrake`` channel on `Freenode`_ (``irc.freenode.net``).
 
-.. _github: http://github.com/firedrakeproject/dcore
+.. _github: http://github.com/firedrakeproject/gusto
 .. _contributing: https://github.com/firedrakeproject/firedrake/blob/master/CONTRIBUTING.md
 .. _IRC: http://www.irchelp.org/
 .. _Freenode: http://freenode.net

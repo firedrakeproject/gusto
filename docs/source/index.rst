@@ -6,7 +6,7 @@
 
       .. raw:: html
 
-         <div class="latest-commit" data-github="firedrakeproject/dcore" data-commits="5"></div>
+         <div class="latest-commit" data-github="firedrakeproject/gusto" data-commits="5"></div>
          <script type="text/javascript" src="_static/jquery.latest-commit.js"></script>
 
 .. only:: latex

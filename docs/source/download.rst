@@ -7,7 +7,7 @@ principle other Linux and Linux-like systems) and must be run from
 within the Firedrake virtual environment.
 
 Having installed Firedrake, check out the `Gusto
-<http://github.com/firedrakeproject/dcore>`_ repository on Github under
+<http://github.com/firedrakeproject/gusto>`_ repository on Github under
 the Firedrake project. Then, start the Firedrake virtualenv add the
 `dcore` subdirectory to your Python path. Try executing files from
 the `examples` directory using e.g., ::
