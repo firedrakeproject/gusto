@@ -130,7 +130,7 @@ def exner_theta(theta,rho,state):
 
 class ShallowWaterForcing(Forcing):
 
-    def __init__(self, state):
+    def __init__(self, state, linear=False):
         self.state = state
 
         g = state.parameters.g
@@ -155,6 +155,9 @@ class ShallowWaterForcing(Forcing):
         L = (
             (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
+
+        if not linear:
+            L -= 0.5*div(w)*inner(u0, u0)*dx
 
         u_forcing_problem = LinearVariationalProblem(
             a, L, self.uF)
