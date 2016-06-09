@@ -1,7 +1,7 @@
 from dcore import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, as_tensor, NonlinearVariationalProblem, NonlinearVariationalSolver
+from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
 
 L = 51200.
 delta = 400.
@@ -104,7 +104,7 @@ PiSolver.solve()
 v, Pi = w.split()
 
 w1 = Function(W)
-v, rho =  w1.split()
+v, rho = w1.split()
 rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
 v, rho = split(w1)
 dv, dpi = TestFunctions(W)
@@ -118,7 +118,7 @@ F = (
 rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
 rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
 rhosolver.solve()
-v, rho =  w1.split()
+v, rho = w1.split()
 rho_b.interpolate(rho)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
@@ -127,7 +127,7 @@ a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=g))
 theta0.interpolate(theta_b + theta_pert)
-#rho0.assign(rho_b)
+# rho0.assign(rho_b)
 rho0.interpolate(rho_b)
 
 state.initialise([u0, rho0, theta0])
@@ -141,7 +141,7 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-#theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+# theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
 theta_advection = SUPGAdvection(state, state.V[2], direction=[1])
 advection_list.append((theta_advection, 2))
 
