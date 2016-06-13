@@ -55,8 +55,8 @@ class Timestepper(object):
                 for advection, index in self.advection_list:
                     # advects a field from xstar and puts result in xp
                     advection.apply(xstar_fields[index], xp_fields[index])
+                state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                 for i in range(state.timestepping.maxi):
-                    state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
                                        state.xrhs)
                     state.xrhs -= state.xnp1

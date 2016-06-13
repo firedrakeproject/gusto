@@ -65,10 +65,11 @@ class CompressibleForcing(Forcing):
 
         n = FacetNormal(state.mesh)
 
-        pi = Function(state.V[1])
-        self.PiProjector = Projector(exner(theta0, rho0, state),
-                                     pi)
+        #pi = Function(state.V[1])
+        #self.PiProjector = Projector(exner(theta0, rho0, state),
+        #                             pi)
 
+        pi = exner(theta0, rho0, state)
         a = inner(w,F)*dx
         L = (
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
@@ -92,7 +93,7 @@ class CompressibleForcing(Forcing):
     def apply(self, scaling, x_in, x_nl, x_out):
 
         self.x0.assign(x_nl)
-        self.PiProjector.project()
+        #self.PiProjector.project()
         self.u_forcing_solver.solve()  # places forcing in self.uF
         self.uF *= scaling
 

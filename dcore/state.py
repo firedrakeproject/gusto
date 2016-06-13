@@ -120,8 +120,8 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if path.exists(self.dumpdir):
-                exit("results directory '%s' already exists" % self.dumpdir)
+            #if path.exists(self.dumpdir):
+            #    exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
