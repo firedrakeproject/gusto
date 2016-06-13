@@ -126,7 +126,7 @@ class CompressibleSolver(TimesteppingSolver):
         # component of the gradient
 
         # the pi prime term (here, bars are for mean and no bars are
-        # for linear perturbations
+        # for linear perturbations)
 
         pi = pibar_theta*theta + pibar_rho*rho
 
