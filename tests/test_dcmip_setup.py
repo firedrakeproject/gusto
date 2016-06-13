@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 from dcore import *
-from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
+from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 import numpy as np
 
@@ -23,8 +23,9 @@ def setup_dcmip(dirname):
     L_z = 20000.0  # Vertical wave length of the Theta' perturbation
     u_0 = 20.0  # Maximum amplitude of the zonal wind (m/s)
 
-    m = IcosahedralSphereMesh(radius=a,
-                              refinement_level=refinements)
+    m = CubedSphereMesh(radius=a,
+                        refinement_level=refinements,
+                        degree=3)
 
     # build volume mesh
     z_top = 1.0e4  # Height position of the model top
@@ -44,8 +45,8 @@ def setup_dcmip(dirname):
     output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
     parameters = CompressibleParameters()
 
-    state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                              family="BDFM", k=k, Omega=Omega,
+    state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
+                              family="RTCF", k=k, Omega=Omega,
                               timestepping=timestepping,
                               output=output,
                               parameters=parameters,
@@ -99,6 +100,7 @@ def setup_dcmip(dirname):
 
     state.initialise([u0, rho0, theta0])
     state.set_reference_profiles(rho_b, theta_b)
+    state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
 
     # Set up advection schemes
     advection_list = []
