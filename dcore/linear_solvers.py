@@ -172,7 +172,7 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(state.V[2])
 
-        theta_eqn = gamma*(theta - theta_in -
+        theta_eqn = gamma*(theta - theta_in +
                            dot(k,u)*dot(k,grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
