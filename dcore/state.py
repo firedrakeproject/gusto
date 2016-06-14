@@ -92,52 +92,7 @@ class State(object):
         # setup the latlon coordinate mesh
         if len(self.output.dumplist_latlon) > 0:
             field_dict_ll = {}
-            coords_orig = self.mesh.coordinates
-            mesh_dg_fs = VectorFunctionSpace(self.mesh, "DG", 1)
-            coords_dg = Function(mesh_dg_fs)
-            coords_latlon = Function(mesh_dg_fs)
-            par_loop("""
-            for (int i=0; i<3; i++) {
-                for (int j=0; j<3; j++) {
-                    dg[i][j] = cg[i][j];
-                }
-            }
-            """, dx, {'dg': (coords_dg, WRITE),
-                      'cg': (coords_orig, READ)})
-
-            # lat-lon 'x' = atan2(y, x)
-            coords_latlon.dat.data[:,0] = np.arctan2(coords_dg.dat.data[:,1], coords_dg.dat.data[:,0])
-            # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-            coords_latlon.dat.data[:,1] = np.arcsin(coords_dg.dat.data[:,2]/np.sqrt(coords_dg.dat.data[:,0]**2 + coords_dg.dat.data[:,1]**2 + coords_dg.dat.data[:,2]**2))
-            coords_latlon.dat.data[:,2] = 0.0
-
-            kernel = op2.Kernel("""
-            #define PI 3.141592653589793
-            #define TWO_PI 6.283185307179586
-            void splat_coords(double **coords) {
-                double diff0 = (coords[0][0] - coords[1][0]);
-                double diff1 = (coords[0][0] - coords[2][0]);
-                double diff2 = (coords[1][0] - coords[2][0]);
-
-                if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
-                    const int sign0 = coords[0][0] < 0 ? -1 : 1;
-                    const int sign1 = coords[1][0] < 0 ? -1 : 1;
-                    const int sign2 = coords[2][0] < 0 ? -1 : 1;
-                    if (sign0 < 0) {
-                        coords[0][0] += TWO_PI;
-                    }
-                    if (sign1 < 0) {
-                        coords[1][0] += TWO_PI;
-                    }
-                    if (sign2 < 0) {
-                        coords[2][0] += TWO_PI;
-                    }
-                }
-            }""", "splat_coords")
-
-            op2.par_loop(kernel, coords_latlon.cell_set,
-                         coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-            mesh_ll = Mesh(coords_latlon)
+            mesh_ll = get_latlon_mesh(self.mesh)
 
         funcs = self.xn.split()
         field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
@@ -344,3 +299,52 @@ class ShallowWaterState(State):
         self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))
+
+
+def get_latlon_mesh(mesh):
+    coords_orig = mesh.coordinates
+    mesh_dg_fs = VectorFunctionSpace(mesh, "DG", 1)
+    coords_dg = Function(mesh_dg_fs)
+    coords_latlon = Function(mesh_dg_fs)
+    par_loop("""
+    for (int i=0; i<3; i++) {
+    for (int j=0; j<3; j++) {
+    dg[i][j] = cg[i][j];
+    }
+    }
+    """, dx, {'dg': (coords_dg, WRITE),
+              'cg': (coords_orig, READ)})
+
+    # lat-lon 'x' = atan2(y, x)
+    coords_latlon.dat.data[:,0] = np.arctan2(coords_dg.dat.data[:,1], coords_dg.dat.data[:,0])
+    # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
+    coords_latlon.dat.data[:,1] = np.arcsin(coords_dg.dat.data[:,2]/np.sqrt(coords_dg.dat.data[:,0]**2 + coords_dg.dat.data[:,1]**2 + coords_dg.dat.data[:,2]**2))
+    coords_latlon.dat.data[:,2] = 0.0
+
+    kernel = op2.Kernel("""
+    #define PI 3.141592653589793
+    #define TWO_PI 6.283185307179586
+    void splat_coords(double **coords) {
+        double diff0 = (coords[0][0] - coords[1][0]);
+        double diff1 = (coords[0][0] - coords[2][0]);
+        double diff2 = (coords[1][0] - coords[2][0]);
+
+        if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
+            const int sign0 = coords[0][0] < 0 ? -1 : 1;
+            const int sign1 = coords[1][0] < 0 ? -1 : 1;
+            const int sign2 = coords[2][0] < 0 ? -1 : 1;
+            if (sign0 < 0) {
+                coords[0][0] += TWO_PI;
+            }
+            if (sign1 < 0) {
+                coords[1][0] += TWO_PI;
+            }
+            if (sign2 < 0) {
+                coords[2][0] += TWO_PI;
+            }
+        }
+    }""", "splat_coords")
+
+    op2.par_loop(kernel, coords_latlon.cell_set,
+                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
+    return Mesh(coords_latlon)
