@@ -127,7 +127,9 @@ class State(object):
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
-        if name in self.output.dumplist_latlon:
+        for name in self.output.dumplist_latlon:
+            print name
+            f = field_dict[name]
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             field_dict_ll[name] = f_ll
             to_dump_latlon.append(f_ll)
@@ -141,10 +143,10 @@ class State(object):
             self.dumpfile = File(outfile, project_output=self.output.project_fields)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
-        # make output file for fields on latlon mesh if required
-        if len(self.output.dumplist_latlon) > 0:
-            outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
-            self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)
+            # make output file for fields on latlon mesh if required
+            if len(self.output.dumplist_latlon) > 0:
+                outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
+                self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
