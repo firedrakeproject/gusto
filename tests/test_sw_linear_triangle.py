@@ -63,7 +63,7 @@ def setup_sw(dirname):
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
+    sw_forcing = ShallowWaterForcing(state, linear=True)
 
     # build time stepper
     stepper = Timestepper(state, advection_list, linear_solver,
