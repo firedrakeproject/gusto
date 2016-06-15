@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
-from dcore.diagnostics import Diagnostics
+from gusto.diagnostics import Diagnostics
 from pyop2.mpi import MPI
 from sys import exit
 from abc import ABCMeta, abstractmethod
