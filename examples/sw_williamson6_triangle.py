@@ -15,12 +15,12 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=120.)
-output = OutputParameters(dirname='sw_rossby_wave', dumpfreq=1)
+output = OutputParameters(dirname='sw_rossby_wave', dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'])
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), Divergence(), Vorticity(), PotentialVorticity()]
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
+state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                           family="BDM",
                           timestepping=timestepping,
                           output=output,

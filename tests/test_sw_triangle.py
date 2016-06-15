@@ -22,7 +22,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
-    output = OutputParameters(dirname=dirname+"/sw", steady_state_dump_err={'D':True,'u':True})
+    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D','Derr'], steady_state_dump_err={'D':True,'u':True})
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [Divergence(), Vorticity(), PotentialVorticity()]
@@ -96,7 +96,7 @@ def test_sw_setup(tmpdir):
     initial_enstrophy = data["PotentialVorticity"]["l2"][0]
     denstrophy = np.array(data["PotentialVorticity"]["l2"])-initial_enstrophy
     assert denstrophy.max() < 5.e-6
-    
+
     # Check divergence:
     maxdiv = np.array(data["Divergence"]["max"])
     assert maxdiv.max() < 2.e-6
