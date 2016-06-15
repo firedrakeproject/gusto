@@ -24,8 +24,8 @@ class TimesteppingParameters(Configuration):
     """
     dt = None
     alpha = 0.5
-    maxk = 2
-    maxi = 2
+    maxk = 4
+    maxi = 1
 
 
 class OutputParameters(Configuration):
@@ -37,6 +37,7 @@ class OutputParameters(Configuration):
     Verbose = False
     dumpfreq = 1
     dumplist = None
+    dumplist_latlon = []
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
