@@ -129,7 +129,6 @@ class State(object):
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
         for name in self.output.dumplist_latlon:
-            print name
             f = field_dict[name]
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             field_dict_ll[name] = f_ll
