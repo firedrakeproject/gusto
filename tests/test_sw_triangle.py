@@ -3,6 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import json
+import numpy as np
 
 
 def setup_sw(dirname):
@@ -93,9 +94,9 @@ def test_sw_setup(tmpdir):
 
     # Check enstrophy conservation:
     initial_enstrophy = data["PotentialVorticity"]["l2"][0]
-    for enstrophy in data["PotentialVorticity"]["l2"]:
-        assert enstrophy-initial_enstrophy < 5.e-6
-
+    denstrophy = np.array(data["PotentialVorticity"]["l2"])-initial_enstrophy
+    assert denstrophy.max() < 5.e-6
+    
     # Check divergence:
-    for div in data["Divergence"]["max"]:
-        assert div < 1.5e-6
+    maxdiv = np.array(data["Divergence"]["max"])
+    assert maxdiv.max() < 2.e-6
