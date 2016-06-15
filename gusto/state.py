@@ -5,7 +5,6 @@ from collections import defaultdict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics
-from pyop2.mpi import MPI
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
@@ -137,16 +136,17 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if MPI.comm.rank == 0 and path.exists(self.dumpdir):
+            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir):
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
-            self.dumpfile = File(outfile, project_output=self.output.project_fields)
+            self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
             # make output file for fields on latlon mesh if required
             if len(self.output.dumplist_latlon) > 0:
                 outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
-                self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields)
+                self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
+                                            comm=self.mesh.comm)
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
