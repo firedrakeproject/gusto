@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from dcore import *
+from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 import numpy as np
