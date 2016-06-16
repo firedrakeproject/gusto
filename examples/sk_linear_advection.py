@@ -1,4 +1,4 @@
-from dcore import *
+from gusto import *
 from firedrake import Expression, \
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh
 from firedrake import exp, sin, ds_b
