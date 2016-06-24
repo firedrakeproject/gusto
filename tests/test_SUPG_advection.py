@@ -1,4 +1,4 @@
-from dcore import *
+from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace, FunctionSpace, as_vector, File, sin, SpatialCoordinate
 import itertools
