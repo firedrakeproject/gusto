@@ -7,7 +7,7 @@ from firedrake import Function, TestFunction, TrialFunction, \
 
 class Advection(object):
     """
-    Base class for advection schemes for dcore.
+    Base class for advection schemes for Gusto.
 
     :arg state: :class:`.State` object.
     """

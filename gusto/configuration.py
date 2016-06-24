@@ -20,23 +20,24 @@ class Configuration(object):
 class TimesteppingParameters(Configuration):
 
     """
-    Timestepping parameters for dcore
+    Timestepping parameters for Gusto
     """
     dt = None
     alpha = 0.5
-    maxk = 2
-    maxi = 2
+    maxk = 4
+    maxi = 1
 
 
 class OutputParameters(Configuration):
 
     """
-    Output parameters for dcore
+    Output parameters for Gusto
     """
 
     Verbose = False
     dumpfreq = 1
     dumplist = None
+    dumplist_latlon = []
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.

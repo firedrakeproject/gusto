@@ -4,13 +4,15 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
-from dcore.diagnostics import Diagnostics
+from gusto.diagnostics import Diagnostics
 from sys import exit
 from abc import ABCMeta, abstractmethod
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
-    FunctionSpace, MixedFunctionSpace, interval, triangle, Function, \
+    FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
+    interval, triangle, Function, Mesh, functionspaceimpl,\
     Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
-    ds_tb, dx, solve
+    ds_tb, dx, solve, op2, par_loop, READ, WRITE
+import numpy as np
 
 
 class State(object):
@@ -86,6 +88,12 @@ class State(object):
         if self.output.dumplist is None:
             self.output.dumplist = self.fieldlist
 
+        # if there are fields to be dumped in latlon coordinates,
+        # setup the latlon coordinate mesh
+        if len(self.output.dumplist_latlon) > 0:
+            field_dict_ll = {}
+            mesh_ll = get_latlon_mesh(self.mesh)
+
         funcs = self.xn.split()
         field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
         to_dump = []
@@ -117,18 +125,35 @@ class State(object):
                 field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
 
+        # make functions on latlon mesh, as specified by dumplist_latlon
+        to_dump_latlon = []
+        for name in self.output.dumplist_latlon:
+            f = field_dict[name]
+            f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            field_dict_ll[name] = f_ll
+            to_dump_latlon.append(f_ll)
+
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            #if path.exists(self.dumpdir):
-            #    exit("results directory '%s' already exists" % self.dumpdir)
+            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir):
+                exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
-            self.dumpfile = File(outfile, project_output=self.output.project_fields)
+            self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
             self.diagnostic_data = defaultdict(partial(defaultdict, list))
+
+            # make output file for fields on latlon mesh if required
+            if len(self.output.dumplist_latlon) > 0:
+                outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
+                self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
+                                            comm=self.mesh.comm)
 
         if (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             self.dumpfile.write(*to_dump)
+
+            if len(self.output.dumplist_latlon) > 0:
+                self.dumpfile_latlon.write(*to_dump_latlon)
 
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(field_dict[name])
@@ -276,3 +301,52 @@ class ShallowWaterState(State):
         self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1]))
+
+
+def get_latlon_mesh(mesh):
+    coords_orig = mesh.coordinates
+    mesh_dg_fs = VectorFunctionSpace(mesh, "DG", 1)
+    coords_dg = Function(mesh_dg_fs)
+    coords_latlon = Function(mesh_dg_fs)
+    par_loop("""
+    for (int i=0; i<3; i++) {
+    for (int j=0; j<3; j++) {
+    dg[i][j] = cg[i][j];
+    }
+    }
+    """, dx, {'dg': (coords_dg, WRITE),
+              'cg': (coords_orig, READ)})
+
+    # lat-lon 'x' = atan2(y, x)
+    coords_latlon.dat.data[:,0] = np.arctan2(coords_dg.dat.data[:,1], coords_dg.dat.data[:,0])
+    # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
+    coords_latlon.dat.data[:,1] = np.arcsin(coords_dg.dat.data[:,2]/np.sqrt(coords_dg.dat.data[:,0]**2 + coords_dg.dat.data[:,1]**2 + coords_dg.dat.data[:,2]**2))
+    coords_latlon.dat.data[:,2] = 0.0
+
+    kernel = op2.Kernel("""
+    #define PI 3.141592653589793
+    #define TWO_PI 6.283185307179586
+    void splat_coords(double **coords) {
+        double diff0 = (coords[0][0] - coords[1][0]);
+        double diff1 = (coords[0][0] - coords[2][0]);
+        double diff2 = (coords[1][0] - coords[2][0]);
+
+        if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
+            const int sign0 = coords[0][0] < 0 ? -1 : 1;
+            const int sign1 = coords[1][0] < 0 ? -1 : 1;
+            const int sign2 = coords[2][0] < 0 ? -1 : 1;
+            if (sign0 < 0) {
+                coords[0][0] += TWO_PI;
+            }
+            if (sign1 < 0) {
+                coords[1][0] += TWO_PI;
+            }
+            if (sign2 < 0) {
+                coords[2][0] += TWO_PI;
+            }
+        }
+    }""", "splat_coords")
+
+    op2.par_loop(kernel, coords_latlon.cell_set,
+                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
+    return Mesh(coords_latlon)

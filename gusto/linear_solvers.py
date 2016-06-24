@@ -5,13 +5,13 @@ from firedrake import split, LinearVariationalProblem, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, Expression
 
-from dcore.forcing import exner, exner_rho, exner_theta
+from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 
 class TimesteppingSolver(object):
     """
-    Base class for timestepping linear solvers for dcore.
+    Base class for timestepping linear solvers for Gusto.
 
     This is a dummy base class where the input is just copied to the output.
 
@@ -126,7 +126,7 @@ class CompressibleSolver(TimesteppingSolver):
         # component of the gradient
 
         # the pi prime term (here, bars are for mean and no bars are
-        # for linear perturbations
+        # for linear perturbations)
 
         pi = pibar_theta*theta + pibar_rho*rho
 
@@ -172,7 +172,7 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(state.V[2])
 
-        theta_eqn = gamma*(theta - theta_in -
+        theta_eqn = gamma*(theta - theta_in +
                            dot(k,u)*dot(k,grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),

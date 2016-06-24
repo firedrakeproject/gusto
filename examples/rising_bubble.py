@@ -122,7 +122,7 @@ rho_b.interpolate(rho)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
 x = SpatialCoordinate(mesh)
-theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc = 250.))
+theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
 
 theta0.interpolate(theta_b + theta_pert)
 rho0.interpolate(rho_b)
@@ -177,5 +177,3 @@ stepper = Timestepper(state, advection_list, linear_solver,
                       compressible_forcing)
 
 stepper.run(t=0, tmax=700.)
-
-

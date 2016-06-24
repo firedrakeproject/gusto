@@ -1,10 +1,10 @@
-from dcore import *
+from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 25  # 10 horizontal layers
+nlayers = 25  # 25 horizontal layers
 refinements = 5  # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
@@ -54,7 +54,7 @@ k = Function(W_VectorCG1).interpolate(
 
 fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0)
-output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
+output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_rt0')
 parameters = CompressibleParameters()
 state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
                           family="RTCF", k=k, z=z,

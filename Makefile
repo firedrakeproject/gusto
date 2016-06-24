@@ -1,9 +1,9 @@
 lint:
-	@echo "    Linting dcore codebase"
-	@flake8 dcore
-	@echo "    Linting dcore examples"
+	@echo "    Linting gusto codebase"
+	@flake8 gusto
+	@echo "    Linting gusto examples"
 	@flake8 examples
-	@echo "    Linting dcore tests"
+	@echo "    Linting gusto tests"
 	@flake8 tests
 
 test:
