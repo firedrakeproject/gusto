@@ -5,13 +5,13 @@ from firedrake import split, LinearVariationalProblem, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, Expression
 
-from dcore.forcing import exner, exner_rho, exner_theta
+from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 
 class TimesteppingSolver(object):
     """
-    Base class for timestepping linear solvers for dcore.
+    Base class for timestepping linear solvers for Gusto.
 
     This is a dummy base class where the input is just copied to the output.
 

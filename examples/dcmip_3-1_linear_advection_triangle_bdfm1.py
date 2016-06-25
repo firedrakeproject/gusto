@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from dcore import *
+from gusto import *
 from firedrake import IcosahedralSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 from firedrake import par_loop, WRITE, READ

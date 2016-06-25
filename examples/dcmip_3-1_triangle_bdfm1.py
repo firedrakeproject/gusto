@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from dcore import *
+from gusto import *
 from firedrake import *
 nlayers = 10         # 10 horizontal layers
 refinements = 2      # number of horizontal cells = 20*(4^refinements)

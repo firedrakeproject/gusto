@@ -20,7 +20,7 @@ class Configuration(object):
 class TimesteppingParameters(Configuration):
 
     """
-    Timestepping parameters for dcore
+    Timestepping parameters for Gusto
     """
     dt = None
     alpha = 0.5
@@ -31,7 +31,7 @@ class TimesteppingParameters(Configuration):
 class OutputParameters(Configuration):
 
     """
-    Output parameters for dcore
+    Output parameters for Gusto
     """
 
     Verbose = False

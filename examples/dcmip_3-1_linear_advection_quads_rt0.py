@@ -1,4 +1,4 @@
-from dcore import *
+from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 from firedrake import exp, acos, cos, sin

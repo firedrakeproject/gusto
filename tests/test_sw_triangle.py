@@ -1,4 +1,4 @@
-from dcore import *
+from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi

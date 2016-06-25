@@ -8,7 +8,7 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
 
 class Forcing(object):
     """
-    Base class for forcing terms for dcore.
+    Base class for forcing terms for Gusto.
 
     :arg state: x :class:`.State` object.
     """
