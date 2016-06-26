@@ -62,6 +62,7 @@ class CompressibleForcing(Forcing):
         Omega = state.Omega
         cp = state.parameters.cp
         g = state.parameters.g
+        mu = state.parameters.mu
 
         n = FacetNormal(state.mesh)
 
@@ -76,6 +77,8 @@ class CompressibleForcing(Forcing):
 
         if Omega is not None:
             L -= inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+        if mu is not None:
+            L -= mu*inner(w,state.k)*inner(u0,state.k)*dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]

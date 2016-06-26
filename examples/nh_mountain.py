@@ -1,31 +1,41 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
+from firedrake import Expression, FunctionSpace, as_vector,\
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver
+from firedrake import exp, sin, ds_t
+import numpy as np
 
-L = 51200.
-delta = 400.
+nlayers = 70  # horizontal layers
+columns = 180  # number of columns
+L = 144000.
+m = PeriodicIntervalMesh(columns, L)
 
 # build volume mesh
-H = 6400.  # Height position of the model top
-nlayers = int(H/delta)  # horizontal layers
-columns = int(L/delta)  # number of columns
-
-m = PeriodicIntervalMesh(columns, L)
+H = 35000.  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+Vc = mesh.coordinates.function_space()
+x = SpatialCoordinate(mesh)
+H = Constant(H)
+a = Constant(1000.)
+xc = Constant(L/2.)
+new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
+mesh.coordinates.assign(new_coords)
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 W_CG1 = FunctionSpace(mesh, "CG", 1)
+W_DG1 = FunctionSpace(mesh, "DG", 1)
 
 # vertical coordinate and normal
 z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
+dt=5.0
+mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
+mu = Function(W_DG1).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=2.0, maxk=4, maxi=1)
-output = OutputParameters(dirname='db_diff', dumpfreq=5, dumplist=['u'])
-parameters = CompressibleParameters()
+timestepping = TimesteppingParameters(dt=dt)
+output = OutputParameters(dirname='nh_mountain', dumpfreq=1, dumplist=['u'])
+parameters = CompressibleParameters(g=9.80665, cp=1004., mu=mu)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
@@ -51,12 +61,12 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 
-# Isentropic background state
+# N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
-thetab = Constant(Tsurf)
-
+thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(state.V[2]).interpolate(thetab)
-rho_b = Function(state.V[1])
+# theta_top = Tsurf*exp(N**2*H/g)
+# pi_top = 1. - (g**2/(c_p*N**2))*(theta_top - Tsurf)/(theta_top*Tsurf)
 
 # Calculate hydrostatic Pi
 W = MixedFunctionSpace((state.Vv,state.V[1]))
@@ -69,16 +79,11 @@ alhs = (
     (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
     + dpi*div(theta_b*v)*dx
 )
-
-arhs = (
-    - g*inner(dv,k)*dx
-    - c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
-)
-bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "top")]
-
+pi_top = 0.5
+arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
+bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "bottom")]
 w = Function(W)
 PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-
 params = {'pc_type': 'fieldsplit',
           'pc_fieldsplit_type': 'schur',
           'ksp_type': 'gmres',
@@ -99,9 +104,34 @@ params = {'pc_type': 'fieldsplit',
 
 PiSolver = LinearVariationalSolver(PiProblem,
                                    solver_parameters=params)
-
+pfile = File('pi.pvd')
 PiSolver.solve()
 v, Pi = w.split()
+pfile.write(Pi)
+p0 = Pi.dat.data[0]
+print "JEMMA: ", p0
+pi_top = 1.0
+arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
+PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
+PiSolver = LinearVariationalSolver(PiProblem,
+                                   solver_parameters=params)
+PiSolver.solve()
+v, Pi = w.split()
+pfile.write(Pi)
+p1 = Pi.dat.data[0]
+print "JEMMA: ", p1
+alpha = 2.*(p1-p0)
+beta = p1-alpha
+pi_top = (1.-beta)/alpha
+print "JEMMA: ", alpha, beta, pi_top
+arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
+PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
+PiSolver = LinearVariationalSolver(PiProblem,
+                                   solver_parameters=params)
+PiSolver.solve()
+v, Pi = w.split()
+print "JEMMA: ", Pi.dat.data[0]
+pfile.write(Pi)
 
 w1 = Function(W)
 v, rho = w1.split()
@@ -113,22 +143,17 @@ F = (
     (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
     + dpi*div(theta_b*v)*dx
     + g*inner(dv,k)*dx
-    + c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
+    + pi_top*c_p*inner(dv,n)*theta_b*ds_t
 )
 rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
 rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
 rhosolver.solve()
 v, rho = w1.split()
-rho_b.interpolate(rho)
+rho_b=Function(state.V[1]).interpolate(rho)
 
-W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = SpatialCoordinate(mesh)
-a = 5.0e3
-deltaTheta = 1.0e-2
-theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=g))
-theta0.interpolate(theta_b + theta_pert)
-# rho0.assign(rho_b)
-rho0.interpolate(rho_b)
+theta0.interpolate(theta_b)
+rho0.assign(rho_b)
+u0.project(as_vector([10.0,0.0]))
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
@@ -141,7 +166,6 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-# theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
 theta_advection = SUPGAdvection(state, state.V[2], direction=[1])
 advection_list.append((theta_advection, 2))
 
@@ -175,11 +199,8 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-diffusion_dict = {"u": InteriorPenulty(state, state.V[0],direction=[2], params={"kappa":75.}),
-                  "theta": InteriorPenulty(state, state.V[2],direction=[2], params={"kappa":75.})}
-
 # build time stepper
 stepper = Timestepper(state, advection_list, linear_solver,
-                      compressible_forcing, diffusion_dict)
+                      compressible_forcing)
 
-stepper.run(t=0, tmax=15.*60.)
+stepper.run(t=0, tmax=9000.0)
