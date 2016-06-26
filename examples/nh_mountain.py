@@ -1,8 +1,6 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver
-from firedrake import exp, sin, ds_t
-import numpy as np
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
@@ -29,7 +27,7 @@ W_DG1 = FunctionSpace(mesh, "DG", 1)
 z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
-dt=5.0
+dt = 5.0
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
 mu = Function(W_DG1).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
@@ -149,7 +147,7 @@ rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
 rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
 rhosolver.solve()
 v, rho = w1.split()
-rho_b=Function(state.V[1]).interpolate(rho)
+rho_b = Function(state.V[1]).interpolate(rho)
 
 theta0.interpolate(theta_b)
 rho0.assign(rho_b)
