@@ -1,12 +1,12 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSo
-lver
+from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver, parameters
 
+parameters["coffee"] = {'O2':False}
 
 L = 51200.
-res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+res_dt = {200.:1.,100.:0.5,50.:0.25}
 
 # build volume mesh
 H = 6400.  # Height position of the model top
@@ -180,8 +180,8 @@ for delta, dt in res_dt.iteritems():
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
 
-    diffusion_dict = {"u": InteriorPenulty(state, state.V[0],direction=[2], params={"kappa":75.}),
-                      "theta": InteriorPenulty(state, state.V[2],direction=[2], params={"kappa":75.})}
+    diffusion_dict = {"u": InteriorPenulty(state, state.V[0],direction=[2], params={"kappa":Constant(75.), "mu":Constant(1./delta)}),
+                      "theta": InteriorPenulty(state, state.V[2],direction=[2], params={"kappa":75., "mu":0.005})}
 
     # build time stepper
     stepper = Timestepper(state, advection_list, linear_solver,

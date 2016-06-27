@@ -37,10 +37,8 @@ class InteriorPenulty(Diffusion):
     :arg direction: list containing directions in which function space
     is discontinuous: 1 corresponds to vertical, 2 to horizontal.
     :arg params: dictionary containing the interior penulty parameters
-    mu and kappa where mu is the penulty weighting function, proportional
-    to 1/dx (if not supplied this is set to a default value based on the
-    max area of a cell), and kappa is the diffusion parameter which must
-    be specified.
+    mu and kappa where mu is the penulty weighting function, which is 
+    recommended to be proportional to 1/dx
 
     """
 
@@ -48,15 +46,6 @@ class InteriorPenulty(Diffusion):
         super(InteriorPenulty, self).__init__(state)
 
         dt = state.timestepping.dt
-        params = params.copy() if params else {}
-
-        # if mu not provided then set to 1/dx
-        if 'mu' not in params.keys():
-            Vdg = FunctionSpace(state.mesh, "DG", 0)
-            area = assemble(TestFunction(Vdg)*dx)
-            print area.dat.data.min(), area.dat.data.max()
-            params.setdefault('mu', 1./sqrt(area.dat.data.max()))
-
         kappa = params['kappa']
         mu = params['mu']
         gamma = TestFunction(V)
