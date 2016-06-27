@@ -1,9 +1,7 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver, parameters
-
-parameters["coffee"] = {'O2':False}
+from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
 
 L = 51200.
 res_dt = {200.:1.,100.:0.5,50.:0.25}
