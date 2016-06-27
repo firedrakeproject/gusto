@@ -63,10 +63,11 @@ def run(dirname, vector, DG):
     kappa = 0.05
     if vector:
         kappa = as_tensor([[kappa, 0.],[0., kappa]])
+    mu = 5.
     dt = state.timestepping.dt
     tmax = 2.5
     t = 0.
-    f_diffusion = InteriorPenulty(state, f.function_space(), direction=direction, params={"kappa":kappa})
+    f_diffusion = InteriorPenulty(state, f.function_space(), direction=direction, params={"kappa":kappa, "mu":Constant(mu)})
     outfile = File(path.join(dirname, "IPdiffusion/field_output.pvd"))
 
     dumpcount = itertools.count()
