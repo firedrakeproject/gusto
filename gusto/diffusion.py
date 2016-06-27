@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
-from firedrake import FunctionSpace, TestFunction, TrialFunction, \
-    Function, assemble, inner, outer, grad, avg, sqrt, dx, dS_h, dS_v, \
+from firedrake import TestFunction, TrialFunction, \
+    Function, inner, outer, grad, avg, dx, dS_h, dS_v, \
     FacetNormal, LinearVariationalProblem, LinearVariationalSolver, action
 
 
@@ -37,8 +37,8 @@ class InteriorPenulty(Diffusion):
     :arg direction: list containing directions in which function space
     is discontinuous: 1 corresponds to vertical, 2 to horizontal.
     :arg params: dictionary containing the interior penulty parameters
-    mu and kappa where mu is the penulty weighting function, which is 
-    recommended to be proportional to 1/dx
+    :mu and kappa where mu is the penulty weighting function, which is
+    :recommended to be proportional to 1/dx
 
     """
 
