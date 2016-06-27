@@ -6,12 +6,12 @@ as balanced initial conditions.
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Expression, Function, \
+    Expression, Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver
 
 
 def compressible_hydrostatic_balance(state, theta0, rho0,
-                                     top=True, rho_boundary=0,
+                                     top=True, pi_boundary=Constant(1.0),
                                      params=None):
     """
     Compute a hydrostatically balanced density given a potential temperature
@@ -22,7 +22,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
     :arg rho0: :class:`.Function` to write the initial density into.
     :arg top: If True, set a boundary condition at the top. Otherwise, set
     it at the bottom.
-    :arg rho_boundary: a field or expression to use as boundary data on
+    :arg pi_boundary: a field or expression to use as boundary data for pi on
     the top or bottom as specified.
     """
 
@@ -51,11 +51,13 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
     k = state.k
     arhs = (
         - g*inner(dv,k)*dx
-        - cp*inner(dv,n)*theta0*rho_boundary*bmeasure
+        - cp*inner(dv,n)*theta0*pi_boundary*bmeasure
     )
 
-    bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
-
+    if(state.mesh.geometric_dimension()==2):
+        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
+    elif(state.mesh.geometric_dimension()==3):
+        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.", "0.")), bstring)]
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
