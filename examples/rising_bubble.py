@@ -1,4 +1,4 @@
-from dcore import *
+from gusto import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
 from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver

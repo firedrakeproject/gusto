@@ -7,7 +7,7 @@ from firedrake import FunctionSpace, TestFunction, TrialFunction, \
 
 class Diffusion(object):
     """
-    Base class for diffusion schemes for dcore.
+    Base class for diffusion schemes for gusto.
 
     :arg state: :class:`.State` object.
     """
