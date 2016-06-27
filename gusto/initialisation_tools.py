@@ -72,13 +72,14 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
                   'pc_fieldsplit_schur_precondition': 'selfp',
                   'fieldsplit_0_ksp_type': 'richardson',
                   'fieldsplit_0_ksp_max_it': 5,
-                  'fieldsplit_0_pc_type': 'bjacobi',
-                  'fieldsplit_0_sub_pc_type': 'ilu',
-                  'fieldsplit_1_ksp_type': 'richardson',
-                  'fieldsplit_1_ksp_max_it': 5,
-                  "fieldsplit_1_ksp_monitor_true_residual": True,
-                  'fieldsplit_1_pc_type': 'bjacobi',
-                  'fieldsplit_1_sub_pc_type': 'ilu'}
+                  'fieldsplit_0_pc_type': 'gamg',
+                  'fieldsplit_1_pc_gamg_sym_graph': True,
+                  'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                  'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
     PiSolver = LinearVariationalSolver(PiProblem,
                                        solver_parameters=params)
@@ -86,8 +87,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
     PiSolver.solve()
     v, Pi = w.split()
 
-    kappa = state.kappa
-    R_d = state.R_d
-    p_0 = state.p_0
+    kappa = state.parameters.kappa
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
 
     rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
