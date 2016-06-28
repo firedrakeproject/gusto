@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver, exp, ds_t
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
