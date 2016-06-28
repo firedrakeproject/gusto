@@ -102,12 +102,9 @@ params = {'pc_type': 'fieldsplit',
 
 PiSolver = LinearVariationalSolver(PiProblem,
                                    solver_parameters=params)
-pfile = File('pi.pvd')
 PiSolver.solve()
 v, Pi = w.split()
-pfile.write(Pi)
 p0 = Pi.dat.data[0]
-print "JEMMA: ", p0
 pi_top = 1.0
 arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
 PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
@@ -115,21 +112,16 @@ PiSolver = LinearVariationalSolver(PiProblem,
                                    solver_parameters=params)
 PiSolver.solve()
 v, Pi = w.split()
-pfile.write(Pi)
 p1 = Pi.dat.data[0]
-print "JEMMA: ", p1
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-print "JEMMA: ", alpha, beta, pi_top
 arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
 PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 PiSolver = LinearVariationalSolver(PiProblem,
                                    solver_parameters=params)
 PiSolver.solve()
 v, Pi = w.split()
-print "JEMMA: ", Pi.dat.data[0]
-pfile.write(Pi)
 
 w1 = Function(W)
 v, rho = w1.split()
