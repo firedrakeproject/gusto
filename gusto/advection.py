@@ -252,7 +252,7 @@ class EulerPoincareForm(Advection):
 class SUPGAdvection(Advection):
     """
     An SUPG advection scheme that can apply DG upwinding (in the direction
-    specified by the direction arg) if the function space is only 
+    specified by the direction arg) if the function space is only
     partially continuous.
 
     :arg state: :class:`.State` object.
