@@ -9,14 +9,15 @@ m = PeriodicIntervalMesh(columns, L)
 
 # build volume mesh
 H = 35000.  # Height position of the model top
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-Vc = mesh.coordinates.function_space()
-x = SpatialCoordinate(mesh)
+ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
+coord = SpatialCoordinate(ext_mesh)
+x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
 H = Constant(H)
 a = Constant(1000.)
 xc = Constant(L/2.)
 new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
-mesh.coordinates.assign(new_coords)
+mesh = Mesh(new_coords)
 
 # Space for initialising velocity
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
@@ -86,7 +87,7 @@ params = {'pc_type': 'fieldsplit',
           'pc_fieldsplit_type': 'schur',
           'ksp_type': 'gmres',
           'ksp_monitor_true_residual': True,
-          'ksp_max_it': 100,
+          'ksp_max_it': 1000,
           'ksp_gmres_restart': 50,
           'pc_fieldsplit_schur_fact_type': 'FULL',
           'pc_fieldsplit_schur_precondition': 'selfp',
