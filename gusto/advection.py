@@ -225,13 +225,11 @@ class EulerPoincareForm(Advection):
             surface_measure = (dS_h + dS_v)
             perp = lambda u: as_vector([-u[1], u[0]])
             perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
-            boundary_term = dt*inner((inner(w,perp(self.ubar))*perp(n)),ustar)*ds_tb
         else:
             surface_measure = dS
             outward_normals = CellNormal(state.mesh)
             perp = lambda u: cross(outward_normals, u)
             perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
-            boundary_term = None
 
         Eqn = (
             (inner(w, u-self.u0)
@@ -240,9 +238,6 @@ class EulerPoincareForm(Advection):
             - dt*inner(jump(inner(w, perp(self.ubar)), n), perp_u_upwind)*surface_measure
             + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*surface_measure
         )
-
-        if boundary_term is not None:
-            Eqn += boundary_term
 
         a = lhs(Eqn)
         L = rhs(Eqn)
