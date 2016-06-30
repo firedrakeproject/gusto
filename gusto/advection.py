@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, ds_tb, action, inner, \
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, \
     outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant
 
 
