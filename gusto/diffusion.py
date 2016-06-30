@@ -28,22 +28,22 @@ class Diffusion(object):
         pass
 
 
-class InteriorPenulty(Diffusion):
+class InteriorPenalty(Diffusion):
     """
-    Interior penulty diffusion method
+    Interior penalty diffusion method
 
     :arg state: :class:`.State` object.
     :arg V: Function space of diffused field
     :arg direction: list containing directions in which function space
     is discontinuous: 1 corresponds to vertical, 2 to horizontal.
-    :arg params: dictionary containing the interior penulty parameters
-    :mu and kappa where mu is the penulty weighting function, which is
+    :arg params: dictionary containing the interior penalty parameters
+    :mu and kappa where mu is the penalty weighting function, which is
     :recommended to be proportional to 1/dx
 
     """
 
     def __init__(self, state, V, direction=[1,2], params=None):
-        super(InteriorPenulty, self).__init__(state)
+        super(InteriorPenalty, self).__init__(state)
 
         dt = state.timestepping.dt
         kappa = params['kappa']
