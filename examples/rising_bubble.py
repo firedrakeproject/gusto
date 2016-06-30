@@ -1,16 +1,15 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh
-from firedrake import exp, sin, ds_b
-import numpy as np
+from firedrake import Expression, FunctionSpace,\
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
+from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
 
-nlayers = 10  # horizontal layers
-columns = 150  # number of columns
-L = 3.0e5
-m = PeriodicIntervalMesh(columns, L)
+L = 1000.
+H = 1000.
+nlayers = int(H/10.)
+ncolumns = int(L/10.)
+dt = 1.
 
-# build volume mesh
-H = 1.0e4  # Height position of the model top
+m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # Space for initialising velocity
@@ -22,8 +21,8 @@ z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'])
+timestepping = TimesteppingParameters(dt=2.0, maxk=4, maxi=1)
+output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -41,6 +40,7 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
 
+
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
 g = parameters.g
@@ -50,9 +50,9 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 
-# N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
+# Isentropic background state
 Tsurf = 300.
-thetab = Tsurf*exp(N**2*z/g)
+thetab = Constant(Tsurf)
 
 theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1])
@@ -102,16 +102,30 @@ PiSolver = LinearVariationalSolver(PiProblem,
 PiSolver.solve()
 v, Pi = w.split()
 
-rho_b.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
+w1 = Function(W)
+v, rho = w1.split()
+rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
+v, rho = split(w1)
+dv, dpi = TestFunctions(W)
+pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))
+F = (
+    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
+    + dpi*div(theta_b*v)*dx
+    + g*inner(dv,k)*dx
+    + c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
+)
+rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
+rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
+rhosolver.solve()
+v, rho = w1.split()
+rho_b.interpolate(rho)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = Function(W_DG1).interpolate(Expression("x[0]"))
-a = 5.0e3
-deltaTheta = 1.0e-2
-theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+x = SpatialCoordinate(mesh)
+theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
+
 theta0.interpolate(theta_b + theta_pert)
-rho0.assign(rho_b)
-u0.project(as_vector([20.0,0.0]))
+rho0.interpolate(rho_b)
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
@@ -124,7 +138,8 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+# theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+theta_advection = SUPGAdvection(state, state.V[2], direction=[1])
 advection_list.append((theta_advection, 2))
 
 # Set up linear solver
@@ -161,4 +176,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_list, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=700.)
