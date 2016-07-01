@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver, exp, ds_t
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
@@ -67,36 +67,35 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(state.V[2]).interpolate(thetab)
 
 # Calculate hydrostatic Pi
-Pi = Function(V[2])
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary_constant=0.5)
+params = {'pc_type': 'fieldsplit',
+          'pc_fieldsplit_type': 'schur',
+          'ksp_type': 'gmres',
+          'ksp_monitor_true_residual': True,
+          'ksp_max_it': 1000,
+          'ksp_gmres_restart': 50,
+          'pc_fieldsplit_schur_fact_type': 'FULL',
+          'pc_fieldsplit_schur_precondition': 'selfp',
+          'fieldsplit_0_ksp_type': 'richardson',
+          'fieldsplit_0_ksp_max_it': 5,
+          'fieldsplit_0_pc_type': 'bjacobi',
+          'fieldsplit_0_sub_pc_type': 'ilu',
+          'fieldsplit_1_ksp_type': 'richardson',
+          'fieldsplit_1_ksp_max_it': 5,
+          "fieldsplit_1_ksp_monitor_true_residual": True,
+          'fieldsplit_1_pc_type': 'bjacobi',
+          'fieldsplit_1_sub_pc_type': 'ilu'}
+Pi = Function(state.V[1])
+rho_b = Function(state.V[1])
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
 p0 = Pi.dat.data[0]
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
 p1 = Pi.dat.data[0]
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary_constant=pi_top)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, pfile,top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
 
-W = MixedFunctionSpace((state.Vv,state.V[1]))
-w1 = Function(W)
-v, rho = w1.split()
-rho.assign(rho_b)
-v, rho = split(w1)
-dv, dpi = TestFunctions(W)
-pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))
-F = (
-    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(theta_b*v)*dx
-    + g*inner(dv,k)*dx
-    + pi_top*c_p*inner(dv,n)*theta_b*ds_t
-)
-rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
-rhosolver.solve()
-v, rho = w1.split()
-rho_b = Function(state.V[1]).interpolate(rho)
-
-theta0.interpolate(theta_b)
+theta0.assign(theta_b)
 rho0.assign(rho_b)
 u0.project(as_vector([10.0,0.0]))
 

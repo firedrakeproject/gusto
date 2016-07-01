@@ -7,11 +7,13 @@ from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
     Expression, Function, Constant, \
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, \
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split
 
 
 def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                                      top=False, pi_boundary=Constant(1.0),
+                                     solve_for_rho=False,
                                      params=None):
     """
     Compute a hydrostatically balanced density given a potential temperature
@@ -86,11 +88,30 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     PiSolver.solve()
     v, Pi = w.split()
+    if pi0 is not None:
+        pi0.assign(Pi)
 
     kappa = state.parameters.kappa
     R_d = state.parameters.R_d
     p_0 = state.parameters.p_0
 
-    rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
-    if pi0 is not None:
-        pi0.assign(Pi)
+    if solve_for_rho:
+        w1 = Function(W)
+        v, rho = w1.split()
+        rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+        v, rho = split(w1)
+        dv, dpi = TestFunctions(W)
+        pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
+        F = (
+            (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
+            + dpi*div(theta0*v)*dx
+            - div(dv)*Phi*dx
+            + inner(dv,n)*Phi*bmeasure
+            + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+        )
+        rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
+        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
+        rhosolver.solve()
+        v, rho0 = w1.split()
+    else:
+        rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
