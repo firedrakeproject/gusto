@@ -65,69 +65,22 @@ kappa = parameters.kappa
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(state.V[2]).interpolate(thetab)
-# theta_top = Tsurf*exp(N**2*H/g)
-# pi_top = 1. - (g**2/(c_p*N**2))*(theta_top - Tsurf)/(theta_top*Tsurf)
 
 # Calculate hydrostatic Pi
-W = MixedFunctionSpace((state.Vv,state.V[1]))
-v, pi = TrialFunctions(W)
-dv, dpi = TestFunctions(W)
-
-n = FacetNormal(mesh)
-
-alhs = (
-    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(theta_b*v)*dx
-)
-pi_top = 0.5
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "bottom")]
-w = Function(W)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-params = {'pc_type': 'fieldsplit',
-          'pc_fieldsplit_type': 'schur',
-          'ksp_type': 'gmres',
-          'ksp_monitor_true_residual': True,
-          'ksp_max_it': 1000,
-          'ksp_gmres_restart': 50,
-          'pc_fieldsplit_schur_fact_type': 'FULL',
-          'pc_fieldsplit_schur_precondition': 'selfp',
-          'fieldsplit_0_ksp_type': 'richardson',
-          'fieldsplit_0_ksp_max_it': 5,
-          'fieldsplit_0_pc_type': 'bjacobi',
-          'fieldsplit_0_sub_pc_type': 'ilu',
-          'fieldsplit_1_ksp_type': 'richardson',
-          'fieldsplit_1_ksp_max_it': 5,
-          "fieldsplit_1_ksp_monitor_true_residual": True,
-          'fieldsplit_1_pc_type': 'bjacobi',
-          'fieldsplit_1_sub_pc_type': 'ilu'}
-
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+Pi = Function(V[2])
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary_constant=0.5)
 p0 = Pi.dat.data[0]
-pi_top = 1.0
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True)
 p1 = Pi.dat.data[0]
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary_constant=pi_top)
 
+W = MixedFunctionSpace((state.Vv,state.V[1]))
 w1 = Function(W)
 v, rho = w1.split()
-rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
+rho.assign(rho_b)
 v, rho = split(w1)
 dv, dpi = TestFunctions(W)
 pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))

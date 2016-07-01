@@ -10,8 +10,8 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     LinearVariationalProblem, LinearVariationalSolver
 
 
-def compressible_hydrostatic_balance(state, theta0, rho0,
-                                     top=True, pi_boundary=Constant(1.0),
+def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
+                                     top=False, pi_boundary=Constant(1.0),
                                      params=None):
     """
     Compute a hydrostatically balanced density given a potential temperature
@@ -92,3 +92,5 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
     p_0 = state.parameters.p_0
 
     rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+    if pi0 is not None:
+        pi0.assign(Pi)

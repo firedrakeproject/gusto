@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import Expression, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh
-from firedrake import exp, sin, ds_b
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
+    exp, sin
 import numpy as np
 
 
@@ -43,16 +43,12 @@ def setup_sk(dirname):
                               on_sphere=False)
 
     # Initial conditions
-    u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
+    u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
     g = parameters.g
     N = parameters.N
-    p_0 = parameters.p_0
-    c_p = parameters.cp
-    R_d = parameters.R_d
-    kappa = parameters.kappa
 
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
     Tsurf = 300.
@@ -60,53 +56,7 @@ def setup_sk(dirname):
 
     theta_b = Function(state.V[2]).interpolate(thetab)
     rho_b = Function(state.V[1])
-
-    # Calculate hydrostatic Pi
-    W = MixedFunctionSpace((state.Vv,state.V[1]))
-    v, pi = TrialFunctions(W)
-    dv, dpi = TestFunctions(W)
-
-    n = FacetNormal(mesh)
-
-    alhs = (
-        (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-        + dpi*div(theta_b*v)*dx
-    )
-
-    arhs = (
-        - g*inner(dv,k)*dx
-        - c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
-    )
-    bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "top")]
-
-    w = Function(W)
-    PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-
-    params = {'pc_type': 'fieldsplit',
-              'pc_fieldsplit_type': 'schur',
-              'ksp_type': 'gmres',
-              'ksp_monitor_true_residual': True,
-              'ksp_max_it': 100,
-              'ksp_gmres_restart': 50,
-              'pc_fieldsplit_schur_fact_type': 'FULL',
-              'pc_fieldsplit_schur_precondition': 'selfp',
-              'fieldsplit_0_ksp_type': 'richardson',
-              'fieldsplit_0_ksp_max_it': 5,
-              'fieldsplit_0_pc_type': 'bjacobi',
-              'fieldsplit_0_sub_pc_type': 'ilu',
-              'fieldsplit_1_ksp_type': 'richardson',
-              'fieldsplit_1_ksp_max_it': 5,
-              "fieldsplit_1_ksp_monitor_true_residual": True,
-              'fieldsplit_1_pc_type': 'bjacobi',
-              'fieldsplit_1_sub_pc_type': 'ilu'}
-
-    PiSolver = LinearVariationalSolver(PiProblem,
-                                       solver_parameters=params)
-
-    PiSolver.solve()
-    v, Pi = w.split()
-
-    rho_b.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
+    compressible_hydrostatic_balance(state, theta_b, rho_b)
 
     W_DG1 = FunctionSpace(mesh, "DG", 1)
     x = Function(W_DG1).interpolate(Expression("x[0]"))
