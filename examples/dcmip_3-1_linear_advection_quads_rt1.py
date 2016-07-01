@@ -114,10 +114,9 @@ s = (d**2)/(d**2 + r**2)
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
 theta0.interpolate(theta_b + theta_pert)
-#Compute the balanced density
+# Compute the balanced density
 compressible_hydrostatic_balance(state, theta0, rho0, top=False,
                                  pi_boundary=(p/p_0)**kappa)
-#rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)

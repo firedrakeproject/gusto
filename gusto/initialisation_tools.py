@@ -54,9 +54,9 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
         - cp*inner(dv,n)*theta0*pi_boundary*bmeasure
     )
 
-    if(state.mesh.geometric_dimension()==2):
+    if(state.mesh.geometric_dimension() == 2):
         bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
-    elif(state.mesh.geometric_dimension()==3):
+    elif(state.mesh.geometric_dimension() == 3):
         bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.", "0.")), bstring)]
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
