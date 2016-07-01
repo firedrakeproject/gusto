@@ -62,20 +62,23 @@ class CompressibleForcing(Forcing):
         Omega = state.Omega
         cp = state.parameters.cp
         g = state.parameters.g
+        mu = state.parameters.mu
 
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
-
         a = inner(w,F)*dx
         L = (
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
             - g*inner(w,state.k)*dx  # gravity term
+            - 0.5*div(w)*inner(u0, u0)*dx
         )
 
         if Omega is not None:
             L -= inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+        if mu is not None:
+            L -= mu*inner(w,state.k)*inner(u0,state.k)*dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]

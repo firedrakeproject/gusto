@@ -2,7 +2,8 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, outer, sign, cross, CellNormal, lhs, rhs
+    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, \
+    outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant
 
 
 class Advection(object):
@@ -217,16 +218,27 @@ class EulerPoincareForm(Advection):
         n = FacetNormal(state.mesh)
         Upwind = 0.5*(sign(dot(self.ubar, n))+1)
 
-        outward_normals = CellNormal(state.mesh)
-        perp = lambda u: cross(outward_normals, u)
-        perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
+        # define surface measure and terms involving perp differently
+        # for slice (i.e. if V.extruded is True) and shallow water
+        # (V.extruded is False)
+        if V.extruded:
+            surface_measure = (dS_h + dS_v)
+            perp = lambda u: as_vector([-u[1], u[0]])
+            perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
+        else:
+            surface_measure = dS
+            outward_normals = CellNormal(state.mesh)
+            perp = lambda u: cross(outward_normals, u)
+            perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
+
         Eqn = (
             (inner(w, u-self.u0)
              - dt*inner(w, div(perp(ustar))*perp(self.ubar))
              - dt*div(w)*inner(ustar, self.ubar))*dx
-            - dt*inner(jump(inner(w, perp(self.ubar)),n), perp_u_upwind)*dS
-            + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*dS
+            - dt*inner(jump(inner(w, perp(self.ubar)), n), perp_u_upwind)*surface_measure
+            + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*surface_measure
         )
+
         a = lhs(Eqn)
         L = rhs(Eqn)
         self.u1 = Function(V)
@@ -237,3 +249,72 @@ class EulerPoincareForm(Advection):
         self.u0.assign(x_in)
         self.usolver.solve()
         x_out.assign(self.u1)
+
+
+class SUPGAdvection(Advection):
+    """
+    An SUPG advection scheme that can apply DG upwinding (in the direction
+    specified by the direction arg) if the function space is only
+    partially continuous.
+
+    :arg state: :class:`.State` object.
+    :arg V:class:`.FunctionSpace` object. The advected field function space.
+    :arg direction: list containing the directions in which the function
+    space is discontinuous. 1 corresponds to the vertical direction, 2 to
+    the horizontal direction
+    :arg supg_params: dictionary containing SUPG parameters tau for each
+    direction. If not supplied tau is set to dt/sqrt(15.)
+    """
+    def __init__(self, state, V, direction=[], supg_params=None):
+        super(SUPGAdvection, self).__init__(state)
+        dt = state.timestepping.dt
+        params = supg_params.copy() if supg_params else {}
+        params.setdefault('a0', dt/sqrt(15.))
+        params.setdefault('a1', dt/sqrt(15.))
+
+        gamma = TestFunction(V)
+        theta = TrialFunction(V)
+        self.theta0 = Function(V)
+        thetastar = 0.5*(self.theta0 + theta)
+
+        # make SUPG test function
+        taus = [params["a0"], params["a1"]]
+        for i in direction:
+            taus[i] = 0.0
+        tau = Constant(((taus[0], 0.), (0., taus[1])))
+
+        dgamma = dot(dot(self.ubar, tau), grad(gamma))
+        gammaSU = gamma + dgamma
+
+        n = FacetNormal(state.mesh)
+        un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
+
+        Eqn = (
+            gammaSU*(theta - self.theta0)
+            + dt*gammaSU*dot(self.ubar, grad(thetastar)))*dx
+
+        if 1 in direction:
+            Eqn += (
+                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
+                                       - un('-')*thetastar('-')))*dS_v
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
+            )
+        if 2 in direction:
+            Eqn += (
+                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
+                                       - un('-')*thetastar('-')))*dS_h
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_h
+            )
+
+        a = lhs(Eqn)
+        L = rhs(Eqn)
+        self.theta1 = Function(V)
+        problem = LinearVariationalProblem(a, L, self.theta1)
+        self.solver = LinearVariationalSolver(problem)
+
+    def apply(self, x_in, x_out):
+        self.theta0.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.theta1)

@@ -11,12 +11,15 @@ class Timestepper(object):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_list, linear_solver, forcing):
+    def __init__(self, state, advection_list, linear_solver, forcing, diffusion_dict=None):
 
         self.state = state
         self.advection_list = advection_list
         self.linear_solver = linear_solver
         self.forcing = forcing
+        self.diffusion_dict = {}
+        if diffusion_dict is not None:
+            self.diffusion_dict.update(diffusion_dict)
 
     def _set_ubar(self):
         """
@@ -64,5 +67,10 @@ class Timestepper(object):
                     state.xnp1 += state.dy
 
             state.xn.assign(state.xnp1)
+
+            for name, diffusion in self.diffusion_dict.iteritems():
+                diffusion.apply(state.field_dict[name], state.field_dict[name])
+
             state.dump()
+
         state.diagnostic_dump()
