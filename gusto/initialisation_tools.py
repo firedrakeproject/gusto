@@ -34,7 +34,6 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
     n = FacetNormal(state.mesh)
 
     cp = state.parameters.cp
-    g = state.parameters.g
 
     alhs = (
         (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx

@@ -61,7 +61,6 @@ class CompressibleForcing(Forcing):
 
         Omega = state.Omega
         cp = state.parameters.cp
-        g = state.parameters.g
 
         n = FacetNormal(state.mesh)
 
