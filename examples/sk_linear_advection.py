@@ -32,7 +32,8 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
-                          fieldlist=fieldlist)
+                          fieldlist=fieldlist,
+                          on_sphere=False)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
