@@ -3,6 +3,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import json
+import numpy as np
 
 
 def setup_sw(dirname):
@@ -24,6 +25,7 @@ def setup_sw(dirname):
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D','Derr'], steady_state_dump_err={'D':True,'u':True})
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
+    diagnostic_fields = [Divergence(), Vorticity(), PotentialVorticity()]
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
@@ -31,7 +33,8 @@ def setup_sw(dirname):
                               output=output,
                               parameters=parameters,
                               diagnostics=diagnostics,
-                              fieldlist=fieldlist)
+                              fieldlist=fieldlist,
+                              diagnostic_fields=diagnostic_fields)
 
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
@@ -82,8 +85,18 @@ def test_sw_setup(tmpdir):
     run_sw(dirname)
     with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
         data = json.load(f)
+
+    # Check magnitude of D and u errors:
     Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
     ul2 = data["uerr"]["l2"][-1]/data["u"]["l2"][0]
-
     assert Dl2 < 5.e-4
     assert ul2 < 5.e-3
+
+    # Check enstrophy conservation:
+    initial_enstrophy = data["PotentialVorticity"]["l2"][0]
+    denstrophy = np.array(data["PotentialVorticity"]["l2"])-initial_enstrophy
+    assert denstrophy.max() < 5.e-6
+
+    # Check divergence:
+    maxdiv = np.array(data["Divergence"]["max"])
+    assert maxdiv.max() < 2.e-6

@@ -26,7 +26,7 @@ timestepping = TimesteppingParameters(dt=6.0)
 output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(),Divergence()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           family="CG",
@@ -161,4 +161,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_list, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=12.0)

@@ -103,6 +103,8 @@ class State(object):
             f.rename(name=name)
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
+            self.diagnostics.register(diagnostic(self).name())
+            field_dict[diagnostic(self).name()] = diagnostic(self)
 
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
@@ -152,12 +154,15 @@ class State(object):
 
             self.dumpfile.write(*to_dump)
 
+            diagnostic_fns = ['min', 'max', 'l2']
+            for field in self.diagnostics.fields:
+                for fn in diagnostic_fns:
+                    d = getattr(self.diagnostics, fn)
+                    data = d(field_dict[field])
+                    self.diagnostic_data[field][fn].append(data)
+
             if len(self.output.dumplist_latlon) > 0:
                 self.dumpfile_latlon.write(*to_dump_latlon)
-
-            for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(field_dict[name])
-                self.diagnostic_data[name]["l2"].append(data)
 
     def diagnostic_dump(self):
 
