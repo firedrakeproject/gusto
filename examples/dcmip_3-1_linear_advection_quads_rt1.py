@@ -58,7 +58,7 @@ output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
 parameters = CompressibleParameters()
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="RTCF", k=k, z=z,
+                          family="RTCF", k=None, z=z,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
@@ -113,11 +113,13 @@ s = (d**2)/(d**2 + r**2)
 
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
-theta0.interpolate(theta_b + theta_pert)
+theta0.interpolate(theta_b)
 #Compute the balanced density
-compressible_hydrostatic_balance(state, theta0, rho0, top=False,
+compressible_hydrostatic_balance(state, theta_b, rho_b, top=False,
                                  pi_boundary=(p/p_0)**kappa)
-#rho0.assign(rho_b)
+theta0.interpolate(theta_pert)
+theta0 += theta_b
+rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)

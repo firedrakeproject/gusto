@@ -66,12 +66,13 @@ class CompressibleForcing(Forcing):
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
+        Phi = state.Phi
 
         a = inner(w,F)*dx
         L = (
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
-            - g*inner(w,state.k)*dx  # gravity term
+            + div(w)*Phi*dx  # gravity term
         )
 
         if Omega is not None:

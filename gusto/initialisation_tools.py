@@ -48,9 +48,10 @@ def compressible_hydrostatic_balance(state, theta0, rho0,
         bmeasure = ds_b
         bstring = "top"
 
-    k = state.k
+    Phi = state.Phi
     arhs = (
-        - g*inner(dv,k)*dx
+        div(dv)*Phi*dx
+        - inner(dv,n)*Phi*bmeasure
         - cp*inner(dv,n)*theta0*pi_boundary*bmeasure
     )
 
