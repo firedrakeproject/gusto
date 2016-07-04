@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, NonlinearVariationalProblem, NonlinearVariationalSolver, exp, ds_t
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
@@ -46,7 +46,8 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           parameters=parameters,
                           diagnostics=diagnostics,
                           fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields)
+                          diagnostic_fields=diagnostic_fields,
+                          on_sphere=False)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
@@ -64,25 +65,8 @@ kappa = parameters.kappa
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(state.V[2]).interpolate(thetab)
-# theta_top = Tsurf*exp(N**2*H/g)
-# pi_top = 1. - (g**2/(c_p*N**2))*(theta_top - Tsurf)/(theta_top*Tsurf)
 
 # Calculate hydrostatic Pi
-W = MixedFunctionSpace((state.Vv,state.V[1]))
-v, pi = TrialFunctions(W)
-dv, dpi = TestFunctions(W)
-
-n = FacetNormal(mesh)
-
-alhs = (
-    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(theta_b*v)*dx
-)
-pi_top = 0.5
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), "bottom")]
-w = Function(W)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 params = {'pc_type': 'fieldsplit',
           'pc_fieldsplit_type': 'schur',
           'ksp_type': 'gmres',
@@ -100,49 +84,18 @@ params = {'pc_type': 'fieldsplit',
           "fieldsplit_1_ksp_monitor_true_residual": True,
           'fieldsplit_1_pc_type': 'bjacobi',
           'fieldsplit_1_sub_pc_type': 'ilu'}
-
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+Pi = Function(state.V[1])
+rho_b = Function(state.V[1])
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
 p0 = Pi.dat.data[0]
-pi_top = 1.0
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
 p1 = Pi.dat.data[0]
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-arhs = (- g*inner(dv,k)*dx - pi_top*c_p*inner(dv,n)*theta_b*ds_t)
-PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
-PiSolver = LinearVariationalSolver(PiProblem,
-                                   solver_parameters=params)
-PiSolver.solve()
-v, Pi = w.split()
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, pfile,top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
 
-w1 = Function(W)
-v, rho = w1.split()
-rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta_b)
-v, rho = split(w1)
-dv, dpi = TestFunctions(W)
-pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))
-F = (
-    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(theta_b*v)*dx
-    + g*inner(dv,k)*dx
-    + pi_top*c_p*inner(dv,n)*theta_b*ds_t
-)
-rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
-rhosolver.solve()
-v, rho = w1.split()
-rho_b = Function(state.V[1]).interpolate(rho)
-
-theta0.interpolate(theta_b)
+theta0.assign(theta_b)
 rho0.assign(rho_b)
 u0.project(as_vector([10.0,0.0]))
 

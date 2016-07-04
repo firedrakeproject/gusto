@@ -226,7 +226,7 @@ params = {'pc_type': 'fieldsplit',
 linear_solver = CompressibleSolver(state, params=params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state, linear)
 
 # build time stepper
 stepper = Timestepper(state, advection_list, linear_solver,

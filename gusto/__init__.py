@@ -7,3 +7,4 @@ from gusto.forcing import *         # noqa
 from gusto.linear_solvers import *  # noqa
 from gusto.state import *           # noqa
 from gusto.timeloop import *        # noqa
+from gusto.initialisation_tools import *  # noqa

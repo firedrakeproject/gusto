@@ -4,8 +4,8 @@ from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 25  # 25 horizontal layers
-refinements = 5  # number of horizontal cells = 20*(4^refinements)
+nlayers = 12  # 10 horizontal layers
+refinements = 4  # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -29,7 +29,7 @@ L_z = 20000.0  # Vertical wave length of the Theta' perturbation
 
 m = CubedSphereMesh(radius=a,
                     refinement_level=refinements,
-                    degree=3)
+                    degree=2)
 
 # build volume mesh
 z_top = 1.0e4  # Height position of the model top
@@ -53,11 +53,12 @@ k = Function(W_VectorCG1).interpolate(
                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])")))
 
 fieldlist = ['u','rho','theta']
-timestepping = TimesteppingParameters(dt=10.0)
-output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_rt0')
+timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
+output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
 parameters = CompressibleParameters()
-state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
-                          family="RTCF", k=k, z=z,
+
+state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
+                          family="RTCF", k=None, z=z,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
@@ -112,7 +113,12 @@ s = (d**2)/(d**2 + r**2)
 
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
-theta0.interpolate(theta_b + theta_pert)
+theta0.interpolate(theta_b)
+# Compute the balanced density
+compressible_hydrostatic_balance(state, theta_b, rho_b,
+                                 pi_boundary=(p/p_0)**kappa)
+theta0.interpolate(theta_pert)
+theta0 += theta_b
 rho0.assign(rho_b)
 
 state.initialise([u0, rho0, theta0])

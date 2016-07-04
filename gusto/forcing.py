@@ -37,12 +37,12 @@ class CompressibleForcing(Forcing):
     Forcing class for compressible Euler equations.
     """
 
-    def __init__(self, state):
+    def __init__(self, state, linear=False):
         self.state = state
 
-        self._build_forcing_solver()
+        self._build_forcing_solver(linear)
 
-    def _build_forcing_solver(self):
+    def _build_forcing_solver(self, linear):
         """
         Only put forcing terms into the u equation.
         """
@@ -61,20 +61,22 @@ class CompressibleForcing(Forcing):
 
         Omega = state.Omega
         cp = state.parameters.cp
-        g = state.parameters.g
         mu = state.parameters.mu
 
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
+        Phi = state.Phi
+
         a = inner(w,F)*dx
         L = (
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
-            - g*inner(w,state.k)*dx  # gravity term
-            - 0.5*div(w)*inner(u0, u0)*dx
+            + div(w)*Phi*dx  # gravity term
         )
 
+        if not linear:
+            L -= 0.5*div(w)*inner(u0, u0)*dx
         if Omega is not None:
             L -= inner(w,cross(2*Omega,u0))*dx  # Coriolis term
         if mu is not None:
