@@ -227,12 +227,16 @@ class EulerPoincareForm(Advection):
 
             # <w,curl(u) cross ubar + grad( u.ubar)>
             #=<curl(u),ubar cross w> - <div(w), u.ubar>
-            #=<u,curl(ubar cross w)> + <<u_upwind, [[(ubar cross w)cross n]]>>
+            #=<u,curl(ubar cross w)> - 
+            #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
+
+            both = 2*avg
 
             Eqn = (
                 (inner(w, u-self.u0)
-                 + dt*inner(ustar, curl( cross(ubar, w)))*dx
-                 - dt*inner(Upwind*ustar, 2*avg(cross(cross(ubar, w), n)))*surface_measure
+                 + dt*inner(ustar, curl(cross(ubar, w)))*dx
+                 - dt*inner(both(Upwind*ustar),
+                            both(cross(n, cross(ubar, w))))*surface_measure
                  - dt*div(w)*inner(ustar, self.ubar))*dx
             )
             
@@ -254,8 +258,10 @@ class EulerPoincareForm(Advection):
                 (inner(w, u-self.u0)
                  - dt*inner(w, div(perp(ustar))*perp(self.ubar))
                  - dt*div(w)*inner(ustar, self.ubar))*dx
-                - dt*inner(jump(inner(w, perp(self.ubar)), n), perp_u_upwind)*surface_measure
-                + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*surface_measure
+                - dt*inner(jump(inner(w, perp(self.ubar)), n), 
+                           perp_u_upwind)*surface_measure
+                + dt*jump(inner(w,
+                                perp(self.ubar))*perp(ustar), n)*surface_measure
             )
 
         a = lhs(Eqn)
