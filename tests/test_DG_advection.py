@@ -1,12 +1,11 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    as_vector, VectorFunctionSpace, File
-import itertools
+    as_vector, VectorFunctionSpace
 import pytest
 from math import pi
 
 
-def setup_DGadvection(vector=False):
+def setup_DGadvection(dirname, continuity=False, vector=False):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
     R = 1.
@@ -19,14 +18,16 @@ def setup_DGadvection(vector=False):
 
     fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
+    output = OutputParameters(dirname=dirname+"/DGadvection")
 
-    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=2,
+    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
                               timestepping=timestepping,
+                              output=output,
                               fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0 = Function(state.V[0], name="velocity")
+    u0 = Function(state.V[0])
     x = SpatialCoordinate(mesh)
     uexpr = as_vector([-x[1], x[0], 0.0])
     u0.project(uexpr)
@@ -38,50 +39,39 @@ def setup_DGadvection(vector=False):
         f_end = Function(VectorDGSpace)
         f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
     else:
-        f = Function(state.V[1], name='f')
+        f = Function(state.V[1])
         fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
         f_end = Function(state.V[1])
         f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
 
     f.interpolate(fexpr)
     f_end.interpolate(f_end_expr)
+    state.initialise([u0, f])
 
-    return state, u0, f, f_end
+    advection_list = []
+    f_advection = DGAdvection(state, f.function_space(), continuity=continuity)
+    advection_list.append((f_advection,1))
+    stepper = AdvectionTimestepper(state, advection_list)
+    return stepper, f_end
 
 
 def run(dirname, continuity=False, vector=False):
 
-    state, u0, f, f_end = setup_DGadvection(vector)
+    stepper, f_end = setup_DGadvection(dirname, continuity, vector)
 
-    dt = state.timestepping.dt
-    tmax = pi/4.
-    t = 0.
-    f_advection = DGAdvection(state, f.function_space(), continuity=continuity)
+    tmax = pi/2.
 
-    fp1 = Function(f.function_space())
-    f_advection.ubar.assign(u0)
-
-    dumpcount = itertools.count()
-    outfile = File(path.join(dirname, "field_output.pvd"))
-    outfile.write(f)
-
-    while t < tmax + 0.5*dt:
-        t += dt
-        for i in range(2):
-            f_advection.apply(f, fp1)
-            f.assign(fp1)
-
-        if(next(dumpcount) % 15) == 0:
-            outfile.write(f)
+    x_end = stepper.run(t=0, tmax=tmax, x_end=True)
+    f = x_end.split()[1]
 
     f_err = Function(f.function_space()).assign(f_end - f)
     return f_err
 
 
-@pytest.mark.parametrize("vector", [False, True])
+@pytest.mark.parametrize("vector", [False])
 @pytest.mark.parametrize("continuity", [False, True])
 def test_dgadvection(tmpdir, vector, continuity):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, vector, continuity)
+    f_err = run(dirname, continuity, vector)
     assert(abs(f_err.dat.data.max()) < 2.5e-2)

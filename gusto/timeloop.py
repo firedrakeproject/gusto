@@ -1,25 +1,18 @@
-class Timestepper(object):
-    """
-    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
-    scheme for the dynamical core.
+from __future__ import absolute_import
+from abc import ABCMeta, abstractmethod
 
-    :arg state: a :class:`.State` object
-    :arg advection_list a list of tuples (scheme, i), where i is an
-        :class:`.AdvectionScheme` object, and i is the index indicating
-        which component of the mixed function space to advect.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
-    """
 
-    def __init__(self, state, advection_list, linear_solver, forcing, diffusion_dict=None):
+class BaseTimestepper(object):
+    """
+    Base timestepping class for Gusto
+
+    """
+    __metaclass__ = ABCMeta
+
+    def __init__(self, state, advection_list):
 
         self.state = state
         self.advection_list = advection_list
-        self.linear_solver = linear_solver
-        self.forcing = forcing
-        self.diffusion_dict = {}
-        if diffusion_dict is not None:
-            self.diffusion_dict.update(diffusion_dict)
 
     def _set_ubar(self):
         """
@@ -32,6 +25,32 @@ class Timestepper(object):
 
         for advection, index in self.advection_list:
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
+
+    @abstractmethod
+    def run(self):
+        pass
+
+
+class Timestepper(BaseTimestepper):
+    """
+    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
+    scheme for the dynamical core.
+
+    :arg state: a :class:`.State` object
+    :arg advection_list a list of tuples (scheme, i), where i is an
+        :class:`.AdvectionScheme` object, and i is the index indicating
+        which component of the mixed function space to advect.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
+    """
+    def __init__(self, state, advection_list, linear_solver, forcing, diffusion_dict=None):
+
+        super(Timestepper, self).__init__(state, advection_list)
+        self.linear_solver = linear_solver
+        self.forcing = forcing
+        self.diffusion_dict = {}
+        if diffusion_dict is not None:
+            self.diffusion_dict.update(diffusion_dict)
 
     def run(self, t, tmax):
         state = self.state
@@ -74,3 +93,38 @@ class Timestepper(object):
             state.dump()
 
         state.diagnostic_dump()
+
+
+class AdvectionTimestepper(BaseTimestepper):
+
+    def run(self, t, tmax, x_end=False):
+        state = self.state
+
+        state.xn.assign(state.x_init)
+
+        xn_fields = state.xn.split()
+        xnp1_fields = state.xnp1.split()
+
+        dt = state.timestepping.dt
+        state.xnp1.assign(state.xn)
+        state.dump()
+
+        while t < tmax + 0.5*dt:
+            if state.output.Verbose:
+                print "STEP", t, dt
+
+            t += dt
+
+            self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
+            for advection, index in self.advection_list:
+                # advects a field from xn and puts result in xnp1
+                advection.apply(xn_fields[index], xnp1_fields[index])
+
+            state.xn.assign(state.xnp1)
+
+            state.dump()
+
+        state.diagnostic_dump()
+
+        if x_end:
+            return state.xn
