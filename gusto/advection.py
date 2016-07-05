@@ -191,18 +191,30 @@ class DGAdvection(Advection):
 
 class EmbeddedDGAdvection(DGAdvection):
 
-    def __init__(self, state, Vdg, continuity):
+    def __init__(self, state, V, Vdg=None, continuity=False):
+
+        if Vdg is None:
+            Vdg_elt = BrokenElement(V.ufl_element())
+            Vdg = FunctionSpace(state.mesh, Vdg_elt)
 
         super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity)
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
 
+        self.x_projected = Function(V)
+        pparameters = {'ksp_type':'cg',
+                       'pc_type':'bjacobi',
+                       'sub_pc_type':'ilu'}
+        self.Projector = Projector(self.xdg_out, self.x_projected,
+                                   solver_parameters=pparameters)
+
     def apply(self, x_in, x_out):
 
         self.xdg_in.interpolate(x_in)
         super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out)
-        x_out.project(self.xdg_out)
+        self.Projector.project()
+        x_out.assign(self.x_projected)
 
 
 class EulerPoincareForm(Advection):
