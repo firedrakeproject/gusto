@@ -112,6 +112,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
-        v, rho0 = w1.split()
+        v, rho_ = w1.split()
+        rho0.assign(rho_)
     else:
         rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
