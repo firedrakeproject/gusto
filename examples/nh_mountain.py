@@ -36,7 +36,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='nh_mountain', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters(g=9.80665, cp=1004., mu=mu)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), VerticalVelocity()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           family="CG",
@@ -87,13 +87,21 @@ params = {'pc_type': 'fieldsplit',
 Pi = Function(state.V[1])
 rho_b = Function(state.V[1])
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
-p0 = Pi.dat.data[0]
+def min(f):
+    fmin = op2.Global(1, [1000], dtype=float)
+    op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
+    {
+    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+    }""", "minify"),
+                 f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+    return fmin.data[0]
+p0 = min(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
-p1 = Pi.dat.data[0]
+p1 = min(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, pfile,top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
