@@ -3,7 +3,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, \
-    outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant
+    outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant, \
+    curl, BrokenElement, FunctionSpace, Projector
 
 
 class Advection(object):
@@ -238,20 +239,20 @@ class EulerPoincareForm(Advection):
                 surface_measure = dS
 
             # <w,curl(u) cross ubar + grad( u.ubar)>
-            #=<curl(u),ubar cross w> - <div(w), u.ubar>
-            #=<u,curl(ubar cross w)> - 
+            # =<curl(u),ubar cross w> - <div(w), u.ubar>
+            # =<u,curl(ubar cross w)> -
             #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
 
-            both = 2*avg
+            both = lambda u: 2*avg(u)
 
             Eqn = (
-                (inner(w, u-self.u0)
-                 + dt*inner(ustar, curl(cross(ubar, w)))*dx
-                 - dt*inner(both(Upwind*ustar),
-                            both(cross(n, cross(ubar, w))))*surface_measure
-                 - dt*div(w)*inner(ustar, self.ubar))*dx
+                inner(w, u-self.u0)*dx
+                + dt*inner(ustar, curl(cross(self.ubar, w)))*dx
+                - dt*inner(both(Upwind*ustar),
+                           both(cross(n, cross(self.ubar, w))))*surface_measure
+                - dt*div(w)*inner(ustar, self.ubar)*dx
             )
-            
+
         # define surface measure and terms involving perp differently
         # for slice (i.e. if V.extruded is True) and shallow water
         # (V.extruded is False)
@@ -270,7 +271,7 @@ class EulerPoincareForm(Advection):
                 (inner(w, u-self.u0)
                  - dt*inner(w, div(perp(ustar))*perp(self.ubar))
                  - dt*div(w)*inner(ustar, self.ubar))*dx
-                - dt*inner(jump(inner(w, perp(self.ubar)), n), 
+                - dt*inner(jump(inner(w, perp(self.ubar)), n),
                            perp_u_upwind)*surface_measure
                 + dt*jump(inner(w,
                                 perp(self.ubar))*perp(ustar), n)*surface_measure
