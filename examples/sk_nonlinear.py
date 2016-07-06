@@ -76,13 +76,10 @@ state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
 Vtdg = FunctionSpace(mesh, "DG", 2)
-advection_list = []
-velocity_advection = EulerPoincareForm(state, state.V[0])
-advection_list.append((velocity_advection, 0))
-rho_advection = DGAdvection(state, state.V[1], continuity=True)
-advection_list.append((rho_advection, 1))
-theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
-advection_list.append((theta_advection, 2))
+advection_dict = {}
+advection_dict["u"] = EulerPoincareForm(state, state.V[0])
+advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
+advection_dict["theta"] = EmbeddedDGAdvection(state, Vtdg, continuity=False)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
@@ -115,7 +112,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_list, linear_solver,
+stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
 stepper.run(t=0, tmax=3600.0)

@@ -48,10 +48,9 @@ def setup_DGadvection(dirname, continuity=False, vector=False):
     f_end.interpolate(f_end_expr)
     state.initialise([u0, f])
 
-    advection_list = []
-    f_advection = DGAdvection(state, f.function_space(), continuity=continuity)
-    advection_list.append((f_advection,1))
-    stepper = AdvectionTimestepper(state, advection_list)
+    advection_dict = {}
+    advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity)
+    stepper = AdvectionTimestepper(state, advection_dict)
     return stepper, f_end
 
 

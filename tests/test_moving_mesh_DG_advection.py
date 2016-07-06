@@ -41,13 +41,12 @@ def setup_DGadvection(dirname, continuity=False):
     f_end.interpolate(f_end_expr)
     state.initialise([u0, f])
 
-    advection_list = []
-    f_advection = DGAdvection(state, f.function_space(), continuity=continuity, scale=0.5)
-    advection_list.append((f_advection,1))
+    advection_dict = {}
+    advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity, scale=0.5)
     vexpr = Expression(("0.0", "0.2*cos(2*pi*x[0])*sin(pi*t/(20.*dt))", "0.0"), R=R, dt=dt, t=0.0)
     v = Function(state.V[0]).project(vexpr)
 
-    stepper = MovingMeshAdvectionTimestepper(state, advection_list, v, vexpr)
+    stepper = MovingMeshAdvectionTimestepper(state, advection_dict, v, vexpr)
     return stepper, f_end
 
 

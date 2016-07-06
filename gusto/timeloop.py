@@ -7,13 +7,17 @@ class BaseTimestepper(object):
     """
     Base timestepping class for Gusto
 
+    :arg state: a :class:`.State` object
+    :arg advection_dict a dictionary with entries fieldname: scheme, where
+        fieldname is the name of the field to be advection and scheme is an
+        :class:`.AdvectionScheme` object
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, advection_list):
+    def __init__(self, state, advection_dict):
 
         self.state = state
-        self.advection_list = advection_list
+        self.advection_dict = advection_dict
 
     def _set_ubar(self):
         """
@@ -24,7 +28,7 @@ class BaseTimestepper(object):
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
 
-        for advection, index in self.advection_list:
+        for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
     @abstractmethod
@@ -38,15 +42,15 @@ class Timestepper(BaseTimestepper):
     scheme for the dynamical core.
 
     :arg state: a :class:`.State` object
-    :arg advection_list a list of tuples (scheme, i), where i is an
-        :class:`.AdvectionScheme` object, and i is the index indicating
-        which component of the mixed function space to advect.
+    :arg advection_dict a dictionary with entries fieldname: scheme, where
+        fieldname is the name of the field to be advection and scheme is an
+        :class:`.AdvectionScheme` object
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     """
-    def __init__(self, state, advection_list, linear_solver, forcing, diffusion_dict=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None):
 
-        super(Timestepper, self).__init__(state, advection_list)
+        super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
         self.forcing = forcing
         self.diffusion_dict = {}
@@ -58,8 +62,10 @@ class Timestepper(BaseTimestepper):
 
         state.xn.assign(state.x_init)
 
-        xstar_fields = state.xstar.split()
-        xp_fields = state.xp.split()
+        xstar_fields = {name: func for (name, func) in
+                        zip(state.fieldlist, state.xstar.split())}
+        xp_fields = {name: func for (name, func) in
+                     zip(state.fieldlist, state.xp.split())}
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -75,9 +81,9 @@ class Timestepper(BaseTimestepper):
 
             for k in range(state.timestepping.maxk):
                 self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-                for advection, index in self.advection_list:
+                for field, advection in self.advection_dict.iteritems():
                     # advects a field from xstar and puts result in xp
-                    advection.apply(xstar_fields[index], xp_fields[index])
+                    advection.apply(xstar_fields[field], xp_fields[field])
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                 for i in range(state.timestepping.maxi):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
@@ -103,8 +109,9 @@ class AdvectionTimestepper(BaseTimestepper):
 
         state.xn.assign(state.x_init)
 
-        xn_fields = state.xn.split()
-        xnp1_fields = state.xnp1.split()
+        xn_fields = state.field_dict
+        xnp1_fields = {name: func for (name, func) in
+                       zip(state.fieldlist, state.xnp1.split())}
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
@@ -117,9 +124,9 @@ class AdvectionTimestepper(BaseTimestepper):
             t += dt
 
             self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-            for advection, index in self.advection_list:
+            for field, advection in self.advection_dict.iteritems():
                 # advects a field from xn and puts result in xnp1
-                advection.apply(xn_fields[index], xnp1_fields[index])
+                advection.apply(xn_fields[field], xnp1_fields[field])
 
             state.xn.assign(state.xnp1)
 
@@ -133,10 +140,8 @@ class AdvectionTimestepper(BaseTimestepper):
 
 class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advection_list, mesh_velocity, mesh_velocity_expr):
-
-        self.state = state
-        self.advection_list = advection_list
+    def __init__(self, state, advection_dict, mesh_velocity, mesh_velocity_expr):
+        super(MovingMeshAdvectionTimestepper, self).__init__(state, advection_dict)
         self.mesh_velocity = mesh_velocity
         self.mesh_velocity_expr = mesh_velocity_expr
 
@@ -150,7 +155,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
         unp1 = state.xnp1.split()[0]
         v = self.mesh_velocity
 
-        for advection, index in self.advection_list:
+        for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
 
     def _project_ubar(self):
@@ -163,7 +168,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
         unp1 = state.xnp1.split()[0]
         v = self.mesh_velocity
 
-        for advection, index in self.advection_list:
+        for field, advection in self.advection_dict.iteritems():
             advection.ubar.project(un + state.timestepping.alpha*(unp1-un) - v)
 
     def run(self, t, tmax, x_end=False):
@@ -173,9 +178,11 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
         state.xn.assign(state.x_init)
 
-        xn_fields = state.xn.split()
-        xstar_fields = state.xstar.split()
-        xnp1_fields = state.xnp1.split()
+        xn_fields = state.field_dict
+        xstar_fields = {name: func for (name, func) in
+                        zip(state.fieldlist, state.xstar.split())}
+        xnp1_fields = {name: func for (name, func) in
+                       zip(state.fieldlist, state.xnp1.split())}
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
@@ -188,9 +195,9 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
             t += dt
 
             self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-            for advection, index in self.advection_list:
+            for field, advection in self.advection_dict.iteritems():
                 # advects a field from xn and puts result in xstar
-                advection.apply(xn_fields[index], xstar_fields[index])
+                advection.apply(xn_fields[field], xstar_fields[field])
 
             # Move mesh
             x = state.mesh.coordinates
@@ -202,9 +209,9 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
             # Second advection step on new mesh
             self._project_ubar()
-            for advection, index in self.advection_list:
+            for field, advection in self.advection_dict.iteritems():
                 # advects a field from xstar and puts result in xnp1
-                advection.apply(xstar_fields[index], xnp1_fields[index])
+                advection.apply(xstar_fields[field], xnp1_fields[field])
 
             state.xn.assign(state.xnp1)
 
