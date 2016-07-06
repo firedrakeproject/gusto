@@ -4,17 +4,17 @@ class Timestepper(object):
     scheme for the dynamical core.
 
     :arg state: a :class:`.State` object
-    :arg advection_list a list of tuples (scheme, i), where i is an
-        :class:`.AdvectionScheme` object, and i is the index indicating
-        which component of the mixed function space to advect.
+    :arg advection_dict a dictionary with entries fieldname: scheme, where
+        fieldname is the name of the field to be advection and scheme is an
+        :class:`.AdvectionScheme` object
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_list, linear_solver, forcing, diffusion_dict=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None):
 
         self.state = state
-        self.advection_list = advection_list
+        self.advection_dict = advection_dict
         self.linear_solver = linear_solver
         self.forcing = forcing
         self.diffusion_dict = {}
@@ -30,7 +30,7 @@ class Timestepper(object):
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
 
-        for advection, index in self.advection_list:
+        for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
     def run(self, t, tmax):
@@ -38,8 +38,10 @@ class Timestepper(object):
 
         state.xn.assign(state.x_init)
 
-        xstar_fields = state.xstar.split()
-        xp_fields = state.xp.split()
+        xstar_fields = {name: func for (name, func) in
+                        zip(state.fieldlist, state.xstar.split())}
+        xp_fields = {name: func for (name, func) in
+                     zip(state.fieldlist, state.xp.split())}
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -55,9 +57,9 @@ class Timestepper(object):
 
             for k in range(state.timestepping.maxk):
                 self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-                for advection, index in self.advection_list:
+                for field, advection in self.advection_dict.iteritems():
                     # advects a field from xstar and puts result in xp
-                    advection.apply(xstar_fields[index], xp_fields[index])
+                    advection.apply(xstar_fields[field], xp_fields[field])
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                 for i in range(state.timestepping.maxi):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
