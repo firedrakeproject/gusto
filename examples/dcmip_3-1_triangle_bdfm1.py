@@ -21,6 +21,6 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 state.initialise_state_from_expressions(u_expr, rho_expr, theta_expr)
 
 # build time stepper
-stepper = Timestepper(state, advection_list)
+stepper = Timestepper(state, advection_dict)
 
 stepper.run(t=0, dt=1.25, T=3600.0)

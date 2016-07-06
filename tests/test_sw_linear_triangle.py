@@ -54,11 +54,9 @@ def setup_sw(dirname):
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
-    advection_list = []
-    velocity_advection = NoAdvection(state)
-    advection_list.append((velocity_advection, 0))
-    D_advection = NoAdvection(state)
-    advection_list.append((D_advection, 1))
+    advection_dict = {}
+    advection_dict["u"] = NoAdvection(state)
+    advection_dict["D"] = NoAdvection(state)
 
     linear_solver = ShallowWaterSolver(state)
 
@@ -66,7 +64,7 @@ def setup_sw(dirname):
     sw_forcing = ShallowWaterForcing(state, linear=True)
 
     # build time stepper
-    stepper = Timestepper(state, advection_list, linear_solver,
+    stepper = Timestepper(state, advection_dict, linear_solver,
                           sw_forcing)
 
     return stepper, 2*day

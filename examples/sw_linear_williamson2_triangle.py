@@ -51,11 +51,9 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 
-advection_list = []
-velocity_advection = NoAdvection(state)
-advection_list.append((velocity_advection, 0))
-D_advection = NoAdvection(state)
-advection_list.append((D_advection, 1))
+advection_dict = []
+advection_dict["u"] = NoAdvection(state)
+advection_dict["D"] = NoAdvection(state)
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -63,7 +61,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_list, linear_solver,
+stepper = Timestepper(state, advection_dict, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=5*day)
