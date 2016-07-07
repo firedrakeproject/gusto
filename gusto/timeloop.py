@@ -150,41 +150,12 @@ class AdvectionTimestepper(BaseTimestepper):
 
 class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advection_dict, mesh_velocity, mesh_velocity_expr):
+    def __init__(self, state, advection_dict, moving_mesh_advection):
         super(MovingMeshAdvectionTimestepper, self).__init__(state, advection_dict)
-        self.mesh_velocity = mesh_velocity
-        self.mesh_velocity_expr = mesh_velocity_expr
-
-    def _set_ubar(self):
-        """
-        Update ubar in the advection methods.
-        """
-
-        state = self.state
-        un = state.xn.split()[0]
-        unp1 = state.xnp1.split()[0]
-        v = self.mesh_velocity
-
-        for field, advection in self.advection_dict.iteritems():
-            advection.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
-
-    def _project_ubar(self):
-        """
-        Update ubar in the advection methods after mesh has moved.
-        """
-
-        state = self.state
-        un = state.xn.split()[0]
-        unp1 = state.xnp1.split()[0]
-        v = self.mesh_velocity
-
-        for field, advection in self.advection_dict.iteritems():
-            advection.ubar.project(un + state.timestepping.alpha*(unp1-un) - v)
+        self.moving_mesh_advection = moving_mesh_advection
 
     def run(self, t, tmax, x_end=None):
         state = self.state
-        mesh_velocity_expr = self.mesh_velocity_expr
-        deltax = Function(state.mesh.coordinates.function_space())
 
         state.xn.assign(state.x_init)
 
@@ -204,24 +175,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-            for field, advection in self.advection_dict.iteritems():
-                # advects a field from xn and puts result in xstar
-                advection.apply(xn_fields[field], xstar_fields[field])
-
-            # Move mesh
-            x = state.mesh.coordinates
-            mesh_velocity_expr.t = t
-            self.mesh_velocity.project(mesh_velocity_expr)
-            deltax.project(dt*self.mesh_velocity)
-            x += deltax
-            self.mesh_velocity.project(mesh_velocity_expr)
-
-            # Second advection step on new mesh
-            self._project_ubar()
-            for field, advection in self.advection_dict.iteritems():
-                # advects a field from xstar and puts result in xnp1
-                advection.apply(xstar_fields[field], xnp1_fields[field])
+            self.moving_mesh_advection.advection(xn_fields, xstar_fields, xnp1_fields, t)
 
             state.xn.assign(state.xnp1)
 

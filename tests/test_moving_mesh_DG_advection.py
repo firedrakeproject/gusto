@@ -12,7 +12,8 @@ def setup_DGadvection(dirname, continuity=False):
     dt = pi/3*0.01
 
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
+                                 refinement_level=refinements,
+                                 degree=3)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
     mesh.init_cell_orientations(global_normal)
 
@@ -44,9 +45,9 @@ def setup_DGadvection(dirname, continuity=False):
     advection_dict = {}
     advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity, scale=0.5)
     vexpr = Expression(("0.0", "0.2*cos(2*pi*x[0])*sin(pi*t/(20.*dt))", "0.0"), R=R, dt=dt, t=0.0)
-    v = Function(state.V[0]).project(vexpr)
+    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr)
 
-    stepper = MovingMeshAdvectionTimestepper(state, advection_dict, v, vexpr)
+    stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
     return stepper, f_end
 
 
@@ -56,14 +57,13 @@ def run(dirname, continuity=False):
 
     tmax = pi/2.
 
-    x_end = stepper.run(t=0, tmax=tmax, x_end=True)
-    f = x_end.split()[1]
-
+    f_dict = stepper.run(t=0, tmax=tmax, x_end=["D"])
+    f = f_dict["D"]
     f_err = Function(f.function_space()).assign(f_end - f)
     return f_err
 
 
-@pytest.mark.parametrize("continuity", [False])
+@pytest.mark.parametrize("continuity", [True, False])
 def test_dgadvection(tmpdir, continuity):
 
     dirname = str(tmpdir)

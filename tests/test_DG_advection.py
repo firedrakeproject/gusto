@@ -1,7 +1,6 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     as_vector, VectorFunctionSpace
-import pytest
 from math import pi
 
 
@@ -67,7 +66,7 @@ def run(dirname):
     tmax = pi/2.
 
     field_dict = stepper.run(t=0, tmax=tmax, x_end=["f_cont", "f_adv", "fvec_cont", "fvec_adv"])
-    
+
     return field_dict, fvec_end, f_end
 
 
@@ -84,4 +83,3 @@ def test_dgadvection(tmpdir):
     assert(abs(f_cont_err.dat.data.max()) < 2.5e-2)
     f_adv_err = Function(f_end.function_space()).assign(field_dict["f_adv"] - f_end)
     assert(abs(f_adv_err.dat.data.max()) < 2.5e-2)
-

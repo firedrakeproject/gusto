@@ -136,7 +136,7 @@ class DGAdvection(Advection):
     def __init__(self, state, V, continuity=False, scale=1.0):
 
         super(DGAdvection, self).__init__(state)
-
+        self.continuity = continuity
         element = V.fiat_element
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
         dt = scale*state.timestepping.dt
