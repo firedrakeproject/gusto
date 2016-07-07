@@ -102,6 +102,72 @@ class Timestepper(BaseTimestepper):
         state.diagnostic_dump()
 
 
+class MovingMeshTimestepper(BaseTimestepper):
+    """
+    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
+    scheme for the dynamical core.
+
+    :arg state: a :class:`.State` object
+    :arg advection_dict a dictionary with entries fieldname: scheme, where
+        fieldname is the name of the field to be advection and scheme is an
+        :class:`.AdvectionScheme` object
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
+    """
+    def __init__(self, state, advection_dict, moving_mesh_advection, linear_solver, forcing, diffusion_dict=None):
+
+        super(MovingMeshTimestepper, self).__init__(state, advection_dict)
+        self.moving_mesh_advection = moving_mesh_advection
+        self.linear_solver = linear_solver
+        self.forcing = forcing
+        self.diffusion_dict = {}
+        if diffusion_dict is not None:
+            self.diffusion_dict.update(diffusion_dict)
+
+    def run(self, t, tmax):
+        state = self.state
+
+        state.xn.assign(state.x_init)
+
+        xstar_fields = {name: func for (name, func) in
+                        zip(state.fieldlist, state.xstar.split())}
+        xp_fields = {name: func for (name, func) in
+                     zip(state.fieldlist, state.xp.split())}
+
+        dt = state.timestepping.dt
+        alpha = state.timestepping.alpha
+        state.dump()
+
+        while t < tmax + 0.5*dt:
+            if state.output.Verbose:
+                print "STEP", t, dt
+
+            t += dt
+            self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar)
+            state.xnp1.assign(state.xn)
+
+            for k in range(state.timestepping.maxk):
+                # return to old mesh for start of outer loop
+
+                self.moving_mesh_advection.advection(xstar_fields, xp_fields, t)
+                state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+                for i in range(state.timestepping.maxi):
+                    self.forcing.apply(alpha*dt, state.xp, state.xnp1,
+                                       state.xrhs)
+                    state.xrhs -= state.xnp1
+                    self.linear_solver.solve()  # solves linear system and places result in state.dy
+                    state.xnp1 += state.dy
+
+            state.xn.assign(state.xnp1)
+
+            for name, diffusion in self.diffusion_dict.iteritems():
+                diffusion.apply(state.field_dict[name], state.field_dict[name])
+
+            state.dump()
+
+        state.diagnostic_dump()
+
+
 class AdvectionTimestepper(BaseTimestepper):
 
     def run(self, t, tmax, x_end=None):
@@ -175,7 +241,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            self.moving_mesh_advection.advection(xn_fields, xstar_fields, xnp1_fields, t)
+            self.moving_mesh_advection.advection(xn_fields, xnp1_fields, t)
 
             state.xn.assign(state.xnp1)
 
