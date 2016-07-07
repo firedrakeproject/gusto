@@ -104,7 +104,7 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def run(self, t, tmax, x_end=False):
+    def run(self, t, tmax, x_end=None):
         state = self.state
 
         state.xn.assign(state.x_init)
@@ -112,9 +112,16 @@ class AdvectionTimestepper(BaseTimestepper):
         xn_fields = state.field_dict
         xnp1_fields = {name: func for (name, func) in
                        zip(state.fieldlist, state.xnp1.split())}
+        for name, func in state.field_dict.iteritems():
+            if name not in state.fieldlist:
+                xnp1_fields[name] = Function(func.function_space())
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
+        for name, func in state.field_dict.iteritems():
+            if name not in state.fieldlist:
+                xnp1_fields[name].assign(xn_fields[name])
+
         state.dump()
 
         while t < tmax + 0.5*dt:
@@ -129,13 +136,16 @@ class AdvectionTimestepper(BaseTimestepper):
                 advection.apply(xn_fields[field], xnp1_fields[field])
 
             state.xn.assign(state.xnp1)
+            for name, func in state.field_dict.iteritems():
+                if name not in state.fieldlist:
+                    xn_fields[name].assign(xnp1_fields[name])
 
             state.dump()
 
         state.diagnostic_dump()
 
-        if x_end:
-            return state.xn
+        if x_end is not None:
+            return {field: state.field_dict[field] for field in x_end}
 
 
 class MovingMeshAdvectionTimestepper(BaseTimestepper):
@@ -171,7 +181,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
         for field, advection in self.advection_dict.iteritems():
             advection.ubar.project(un + state.timestepping.alpha*(unp1-un) - v)
 
-    def run(self, t, tmax, x_end=False):
+    def run(self, t, tmax, x_end=None):
         state = self.state
         mesh_velocity_expr = self.mesh_velocity_expr
         deltax = Function(state.mesh.coordinates.function_space())
@@ -219,5 +229,5 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
         state.diagnostic_dump()
 
-        if x_end:
-            return state.xn
+        if x_end is not None:
+            return {field: state.field_dict[field] for field in x_end}
