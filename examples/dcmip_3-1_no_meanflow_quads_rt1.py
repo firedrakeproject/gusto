@@ -4,8 +4,8 @@ from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 12  # Number of horizontal layers
-refinements = 4  # number of horizontal cells = 20*(4^refinements)
+nlayers = 12  # Number of horizontal layers (was 12)
+refinements = 4  # number of horizontal cells = 20*(4^refinements) (was 4)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -64,6 +64,9 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           parameters=parameters,
                           fieldlist=fieldlist,
                           on_sphere=True)
+
+Vtdg_elt = BrokenElement(state.V_elt[2])
+Vtdg = FunctionSpace(mesh, Vtdg_elt)
 
 # Initial conditions
 u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
@@ -124,14 +127,12 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-Vtdg_elt = BrokenElement(state.V_elt[2])
-Vtdg = FunctionSpace(mesh, Vtdg_elt)
 theta_advection = EmbeddedDGAdvection(state, state.V[2],
                                       Vdg=Vtdg, continuity=False)
 advection_list.append((theta_advection, 2))
 
 # Set up linear solver
-schur_params = {'pc_type': 'fieldsplit',
+schur_amg_params = {'pc_type': 'fieldsplit',
                 'pc_fieldsplit_type': 'schur',
                 'ksp_type': 'gmres',
                 'ksp_monitor_true_residual': True,
@@ -155,7 +156,7 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, params=schur_params)
+linear_solver = CompressibleSolver(state, params=schur_amg_params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
