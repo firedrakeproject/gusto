@@ -191,9 +191,9 @@ class DGAdvection(Advection):
 
 class EmbeddedDGAdvection(DGAdvection):
 
-    def __init__(self, state, Vdg, continuity):
+    def __init__(self, state, Vdg, continuity, scale=1.0):
 
-        super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity)
+        super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity, scale)
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
@@ -207,10 +207,10 @@ class EmbeddedDGAdvection(DGAdvection):
 
 class EulerPoincareForm(Advection):
 
-    def __init__(self, state, V):
+    def __init__(self, state, V, scale=1.0):
         super(EulerPoincareForm, self).__init__(state)
 
-        dt = state.timestepping.dt
+        dt = scale*state.timestepping.dt
         w = TestFunction(V)
         u = TrialFunction(V)
         self.u0 = Function(V)
@@ -265,9 +265,9 @@ class SUPGAdvection(Advection):
     :arg supg_params: dictionary containing SUPG parameters tau for each
     direction. If not supplied tau is set to dt/sqrt(15.)
     """
-    def __init__(self, state, V, direction=[], supg_params=None):
+    def __init__(self, state, V, direction=[], supg_params=None, scale=1.0):
         super(SUPGAdvection, self).__init__(state)
-        dt = state.timestepping.dt
+        dt = scale*state.timestepping.dt
         params = supg_params.copy() if supg_params else {}
         params.setdefault('a0', dt/sqrt(15.))
         params.setdefault('a1', dt/sqrt(15.))
