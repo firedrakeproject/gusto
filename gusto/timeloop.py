@@ -147,9 +147,8 @@ class MovingMeshTimestepper(BaseTimestepper):
             state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
-                # return to old mesh for start of outer loop
 
-                self.moving_mesh_advection.advection(xstar_fields, xp_fields, t)
+                self.moving_mesh_advection.advection(xstar_fields, xp_fields, t, k)
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
                 for i in range(state.timestepping.maxi):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
@@ -226,8 +225,6 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
         state.xn.assign(state.x_init)
 
         xn_fields = state.field_dict
-        xstar_fields = {name: func for (name, func) in
-                        zip(state.fieldlist, state.xstar.split())}
         xnp1_fields = {name: func for (name, func) in
                        zip(state.fieldlist, state.xnp1.split())}
 
