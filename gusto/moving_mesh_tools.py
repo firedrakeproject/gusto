@@ -10,6 +10,7 @@ class MovingMeshAdvection(object):
         self.mesh_velocity_expr = mesh_velocity_expr
         if mesh_velocity_expr is not None:
             self.mesh_velocity = Function(state.V[0]).project(mesh_velocity_expr)
+            state.field_dict['mesh_velocity'] = self.mesh_velocity
         self.oldx = Function(state.mesh.coordinates.function_space())
         self.deltax = Function(state.mesh.coordinates.function_space())
         self.x = self.state.mesh.coordinates

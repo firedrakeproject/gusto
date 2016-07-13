@@ -43,10 +43,9 @@ class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
     def area(self, mesh):
-        if not hasattr(self, "_area"):
-            V = FunctionSpace(mesh, "DG", 0)
-            self.expr = TestFunction(V)*dx
-            self._area = Function(V)
+        V = FunctionSpace(mesh, "DG", 0)
+        self.expr = TestFunction(V)*dx
+        self._area = Function(V)
         assemble(self.expr, tensor=self._area)
         return self._area
 
@@ -59,4 +58,9 @@ class CourantNumber(DiagnosticField):
     def compute(self, state):
         u = state.field_dict['u']
         dt = Constant(state.timestepping.dt)
-        return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
+        if "mesh_velocity" in state.field_dict.keys():
+            print "JEMMA: in compute Courant with mesh velocity"
+            v = state.field_dict["mesh_velocity"]
+            return self.field(state.mesh).project(sqrt(dot(u-v, u-v))/sqrt(self.area(state.mesh))*dt)
+        else:
+            return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
