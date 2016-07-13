@@ -65,7 +65,7 @@ def run(dirname, element, continuity=False, vector=False):
     dt = state.timestepping.dt
     tmax = pi/4.
     t = 0.
-    f_advection = EmbeddedDGAdvection(state, dgfunctionspace, continuity=continuity)
+    f_advection = EmbeddedDGAdvection(state, f, Vdg=dgfunctionspace, continuity=continuity)
 
     fp1 = Function(f.function_space())
     f_advection.ubar.assign(u0)
