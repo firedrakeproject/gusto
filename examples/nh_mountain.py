@@ -30,10 +30,11 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 dt = 5.0
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
+# mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
 mu = Function(W_DG1).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='nh_mountain_w0_embdg', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters(g=9.80665, cp=1004., mu=mu)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VerticalVelocity()]
@@ -50,7 +51,7 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           on_sphere=False)
 
 # Initial conditions
-u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
+u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -106,19 +107,21 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundar
 theta0.assign(theta_b)
 rho0.assign(rho_b)
 u0.project(as_vector([10.0,0.0]))
+remove_initial_w(u0, state.Vv)
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
-Vtdg = FunctionSpace(mesh, "DG", 2)
+Vtdg = FunctionSpace(mesh, "DG", 1)
 advection_list = []
 velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-theta_advection = SUPGAdvection(state, state.V[2], direction=[1])
+theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+# theta_advection = SUPGAdvection(state, state.V[2], direction=[1])
 advection_list.append((theta_advection, 2))
 
 # Set up linear solver
