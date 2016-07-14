@@ -34,13 +34,13 @@ mu = Function(W_DG1).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='nh_mountain', dumpfreq=1, dumplist=['u'])
-parameters = CompressibleParameters(g=9.80665, cp=1004., mu=mu)
+parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VerticalVelocity()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                           family="CG",
-                          z=z, k=k,
+                          z=z, k=k, mu=mu,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
@@ -87,6 +87,8 @@ params = {'pc_type': 'fieldsplit',
 Pi = Function(state.V[1])
 rho_b = Function(state.V[1])
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
+
+
 def min(f):
     fmin = op2.Global(1, [1000], dtype=float)
     op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
@@ -95,6 +97,8 @@ def min(f):
     }""", "minify"),
                  f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
     return fmin.data[0]
+
+
 p0 = min(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
 p1 = min(Pi)

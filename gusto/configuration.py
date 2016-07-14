@@ -59,7 +59,7 @@ class CompressibleParameters(Configuration):
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    mu = None
+    geopotential = True  # use geopotential for gravity term
 
 
 class ShallowWaterParameters(Configuration):
