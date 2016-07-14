@@ -98,7 +98,7 @@ for delta, dt in res_dt.iteritems():
 
     # Set up advection schemes
     Vtdg = FunctionSpace(mesh, "DG", 2)
-    advection_dict = []
+    advection_dict = {}
     advection_dict["u"] = EulerPoincareForm(state, state.V[0])
     advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
     advection_dict["theta"] = SUPGAdvection(state, state.V[2], direction=[1])

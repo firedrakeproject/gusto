@@ -51,7 +51,7 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 
-advection_dict = []
+advection_dict = {}
 advection_dict["u"] = NoAdvection(state)
 advection_dict["D"] = NoAdvection(state)
 

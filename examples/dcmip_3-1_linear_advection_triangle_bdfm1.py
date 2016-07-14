@@ -190,7 +190,7 @@ for (int i=0; i<3; ++i) {
 state.zhat = zhat
 
 # Set up advection schemes
-advection_dict = []
+advection_dict = {}
 advection_dict["u"] = NoAdvection(state)
 advection_dict["rho"] = LinearAdvection_V3(state, state.V[1], rho_b)
 advection_dict["theta"] = LinearAdvection_Vt(state, state.V[2], theta_b)
