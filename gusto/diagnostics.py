@@ -74,4 +74,19 @@ class VerticalVelocity(DiagnosticField):
     def compute(self, state):
         u = state.field_dict['u']
         w = u[1]
-        return self.field(state.mesh).project(w)
+        return self.field(state.mesh).interpolate(w)
+
+
+class HorizontalalVelocity(DiagnosticField):
+    name = "HorizontalalVelocity"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.field_dict['u']
+        uh = u[0]
+        return self.field(state.mesh).interpolate(uh)
