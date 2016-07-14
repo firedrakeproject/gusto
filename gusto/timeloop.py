@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from pyop2.profiling import timed_stage
+
+
 class Timestepper(object):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
@@ -52,27 +56,36 @@ class Timestepper(object):
                 print "STEP", t, dt
 
             t += dt
-            self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar)
-            state.xnp1.assign(state.xn)
+            with timed_stage("Apply forcing terms"):
+                self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar)
+                state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
-                self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
-                for field, advection in self.advection_dict.iteritems():
-                    # advects a field from xstar and puts result in xp
-                    advection.apply(xstar_fields[field], xp_fields[field])
+                with timed_stage("Compute ubar"):
+                    self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
+
+                with timed_stage("Advection"):
+                    for field, advection in self.advection_dict.iteritems():
+                        # advects a field from xstar and puts result in xp
+                        advection.apply(xstar_fields[field], xp_fields[field])
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+
                 for i in range(state.timestepping.maxi):
-                    self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                       state.xrhs)
-                    state.xrhs -= state.xnp1
-                    self.linear_solver.solve()  # solves linear system and places result in state.dy
+                    with timed_stage("Apply forcing terms"):
+                        self.forcing.apply(alpha*dt, state.xp, state.xnp1,
+                                           state.xrhs)
+                        state.xrhs -= state.xnp1
+                    with timed_stage("Implicit solve"):
+                        self.linear_solver.solve()  # solves linear system and places result in state.dy
                     state.xnp1 += state.dy
 
             state.xn.assign(state.xnp1)
 
-            for name, diffusion in self.diffusion_dict.iteritems():
-                diffusion.apply(state.field_dict[name], state.field_dict[name])
+            with timed_stage("Diffusion"):
+                for name, diffusion in self.diffusion_dict.iteritems():
+                    diffusion.apply(state.field_dict[name], state.field_dict[name])
 
-            state.dump()
+            with timed_stage("Dump output"):
+                state.dump()
 
         state.diagnostic_dump()
