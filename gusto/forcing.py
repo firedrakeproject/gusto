@@ -105,7 +105,7 @@ class CompressibleForcing(Forcing):
         self.x0.assign(x_nl)
         self.scaling.assign(scaling)
         if mu_alpha is not None:
-            self.mu_alpha.assign(mu_alpha)
+            self.mu_scaling.assign(mu_alpha)
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         u_out, _, _ = x_out.split()
