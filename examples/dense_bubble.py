@@ -102,7 +102,7 @@ for delta, dt in res_dt.iteritems():
     advection_dict["u"] = EulerPoincareForm(state, state.V[0])
     advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
     advection_dict["theta"] = SUPGAdvection(state, state.V[2], direction=[1])
-    # theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+    # theta_advection = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',

@@ -279,6 +279,11 @@ class CompressibleState(State):
         V2v_elt = HDiv(V2t_elt)
         V2_elt = V2h_elt + V2v_elt
 
+        self.V_elt = [0,0,0]
+        self.V_elt[0] = V2_elt
+        self.V_elt[1] = V3_elt
+        self.V_elt[2] = V2t_elt
+
         self.V = [0,0,0]
         self.V[0] = FunctionSpace(mesh, V2_elt)
         self.V[1] = FunctionSpace(mesh, V3_elt)

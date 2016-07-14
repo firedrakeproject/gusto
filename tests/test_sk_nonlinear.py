@@ -77,7 +77,8 @@ def setup_sk(dirname):
     advection_dict = {}
     advection_dict["u"] = EulerPoincareForm(state, state.V[0])
     advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
-    advection_dict["theta"] = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+    advection_dict["theta"] = EmbeddedDGAdvection(state, state.V[2],
+                                                  Vdg=Vtdg, continuity=False)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
