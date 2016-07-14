@@ -41,7 +41,7 @@ class State(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT", z=None, k=None, Omega=None,
+                 family="RT", z=None, k=None, Omega=None, mu=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -52,6 +52,7 @@ class State(object):
         self.z = z
         self.k = k
         self.Omega = Omega
+        self.mu = mu
         self.timestepping = timestepping
         self.output = output
         self.parameters = parameters
@@ -198,7 +199,7 @@ class State(object):
 class CompressibleState(State):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
-                 family="RT", z=None, k=None, Omega=None,
+                 family="RT", z=None, k=None, Omega=None, mu=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -211,7 +212,7 @@ class CompressibleState(State):
                                                 vertical_degree=vertical_degree,
                                                 horizontal_degree=horizontal_degree,
                                                 family=family,
-                                                z=z, k=k, Omega=Omega,
+                                                z=z, k=k, Omega=Omega, mu=mu,
                                                 timestepping=timestepping,
                                                 output=output,
                                                 parameters=parameters,
@@ -220,12 +221,13 @@ class CompressibleState(State):
                                                 diagnostic_fields=diagnostic_fields)
 
         # build the geopotential
-        V = FunctionSpace(mesh, "CG", 1)
-        if on_sphere:
-            self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-        else:
-            self.Phi = Function(V).interpolate(Expression("x[1]"))
-        self.Phi *= parameters.g
+        if parameters.geopotential:
+            V = FunctionSpace(mesh, "CG", 1)
+            if on_sphere:
+                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+            else:
+                self.Phi = Function(V).interpolate(Expression("x[1]"))
+            self.Phi *= parameters.g
 
         if self.k is None:
             # build the vertical normal
