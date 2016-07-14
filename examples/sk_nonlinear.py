@@ -81,7 +81,7 @@ velocity_advection = EulerPoincareForm(state, state.V[0])
 advection_list.append((velocity_advection, 0))
 rho_advection = DGAdvection(state, state.V[1], continuity=True)
 advection_list.append((rho_advection, 1))
-theta_advection = EmbeddedDGAdvection(state, Vtdg, continuity=False)
+theta_advection = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
 advection_list.append((theta_advection, 2))
 
 # Set up linear solver
