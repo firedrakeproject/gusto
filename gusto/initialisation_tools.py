@@ -116,3 +116,12 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         rho0.assign(rho_)
     else:
         rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+
+
+def remove_initial_w(u, Vv):
+    bc = DirichletBC(u.function_space()[0], Constant((0,0)), "bottom")
+    bc.apply(u)
+    uv = Function(Vv).project(u)
+    ustar = Function(u.function_space()).project(uv)
+    uin = Function(u.function_space()).assign(u - ustar)
+    u.assign(uin)
