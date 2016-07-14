@@ -110,7 +110,7 @@ s = (d**2)/(d**2 + r**2)
 theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
 
 theta0.interpolate(theta_b)
-#Compute the balanced density
+# Compute the balanced density
 compressible_hydrostatic_balance(state, theta_b, rho_b, top=False,
                                  pi_boundary=(p/p_0)**kappa)
 theta0.interpolate(theta_pert)
@@ -133,28 +133,28 @@ advection_list.append((theta_advection, 2))
 
 # Set up linear solver
 schur_amg_params = {'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': True,
-                'ksp_max_it': 100,
-                'ksp_gmres_restart': 50,
-                'pc_fieldsplit_schur_fact_type': 'FULL',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
-                'fieldsplit_0_pc_type': 'bjacobi',
-                'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": True,
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_pc_gamg_sym_graph': True,
-                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+                    'pc_fieldsplit_type': 'schur',
+                    'ksp_type': 'gmres',
+                    'ksp_monitor_true_residual': True,
+                    'ksp_max_it': 100,
+                    'ksp_gmres_restart': 50,
+                    'pc_fieldsplit_schur_fact_type': 'FULL',
+                    'pc_fieldsplit_schur_precondition': 'selfp',
+                    'fieldsplit_0_ksp_type': 'richardson',
+                    'fieldsplit_0_ksp_max_it': 5,
+                    'fieldsplit_0_pc_type': 'bjacobi',
+                    'fieldsplit_0_sub_pc_type': 'ilu',
+                    'fieldsplit_1_ksp_type': 'richardson',
+                    'fieldsplit_1_ksp_max_it': 5,
+                    "fieldsplit_1_ksp_monitor_true_residual": True,
+                    'fieldsplit_1_pc_type': 'gamg',
+                    'fieldsplit_1_pc_gamg_sym_graph': True,
+                    'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                    'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                    'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                    'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
 linear_solver = CompressibleSolver(state, params=schur_amg_params)
 
