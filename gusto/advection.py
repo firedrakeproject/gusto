@@ -133,13 +133,14 @@ class DGAdvection(Advection):
          :math: `D_t + (u \cdot \nabla)D = 0`.
     """
 
-    def __init__(self, state, V, continuity=False, scale=1.0):
+    def __init__(self, state, V, continuity=False):
 
         super(DGAdvection, self).__init__(state)
         self.continuity = continuity
         element = V.fiat_element
         assert element.entity_dofs() == element.entity_closure_dofs(), "Provided space is not discontinuous"
-        dt = scale*state.timestepping.dt
+        self.scale = Constant(1.)
+        dt = state.timestepping.dt
 
         if V.extruded:
             surface_measure = (dS_h + dS_v)
@@ -163,7 +164,7 @@ class DGAdvection(Advection):
             a_int = -inner(div(outer(phi,self.ubar)),D)*dx
 
         a_flux = (dot(jump(phi), un('+')*D('+') - un('-')*D('-')))*surface_measure
-        arhs = a_mass - dt*(a_int + a_flux)
+        arhs = a_mass - self.scale*dt*(a_int + a_flux)
 
         DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
                                              self.dD)
@@ -173,7 +174,9 @@ class DGAdvection(Advection):
                                                     'pc_type':'bjacobi',
                                                     'sub_pc_type': 'ilu'})
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_in, x_out, scale=1.0):
+
+        self.scale.assign(scale)
         # SSPRK Stage 1
         self.D1.assign(x_in)
         self.DGsolver.solve()
