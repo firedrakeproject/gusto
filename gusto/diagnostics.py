@@ -68,7 +68,7 @@ class VerticalVelocity(DiagnosticField):
     def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 1), name=self.name)
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
         return self._field
 
     def compute(self, state):
@@ -83,7 +83,7 @@ class HorizontalalVelocity(DiagnosticField):
     def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 1), name=self.name)
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
         return self._field
 
     def compute(self, state):
