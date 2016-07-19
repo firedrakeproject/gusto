@@ -54,11 +54,9 @@ for ref_level, dt in ref_dt.iteritems():
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
-    advection_list = []
-    velocity_advection = EulerPoincareForm(state, state.V[0])
-    advection_list.append((velocity_advection, 0))
-    D_advection = DGAdvection(state, state.V[1], continuity=True)
-    advection_list.append((D_advection, 1))
+    advection_dict = {}
+    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
+    advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
 
     linear_solver = ShallowWaterSolver(state)
 
@@ -66,7 +64,7 @@ for ref_level, dt in ref_dt.iteritems():
     sw_forcing = ShallowWaterForcing(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_list, linear_solver,
+    stepper = Timestepper(state, advection_dict, linear_solver,
                           sw_forcing)
 
     stepper.run(t=0, tmax=5*day)

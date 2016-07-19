@@ -3,7 +3,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, action, inner, \
-    outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant
+    outer, sign, cross, CellNormal, lhs, rhs, as_vector, sqrt, Constant, \
+    curl, BrokenElement, FunctionSpace, Projector
 
 
 class Advection(object):
@@ -191,18 +192,30 @@ class DGAdvection(Advection):
 
 class EmbeddedDGAdvection(DGAdvection):
 
-    def __init__(self, state, Vdg, continuity):
+    def __init__(self, state, V, Vdg=None, continuity=False):
+
+        if Vdg is None:
+            Vdg_elt = BrokenElement(V.ufl_element())
+            Vdg = FunctionSpace(state.mesh, Vdg_elt)
 
         super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity)
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
 
+        self.x_projected = Function(V)
+        pparameters = {'ksp_type':'cg',
+                       'pc_type':'bjacobi',
+                       'sub_pc_type':'ilu'}
+        self.Projector = Projector(self.xdg_out, self.x_projected,
+                                   solver_parameters=pparameters)
+
     def apply(self, x_in, x_out):
 
         self.xdg_in.interpolate(x_in)
         super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out)
-        x_out.project(self.xdg_out)
+        self.Projector.project()
+        x_out.assign(self.x_projected)
 
 
 class EulerPoincareForm(Advection):
@@ -218,26 +231,51 @@ class EulerPoincareForm(Advection):
         n = FacetNormal(state.mesh)
         Upwind = 0.5*(sign(dot(self.ubar, n))+1)
 
+        if state.mesh.geometric_dimension() == 3:
+
+            if V.extruded:
+                surface_measure = (dS_h + dS_v)
+            else:
+                surface_measure = dS
+
+            # <w,curl(u) cross ubar + grad( u.ubar)>
+            # =<curl(u),ubar cross w> - <div(w), u.ubar>
+            # =<u,curl(ubar cross w)> -
+            #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
+
+            both = lambda u: 2*avg(u)
+
+            Eqn = (
+                inner(w, u-self.u0)*dx
+                + dt*inner(ustar, curl(cross(self.ubar, w)))*dx
+                - dt*inner(both(Upwind*ustar),
+                           both(cross(n, cross(self.ubar, w))))*surface_measure
+                - dt*div(w)*inner(ustar, self.ubar)*dx
+            )
+
         # define surface measure and terms involving perp differently
         # for slice (i.e. if V.extruded is True) and shallow water
         # (V.extruded is False)
-        if V.extruded:
-            surface_measure = (dS_h + dS_v)
-            perp = lambda u: as_vector([-u[1], u[0]])
-            perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
         else:
-            surface_measure = dS
-            outward_normals = CellNormal(state.mesh)
-            perp = lambda u: cross(outward_normals, u)
-            perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
+            if V.extruded:
+                surface_measure = (dS_h + dS_v)
+                perp = lambda u: as_vector([-u[1], u[0]])
+                perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
+            else:
+                surface_measure = dS
+                outward_normals = CellNormal(state.mesh)
+                perp = lambda u: cross(outward_normals, u)
+                perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
 
-        Eqn = (
-            (inner(w, u-self.u0)
-             - dt*inner(w, div(perp(ustar))*perp(self.ubar))
-             - dt*div(w)*inner(ustar, self.ubar))*dx
-            - dt*inner(jump(inner(w, perp(self.ubar)), n), perp_u_upwind)*surface_measure
-            + dt*jump(inner(w, perp(self.ubar))*perp(ustar), n)*surface_measure
-        )
+            Eqn = (
+                (inner(w, u-self.u0)
+                 - dt*inner(w, div(perp(ustar))*perp(self.ubar))
+                 - dt*div(w)*inner(ustar, self.ubar))*dx
+                - dt*inner(jump(inner(w, perp(self.ubar)), n),
+                           perp_u_upwind)*surface_measure
+                + dt*jump(inner(w,
+                                perp(self.ubar))*perp(ustar), n)*surface_measure
+            )
 
         a = lhs(Eqn)
         L = rhs(Eqn)
