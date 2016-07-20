@@ -98,9 +98,10 @@ class CompressibleSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        beta = state.timestepping.dt*state.timestepping.alpha
+        dt = state.timestepping.dt
+        beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
-        mu = state.parameters.mu
+        mu = state.mu
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
@@ -148,7 +149,7 @@ class CompressibleSolver(TimesteppingSolver):
         )
 
         if mu is not None:
-            eqn += beta*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
