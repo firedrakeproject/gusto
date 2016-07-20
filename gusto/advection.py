@@ -313,7 +313,6 @@ class SUPGAdvection(Advection):
         gamma = TestFunction(V)
         theta = TrialFunction(V)
         self.theta0 = Function(V)
-        thetastar = 0.5*(self.theta0 + theta)
 
         # make SUPG test function
         taus = [params["a0"], params["a1"]]
@@ -327,32 +326,41 @@ class SUPGAdvection(Advection):
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
 
-        Eqn = (
-            gammaSU*(theta - self.theta0)
-            + dt*gammaSU*dot(self.ubar, grad(thetastar)))*dx
+        a_mass = gammaSU*theta*dx
+        arhs = a_mass - dt*gammaSU*dot(self.ubar, grad(theta))*dx
 
         if 1 in direction:
-            Eqn += (
-                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
-                                       - un('-')*thetastar('-')))*dS_v
-                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_v
+            arhs -= (
+                dt*dot(jump(gammaSU), (un('+')*theta('+')
+                                       - un('-')*theta('-')))*dS_v
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*theta('+')
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*theta('-'))*dS_v
             )
         if 2 in direction:
-            Eqn += (
-                dt*dot(jump(gammaSU), (un('+')*thetastar('+')
-                                       - un('-')*thetastar('-')))*dS_h
-                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*thetastar('+')
-                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*thetastar('-'))*dS_h
+            arhs -= (
+                dt*dot(jump(gammaSU), (un('+')*theta('+')
+                                       - un('-')*theta('-')))*dS_h
+                - dt*(gammaSU('+')*dot(self.ubar('+'), n('+'))*theta('+')
+                      + gammaSU('-')*dot(self.ubar('-'), n('-'))*theta('-'))*dS_h
             )
 
-        a = lhs(Eqn)
-        L = rhs(Eqn)
         self.theta1 = Function(V)
-        problem = LinearVariationalProblem(a, L, self.theta1)
+        self.dtheta = Function(V)
+        problem = LinearVariationalProblem(a_mass, action(arhs,self.theta1), self.dtheta)
         self.solver = LinearVariationalSolver(problem)
 
     def apply(self, x_in, x_out):
-        self.theta0.assign(x_in)
+
+        # SSPRK Stage 1
+        self.theta1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.theta1)
+        self.theta1.assign(self.dtheta)
+
+        # SSPRK Stage 2
+        self.solver.solve()
+        self.theta1.assign(0.75*x_in + 0.25*self.dtheta)
+
+        # SSPRK Stage 3
+        self.solver.solve()
+
+        x_out.assign((1.0/3.0)*x_in + (2.0/3.0)*self.dtheta)
