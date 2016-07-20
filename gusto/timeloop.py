@@ -49,6 +49,10 @@ class Timestepper(object):
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
+        if state.mu is not None:
+            mu_alpha = dt
+        else:
+            mu_alpha = None
         state.dump()
 
         while t < tmax + 0.5*dt:
@@ -71,12 +75,14 @@ class Timestepper(object):
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
                 for i in range(state.timestepping.maxi):
+
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs)
+                                           state.xrhs, mu_alpha)
                         state.xrhs -= state.xnp1
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
+
                     state.xnp1 += state.dy
 
             state.xn.assign(state.xnp1)

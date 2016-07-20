@@ -49,12 +49,13 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    Phi = state.Phi
-    arhs = (
-        div(dv)*Phi*dx
-        - inner(dv,n)*Phi*bmeasure
-        - cp*inner(dv,n)*theta0*pi_boundary*bmeasure
-    )
+    arhs = -cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+    if state.parameters.geopotential:
+        Phi = state.Phi
+        arhs += div(dv)*Phi*dx - inner(dv,n)*Phi*bmeasure
+    else:
+        g = state.parameters.g
+        arhs -= g*inner(dv,state.k)*dx
 
     if(state.mesh.geometric_dimension() == 2):
         bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
@@ -105,13 +106,25 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         F = (
             (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
             + dpi*div(theta0*v)*dx
-            - div(dv)*Phi*dx
-            + inner(dv,n)*Phi*bmeasure
             + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
         )
+        if state.parameters.geopotential:
+            F += - div(dv)*Phi*dx + inner(dv,n)*Phi*bmeasure
+        else:
+            F += g*inner(dv,state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
-        v, rho0 = w1.split()
+        v, rho_ = w1.split()
+        rho0.assign(rho_)
     else:
         rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+
+
+def remove_initial_w(u, Vv):
+    bc = DirichletBC(u.function_space()[0], Constant((0,0)), "bottom")
+    bc.apply(u)
+    uv = Function(Vv).project(u)
+    ustar = Function(u.function_space()).project(uv)
+    uin = Function(u.function_space()).assign(u - ustar)
+    u.assign(uin)

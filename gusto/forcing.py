@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS
+    CellNormal, dot, dS, Constant
 
 
 class Forcing(object):
@@ -18,16 +18,16 @@ class Forcing(object):
         self.state = state
 
     @abstractmethod
-    def apply(self, scale, x, x_nl, x_out):
+    def apply(self, scale, x, x_nl, x_out, mu_alpha):
         """
         Function takes x as input, computes F(x_nl) and returns
         x_out = x + scale*F(x_nl)
         as output.
 
-        :arg scale: parameter to scale the output by.
         :arg x: :class:`.Function` object
         :arg x_nl: :class:`.Function` object
         :arg x_out: :class:`.Function` object
+        :arg mu_alpha: scale for sponge term, if present
         """
         pass
 
@@ -48,6 +48,7 @@ class CompressibleForcing(Forcing):
         """
 
         state = self.state
+        self.scaling = Constant(1.)
         Vu = state.V[0]
         W = state.W
 
@@ -61,26 +62,34 @@ class CompressibleForcing(Forcing):
 
         Omega = state.Omega
         cp = state.parameters.cp
-        mu = state.parameters.mu
+        mu = state.mu
 
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
-        Phi = state.Phi
 
         a = inner(w,F)*dx
-        L = (
+        L = self.scaling*(
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
-            + div(w)*Phi*dx  # gravity term
         )
 
+        if state.parameters.geopotential:
+            Phi = state.Phi
+            L += self.scaling*div(w)*Phi*dx  # gravity term
+        else:
+            g = state.parameters.g
+            L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
+
         if not linear:
-            L -= 0.5*div(w)*inner(u0, u0)*dx
+            L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
+
         if Omega is not None:
-            L -= inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+
         if mu is not None:
-            L -= mu*inner(w,state.k)*inner(u0,state.k)*dx
+            self.mu_scaling = Constant(1.)
+            L -= self.mu_scaling*mu*inner(w,state.k)*inner(u0,state.k)*dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
@@ -91,11 +100,13 @@ class CompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-    def apply(self, scaling, x_in, x_nl, x_out):
+    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
 
         self.x0.assign(x_nl)
+        self.scaling.assign(scaling)
+        if mu_alpha is not None:
+            self.mu_scaling.assign(mu_alpha)
         self.u_forcing_solver.solve()  # places forcing in self.uF
-        self.uF *= scaling
 
         u_out, _, _ = x_out.split()
 
@@ -166,7 +177,7 @@ class ShallowWaterForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-    def apply(self, scaling, x_in, x_nl, x_out):
+    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
 
         self.x0.assign(x_nl)
 
