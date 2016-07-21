@@ -36,8 +36,7 @@ install:
   - curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
   - python ./firedrake-install --disable-ssh --minimal-petsc
   - . ./firedrake/bin/activate
-  - pip install pytest
-  - export PYTHONPATH=`pwd`:$PYTHONPATH
+  - pip install -e .
 
 script:
   - make lint
