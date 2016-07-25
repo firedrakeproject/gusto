@@ -1,12 +1,7 @@
 sudo: false
 notifications:
-  irc:
-    channels: "chat.freenode.net#firedrake"
-    skip_join: true
-    on_success: change
-    on_failure: always
-    template: "%{repository}#%{build_number} (%{branch} - %{commit} : %{author}): %{message} | %{build_url}"
-
+  slack:
+    secure: WTCf7JYST3+y1axbCAPQojnu4XU4PT10LtxDZ4/69t4+IzvTLcuqQnRf+eW0y3/9Vt3bbNkl/Mdxm6x0RQGmrl3h03mhFezbDQ3cqVPro5AnRCwwAVP2jQHZCJOfFfRTP5KVfHU4+5Z9Scxo+Xrx32BfQ3r8Zu5jA8u2Kyb8OI+omdLIF2ivbeNiC+Q/6Ea3zsGhOpe4v592bnv0nBtcBGi/cCFU0xdFNL9PVUQ0xpn21kk5PlxpyymhdnmpCHk4g5IDgtx9pKVnWfH1iXK/8kTw3Go+TS36uvSaMLMGv43YZLcZFdrM7BUuZwn3eSToTT7f8pfy3ZgI4BLysjZDefqyLnkWvyLlhjfGl4Cn274JKp0NmgwTGvhOOGBmjAKRQ4DYkxgZ3dd8/UADzrkuAfD7r5X+enRGAWU4mZjcEnj1rhNfwOKCAhQ8fsOy+mTO2fLjTOZGdu/xWmh7gCN9CcWcjyY3FWbavYEwLmRIKHB5VS3LkWLg2Ay4jNverzXl3MlUi+DjqVBPY0Yol3JfvQD1f2zEtMFXIapJgoJ6OSSvYdxCvwroQs/oQcoBPsNKkUzNVsnOjKqx2C/vXo6dKt18C2F0NlrIwrqd0ps+IVAbFPjxlf8Qs10wdnNb3cJzB1+Cd5UWpPnPiGXSklirzABeoZjWBlyLwHe6iKLvHN4=
 language: python
 python: "2.7"
 addons:
@@ -41,8 +36,7 @@ install:
   - curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
   - python ./firedrake-install --disable-ssh --minimal-petsc
   - . ./firedrake/bin/activate
-  - pip install pytest
-  - export PYTHONPATH=`pwd`:$PYTHONPATH
+  - pip install -e .
 
 script:
   - make lint
