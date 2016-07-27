@@ -296,6 +296,45 @@ class CompressibleState(State):
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
 
 
+class IncompressibleState(CompressibleState):
+
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT", z=None, k=None, Omega=None, mu=None,
+                 timestepping=None,
+                 output=None,
+                 parameters=None,
+                 diagnostics=None,
+                 fieldlist=None,
+                 diagnostic_fields=[],
+                 on_sphere=False):
+
+        super(IncompressibleState, self).__init__(mesh=mesh,
+                                                  vertical_degree=vertical_degree,
+                                                  horizontal_degree=horizontal_degree,
+                                                  family=family, z=z,
+                                                  k=k, Omega=Omega,
+                                                  mu=mu,
+                                                  timestepping=timestepping,
+                                                  output=output,
+                                                  parameters=parameters,
+                                                  diagnostics=diagnostics,
+                                                  fieldlist=fieldlist,
+                                                  diagnostic_fields=diagnostic_fields,
+                                                  on_sphere=on_sphere)
+
+    def set_reference_profiles(self, p_ref, b_ref):
+        """
+        Initialise reference profiles
+        :arg p_ref: :class:`.Function` object, reference pressure
+        :arg b_ref: :class:`.Function` object, reference bouyancy
+        """
+
+        super(IncompressibleState, self).set_reference_profiles(p_ref,
+                                                                b_ref)
+        self.pbar = self.rhobar
+        self.bbar = self.thetabar
+
+
 class ShallowWaterState(State):
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
