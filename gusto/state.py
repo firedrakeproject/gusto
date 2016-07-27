@@ -302,17 +302,14 @@ class CompressibleState(BaroclinicState):
 
 
 class IncompressibleState(BaroclinicState):
-    def set_reference_profiles(self, p_ref, b_ref):
+    def set_reference_profiles(self, b_ref):
         """
         Initialise reference profiles
-        :arg p_ref: :class:`.Function` object, reference pressure
         :arg b_ref: :class:`.Function` object, reference bouyancy
         """
 
-        self.pbar = Function(self.V[1])
         self.bbar = Function(self.V[2])
 
-        self.pbar.project(p_ref)
         self.bbar.project(b_ref)
 
 
