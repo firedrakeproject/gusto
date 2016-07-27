@@ -114,6 +114,82 @@ class CompressibleForcing(Forcing):
         u_out += self.uF
 
 
+class IncompressibleForcing(Forcing):
+    """
+    Forcing class for incompressible Euler Boussinesq equations.
+    """
+
+    def __init__(self, state, linear=False):
+        self.state = state
+
+        self._build_forcing_solver(linear)
+
+    def _build_forcing_solver(self, linear):
+        """
+        Only put forcing terms into the u equation.
+        """
+
+        state = self.state
+        self.scaling = Constant(1.)
+        Vu = state.V[0]
+        W = state.W
+
+        self.x0 = Function(W)   # copy x to here
+
+        u0,p0,b0 = split(self.x0)
+
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        self.uF = Function(Vu)
+
+        Omega = state.Omega
+        mu = state.mu
+
+        a = inner(w,F)*dx
+        L = self.scaling*div(w)*p*dx  # pressure gradient
+
+        if state.parameters.geopotential:
+            Phi = state.Phi
+            L += self.scaling*div(w)*Phi*dx  # gravity term
+        else:
+            g = state.parameters.g
+            L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
+
+        if not linear:
+            L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
+
+        if Omega is not None:
+            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+
+        if mu is not None:
+            self.mu_scaling = Constant(1.)
+            L -= self.mu_scaling*mu*inner(w,state.k)*inner(u0,state.k)*dx
+
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
+
+        u_forcing_problem = LinearVariationalProblem(
+            a,L,self.uF, bcs=bcs
+        )
+
+        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+
+        NEEDS A PRESSURE SOLVER
+
+    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
+
+        self.x0.assign(x_nl)
+        self.scaling.assign(scaling)
+        if mu_alpha is not None:
+            self.mu_scaling.assign(mu_alpha)
+        self.u_forcing_solver.solve()  # places forcing in self.uF
+
+        u_out, _, _ = x_out.split()
+
+        x_out.assign(x_in)
+        u_out += self.uF
+
+
 def exner(theta,rho,state):
     """
     Compute the exner function.

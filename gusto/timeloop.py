@@ -25,6 +25,11 @@ class Timestepper(object):
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
 
+        if(isinstance(self.state, IncompressibleState)):
+            self.incompressible = True
+        else:
+            self.incompressible = False
+
     def _set_ubar(self):
         """
         Update ubar in the advection methods.
@@ -78,7 +83,8 @@ class Timestepper(object):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha)
+                                           state.xrhs, mu_alpha,
+                                           incompressible=self.incompressible)
                         state.xrhs -= state.xnp1
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
