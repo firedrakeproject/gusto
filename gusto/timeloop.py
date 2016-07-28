@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from pyop2.profiling import timed_stage
+from gusto.state import IncompressibleState
 
 
 class Timestepper(object):

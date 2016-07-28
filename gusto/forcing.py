@@ -114,6 +114,33 @@ class CompressibleForcing(Forcing):
         u_out += self.uF
 
 
+def exner(theta,rho,state):
+    """
+    Compute the exner function.
+    """
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
+
+
+def exner_rho(theta,rho,state):
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
+
+
+def exner_theta(theta,rho,state):
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
+    kappa = state.parameters.kappa
+
+    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
+
+
 class IncompressibleForcing(Forcing):
     """
     Forcing class for incompressible Euler Boussinesq equations.
@@ -146,7 +173,7 @@ class IncompressibleForcing(Forcing):
         mu = state.mu
 
         a = inner(w,F)*dx
-        L = self.scaling*div(w)*p*dx  # pressure gradient
+        L = self.scaling*div(w)*p0*dx  # pressure gradient
 
         if state.parameters.geopotential:
             Phi = state.Phi
@@ -174,9 +201,21 @@ class IncompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-        NEEDS A PRESSURE SOLVER
+        Vp = state.V[1]
+        p = TrialFunction(Vp)
+        q = TestFunction(Vp)
+        self.divu = Function(Vp)
 
-    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
+        a = p*q*dx
+        L = q*div(u0)*dx
+
+        divergence_problem = LinearVariationalProblem(
+            a, L, self.divu)
+
+        self.divergence_solver = LinearVariationalSolver(divergence_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None,
+              incompressible=False):
 
         self.x0.assign(x_nl)
         self.scaling.assign(scaling)
@@ -184,37 +223,14 @@ class IncompressibleForcing(Forcing):
             self.mu_scaling.assign(mu_alpha)
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
-        u_out, _, _ = x_out.split()
+        u_out, p_out, _ = x_out.split()
 
         x_out.assign(x_in)
         u_out += self.uF
 
-
-def exner(theta,rho,state):
-    """
-    Compute the exner function.
-    """
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
-
-
-def exner_rho(theta,rho,state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
-
-
-def exner_theta(theta,rho,state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
+        if(incompressible):
+            self.divergence_solver.solve()
+            p_out.assign(self.divu)
 
 
 class ShallowWaterForcing(Forcing):
