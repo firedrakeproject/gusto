@@ -18,7 +18,7 @@ class Forcing(object):
         self.state = state
 
     @abstractmethod
-    def apply(self, scale, x, x_nl, x_out, mu_alpha):
+    def apply(self, scale, x, x_nl, x_out, **kwargs):
         """
         Function takes x as input, computes F(x_nl) and returns
         x_out = x + scale*F(x_nl)
@@ -100,12 +100,12 @@ class CompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         self.x0.assign(x_nl)
         self.scaling.assign(scaling)
-        if mu_alpha is not None:
-            self.mu_scaling.assign(mu_alpha)
+        if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
+            self.mu_scaling.assign(kwargs['mu_alpha'])
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         u_out, _, _ = x_out.split()
@@ -214,13 +214,12 @@ class IncompressibleForcing(Forcing):
 
         self.divergence_solver = LinearVariationalSolver(divergence_problem)
 
-    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None,
-              incompressible=False):
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         self.x0.assign(x_nl)
         self.scaling.assign(scaling)
-        if mu_alpha is not None:
-            self.mu_scaling.assign(mu_alpha)
+        if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
+            self.mu_scaling.assign(kwargs['mu_alpha'])
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         u_out, p_out, _ = x_out.split()
@@ -228,7 +227,7 @@ class IncompressibleForcing(Forcing):
         x_out.assign(x_in)
         u_out += self.uF
 
-        if(incompressible):
+        if 'incompressible' in kwargs and kwargs['incompressible']:
             self.divergence_solver.solve()
             p_out.assign(self.divu)
 
@@ -269,7 +268,7 @@ class ShallowWaterForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-    def apply(self, scaling, x_in, x_nl, x_out, mu_alpha=None):
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         self.x0.assign(x_nl)
 

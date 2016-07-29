@@ -84,7 +84,7 @@ class Timestepper(object):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha,
+                                           state.xrhs, mu_alpha=mu_alpha,
                                            incompressible=self.incompressible)
                         state.xrhs -= state.xnp1
                     with timed_stage("Implicit solve"):
