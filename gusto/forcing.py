@@ -180,7 +180,7 @@ class IncompressibleForcing(Forcing):
             L += self.scaling*div(w)*Phi*dx  # gravity term
         else:
             g = state.parameters.g
-            L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
+            L += self.scaling*b0*inner(w,state.k)*dx  # gravity term
 
         if not linear:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
