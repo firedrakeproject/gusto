@@ -23,7 +23,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'p', 'b']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u', 'b', 'p'])
+output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'])
 parameters = CompressibleParameters(geopotential=False)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -51,8 +51,7 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 
-# N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-Tsurf = 300.
+# z.grad(bref) = N**2
 bref = z*(N**2)
 
 b_b = Function(state.V[2]).interpolate(bref)
