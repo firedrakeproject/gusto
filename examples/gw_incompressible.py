@@ -42,16 +42,8 @@ state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
-# Thermodynamic constants required for setting initial conditions
-# and reference profiles
-g = parameters.g
-N = parameters.N
-p_0 = parameters.p_0
-c_p = parameters.cp
-R_d = parameters.R_d
-kappa = parameters.kappa
-
 # z.grad(bref) = N**2
+N = parameters.N
 bref = z*(N**2)
 
 b_b = Function(state.V[2]).interpolate(bref)
