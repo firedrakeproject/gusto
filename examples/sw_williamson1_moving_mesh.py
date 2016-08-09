@@ -4,7 +4,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
 from math import pi
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {3:1800.}
+ref_dt = {3:3600.}
 
 # setup shallow water parameters
 R = 6371220.
@@ -59,7 +59,8 @@ for ref_level, dt in ref_dt.iteritems():
     sw_forcing = ShallowWaterForcing(state)
 
     # build time stepper
-    vexpr = as_vector([0.0, x[2]/R, -x[1]/R])
+    vscale = Constant(1.0)
+    vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
     Vu = VectorFunctionSpace(mesh, "DG", 2)
     uadv = Function(Vu).interpolate(u0)
     moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv)
