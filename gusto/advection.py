@@ -201,7 +201,7 @@ class EmbeddedDGAdvection(DGAdvection):
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
 
-    def apply(self, x_in, x_out, scale):
+    def apply(self, x_in, x_out, scale=1.0):
 
         self.xdg_in.interpolate(x_in)
         super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out, scale)
@@ -249,7 +249,7 @@ class EulerPoincareForm(Advection):
         uproblem = LinearVariationalProblem(a, L, self.u1)
         self.usolver = LinearVariationalSolver(uproblem)
 
-    def apply(self, x_in, x_out, scale):
+    def apply(self, x_in, x_out, scale=1.0):
         self.scale.assign(scale)
         self.u0.assign(x_in)
         self.usolver.solve()
@@ -272,7 +272,7 @@ class SUPGAdvection(Advection):
     """
     def __init__(self, state, V, direction=[], supg_params=None):
         super(SUPGAdvection, self).__init__(state)
-        self.scale = scale
+        self.scale = Constant(1.)
         dt = self.scale*state.timestepping.dt
         params = supg_params.copy() if supg_params else {}
         params.setdefault('a0', dt/sqrt(15.))
@@ -320,7 +320,7 @@ class SUPGAdvection(Advection):
         problem = LinearVariationalProblem(a, L, self.theta1)
         self.solver = LinearVariationalSolver(problem)
 
-    def apply(self, x_in, x_out, scale):
+    def apply(self, x_in, x_out, scale=1.0):
         self.scale.assign(scale)
         self.theta0.assign(x_in)
         self.solver.solve()

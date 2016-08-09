@@ -43,7 +43,7 @@ def setup_DGadvection(dirname, continuity=False):
     state.initialise([u0, f])
 
     advection_dict = {}
-    advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity, scale=0.5)
+    advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity)
     vexpr = Expression(("0.0", "0.2*cos(2*pi*x[0])*sin(pi*t/(20.*dt))", "0.0"), R=R, dt=dt, t=0.0)
     moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr)
 
