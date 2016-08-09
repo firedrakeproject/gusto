@@ -194,26 +194,27 @@ class DGAdvection(Advection):
 
 class EmbeddedDGAdvection(DGAdvection):
 
-    def __init__(self, state, Vdg, continuity, scale=1.0):
+    def __init__(self, state, Vdg, continuity):
 
-        super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity, scale)
+        super(EmbeddedDGAdvection, self).__init__(state, Vdg, continuity)
 
         self.xdg_in = Function(Vdg)
         self.xdg_out = Function(Vdg)
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_in, x_out, scale):
 
         self.xdg_in.interpolate(x_in)
-        super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out)
+        super(EmbeddedDGAdvection, self).apply(self.xdg_in, self.xdg_out, scale)
         x_out.project(self.xdg_out)
 
 
 class EulerPoincareForm(Advection):
 
-    def __init__(self, state, V, scale=1.0):
+    def __init__(self, state, V):
         super(EulerPoincareForm, self).__init__(state)
 
-        dt = scale*state.timestepping.dt
+        self.scale = Constant(1.0)
+        dt = self.scale*state.timestepping.dt
         w = TestFunction(V)
         u = TrialFunction(V)
         self.u0 = Function(V)
@@ -248,7 +249,8 @@ class EulerPoincareForm(Advection):
         uproblem = LinearVariationalProblem(a, L, self.u1)
         self.usolver = LinearVariationalSolver(uproblem)
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_in, x_out, scale):
+        self.scale.assign(scale)
         self.u0.assign(x_in)
         self.usolver.solve()
         x_out.assign(self.u1)
@@ -268,9 +270,10 @@ class SUPGAdvection(Advection):
     :arg supg_params: dictionary containing SUPG parameters tau for each
     direction. If not supplied tau is set to dt/sqrt(15.)
     """
-    def __init__(self, state, V, direction=[], supg_params=None, scale=1.0):
+    def __init__(self, state, V, direction=[], supg_params=None):
         super(SUPGAdvection, self).__init__(state)
-        dt = scale*state.timestepping.dt
+        self.scale = scale
+        dt = self.scale*state.timestepping.dt
         params = supg_params.copy() if supg_params else {}
         params.setdefault('a0', dt/sqrt(15.))
         params.setdefault('a1', dt/sqrt(15.))
@@ -317,7 +320,8 @@ class SUPGAdvection(Advection):
         problem = LinearVariationalProblem(a, L, self.theta1)
         self.solver = LinearVariationalSolver(problem)
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_in, x_out, scale):
+        self.scale.assign(scale)
         self.theta0.assign(x_in)
         self.solver.solve()
         x_out.assign(self.theta1)

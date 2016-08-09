@@ -178,7 +178,7 @@ class AdvectionTimestepper(BaseTimestepper):
         xnp1_fields = {name: func for (name, func) in
                        zip(state.fieldlist, state.xnp1.split())}
         for name, func in state.field_dict.iteritems():
-            if name not in state.fieldlist:
+            if name not in state.fieldlist and name in self.advection_dict.keys():
                 xnp1_fields[name] = Function(func.function_space())
 
         dt = state.timestepping.dt
@@ -202,7 +202,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
             state.xn.assign(state.xnp1)
             for name, func in state.field_dict.iteritems():
-                if name not in state.fieldlist:
+                if name not in state.fieldlist and name in self.advection_dict.keys():
                     xn_fields[name].assign(xnp1_fields[name])
 
             state.dump()

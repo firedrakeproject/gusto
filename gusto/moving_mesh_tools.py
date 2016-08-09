@@ -3,7 +3,7 @@ from firedrake import Function, action, assemble, TestFunction, TrialFunction, d
 
 class MovingMeshAdvection(object):
 
-    def __init__(self, state, advection_dict, mesh_velocity_expr=None):
+    def __init__(self, state, advection_dict, mesh_velocity_expr=None, uadv=None):
         self.state = state
         self.dt = state.timestepping.dt
         self.advection_dict = advection_dict
@@ -18,6 +18,8 @@ class MovingMeshAdvection(object):
         for name, func in state.field_dict.iteritems():
             self.xa_fields[name] = Function(func.function_space())
         self.setup_move_mesh = True
+        self.uadv = uadv
+        self.ubar = Function(state.V[0])
 
     def _get_mesh_velocity(self):
         if self.mesh_velocity_expr is not None:
@@ -37,9 +39,13 @@ class MovingMeshAdvection(object):
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
         v = self._get_mesh_velocity()
+        if self.uadv is not None:
+            self.ubar.project(self.uadv - v)
+        else:        
+            self.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
 
         for field, advection in self.advection_dict.iteritems():
-            advection.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
+            advection.ubar.assign(self.ubar)
 
     def _project_ubar(self):
         """
@@ -50,9 +56,13 @@ class MovingMeshAdvection(object):
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
         v = self._get_mesh_velocity()
+        if self.uadv is not None:
+            self.ubar.project(self.uadv - v)
+        else:        
+            self.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
 
         for field, advection in self.advection_dict.iteritems():
-            advection.ubar.project(un + state.timestepping.alpha*(unp1-un) - v)
+            advection.ubar.project(self.ubar)
 
     def _setup_move_mesh(self):
         # setup required mass matrices on old mesh
