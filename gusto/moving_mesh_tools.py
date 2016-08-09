@@ -77,11 +77,10 @@ class MovingMeshAdvection(object):
                 self.mass_matrices[field] = mass
                 self.rhs[field] = Function(fs)
 
-    def move_mesh(self):
+    def move_mesh(self, k):
 
-        if self.setup_move_mesh:
+        if k == 0:
             self._setup_move_mesh()
-            self.setup_move_mesh = False
 
         # assemble required mass matrices on old mesh
         for field, advection in self.advection_dict.iteritems():
@@ -95,7 +94,7 @@ class MovingMeshAdvection(object):
         self.mesh_velocity.project(self.mesh_velocity_expr)
 
         for field, advection in self.advection_dict.iteritems():
-            if hasattr(advection, 'continuity') and advection.continuity:
+            if hasattr(advection, 'continuity') and advection.continuity or field is "u":
                 lhs = assemble(self.mass_matrices[field])
                 solve(lhs, self.xa_fields[field], self.rhs[field])
 
@@ -111,7 +110,7 @@ class MovingMeshAdvection(object):
             # advects a field from xn and puts result in xa
             advection.apply(xn_fields[field], self.xa_fields[field], scale=0.5)
 
-        self.move_mesh()
+        self.move_mesh(k)
 
         # Second advection step on new mesh
         self._project_ubar()
