@@ -41,7 +41,7 @@ class MovingMeshAdvection(object):
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
-        else:        
+        else:
             self.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
 
         for field, advection in self.advection_dict.iteritems():
@@ -58,7 +58,7 @@ class MovingMeshAdvection(object):
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
-        else:        
+        else:
             self.ubar.assign(un + state.timestepping.alpha*(unp1-un) - v)
 
         for field, advection in self.advection_dict.iteritems():

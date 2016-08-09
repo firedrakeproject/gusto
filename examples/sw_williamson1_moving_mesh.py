@@ -1,10 +1,10 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, File, cos
+    Constant, as_vector
 from math import pi
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {4:1800.}
+ref_dt = {3:1800.}
 
 # setup shallow water parameters
 R = 6371220.
@@ -25,7 +25,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumpfreq=10, dumplist_latlon=['D','u'])
+    output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D','u'])
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
