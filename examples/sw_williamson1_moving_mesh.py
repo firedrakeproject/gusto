@@ -25,7 +25,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D','u'])
+    output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D','u'], Verbose=True)
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
