@@ -52,7 +52,7 @@ for ref_level, dt in ref_dt.iteritems():
     state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
 
     advection_dict = {}
-    advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
+    advection_dict["D"] = DGAdvection(state, state.V[1], continuity=False)
 
     # build time stepper
     vscale = Constant(10.0)
