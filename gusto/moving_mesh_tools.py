@@ -79,7 +79,7 @@ class MovingMeshAdvection(object):
 
     def move_mesh(self, k):
 
-        if k == 0:
+        if k == 0 or k is None:
             self._setup_move_mesh()
 
         # assemble required mass matrices on old mesh
