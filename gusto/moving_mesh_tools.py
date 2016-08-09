@@ -17,7 +17,6 @@ class MovingMeshAdvection(object):
         self.xa_fields = {}
         for name, func in state.field_dict.iteritems():
             self.xa_fields[name] = Function(func.function_space())
-        self.setup_move_mesh = True
         self.uadv = uadv
         self.ubar = Function(state.V[0])
 

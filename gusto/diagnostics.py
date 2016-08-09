@@ -59,7 +59,6 @@ class CourantNumber(DiagnosticField):
         u = state.field_dict['u']
         dt = Constant(state.timestepping.dt)
         if "mesh_velocity" in state.field_dict.keys():
-            print "JEMMA: in compute Courant with mesh velocity"
             v = state.field_dict["mesh_velocity"]
             return self.field(state.mesh).project(sqrt(dot(u-v, u-v))/sqrt(self.area(state.mesh))*dt)
         else:
