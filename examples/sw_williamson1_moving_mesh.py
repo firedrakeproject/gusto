@@ -55,9 +55,6 @@ for ref_level, dt in ref_dt.iteritems():
     advection_dict = {}
     advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
 
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
-
     # build time stepper
     vscale = Constant(1.0)
     vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
