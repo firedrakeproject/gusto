@@ -41,7 +41,6 @@ for ref_level, dt in ref_dt.iteritems():
     u_max = Constant(u_0)
     R0 = Constant(R)
     uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
-    u0.project(uexpr)
     Dexpr = Expression("R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0)) < rc ? (h0/2.0)*(1 + cos(pi*R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0))/rc)) : 0.0", R=R, rc=R/3., h0=1000., x0=0.0, x1=-R, x2=0.0)
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
@@ -59,8 +58,8 @@ for ref_level, dt in ref_dt.iteritems():
     vscale = Constant(10.0)
     vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
     Vu = VectorFunctionSpace(mesh, "DG", 2)
-    uadv = Function(Vu).interpolate(u0)
-    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv)
+    uadv = Function(Vu)
+    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv, uexpr=uexpr)
     stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
 
     stepper.run(t=0, tmax=12*day)
