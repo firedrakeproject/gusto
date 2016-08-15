@@ -3,7 +3,7 @@ from firedrake import Function, action, assemble, TestFunction, TrialFunction, d
 
 class MovingMeshAdvection(object):
 
-    def __init__(self, state, advection_dict, mesh_velocity_expr=None, uadv=None):
+    def __init__(self, state, advection_dict, mesh_velocity_expr=None, uadv=None, uexpr=None):
         self.state = state
         self.dt = state.timestepping.dt
         self.advection_dict = advection_dict
@@ -18,6 +18,7 @@ class MovingMeshAdvection(object):
         for name, func in state.field_dict.iteritems():
             self.xa_fields[name] = Function(func.function_space())
         self.uadv = uadv
+        self.uexpr = uexpr
         self.ubar = Function(state.V[0])
 
     def _get_mesh_velocity(self):
@@ -37,6 +38,7 @@ class MovingMeshAdvection(object):
         state = self.state
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
+        self.uadv.project(self.uexpr)
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
@@ -54,6 +56,7 @@ class MovingMeshAdvection(object):
         state = self.state
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
+        self.uadv.project(self.uexpr)
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
