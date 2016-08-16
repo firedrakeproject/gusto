@@ -38,7 +38,7 @@ class MovingMeshAdvection(object):
         state = self.state
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
-        self.uadv.project(self.uexpr)
+        self.uadv.interpolate(self.uexpr)
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
@@ -56,7 +56,7 @@ class MovingMeshAdvection(object):
         state = self.state
         un = state.xn.split()[0]
         unp1 = state.xnp1.split()[0]
-        self.uadv.project(self.uexpr)
+        self.uadv.interpolate(self.uexpr)
         v = self._get_mesh_velocity()
         if self.uadv is not None:
             self.ubar.project(self.uadv - v)
