@@ -20,7 +20,7 @@ for ref_level, dt in ref_dt.iteritems():
 
     dirname = "sw_mm_W1_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=3)
+                                 refinement_level=ref_level)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
     mesh.init_cell_orientations(global_normal)
 
