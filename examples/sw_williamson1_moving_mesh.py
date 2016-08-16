@@ -56,7 +56,7 @@ for ref_level, dt in ref_dt.iteritems():
     advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
 
     # build time stepper
-    vscale = Constant(1.0)
+    vscale = Constant(10.0)
     vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
     Vu = VectorFunctionSpace(mesh, "DG", 2)
     uadv = Function(Vu).interpolate(u0)
