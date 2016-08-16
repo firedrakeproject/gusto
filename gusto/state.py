@@ -302,6 +302,32 @@ class CompressibleState(BaroclinicState):
 
 
 class IncompressibleState(BaroclinicState):
+
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT", z=None, k=None, Omega=None, mu=None,
+                 timestepping=None,
+                 output=None,
+                 parameters=None,
+                 diagnostics=None,
+                 fieldlist=None,
+                 diagnostic_fields=[],
+                 on_sphere=False):
+
+        super(IncompressibleState, self).__init__(mesh=mesh,
+                                                  vertical_degree=vertical_degree,
+                                                  horizontal_degree=horizontal_degree,
+                                                  family=family,
+                                                  z=z, k=k, Omega=Omega, mu=mu,
+                                                  timestepping=timestepping,
+                                                  output=output,
+                                                  parameters=parameters,
+                                                  diagnostics=diagnostics,
+                                                  fieldlist=fieldlist,
+                                                  diagnostic_fields=diagnostic_fields)
+        if parameters.geopotential:
+            raise RuntimeError("geopotential formulation is not compatible with incompressible Boussinesq")
+
+
     def set_reference_profiles(self, b_ref):
         """
         Initialise reference profiles

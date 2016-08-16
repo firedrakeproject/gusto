@@ -173,13 +173,10 @@ class IncompressibleForcing(Forcing):
         mu = state.mu
 
         a = inner(w,F)*dx
-        L = self.scaling*div(w)*p0*dx  # pressure gradient
-
-        if state.parameters.geopotential:
-            Phi = state.Phi
-            L += self.scaling*div(w)*Phi*dx  # gravity term
-        else:
-            L += self.scaling*b0*inner(w,state.k)*dx  # gravity term
+        L = (
+            self.scaling*div(w)*p0*dx  # pressure gradient
+            + self.scaling*b0*inner(w,state.k)*dx  # gravity term
+        )
 
         if not linear:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
