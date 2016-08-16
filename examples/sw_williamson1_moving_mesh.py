@@ -57,7 +57,7 @@ for ref_level, dt in ref_dt.iteritems():
     # build time stepper
     vscale = Constant(10.0)
     vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
-    Vu = VectorFunctionSpace(mesh, "DG", 2)
+    Vu = VectorFunctionSpace(mesh, "CG", 1)
     uadv = Function(Vu)
     moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv, uexpr=uexpr)
     stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
