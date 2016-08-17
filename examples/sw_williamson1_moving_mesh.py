@@ -61,10 +61,12 @@ for ref_level, dt in ref_dt.iteritems():
     uadv = Function(Vu)
 
     def meshx_callback(self):
-        pass
+        self.oldx.assign(self.state.mesh.coordinates)
+        self.deltax.assign(Constant(dt) * self.mesh_velocity)
+        self.state.mesh.coordinates.assign(self.oldx + self.deltax)
 
     def meshv_callback(self):
-        pass
+        self.mesh_velocity.project(vexpr)
 
     moving_mesh_advection = MovingMeshAdvection(state, advection_dict, meshx_callback, meshv_callback, uadv=uadv, uexpr=uexpr)
     stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
