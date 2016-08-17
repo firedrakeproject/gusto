@@ -51,7 +51,17 @@ Vu = VectorFunctionSpace(mesh, "DG", 1)
 u_max = Constant(1.0)
 uexpr = as_vector([u_max, 0.0])
 uadv = Function(Vu)
-moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv, uexpr=uexpr)
+
+def meshx_callback(self):
+    self.oldx.assign(self.state.mesh.coordinates)
+    self.deltax.assign(Constant(dt) * self.mesh_velocity)
+    self.state.mesh.coordinates.assign(self.oldx + self.deltax)
+
+def meshv_callback(self):
+    vexpr.t = self.t
+    self.mesh_velocity.project(vexpr)
+
+moving_mesh_advection = MovingMeshAdvection(state, advection_dict, meshx_callback, meshv_callback, uadv=uadv, uexpr=uexpr)
 stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
 
 stepper.run(t=0, tmax=10.)
