@@ -327,7 +327,6 @@ class IncompressibleState(BaroclinicState):
         if parameters.geopotential:
             raise RuntimeError("geopotential formulation is not compatible with incompressible Boussinesq")
 
-
     def set_reference_profiles(self, b_ref):
         """
         Initialise reference profiles
