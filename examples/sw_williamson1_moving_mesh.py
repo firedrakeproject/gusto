@@ -4,7 +4,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
 from math import pi
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {3:3600.}
+ref_dt = {3:7200.}
 
 # setup shallow water parameters
 R = 6371220.
