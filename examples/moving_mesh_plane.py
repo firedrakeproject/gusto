@@ -50,8 +50,8 @@ vexpr = Expression(("0.0","2*sin(x[1]*pi/L)*sin(2*x[0]*pi/L)*sin(0.5*pi*t)"), t=
 Vu = VectorFunctionSpace(mesh, "DG", 1)
 u_max = Constant(1.0)
 uexpr = as_vector([u_max, 0.0])
-uadv = Function(Vu).interpolate(uexpr)
-moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv)
+uadv = Function(Vu)
+moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv, uexpr=uexpr)
 stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
 
 stepper.run(t=0, tmax=10.)
