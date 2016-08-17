@@ -234,7 +234,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-                print "STEP", t, dt
+                print "STEP t = " + str(t) + " to " + str(t + dt) + ", dt = " + str(dt)
 
             t += dt
 
