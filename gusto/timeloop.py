@@ -232,7 +232,7 @@ class MovingMeshAdvectionTimestepper(BaseTimestepper):
         state.xnp1.assign(state.xn)
         state.dump()
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
