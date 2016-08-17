@@ -59,7 +59,14 @@ for ref_level, dt in ref_dt.iteritems():
     vexpr = vscale*as_vector([0.0, x[2]/R, -x[1]/R])
     Vu = VectorFunctionSpace(mesh, "CG", 1)
     uadv = Function(Vu)
-    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv=uadv, uexpr=uexpr)
+
+    def meshx_callback(self):
+        pass
+
+    def meshv_callback(self):
+        pass
+
+    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, meshx_callback, meshv_callback, uadv=uadv, uexpr=uexpr)
     stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
 
     stepper.run(t=0, tmax=12*day)
