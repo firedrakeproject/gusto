@@ -42,7 +42,7 @@ for ref_level, dt in ref_dt.iteritems():
     R0 = Constant(R)
     uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
     u0.project(uexpr)
-    Dexpr = Expression("fabs(x[2]) < R ? R*acos(-sqrt(1-x[2]*x[2]/R/R)*x[1]/sqrt(x[0]*x[0]+x[1]*x[1])) > rc ? 0.0 : 0.5*h0*(1.+cos(pi*(R/rc)*acos(-sqrt(1-x[2]*x[2]/R/R)*x[1]/sqrt(x[0]*x[0]+x[1]*x[1])))) : 0.5*pi*R > rc ? 0.0 : 0.5*h0*(1.+cos(pi*0.5*pi*R/rc))", R=R, rc=R/3., h0=1000.)
+    Dexpr = Expression("R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0)) < rc ? (h0/2.0)*(1 + cos(pi*R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0))/rc)) : 0.0", R=R, rc=R/3., h0=1000., x0=0.0, x1=-R, x2=0.0)
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
