@@ -75,7 +75,14 @@ def setup_gw(dirname):
                                               Vdg=Vtdg, continuity=False)
 
     # Set up linear solver
-    linear_solver = IncompressibleSolver(state, L)
+    params = {'ksp_type':'gmres',
+              'pc_type':'fieldsplit',
+              'pc_fieldsplit_type':'additive',
+              'fieldsplit_0_pc_type':'lu',
+              'fieldsplit_1_pc_type':'lu',
+              'fieldsplit_0_ksp_type':'preonly',
+              'fieldsplit_1_ksp_type':'preonly'}
+    linear_solver = IncompressibleSolver(state, L, params=params)
 
     # Set up forcing
     forcing = IncompressibleForcing(state)
