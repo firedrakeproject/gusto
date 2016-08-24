@@ -19,7 +19,7 @@ def setup_DGadvection(dirname, continuity=False):
 
     fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/DGadvection")
+    output = OutputParameters(dirname=dirname+"/DGadvection", dumpfreq=10)
 
     state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
                               family="BDM",
@@ -31,34 +31,35 @@ def setup_DGadvection(dirname, continuity=False):
     u0 = Function(state.V[0])
     x = SpatialCoordinate(mesh)
     uexpr = as_vector([-x[1], x[0], 0.0])
-    u0.project(uexpr)
 
     f = Function(state.V[1])
     fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-    f_end = Function(state.V[1])
     f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
 
     f.interpolate(fexpr)
-    f_end.interpolate(f_end_expr)
     state.initialise([u0, f])
 
     advection_dict = {}
     advection_dict["D"] = DGAdvection(state, f.function_space(), continuity=continuity)
-    vexpr = Expression(("0.0", "0.2*cos(2*pi*x[0])*sin(pi*t/(20.*dt))", "0.0"), R=R, dt=dt, t=0.0)
-    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr)
+    vscale = Constant(0.5)
+    vexpr = vscale*as_vector([0.0, x[2], -x[1]])
+    V = VectorFunctionSpace(mesh, "DG", 2)
+    uadv = Function(V)
+    moving_mesh_advection = MovingMeshAdvection(state, advection_dict, vexpr, uadv, uexpr)
 
     stepper = MovingMeshAdvectionTimestepper(state, advection_dict, moving_mesh_advection)
-    return stepper, f_end
+    return stepper, f_end_expr
 
 
 def run(dirname, continuity=False):
 
-    stepper, f_end = setup_DGadvection(dirname, continuity)
+    stepper, f_end_expr = setup_DGadvection(dirname, continuity)
 
     tmax = pi/2.
 
     f_dict = stepper.run(t=0, tmax=tmax, x_end=["D"])
     f = f_dict["D"]
+    f_end = Function(f.function_space()).interpolate(f_end_expr)
     f_err = Function(f.function_space()).assign(f_end - f)
     return f_err
 
