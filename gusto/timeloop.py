@@ -61,7 +61,7 @@ class Timestepper(object):
 
             t += dt
             with timed_stage("Apply forcing terms"):
-                self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar)
+                self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar, mu_alpha=0.)
                 state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
