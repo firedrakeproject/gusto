@@ -4,8 +4,8 @@ from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
 from firedrake import exp, acos, cos, sin
 import numpy as np
 
-nlayers = 12  # Number of horizontal layers (was 12)
-refinements = 4  # number of horizontal cells = 20*(4^refinements) (was 4)
+nlayers = 20  # Number of horizontal layers (was 12)
+refinements = 5  # number of horizontal cells = 20*(4^refinements) (was 4)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -54,7 +54,7 @@ k = Function(W_VectorCG1).interpolate(
 
 fieldlist = ['u','rho','theta']
 timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
-output = OutputParameters(Verbose=True, dumpfreq=10, dirname='dcmip_no_geo')
+output = OutputParameters(Verbose=True, dumpfreq=10, dirname='dcmip_z20_r5')
 parameters = CompressibleParameters()
 parameters.geopotential = False
 
