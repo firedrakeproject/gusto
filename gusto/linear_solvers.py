@@ -167,7 +167,8 @@ class CompressibleSolver(TimesteppingSolver):
             aeqn, Leqn, self.urho, bcs=bcs)
 
         self.urho_solver = LinearVariationalSolver(urho_problem,
-                                                   solver_parameters=self.params)
+                                                   solver_parameters=self.params,
+                                                   options_prefix='ImplicitSolver')
 
         # Reconstruction of theta
         theta = TrialFunction(state.V[2])
@@ -182,7 +183,8 @@ class CompressibleSolver(TimesteppingSolver):
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
                                                  self.theta)
-        self.theta_solver = LinearVariationalSolver(theta_problem)
+        self.theta_solver = LinearVariationalSolver(theta_problem,
+                                                    options_prefix='thetabacksubstitution')
 
     def solve(self):
         """
@@ -234,7 +236,8 @@ class ShallowWaterSolver(TimesteppingSolver):
             aeqn, Leqn, self.state.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.params)
+                                                 solver_parameters=self.params,
+                                                 options_prefix='SWimplicit')
 
     def solve(self):
         """
