@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, Expression
+    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -200,6 +200,142 @@ class CompressibleSolver(TimesteppingSolver):
 
         self.theta_solver.solve()
         theta.assign(self.theta)
+
+
+class IncompressibleSolver(TimesteppingSolver):
+    """Timestepping linear solver object for the incompressible
+    Boussinesq equations with prognostic variables u, p, b.
+
+    This solver follows the following strategy:
+    (1) Analytically eliminate b (introduces error near topography)
+    (2) Solve resulting system for (u,p) using a block Hdiv preconditioner
+    (3) Reconstruct b
+
+    This currently requires a (parallel) direct solver so is probably
+    a bit memory-hungry, we'll improve this with a hybridised solver
+    soon.
+
+    :arg state: a :class:`.State` object containing everything else.
+    :arg L: the width of the domain, used in the preconditioner.
+    :arg params: Solver parameters.
+    """
+
+    def __init__(self, state, L, params=None):
+
+        self.state = state
+
+        if params is None:
+            self.params = {'ksp_type':'gmres',
+                           'pc_type':'fieldsplit',
+                           'pc_fieldsplit_type':'additive',
+                           'fieldsplit_0_pc_type':'lu',
+                           'fieldsplit_1_pc_type':'lu',
+                           'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
+                           'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
+                           'fieldsplit_0_ksp_type':'preonly',
+                           'fieldsplit_1_ksp_type':'preonly'}
+        else:
+            self.params = params
+
+        self.L = L
+
+        # setup the solver
+        self._setup_solver()
+
+    def _setup_solver(self):
+        state = self.state      # just cutting down line length a bit
+        dt = state.timestepping.dt
+        beta = dt*state.timestepping.alpha
+        mu = state.mu
+
+        # Split up the rhs vector (symbolically)
+        u_in, p_in, b_in = split(state.xrhs)
+
+        # Build the reduced function space for u,p
+        M = MixedFunctionSpace((state.V[0], state.V[1]))
+        w, phi = TestFunctions(M)
+        u, p = TrialFunctions(M)
+
+        # Get background fields
+        bbar = state.bbar
+
+        # Analytical (approximate) elimination of theta
+        k = state.k             # Upward pointing unit vector
+        b = -dot(k,u)*dot(k,grad(bbar))*beta + b_in
+
+        # vertical projection
+        def V(u):
+            return k*inner(u,k)
+
+        eqn = (
+            inner(w, (u - u_in))*dx
+            - beta*div(w)*p*dx
+            - beta*inner(w,k)*b*dx
+            + phi*div(u)*dx
+        )
+
+        if mu is not None:
+            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put result of u p solver
+        self.up = Function(M)
+
+        # Boundary conditions (assumes extruded mesh)
+        dim = M.sub(0).ufl_element().value_shape()[0]
+        bc = ("0.0",)*dim
+        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
+               DirichletBC(M.sub(0), Expression(bc), "top")]
+
+        # preconditioner equation
+        L = self.L
+        Ap = (
+            inner(w,u) + L*L*div(w)*div(u) +
+            phi*p/L/L
+        )*dx
+
+        # Solver for u, p
+        up_problem = LinearVariationalProblem(
+            aeqn, Leqn, self.up, bcs=bcs, aP=Ap)
+
+        nullspace = MixedVectorSpaceBasis(M,
+                                          [M.sub(0),
+                                           VectorSpaceBasis(constant=True)])
+
+        self.up_solver = LinearVariationalSolver(up_problem,
+                                                 solver_parameters=self.params,
+                                                 nullspace=nullspace)
+
+        # Reconstruction of b
+        b = TrialFunction(state.V[2])
+        gamma = TestFunction(state.V[2])
+
+        u, p = self.up.split()
+        self.b = Function(state.V[2])
+
+        b_eqn = gamma*(b - b_in +
+                       dot(k,u)*dot(k,grad(bbar))*beta)*dx
+
+        b_problem = LinearVariationalProblem(lhs(b_eqn),
+                                             rhs(b_eqn),
+                                             self.b)
+        self.b_solver = LinearVariationalSolver(b_problem)
+
+    def solve(self):
+        """
+        Apply the solver with rhs state.xrhs and result state.dy.
+        """
+
+        self.up_solver.solve()
+
+        u1, p1 = self.up.split()
+        u, p, b = self.state.dy.split()
+        u.assign(u1)
+        p.assign(p1)
+
+        self.b_solver.solve()
+        b.assign(self.b)
 
 
 class ShallowWaterSolver(TimesteppingSolver):
