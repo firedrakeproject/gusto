@@ -97,5 +97,5 @@ class Timestepper(object):
                 state.dump()
 
         state.diagnostic_dump()
-        
+
         print "TIMELOOP complete. t= "+str(t)+" tmax="+str(tmax)

@@ -101,8 +101,8 @@ class State(object):
 
         funcs = self.xn.split()
         field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
-        to_dump = [] #fields to output to dump and checkpoint
-        to_pickup = [] #fields to pick up from checkpoint
+        to_dump = []  # fields to output to dump and checkpoint
+        to_pickup = []  # fields to pick up from checkpoint
         for name, f in field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
@@ -135,7 +135,7 @@ class State(object):
                 self.diagnostics.register(name+"perturbation")
                 field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
-            mean_name=field.name()+"_bar"
+            mean_name = field.name() + "_bar"
             meanfield.rename(name=mean_name)
             to_dump.append(meanfield)
             to_pickup.append(meanfield)
@@ -165,7 +165,7 @@ class State(object):
 
         if(pickup):
             #Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")        
+            chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 #Recover all the fields from the checkpoint
                 for field in to_pickup:
@@ -185,21 +185,13 @@ class State(object):
 
             #Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
-            
-            chkfile = path.join(self.dumpdir, "chkptbk")
-            with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                #Dump all the fields to a checkpoint
-                for field in to_dump:
-                    chk.store(field)
-                chk.write_attribute("/","time",t)
-
-            #Open the checkpointing file (main version)
-            chkfile = path.join(self.dumpdir, "chkpt")
-            with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                #Dump all the fields to a checkpoint
-                for field in to_dump:
-                    chk.store(field)
-                chk.write_attribute("/","time",t)
+            for file in files:
+                chkfile = path.join(self.dumpdir, file)
+                with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                    #Dump all the fields to a checkpoint
+                    for field in to_dump:
+                        chk.store(field)
+                        chk.write_attribute("/","time",t)
 
         return t
 
@@ -238,6 +230,7 @@ class State(object):
         self.xrhs = Function(W)
         self.dy = Function(W)
 
+
 class CompressibleState(State):
 
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
@@ -262,7 +255,7 @@ class CompressibleState(State):
                                                 fieldlist=fieldlist,
                                                 diagnostic_fields=diagnostic_fields)
 
-        # build the geopotential
+        #  build the geopotential
         if parameters.geopotential:
             V = FunctionSpace(mesh, "CG", 1)
             if on_sphere:
