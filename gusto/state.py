@@ -183,7 +183,17 @@ class State(object):
                 data = self.diagnostics.l2(field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
-            #Open the checkpointing file
+            #Open the checkpointing file (backup version)
+            files = ["chkptbk", "chkpt"]
+            
+            chkfile = path.join(self.dumpdir, "chkptbk")
+            with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                #Dump all the fields to a checkpoint
+                for field in to_dump:
+                    chk.store(field)
+                chk.write_attribute("/","time",t)
+
+            #Open the checkpointing file (main version)
             chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
                 #Dump all the fields to a checkpoint
