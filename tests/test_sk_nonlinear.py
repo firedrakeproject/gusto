@@ -125,7 +125,7 @@ def run_sk_linear(dirname):
     os.system('mkdir sk_nonlinear/bk')
     os.system('mv sk_nonlinear/field_output* sk_nonlinear/bk')
     stepper, tmax = setup_sk(dirname)
-    #should pick up from the end of the previous run.
+    # should pick up from the end of the previous run.
     dt = stepper.state.timestepping.dt
     stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
 

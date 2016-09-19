@@ -151,7 +151,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir) and pickup==False:
+            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir) and not pickup:
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -164,19 +164,19 @@ class State(object):
                                             comm=self.mesh.comm)
 
         if(pickup):
-            #Open the checkpointing file for writing
+            # Open the checkpointing file for writing
             chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                #Recover all the fields from the checkpoint
+                # Recover all the fields from the checkpoint
                 for field in to_pickup:
                     chk.load(field)
                 t = chk.read_attribute("/","time")
                 next(self.dumpcount)
-                
+
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             print "DBG dumping", t
-            
+
             self.dumpfile.write(*to_dump)
 
             if len(self.output.dumplist_latlon) > 0:
@@ -186,12 +186,12 @@ class State(object):
                 data = self.diagnostics.l2(field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
-            #Open the checkpointing file (backup version)
+            # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
             for file in files:
                 chkfile = path.join(self.dumpdir, file)
                 with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                    #Dump all the fields to a checkpoint
+                    # Dump all the fields to a checkpoint
                     for field in to_dump:
                         chk.store(field)
                     chk.write_attribute("/","time",t)
