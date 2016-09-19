@@ -80,12 +80,12 @@ class State(object):
 
         self.dumpfile = None
 
-    def dump(self, t, pickup):
+    def dump(self, t=0, pickup=False):
         """
         Dump output
-        :arg t: the current model time.
+        :arg t: the current model time (default is zero).
         :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk.
+        otherwise dump and checkpoint to disk. (default is False).
         """
 
         # default behaviour is to dump all prognostic fields
