@@ -71,7 +71,8 @@ class LinearAdvection_Vt(Advection):
                        'sub_pc_type':'ilu'}
 
         self.solver = LinearVariationalSolver(aProblem,
-                                              solver_parameters=options)
+                                              solver_parameters=options,
+                                              options_prefix='LinearAdvectionVt')
 
     def apply(self, x_in, x_out):
         dt = self.state.timestepping.dt
@@ -111,7 +112,8 @@ class LinearAdvection_V3(Advection):
                        'sub_pc_type':'ilu'}
 
         self.solver = LinearVariationalSolver(aProblem,
-                                              solver_parameters=options)
+                                              solver_parameters=options,
+                                              options_prefix='LinearAdvectionV3')
 
     def apply(self, x_in, x_out):
         dt = self.state.timestepping.dt
@@ -172,7 +174,8 @@ class DGAdvection(Advection):
                                                 solver_parameters={
                                                     'ksp_type':'preonly',
                                                     'pc_type':'bjacobi',
-                                                    'sub_pc_type': 'ilu'})
+                                                    'sub_pc_type': 'ilu'},
+                                                options_prefix='DGAdvection')
 
     def apply(self, x_in, x_out):
         # SSPRK Stage 1
@@ -281,7 +284,8 @@ class EulerPoincareForm(Advection):
         L = rhs(Eqn)
         self.u1 = Function(V)
         uproblem = LinearVariationalProblem(a, L, self.u1)
-        self.usolver = LinearVariationalSolver(uproblem)
+        self.usolver = LinearVariationalSolver(uproblem,
+                                               options_prefix='EPAdvection')
 
     def apply(self, x_in, x_out):
         self.u0.assign(x_in)
@@ -347,7 +351,8 @@ class SUPGAdvection(Advection):
         self.theta1 = Function(V)
         self.dtheta = Function(V)
         problem = LinearVariationalProblem(a_mass, action(arhs,self.theta1), self.dtheta)
-        self.solver = LinearVariationalSolver(problem)
+        self.solver = LinearVariationalSolver(problem,
+                                              options_prefix='SUPGAdvection')
 
     def apply(self, x_in, x_out):
 

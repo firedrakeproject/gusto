@@ -231,8 +231,11 @@ class State(object):
         self.dy = Function(W)
 
 
-class CompressibleState(State):
-
+class BaroclinicState(State):
+    """
+    A state class for vertically-extruded GFD models, with
+    density/pressure and temperature/bouyancy variables.
+    """
     def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
                  family="RT", z=None, k=None, Omega=None, mu=None,
                  timestepping=None,
@@ -243,17 +246,17 @@ class CompressibleState(State):
                  diagnostic_fields=[],
                  on_sphere=False):
 
-        super(CompressibleState, self).__init__(mesh=mesh,
-                                                vertical_degree=vertical_degree,
-                                                horizontal_degree=horizontal_degree,
-                                                family=family,
-                                                z=z, k=k, Omega=Omega, mu=mu,
-                                                timestepping=timestepping,
-                                                output=output,
-                                                parameters=parameters,
-                                                diagnostics=diagnostics,
-                                                fieldlist=fieldlist,
-                                                diagnostic_fields=diagnostic_fields)
+        super(BaroclinicState, self).__init__(mesh=mesh,
+                                              vertical_degree=vertical_degree,
+                                              horizontal_degree=horizontal_degree,
+                                              family=family,
+                                              z=z, k=k, Omega=Omega, mu=mu,
+                                              timestepping=timestepping,
+                                              output=output,
+                                              parameters=parameters,
+                                              diagnostics=diagnostics,
+                                              fieldlist=fieldlist,
+                                              diagnostic_fields=diagnostic_fields)
 
         #  build the geopotential
         if parameters.geopotential:
@@ -273,19 +276,6 @@ class CompressibleState(State):
             krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
             klhs = inner(w,u)*dx
             solve(klhs == krhs, self.k)
-
-    def set_reference_profiles(self, rho_ref, theta_ref):
-        """
-        Initialise reference profiles
-        :arg rho_ref: :class:`.Function` object, initial rho
-        :arg theta_ref: :class:`.Function` object, initial theta
-        """
-
-        self.rhobar = Function(self.V[1])
-        self.thetabar = Function(self.V[2])
-
-        self.rhobar.project(rho_ref)
-        self.thetabar.project(theta_ref)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
@@ -329,6 +319,58 @@ class CompressibleState(State):
         self.Vv = FunctionSpace(mesh, V2v_elt)
 
         self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
+
+
+class CompressibleState(BaroclinicState):
+    def set_reference_profiles(self, rho_ref, theta_ref):
+        """
+        Initialise reference profiles
+        :arg rho_ref: :class:`.Function` object, initial rho
+        :arg theta_ref: :class:`.Function` object, initial theta
+        """
+
+        self.rhobar = Function(self.V[1])
+        self.thetabar = Function(self.V[2])
+
+        self.rhobar.project(rho_ref)
+        self.thetabar.project(theta_ref)
+
+
+class IncompressibleState(BaroclinicState):
+
+    def __init__(self, mesh, vertical_degree=1, horizontal_degree=1,
+                 family="RT", z=None, k=None, Omega=None, mu=None,
+                 timestepping=None,
+                 output=None,
+                 parameters=None,
+                 diagnostics=None,
+                 fieldlist=None,
+                 diagnostic_fields=[],
+                 on_sphere=False):
+
+        super(IncompressibleState, self).__init__(mesh=mesh,
+                                                  vertical_degree=vertical_degree,
+                                                  horizontal_degree=horizontal_degree,
+                                                  family=family,
+                                                  z=z, k=k, Omega=Omega, mu=mu,
+                                                  timestepping=timestepping,
+                                                  output=output,
+                                                  parameters=parameters,
+                                                  diagnostics=diagnostics,
+                                                  fieldlist=fieldlist,
+                                                  diagnostic_fields=diagnostic_fields)
+        if parameters.geopotential:
+            raise RuntimeError("geopotential formulation is not compatible with incompressible Boussinesq")
+
+    def set_reference_profiles(self, b_ref):
+        """
+        Initialise reference profiles
+        :arg b_ref: :class:`.Function` object, reference bouyancy
+        """
+
+        self.bbar = Function(self.V[2])
+
+        self.bbar.project(b_ref)
 
 
 class ShallowWaterState(State):
