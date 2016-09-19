@@ -12,7 +12,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     interval, triangle, Function, Mesh, functionspaceimpl,\
     Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
     ds_tb, dx, solve, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_UPDATE
+    FILE_CREATE, FILE_READ
 import numpy as np
 
 
