@@ -121,7 +121,8 @@ def run_sk_linear(dirname):
 
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0, tmax=tmax)
-
+    #should pick up from the end of the previous run.
+    stepper.run(t=0, tmax=2*tmax, pickup=True)
 
 def test_sk(tmpdir):
 
