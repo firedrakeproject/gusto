@@ -170,7 +170,7 @@ class State(object):
                 #Recover all the fields from the checkpoint
                 for field in to_pickup:
                     chk.load(field)
-                chk.read_attribute(t)
+                chk.read_attribute("/","time",t)
 
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
@@ -189,7 +189,7 @@ class State(object):
                 #Dump all the fields to a checkpoint
                 for field in to_dump:
                     chk.store(field)
-                chk.write_attribute(t)
+                chk.write_attribute("/","time",t)
 
         return t
 
