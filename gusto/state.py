@@ -102,6 +102,7 @@ class State(object):
             if name in self.output.dumplist:
                 to_dump.append(f)
             f.rename(name=name)
+
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
 
@@ -159,6 +160,14 @@ class State(object):
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
+
+                #Open the checkpointing file
+                chkfile = path.join(self.dumpdir, "chkpt")
+                with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                    #Dump all the fields
+                    for field in to_dump:
+                        chk.store(field)
+                    chk.write_attribute(t)
 
     def diagnostic_dump(self):
 
