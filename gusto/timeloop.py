@@ -53,7 +53,9 @@ class Timestepper(object):
             mu_alpha = dt
         else:
             mu_alpha = None
-        t = state.dump(t, pickup)
+
+        with timed_stage("Dump output"):
+            t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
@@ -95,3 +97,5 @@ class Timestepper(object):
                 state.dump()
 
         state.diagnostic_dump()
+        
+        print "TIMELOOP complete. t= "+str(t)+" tmax="+str(tmax)
