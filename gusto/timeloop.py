@@ -101,8 +101,8 @@ class Timestepper(object):
                     diffusion.apply(state.field_dict[name], state.field_dict[name])
 
             with timed_stage("Dump output"):
-                state.dump()
+                state.dump(t, pickup=False)
 
         state.diagnostic_dump()
 
-        print "TIMELOOP complete. t= "+str(t)+" tmax="+str(tmax)
+        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)

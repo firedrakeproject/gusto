@@ -151,7 +151,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir):
+            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir) and pickup==False:
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -170,10 +170,13 @@ class State(object):
                 #Recover all the fields from the checkpoint
                 for field in to_pickup:
                     chk.load(field)
-                chk.read_attribute("/","time",t)
-
+                t = chk.read_attribute("/","time")
+                next(self.dumpcount)
+                
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
+            print "DBG dumping", t
+            
             self.dumpfile.write(*to_dump)
 
             if len(self.output.dumplist_latlon) > 0:
@@ -191,7 +194,7 @@ class State(object):
                     #Dump all the fields to a checkpoint
                     for field in to_dump:
                         chk.store(field)
-                        chk.write_attribute("/","time",t)
+                    chk.write_attribute("/","time",t)
 
         return t
 
