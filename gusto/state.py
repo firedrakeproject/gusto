@@ -80,9 +80,12 @@ class State(object):
 
         self.dumpfile = None
 
-    def dump(self):
+    def dump(self, t, pickup):
         """
         Dump output
+        :arg t: the current model time.
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk.
         """
 
         # default behaviour is to dump all prognostic fields
@@ -97,10 +100,12 @@ class State(object):
 
         funcs = self.xn.split()
         field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
-        to_dump = []
+        to_dump = [] #fields to output to dump and checkpoint
+        to_pickup = [] #fields to pick up from checkpoint
         for name, f in field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
+                to_pickup.append(f)
             f.rename(name=name)
 
         for diagnostic in self.diagnostic_fields:
@@ -114,6 +119,9 @@ class State(object):
                 field_dict[name+"err"] = err
                 self.diagnostics.register(name+"err")
                 to_dump.append(err)
+                f_init.rename(f.name()+"_init")
+                to_dump.append(f_init)
+                to_pickup.append(f_init)
 
         meanfields = defaultdict(lambda: None)
         meanfields.update(self.output.meanfields)
@@ -126,6 +134,10 @@ class State(object):
                 self.diagnostics.register(name+"perturbation")
                 field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
+            mean_name=field.name()+"_bar"
+            meanfield.rename(name=mean_name)
+            to_dump.append(meanfield)
+            to_pickup.append(meanfield)
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
@@ -150,7 +162,16 @@ class State(object):
                 self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
                                             comm=self.mesh.comm)
 
-        if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+        if(pickup):
+            #Open the checkpointing file for writing
+            chkfile = path.join(self.dumpdir, "chkpt")        
+            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                #Recover all the fields from the checkpoint
+                for field in to_pickup:
+                    chk.load(field)
+                chk.read_attribute(t)
+
+        elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             self.dumpfile.write(*to_dump)
 
@@ -161,13 +182,15 @@ class State(object):
                 data = self.diagnostics.l2(field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
-                #Open the checkpointing file
-                chkfile = path.join(self.dumpdir, "chkpt")
-                with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                    #Dump all the fields
-                    for field in to_dump:
-                        chk.store(field)
-                    chk.write_attribute(t)
+            #Open the checkpointing file
+            chkfile = path.join(self.dumpdir, "chkpt")
+            with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                #Dump all the fields to a checkpoint
+                for field in to_dump:
+                    chk.store(field)
+                chk.write_attribute(t)
+
+        return t
 
     def diagnostic_dump(self):
 
@@ -203,7 +226,6 @@ class State(object):
         self.xnp1 = Function(W)
         self.xrhs = Function(W)
         self.dy = Function(W)
-
 
 class CompressibleState(State):
 

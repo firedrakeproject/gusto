@@ -37,7 +37,7 @@ class Timestepper(object):
         for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
-    def run(self, t, tmax):
+    def run(self, t, tmax, pickup=False):
         state = self.state
 
         state.xn.assign(state.x_init)
@@ -53,7 +53,7 @@ class Timestepper(object):
             mu_alpha = dt
         else:
             mu_alpha = None
-        state.dump()
+        t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
