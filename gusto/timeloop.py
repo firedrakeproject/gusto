@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
+from gusto.state import IncompressibleState, Expression
+from firedrake import DirichletBC
 
 
 class Timestepper(object):
@@ -42,6 +43,22 @@ class Timestepper(object):
 
         for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
+
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.state.xnp1.split()[0]
+
+        dim = unp1.ufl_element().value_shape()[0]
+        bc = ("0.0",)*dim
+        M = unp1.function_space()
+        bcs = [DirichletBC(M, Expression(bc), "bottom"),
+               DirichletBC(M, Expression(bc), "top")]
+        
+        for bc in bcs:
+            bc.apply(unp1)
+
 
     def run(self, t, tmax):
         state = self.state
@@ -92,6 +109,7 @@ class Timestepper(object):
 
                     state.xnp1 += state.dy
 
+            self._apply_bcs()
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):

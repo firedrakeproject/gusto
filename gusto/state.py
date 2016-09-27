@@ -181,6 +181,7 @@ class State(object):
         """
         pass
 
+
     def _allocate_state(self):
         """
         Construct Functions to store the state variables.
