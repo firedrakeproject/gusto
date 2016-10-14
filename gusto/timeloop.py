@@ -50,14 +50,15 @@ class Timestepper(object):
         """
         unp1 = self.state.xnp1.split()[0]
 
-        dim = unp1.ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        M = unp1.function_space()
-        bcs = [DirichletBC(M, Expression(bc), "bottom"),
-               DirichletBC(M, Expression(bc), "top")]
+        if unp1.function_space().extruded:
+            dim = unp1.ufl_element().value_shape()[0]
+            bc = ("0.0",)*dim
+            M = unp1.function_space()
+            bcs = [DirichletBC(M, Expression(bc), "bottom"),
+                   DirichletBC(M, Expression(bc), "top")]
 
-        for bc in bcs:
-            bc.apply(unp1)
+            for bc in bcs:
+                bc.apply(unp1)
 
     def run(self, t, tmax):
         state = self.state
