@@ -26,7 +26,7 @@ def setup_sk(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5)
+    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
     diagnostics = Diagnostics(*fieldlist)
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
@@ -120,7 +120,14 @@ def setup_sk(dirname):
 def run_sk_linear(dirname):
 
     stepper, tmax = setup_sk(dirname)
-    stepper.run(t=0, tmax=tmax)
+    stepper.run(t=0., tmax=tmax)
+    import os
+    os.system('mkdir sk_nonlinear/bk')
+    os.system('mv sk_nonlinear/field_output* sk_nonlinear/bk')
+    stepper, tmax = setup_sk(dirname)
+    # should pick up from the end of the previous run.
+    dt = stepper.state.timestepping.dt
+    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
 
 
 def test_sk(tmpdir):
