@@ -20,21 +20,21 @@ new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x
 mesh = Mesh(new_coords)
 
 # Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-W_DG1 = FunctionSpace(mesh, "DG", 1)
+W_VectorCG = VectorFunctionSpace(mesh, "CG", 2)
+W_CG = FunctionSpace(mesh, "CG", 2)
+W_DG = FunctionSpace(mesh, "DG", 2)
 
 # vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+z = Function(W_CG).interpolate(Expression("x[1]"))
+k = Function(W_VectorCG).interpolate(Expression(("0.","1.")))
 
 dt = 5.0
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
 # mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
-mu = Function(W_DG1).interpolate(mu_top)
+mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='nh_mountain', dumpfreq=18, dumplist=['u'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VerticalVelocity()]
