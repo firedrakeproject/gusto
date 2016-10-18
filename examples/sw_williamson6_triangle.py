@@ -15,7 +15,7 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=120.)
-output = OutputParameters(dirname='sw_rossby_wave', dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'])
+output = OutputParameters(dirname='sw_rossby_wave', dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity', 'Vorticity', 'Divergence'])
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), Divergence(), Vorticity(), PotentialVorticity()]
@@ -57,7 +57,6 @@ u_init = Function(VX).interpolate(uexpr)
 u0.project(u_init)
 D0.interpolate(Dexpr)
 
-Vdg = VectorFunctionSpace(mesh, "DG", 2)
 state.initialise([u0, D0])
 advection_list = []
 velocity_advection = EulerPoincareForm(state, state.V[0])
