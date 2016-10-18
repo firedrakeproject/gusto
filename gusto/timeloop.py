@@ -60,7 +60,8 @@ class Timestepper(object):
             for bc in bcs:
                 bc.apply(unp1)
 
-    def run(self, t, tmax):
+    def run(self, t, tmax, pickup=False):
+
         state = self.state
 
         state.xn.assign(state.x_init)
@@ -76,7 +77,9 @@ class Timestepper(object):
             mu_alpha = [0., dt]
         else:
             mu_alpha = [None, None]
-        state.dump()
+
+        with timed_stage("Dump output"):
+            t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
@@ -119,6 +122,8 @@ class Timestepper(object):
                     diffusion.apply(state.field_dict[name], state.field_dict[name])
 
             with timed_stage("Dump output"):
-                state.dump()
+                state.dump(t, pickup=False)
 
         state.diagnostic_dump()
+
+        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
