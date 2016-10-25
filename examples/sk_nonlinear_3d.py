@@ -1,20 +1,13 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
+    VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
     exp, sin
 import numpy as np
-import sys
-
-dt = 6.
-if '--running-tests' in sys.argv:
-    tmax = dt
-else:
-    tmax = 3600.
 
 nlayers = 10  # horizontal layers
 columns = 150  # number of columns
 L = 3.0e5
-m = PeriodicIntervalMesh(columns, L)
+m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
 # build volume mesh
 H = 1.0e4  # Height position of the model top
@@ -25,18 +18,18 @@ W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+z = Function(W_CG1).interpolate(Expression("x[2]"))
+k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='sk_nonlinear_3d', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
+                          family="RTCF",
                           z=z, k=k,
                           timestepping=timestepping,
                           output=output,
@@ -75,7 +68,7 @@ deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
-u0.project(as_vector([20.0,0.0]))
+u0.project(as_vector([20.0, 0.0, 0.0]))
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
@@ -124,4 +117,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=0, tmax=3600.0)

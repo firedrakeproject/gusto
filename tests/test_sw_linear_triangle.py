@@ -47,16 +47,18 @@ def setup_sw(dirname):
     # interpolate initial conditions
     # Initial/current conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])
+    Dbar = Function(state.V[1])
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = Constant(parameters.g)
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
+    Dbar.interpolate(Dexpr)
     state.initialise([u0, D0])
 
     advection_dict = {}
-    advection_dict["u"] = NoAdvection(state)
-    advection_dict["D"] = NoAdvection(state)
+    advection_dict["u"] = NoAdvection(state, u0, None)
+    advection_dict["D"] = NoAdvection(state, D0, None)
 
     linear_solver = ShallowWaterSolver(state)
 
