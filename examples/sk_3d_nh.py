@@ -1,13 +1,13 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    exp, sin
+    VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
+    exp, sin, SpatialCoordinate
 import numpy as np
 
 nlayers = 10  # horizontal layers
-columns = 150  # number of columns
-L = 3.0e5
-m = PeriodicIntervalMesh(columns, L)
+columns = 300  # number of columns
+L = 6.0e6
+m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
 # build volume mesh
 H = 1.0e4  # Height position of the model top
@@ -18,19 +18,20 @@ W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+z = Function(W_CG1).interpolate(Expression("x[2]"))
+k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
+Omega = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.e-4")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='sk_3d_nonlinear_asp_f_ic', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
-                          z=z, k=k,
+                          family="RTCF",
+                          z=z, k=k, Omega=Omega,
                           timestepping=timestepping,
                           output=output,
                           parameters=parameters,
@@ -62,26 +63,24 @@ rho_b = Function(state.V[1])
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = Function(W_DG1).interpolate(Expression("x[0]"))
-a = 5.0e3
+x = SpatialCoordinate(mesh)
+a = 1.0e5
 deltaTheta = 1.0e-2
-theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+theta_pert = deltaTheta*sin(np.pi*x[2]/H)/(1 + (x[0] - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
-u0.project(as_vector([20.0,0.0]))
+u0.project(as_vector([20.0,0.0,0.0]))
 
 state.initialise([u0, rho0, theta0])
 state.set_reference_profiles(rho_b, theta_b)
 state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
-ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
-rhoeqn = AdvectionEquation(state, state.V[1], continuity=True)
-thetaeqn = AdvectionEquation(state, state.V[2], supg={"dg_directions":[1]})
+Vtdg = FunctionSpace(mesh, "DG", 1)
 advection_dict = {}
-advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+advection_dict["u"] = EulerPoincareForm(state, state.V[0])
+advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
+advection_dict["theta"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
