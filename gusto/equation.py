@@ -45,12 +45,12 @@ class Equation(object):
                 self.dS = dg_interior_surfaces[0] + dg_interior_surfaces[1]
 
             # make SUPG test function
-            if(state.mesh.geometric_dimension() == 2):
+            if(state.mesh.topological_dimension() == 2):
                 taus = [supg_params["a0"], supg_params["a1"]]
                 for i in supg_params["dg_directions"]:
                     taus[i] = 0.0
                 tau = Constant(((taus[0], 0.), (0., taus[1])))
-            elif(state.mesh.geometric_dimension() == 3):
+            elif(state.mesh.topological_dimension() == 3):
                 taus = [supg_params["a0"], supg_params["a1"], supg_params["a2"]]
                 for i in supg_params["dg_directions"]:
                     taus[i] = 0.0
@@ -124,38 +124,23 @@ class MomentumEquation(AdvectionEquation):
 
         self.ibp_twice = kwargs.get("ibp_twice", False)
         self.vector_invariant_form = kwargs.get("vector_invariant", None)
+
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
         if V.extruded:
             self.dS = dS_v + dS_h
             self.perp = lambda u: as_vector([-u[1], u[0]])
-            self.gradperp = lambda u: self.perp(grad(u))
             self.perp_u_upwind = lambda q: self.Upwind('+')*self.perp(q('+')) + self.Upwind('-')*self.perp(q('-'))
         else:
             self.dS = dS
             outward_normals = CellNormal(state.mesh)
             self.perp = lambda u: cross(outward_normals, u)
             self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
-
-        w = self.test
-        u = self.trial
-        dt = self.state.timestepping.dt
-        self.u0 = Function(V)
-        ustar = 0.5*(self.u0 + u)
-
-        self.eqn = (
-            (inner(w, u-self.u0)
-             - dt*inner(w, div(self.perp(ustar))*self.perp(self.ubar))
-             - dt*div(w)*inner(ustar, self.ubar))*dx
-            - dt*inner(jump(inner(w, self.perp(self.ubar)), self.n),
-                       self.perp_u_upwind(ustar))*self.dS
-            + dt*jump(inner(w,
-                            self.perp(self.ubar))*self.perp(ustar), self.n)*self.dS
-        )
+        self.gradperp = lambda u: self.perp(grad(u))
 
     def advection_term(self, q):
 
         if self.vector_invariant_form is not None:
-            if self.state.mesh.geometric_dimension() == 3:
+            if self.state.mesh.topological_dimension() == 3:
 
                 # <w,curl(u) cross ubar + grad( u.ubar)>
                 # =<curl(u),ubar cross w> - <div(w), u.ubar>
@@ -174,16 +159,16 @@ class MomentumEquation(AdvectionEquation):
 
                 if self.ibp_twice:
                     L = (
-                        (inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
-                        + inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
+                        (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
+                        - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
                                 self.perp_u_upwind(q))*self.dS
-                        - jump(inner(self.test,
+                        + jump(inner(self.test,
                                      self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                     )
                 else:
                     L = (
                         -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
-                        + inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
+                        - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
                                 self.perp_u_upwind(q))*self.dS
                     )
 
