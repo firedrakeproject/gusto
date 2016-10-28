@@ -94,10 +94,8 @@ class ImplicitMidpoint(Advection):
         super(ImplicitMidpoint, self).__init__(state, field, equation, solver_params)
         trial = self.equation.trial
         q = self.equation.q
-        #self.lhs = self.equation.mass_term(trial) + 0.5*self.dt*self.equation.advection_term(trial)
-        #self.rhs = self.equation.mass_term(q) - 0.5*self.dt*self.equation.advection_term(q)
-        self.lhs = lhs(self.equation.eqn)
-        self.rhs = rhs(self.equation.eqn)
+        self.lhs = self.equation.mass_term(trial) + 0.5*self.dt*self.equation.advection_term(trial)
+        self.rhs = self.equation.mass_term(q) - 0.5*self.dt*self.equation.advection_term(q)
         self.update_solver()
 
     def apply(self, x_in, x_out):
