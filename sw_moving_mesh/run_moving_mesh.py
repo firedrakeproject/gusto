@@ -129,7 +129,7 @@ timestepper = SSPRK3(D0, equation, dt)
 
 invdt = 1/dt
 step = 0
-while t < tmax + 0.5*dt:
+while t < tmax - 0.5*dt:
     t += dt
 
     deltax.dat.data[:] = np.load("meshes/mesh_" + str(step+1) + ".npy")[:] - np.load("meshes/mesh_" + str(step) + ".npy")[:]
