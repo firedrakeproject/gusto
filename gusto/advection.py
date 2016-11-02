@@ -167,7 +167,7 @@ class DGAdvection(Advection):
         arhs = a_mass - self.scale*dt*(a_int + a_flux)
 
         DGproblem = LinearVariationalProblem(a_mass, action(arhs,self.D1),
-                                             self.dD)
+                                             self.dD, constant_jacobian=False)
         self.DGsolver = LinearVariationalSolver(DGproblem,
                                                 solver_parameters={
                                                     'ksp_type':'preonly',
