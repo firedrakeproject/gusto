@@ -109,9 +109,13 @@ class State(object):
                 to_pickup.append(f)
             f.rename(name=name)
 
+        # append diagnostic fields for to_dump
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
 
+        # check if we are running a steady state simulation and if so
+        # set up the error fields and save the
+        # initial fields so that we can compute the error fields
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
         for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
@@ -124,6 +128,9 @@ class State(object):
                 to_dump.append(f_init)
                 to_pickup.append(f_init)
 
+        # check if we are dumping perturbation fields. If we are, the
+        # meanfields are provided in a dictionary. Here we set up the
+        # perturbation fields.
         meanfields = defaultdict(lambda: None)
         meanfields.update(self.output.meanfields)
         for name, meanfield in meanfields.iteritems():
@@ -177,11 +184,14 @@ class State(object):
 
             print "DBG dumping", t
 
+            # dump fields
             self.dumpfile.write(*to_dump)
 
+            # dump fields on latlon mesh
             if len(self.output.dumplist_latlon) > 0:
                 self.dumpfile_latlon.write(*to_dump_latlon)
 
+            # compute diagnostics
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
@@ -199,6 +209,9 @@ class State(object):
         return t
 
     def diagnostic_dump(self):
+        """
+        Dump diagnostics dictionary
+        """
 
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
