@@ -23,7 +23,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='sk_nonlinear_supg', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -77,7 +77,8 @@ state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 # Set up advection schemes
 ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
 rhoeqn = AdvectionEquation(state, state.V[1], continuity=True)
-thetaeqn = AdvectionEquation(state, state.V[2], supg={"dg_directions":[1]})
+thetaeqn = AdvectionEquation(state, state.V[2], supg={"dg_directions":[0]})
+# thetaeqn = AdvectionEquation(state, state.V[2], embedded_dg_space="Default")
 advection_dict = {}
 advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
