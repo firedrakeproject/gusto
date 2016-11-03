@@ -33,6 +33,10 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
                                   fieldlist=fieldlist)
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
+        u0, D0 = Function(state.V[0], name="velocity"), Function(state.V[1])
+        u0.project(uexpr)
+        state.initialise([u0, D0])
+
         if vector:
             VectorDGSpace = VectorFunctionSpace(mesh, "DG", 1)
             f = Function(VectorDGSpace, name="f")
@@ -77,12 +81,18 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
                                   fieldlist=fieldlist)
 
         uexpr = as_vector([1.0, 0.0])
+        u0, rho0, theta0 = Function(state.V[0], name="velocity"), Function(state.V[1]), Function(state.V[2])
+        u0.project(uexpr)
+        state.initialise([u0, rho0, theta0])
 
         if spatial_opts is not None and "supg" in spatial_opts:
-            if len(kwargs.get("direction")) > 0:
-                space = state.V[2]
-            else:
-                space = W_CG1
+                # if the direction list is empty we are testing SUPG for a 
+                # continuous space, else we are testing the hybrid SUPG /
+                # DG upwind scheme for the theta space
+                if len(spatial_opts["supg"].get("dg_directions")) == 0:
+                    space = W_CG1
+                else:
+                    space = state.V[2]
         else:
             space = state.V[1]
         f = Function(space, name='f')
@@ -92,10 +102,6 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
         f_end_expr = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
 
     # interpolate initial conditions
-    u0 = Function(state.V[0], name="velocity")
-    u0.project(uexpr)
-    D0 = Function(state.V[-1], name="unused").interpolate(Constant(0))
-    state.initialise([u0, D0])
     f.interpolate(fexpr)
     state.field_dict["f"] = f
     f_end.interpolate(f_end_expr)
@@ -118,7 +124,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
 
 def run(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=None):
 
-    timestepper, tmax, f_end = setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=None)
+    timestepper, tmax, f_end = setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=spatial_opts)
 
     f_dict = timestepper.run(0, tmax, x_end=["f"])
     f = f_dict["f"]
@@ -139,26 +145,26 @@ def test_advection_dg(tmpdir, geometry, time_discretisation, ibp_twice, vector, 
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
-@pytest.mark.parametrize("geometry", ["slice", "sphere"])
-@pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
+@pytest.mark.parametrize("geometry", ["slice"])
+@pytest.mark.parametrize("time_discretisation", ["ssprk"])
 @pytest.mark.parametrize("ibp_twice", [False, True])
-@pytest.mark.parametrize("vector", [False, True])
+@pytest.mark.parametrize("vector", [False])
 @pytest.mark.parametrize("continuity", [False, True])
 def test_advection_embedded_dg(tmpdir, geometry, time_discretisation, ibp_twice, vector, continuity):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity)
+    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity, spatial_opts={"embedded_dg_space":"default"})
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
-@pytest.mark.parametrize("geometry", ["slice", "sphere"])
+@pytest.mark.parametrize("geometry", ["slice"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp_twice", [False, True])
+@pytest.mark.parametrize("ibp_twice", [True])
 @pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-@pytest.mark.parametrize("direction", [[], [1]])
+@pytest.mark.parametrize("direction", [[],[0]])
 def test_advection_supg(tmpdir, geometry, time_discretisation, ibp_twice, vector, continuity, direction):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity, spatial_opts={"supg":{"direction":direction}})
+    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity, spatial_opts={"supg":{"dg_directions":direction}})
     assert(abs(f_err.dat.data.max()) < error[geometry])

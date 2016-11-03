@@ -6,7 +6,7 @@ import itertools
 import pytest
 from math import pi
 
-output = OutputParameters(dirname="tstadv_SSPRK_vector", dumplist=["f"], dumpfreq=1)
+output = OutputParameters(dirname="tstadv_IM_scalar_continuity", dumplist=["f"], dumpfreq=1)
 nlayers = 25  # horizontal layers
 columns = 25  # number of columns
 L = 1.0
@@ -41,20 +41,21 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 
 uexpr = as_vector([1.0, 0.0])
 
-#space = state.V[1]
-space = W_VectorCG1
+space = state.V[2]
+#space = W_VectorCG1
 f = Function(space, name='f')
 x = SpatialCoordinate(mesh)
-fexpr = as_vector([sin(2*pi*x[0])*sin(2*pi*x[1]), Constant(0)])
+#fexpr = as_vector([sin(2*pi*x[0])*sin(2*pi*x[1]), Constant(0)])
+fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
 
 # interpolate initial conditions
-u0, D0  = Function(state.V[0], name="velocity"), Function(state.V[1])
+u0 = Function(state.V[0], name="velocity")
 u0.project(uexpr)
 f.interpolate(fexpr)
 state.field_dict["f"] = f
-state.initialise([u0, D0])
+state.initialise([u0])
 
-fequation = AdvectionEquation(state, f.function_space(), continuity=False)
+fequation = AdvectionEquation(state, f.function_space(), continuity=False, supg={"dg_directions":[0]})
 f_advection = SSPRK3(state, f, fequation)
 #f_advection = ImplicitMidpoint(state, f, fequation)
 

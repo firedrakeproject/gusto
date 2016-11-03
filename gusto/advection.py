@@ -1,7 +1,21 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver, lhs, rhs
+from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver
 
+def embedded_dg(original_apply):
+    def get_apply(self, x_in, x_out):
+        if hasattr(self, "Projector"):
+            def new_apply(self, x_in, x_out):
+                self.xdg_in.interpolate(x_in)
+                print self.xdg_in.dat.data.min(), self.xdg_in.dat.data.max()
+                original_apply(self, self.xdg_in, self.xdg_out)
+                self.Projector.project()
+                x_out.assign(self.x_projected)
+            return new_apply(self, x_in, x_out)
+
+        else:
+            return original_apply(self, x_in, x_out)
+    return get_apply
 
 class Advection(object):
 
@@ -18,7 +32,14 @@ class Advection(object):
             self.solver_parameters = solver_params
         self.dt = self.state.timestepping.dt
 
-        fs = field.function_space()
+        if hasattr(equation, "Projector"):
+            fs = equation.xdg_out.function_space()
+            self.Projector = equation.Projector
+            self.xdg_out = equation.xdg_out
+            self.xdg_in = Function(fs)
+            self.x_projected = equation.x_projected
+        else:
+            fs = field.function_space()
         self.dq = Function(fs)
         self.q1 = Function(fs)
         self.equation = equation
@@ -82,6 +103,7 @@ class SSPRK3(Advection):
             self.solver.solve()
             x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
 
+    @embedded_dg
     def apply(self, x_in, x_out):
 
         for i in range(3):
