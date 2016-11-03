@@ -27,9 +27,9 @@ class Equation(object):
 
         self.ibp_twice = kwargs.get("ibp_twice")
         dg_interior_surfaces_dict = {0:dS_v, 1:dS_h}
-        print "KWARGS:", kwargs
+
         if "supg" in kwargs:
-            print "IN HERE!"
+
             # if using SUPG we must integrate by parts twice
             if not self.ibp_twice:
                 warning("if using SUPG we must integrate by parts twice")
@@ -41,7 +41,6 @@ class Equation(object):
             supg_params.setdefault('a1', dt/sqrt(15.))
             supg_params.setdefault('a2', dt/sqrt(15.))
             supg_params.setdefault('dg_directions', [])
-            print supg_params
             
             dg_interior_surfaces = [dg_interior_surfaces_dict[k] for k in supg_params["dg_directions"]]
             if len(dg_interior_surfaces) == 0:
@@ -61,7 +60,6 @@ class Equation(object):
                 for i in supg_params["dg_directions"]:
                     taus[i] = 0.0
                 tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
-            print "JEMMA:", state.mesh.topological_dimension(), taus
             dtest = dot(dot(self.ubar, tau), grad(self.test))
             self.test += dtest
 
@@ -121,7 +119,6 @@ class AdvectionEquation(Equation):
                     L = -inner(div(outer(self.test,self.ubar)),q)*dx
 
             if self.dS is not None:
-                print "HELLO JEMMA!"
                 L += dot(jump(self.test), (self.un('+')*q('+')
                                            - self.un('-')*q('-')))*self.dS
                 if self.ibp_twice:
