@@ -1,8 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
     ExtrudedMesh, Expression, SpatialCoordinate, \
-    as_vector, VectorFunctionSpace, File, sin
-import itertools
+    as_vector, VectorFunctionSpace, sin
 import pytest
 from math import pi
 
@@ -86,7 +85,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
         state.initialise([u0, rho0, theta0])
 
         if spatial_opts is not None and "supg" in spatial_opts:
-                # if the direction list is empty we are testing SUPG for a 
+                # if the direction list is empty we are testing SUPG for a
                 # continuous space, else we are testing the hybrid SUPG /
                 # DG upwind scheme for the theta space
                 if len(spatial_opts["supg"].get("dg_directions")) == 0:
