@@ -139,7 +139,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and not "pytest" in self.output.dirname and path.exists(self.dumpdir):
+            if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -171,7 +171,6 @@ class State(object):
         """
         Initialise state variables
         """
-
         for x, ic in zip(self.x_init.split(), initial_conditions):
             x.assign(ic)
 
