@@ -4,7 +4,7 @@ from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
     outer, sign, cross, CellNormal, as_vector, sqrt, Constant, \
-    curl
+    curl, warning, BrokenElement, FunctionSpace, Projector
 
 
 class Equation(object):
@@ -26,16 +26,23 @@ class Equation(object):
         self.n = FacetNormal(state.mesh)
 
         self.ibp_twice = kwargs.get("ibp_twice")
-        dg_interior_surfaces_dict = {1:dS_v, 2:dS_h}
+        dg_interior_surfaces_dict = {0:dS_v, 1:dS_h}
+        print "KWARGS:", kwargs
         if "supg" in kwargs:
-            self.ibp_twice = True
+            print "IN HERE!"
+            # if using SUPG we must integrate by parts twice
+            if not self.ibp_twice:
+                warning("if using SUPG we must integrate by parts twice")
+                self.ibp_twice = True
+            # set default SUPG parameters
             dt = state.timestepping.dt
             supg_params = kwargs.get("supg").copy() if kwargs.get("supg") else {}
             supg_params.setdefault('a0', dt/sqrt(15.))
             supg_params.setdefault('a1', dt/sqrt(15.))
             supg_params.setdefault('a2', dt/sqrt(15.))
             supg_params.setdefault('dg_directions', [])
-
+            print supg_params
+            
             dg_interior_surfaces = [dg_interior_surfaces_dict[k] for k in supg_params["dg_directions"]]
             if len(dg_interior_surfaces) == 0:
                 self.dS = None
@@ -43,7 +50,6 @@ class Equation(object):
                 self.dS = dg_interior_surfaces[0]
             elif len(dg_interior_surfaces) == 2:
                 self.dS = dg_interior_surfaces[0] + dg_interior_surfaces[1]
-
             # make SUPG test function
             if(state.mesh.topological_dimension() == 2):
                 taus = [supg_params["a0"], supg_params["a1"]]
@@ -55,20 +61,28 @@ class Equation(object):
                 for i in supg_params["dg_directions"]:
                     taus[i] = 0.0
                 tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
-
+            print "JEMMA:", state.mesh.topological_dimension(), taus
             dtest = dot(dot(self.ubar, tau), grad(self.test))
             self.test += dtest
 
-        self.dS = None
+        self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
         element = V.fiat_element
         self.dg = element.entity_dofs() == element.entity_closure_dofs()
         if self.dg:
-            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
-
             if V.extruded:
                 self.dS = (dS_h + dS_v)
             else:
                 self.dS = dS
+        if "embedded_dg_space" in kwargs:
+            Vdg_elt = BrokenElement(V.ufl_element())
+            Vdg = FunctionSpace(state.mesh, Vdg_elt)
+            self.xdg_out = Function(Vdg)
+            self.x_projected = Function(V)
+            pparameters = {'ksp_type':'cg',
+                           'pc_type':'bjacobi',
+                           'sub_pc_type':'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=pparameters)
 
     def mass_term(self, q):
         return inner(self.test, q)*dx
@@ -107,6 +121,7 @@ class AdvectionEquation(Equation):
                     L = -inner(div(outer(self.test,self.ubar)),q)*dx
 
             if self.dS is not None:
+                print "HELLO JEMMA!"
                 L += dot(jump(self.test), (self.un('+')*q('+')
                                            - self.un('-')*q('-')))*self.dS
                 if self.ibp_twice:
