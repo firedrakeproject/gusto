@@ -1,9 +1,7 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
+from firedrake import PeriodicIntervalMesh, \
     ExtrudedMesh, Expression, SpatialCoordinate, \
-    as_vector, VectorFunctionSpace, File, sin
-import itertools
-import pytest
+    as_vector, VectorFunctionSpace, sin
 from math import pi
 
 output = OutputParameters(dirname="tstadv_IM_scalar_continuity", dumplist=["f"], dumpfreq=1)
@@ -42,10 +40,8 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 uexpr = as_vector([1.0, 0.0])
 
 space = state.V[2]
-#space = W_VectorCG1
 f = Function(space, name='f')
 x = SpatialCoordinate(mesh)
-#fexpr = as_vector([sin(2*pi*x[0])*sin(2*pi*x[1]), Constant(0)])
 fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
 
 # interpolate initial conditions
@@ -57,7 +53,6 @@ state.initialise([u0])
 
 fequation = AdvectionEquation(state, f.function_space(), continuity=False, supg={"dg_directions":[0]})
 f_advection = SSPRK3(state, f, fequation)
-#f_advection = ImplicitMidpoint(state, f, fequation)
 
 advection_dict = {}
 advection_dict["f"] = f_advection
