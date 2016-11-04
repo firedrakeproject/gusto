@@ -69,10 +69,11 @@ def setup_gw(dirname):
 
     # Set up advection schemes
     Vtdg = FunctionSpace(mesh, "DG", 1)
+    ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
+    beqn = AdvectionEquation(state, state.V[2], embedded_dg_space="Default", continuity=False)
     advection_dict = {}
-    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-    advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2],
-                                              Vdg=Vtdg, continuity=False)
+    advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
+    advection_dict["b"] = SSPRK3(state, b0, beqn)
 
     # Set up linear solver
     params = {'ksp_type':'gmres',
