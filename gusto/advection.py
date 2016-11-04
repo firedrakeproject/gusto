@@ -76,8 +76,9 @@ class ForwardEuler(Advection):
         self.update_solver()
 
     def apply(self, x_in, x_out):
+        self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(x_in + self.dt*self.dq)
+        x_out.assign(self.dq)
 
 
 class SSPRK3(Advection):

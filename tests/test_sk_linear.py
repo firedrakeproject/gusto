@@ -26,7 +26,7 @@ def setup_sk(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/sk_linear", dumplist=['u'], dumpfreq=150)
+    output = OutputParameters(dirname=dirname+"/sk_linear", dumplist=['u'], dumpfreq=1)
     diagnostics = Diagnostics(*fieldlist)
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
@@ -112,7 +112,7 @@ def setup_sk(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, dt
+    return stepper, 10*dt
 
 
 def run_sk_linear(dirname):

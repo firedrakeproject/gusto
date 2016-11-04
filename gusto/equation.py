@@ -59,6 +59,8 @@ class Equation(object):
                 self.dS = (dS_h + dS_v)
             else:
                 self.dS = dS
+        else:
+            self.dS = None
 
         # DG and SUPG methods need n and un
         if self.dg or supg:
