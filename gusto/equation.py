@@ -18,22 +18,59 @@ class Equation(object):
     def __init__(self, state, V, **kwargs):
         self.state = state
         self.V = V
+
+        # get parameters from kwargs:
         self.continuity = kwargs.get("continuity")
+        self.linear = "linear_ref" in kwargs
+        if self.linear:
+            self.qbar = kwargs.get("linear_ref")
+        self.ibp_twice = kwargs.get("ibp_twice", False)
+        supg = "supg" in kwargs
+        emb_dg = "embedded_dg_space" in kwargs
+
+        if emb_dg:
+            Vdg_elt = BrokenElement(V.ufl_element())
+            Vdg = FunctionSpace(state.mesh, Vdg_elt)
+            space = Vdg
+            self.xdg_out = Function(Vdg)
+            self.x_projected = Function(V)
+            pparameters = {'ksp_type':'cg',
+                           'pc_type':'bjacobi',
+                           'sub_pc_type':'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=pparameters)
+
+        else:
+            space = V
+
+        # set up functions required for forms
         self.ubar = Function(state.V[0])
-        self.test = TestFunction(V)
-        self.trial = TrialFunction(V)
-        self.q = Function(V)
-        self.n = FacetNormal(state.mesh)
+        self.test = TestFunction(space)
+        self.trial = TrialFunction(space)
+        self.q = Function(space)
 
-        self.ibp_twice = kwargs.get("ibp_twice")
-        dg_interior_surfaces_dict = {0:dS_v, 1:dS_h}
+        # find out if we are DG
+        element = space.fiat_element
+        self.dg = element.entity_dofs() == element.entity_closure_dofs()
 
-        if "supg" in kwargs:
+        # DG and embedded DG methods need surface measures
+        if self.dg:
+            if space.extruded:
+                self.dS = (dS_h + dS_v)
+            else:
+                self.dS = dS
 
+        # DG and SUPG methods need n and un
+        if self.dg or supg:
+            self.n = FacetNormal(state.mesh)
+            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
+
+        if supg:
             # if using SUPG we must integrate by parts twice
             if not self.ibp_twice:
                 warning("if using SUPG we must integrate by parts twice")
                 self.ibp_twice = True
+
             # set default SUPG parameters
             dt = state.timestepping.dt
             supg_params = kwargs.get("supg").copy() if kwargs.get("supg") else {}
@@ -41,7 +78,10 @@ class Equation(object):
             supg_params.setdefault('a1', dt/sqrt(15.))
             supg_params.setdefault('a2', dt/sqrt(15.))
             supg_params.setdefault('dg_directions', [])
-            
+
+            # find out if we need to do DG upwinding in any direction and set
+            # self.dS accordingly
+            dg_interior_surfaces_dict = {0:dS_v, 1:dS_h}
             dg_interior_surfaces = [dg_interior_surfaces_dict[k] for k in supg_params["dg_directions"]]
             if len(dg_interior_surfaces) == 0:
                 self.dS = None
@@ -49,6 +89,7 @@ class Equation(object):
                 self.dS = dg_interior_surfaces[0]
             elif len(dg_interior_surfaces) == 2:
                 self.dS = dg_interior_surfaces[0] + dg_interior_surfaces[1]
+
             # make SUPG test function
             if(state.mesh.topological_dimension() == 2):
                 taus = [supg_params["a0"], supg_params["a1"]]
@@ -63,25 +104,6 @@ class Equation(object):
             dtest = dot(dot(self.ubar, tau), grad(self.test))
             self.test += dtest
 
-        self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
-        element = V.fiat_element
-        self.dg = element.entity_dofs() == element.entity_closure_dofs()
-        if self.dg:
-            if V.extruded:
-                self.dS = (dS_h + dS_v)
-            else:
-                self.dS = dS
-        if "embedded_dg_space" in kwargs:
-            Vdg_elt = BrokenElement(V.ufl_element())
-            Vdg = FunctionSpace(state.mesh, Vdg_elt)
-            self.xdg_out = Function(Vdg)
-            self.x_projected = Function(V)
-            pparameters = {'ksp_type':'cg',
-                           'pc_type':'bjacobi',
-                           'sub_pc_type':'ilu'}
-            self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=pparameters)
-
     def mass_term(self, q):
         return inner(self.test, q)*dx
 
@@ -92,14 +114,11 @@ class Equation(object):
 
 class AdvectionEquation(Equation):
 
-    def advection_term(self, q, **kwargs):
+    def advection_term(self, q):
 
-        if 'qbar' in kwargs:
-            qbar = kwargs.get('qbar')
-            if options is None:
-                self.options = {'ksp_type':'cg',
-                                'pc_type':'bjacobi',
-                                'sub_pc_type':'ilu'}
+        if self.linear:
+            qbar = self.qbar
+
             if self.dg:
                 L = (dot(grad(self.test), self.ubar)*qbar*dx -
                      jump(self.ubar*self.test, self.n)*avg(qbar)*self.dS)
@@ -134,9 +153,9 @@ class MomentumEquation(AdvectionEquation):
     def __init__(self, state, V, **kwargs):
         super(MomentumEquation, self).__init__(state, V)
 
-        self.ibp_twice = kwargs.get("ibp_twice", False)
         self.vector_invariant_form = kwargs.get("vector_invariant", None)
 
+        self.n = FacetNormal(state.mesh)
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
         if V.extruded:
             self.dS = dS_v + dS_h

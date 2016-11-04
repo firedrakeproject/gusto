@@ -2,12 +2,12 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver
 
+
 def embedded_dg(original_apply):
     def get_apply(self, x_in, x_out):
         if hasattr(self, "Projector"):
             def new_apply(self, x_in, x_out):
                 self.xdg_in.interpolate(x_in)
-                print self.xdg_in.dat.data.min(), self.xdg_in.dat.data.max()
                 original_apply(self, self.xdg_in, self.xdg_out)
                 self.Projector.project()
                 x_out.assign(self.x_projected)
@@ -16,6 +16,7 @@ def embedded_dg(original_apply):
         else:
             return original_apply(self, x_in, x_out)
     return get_apply
+
 
 class Advection(object):
 
@@ -48,7 +49,7 @@ class Advection(object):
 
     def update_solver(self):
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
-        self.solver = LinearVariationalSolver(problem)#, solver_parameters=self.solver_parameters)
+        self.solver = LinearVariationalSolver(problem, solver_parameters=self.solver_parameters)
 
     @abstractmethod
     def apply(self, x_in, x_out):
