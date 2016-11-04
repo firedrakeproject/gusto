@@ -84,7 +84,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
         u0.project(uexpr)
         state.initialise([u0, rho0, theta0])
 
-        if spatial_opts is not None and "supg" in spatial_opts:
+        if spatial_opts is not None:
+            if "supg" in spatial_opts:
                 # if the direction list is empty we are testing SUPG for a
                 # continuous space, else we are testing the hybrid SUPG /
                 # DG upwind scheme for the theta space
@@ -92,6 +93,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
                     space = W_CG1
                 else:
                     space = state.V[2]
+            elif "embedded_dg_space" in spatial_opts:
+                space = state.V[2]
         else:
             space = state.V[1]
         f = Function(space, name='f')

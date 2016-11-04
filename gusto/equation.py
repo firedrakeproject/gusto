@@ -122,10 +122,10 @@ class AdvectionEquation(Equation):
             qbar = self.qbar
 
             if self.dg:
-                L = (dot(grad(self.test), self.ubar)*qbar*dx -
+                L = (-dot(grad(self.test), self.ubar)*qbar*dx +
                      jump(self.ubar*self.test, self.n)*avg(qbar)*self.dS)
             else:
-                L = -self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(qbar))*dx
+                L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(qbar))*dx
 
         else:
             if self.continuity:

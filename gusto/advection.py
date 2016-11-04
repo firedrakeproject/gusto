@@ -72,13 +72,13 @@ class ForwardEuler(Advection):
         super(ForwardEuler, self).__init__(state, field, equation, solver_params)
 
         self.lhs = self.equation.mass_term(self.equation.trial)
-        self.rhs = self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        self.rhs = -self.equation.advection_term(self.q1)
         self.update_solver()
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(x_in + self.dt*self.dq)
 
 
 class SSPRK3(Advection):
