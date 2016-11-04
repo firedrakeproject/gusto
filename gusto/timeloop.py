@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
 from gusto.advection import NoAdvection
-from firedrake import Function
+from gusto.state import IncompressibleState
+from firedrake import DirichletBC, Expression, Function
 
 
 class BaseTimestepper(object):
@@ -34,6 +34,22 @@ class BaseTimestepper(object):
         for field, advection in self.advection_dict.iteritems():
             if not isinstance(advection, NoAdvection):
                 advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
+
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.state.xnp1.split()[0]
+
+        if unp1.function_space().extruded:
+            dim = unp1.ufl_element().value_shape()[0]
+            bc = ("0.0",)*dim
+            M = unp1.function_space()
+            bcs = [DirichletBC(M, Expression(bc), "bottom"),
+                   DirichletBC(M, Expression(bc), "top")]
+
+            for bc in bcs:
+                bc.apply(unp1)
 
     @abstractmethod
     def run(self):
@@ -67,7 +83,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax):
+    def run(self, t, tmax, pickup=False):
         state = self.state
 
         state.xn.assign(state.x_init)
@@ -83,7 +99,9 @@ class Timestepper(BaseTimestepper):
             mu_alpha = [0., dt]
         else:
             mu_alpha = [None, None]
-        state.dump()
+
+        with timed_stage("Dump output"):
+            t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
@@ -118,6 +136,7 @@ class Timestepper(BaseTimestepper):
 
                     state.xnp1 += state.dy
 
+            self._apply_bcs()
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
@@ -125,9 +144,10 @@ class Timestepper(BaseTimestepper):
                     diffusion.apply(state.field_dict[name], state.field_dict[name])
 
             with timed_stage("Dump output"):
-                state.dump()
+                state.dump(t, pickup=False)
 
         state.diagnostic_dump()
+        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
 
 
 class AdvectionTimestepper(BaseTimestepper):

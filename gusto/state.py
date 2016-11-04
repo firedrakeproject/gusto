@@ -11,7 +11,8 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, triangle, Function, Mesh, functionspaceimpl,\
     Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
-    ds_tb, dx, solve, op2, par_loop, READ, WRITE
+    ds_tb, dx, solve, op2, par_loop, READ, WRITE, DumbCheckpoint, \
+    FILE_CREATE, FILE_READ
 import numpy as np
 
 
@@ -83,9 +84,12 @@ class State(object):
 
         self.dumpfile = None
 
-    def dump(self):
+    def dump(self, t=0, pickup=False):
         """
         Dump output
+        :arg t: the current model time (default is zero).
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk. (default is False).
         """
 
         # default behaviour is to dump all prognostic fields
@@ -99,14 +103,22 @@ class State(object):
             mesh_ll = get_latlon_mesh(self.mesh)
 
         funcs = self.xn.split()
-        to_dump = []
+
+        to_dump = []  # fields to output to dump and checkpoint
+        to_pickup = []  # fields to pick up from checkpoint
         for name, f in self.field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
+                to_pickup.append(f)
             f.rename(name=name)
+
+        # append diagnostic fields for to_dump
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
 
+        # check if we are running a steady state simulation and if so
+        # set up the error fields and save the
+        # initial fields so that we can compute the error fields
         steady_state_dump_err = defaultdict(bool)
         steady_state_dump_err.update(self.output.steady_state_dump_err)
         for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
@@ -115,7 +127,13 @@ class State(object):
                 self.field_dict[name+"err"] = err
                 self.diagnostics.register(name+"err")
                 to_dump.append(err)
+                f_init.rename(f.name()+"_init")
+                to_dump.append(f_init)
+                to_pickup.append(f_init)
 
+        # check if we are dumping perturbation fields. If we are, the
+        # meanfields are provided in a dictionary. Here we set up the
+        # perturbation fields.
         meanfields = defaultdict(lambda: None)
         meanfields.update(self.output.meanfields)
         for name, meanfield in meanfields.iteritems():
@@ -127,6 +145,10 @@ class State(object):
                 self.diagnostics.register(name+"perturbation")
                 self.field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
+            mean_name = field.name() + "_bar"
+            meanfield.rename(name=mean_name)
+            to_dump.append(meanfield)
+            to_pickup.append(meanfield)
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
@@ -139,7 +161,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
+            if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir) and not pickup:
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -151,18 +173,48 @@ class State(object):
                 self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
                                             comm=self.mesh.comm)
 
-        if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+        if(pickup):
+            # Open the checkpointing file for writing
+            chkfile = path.join(self.dumpdir, "chkpt")
+            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                # Recover all the fields from the checkpoint
+                for field in to_pickup:
+                    chk.load(field)
+                t = chk.read_attribute("/","time")
+                next(self.dumpcount)
 
+        elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
+
+            print "DBG dumping", t
+
+            # dump fields
             self.dumpfile.write(*to_dump)
 
+            # dump fields on latlon mesh
             if len(self.output.dumplist_latlon) > 0:
                 self.dumpfile_latlon.write(*to_dump_latlon)
 
+            # compute diagnostics
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(self.field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
+            # Open the checkpointing file (backup version)
+            files = ["chkptbk", "chkpt"]
+            for file in files:
+                chkfile = path.join(self.dumpdir, file)
+                with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                    # Dump all the fields to a checkpoint
+                    for field in to_dump:
+                        chk.store(field)
+                    chk.write_attribute("/","time",t)
+
+        return t
+
     def diagnostic_dump(self):
+        """
+        Dump diagnostics dictionary
+        """
 
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
@@ -224,7 +276,7 @@ class BaroclinicState(State):
                                               fieldlist=fieldlist,
                                               diagnostic_fields=diagnostic_fields)
 
-        # build the geopotential
+        #  build the geopotential
         if parameters.geopotential:
             V = FunctionSpace(mesh, "CG", 1)
             if on_sphere:
