@@ -52,9 +52,11 @@ def setup_sw(dirname):
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
+    ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
+    Deqn = AdvectionEquation(state, state.V[1], continuity=True)
     advection_dict = {}
-    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-    advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
+    advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
+    advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)
 
