@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.state import IncompressibleState
+from gusto.advection import NoAdvection
 from firedrake import Function
 
 
@@ -31,7 +32,8 @@ class BaseTimestepper(object):
         unp1 = state.xnp1.split()[0]
 
         for field, advection in self.advection_dict.iteritems():
-            advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
+            if not isinstance(advection, NoAdvection):
+                advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
     @abstractmethod
     def run(self):
