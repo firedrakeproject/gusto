@@ -106,7 +106,7 @@ def setup_sk(dirname):
     linear_solver = CompressibleSolver(state, params=schur_params)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state, linear=True)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,

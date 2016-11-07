@@ -14,8 +14,15 @@ class Forcing(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state):
+    def __init__(self, state, euler_poincare=True):
         self.state = state
+        self.euler_poincare = euler_poincare
+
+        self._build_forcing_solver()
+
+    @abstractmethod
+    def _build_forcing_solver(self):
+        pass
 
     @abstractmethod
     def apply(self, scale, x, x_nl, x_out, **kwargs):
@@ -37,12 +44,7 @@ class CompressibleForcing(Forcing):
     Forcing class for compressible Euler equations.
     """
 
-    def __init__(self, state, linear=False):
-        self.state = state
-
-        self._build_forcing_solver(linear)
-
-    def _build_forcing_solver(self, linear):
+    def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
         """
@@ -81,7 +83,7 @@ class CompressibleForcing(Forcing):
             g = state.parameters.g
             L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
 
-        if not linear:
+        if self.euler_poincare:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
@@ -146,12 +148,7 @@ class IncompressibleForcing(Forcing):
     Forcing class for incompressible Euler Boussinesq equations.
     """
 
-    def __init__(self, state, linear=False):
-        self.state = state
-
-        self._build_forcing_solver(linear)
-
-    def _build_forcing_solver(self, linear):
+    def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
         """
@@ -178,7 +175,7 @@ class IncompressibleForcing(Forcing):
             + self.scaling*b0*inner(w,state.k)*dx  # gravity term
         )
 
-        if not linear:
+        if self.euler_poincare:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
@@ -230,9 +227,9 @@ class IncompressibleForcing(Forcing):
 
 class ShallowWaterForcing(Forcing):
 
-    def __init__(self, state, linear=False):
-        self.state = state
+    def _build_forcing_solver(self):
 
+        state = self.state
         g = state.parameters.g
         f = state.f
 
@@ -256,7 +253,7 @@ class ShallowWaterForcing(Forcing):
             (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
 
-        if not linear:
+        if self.euler_poincare:
             L -= 0.5*div(w)*inner(u0, u0)*dx
 
         u_forcing_problem = LinearVariationalProblem(
