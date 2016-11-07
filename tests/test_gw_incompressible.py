@@ -68,7 +68,6 @@ def setup_gw(dirname):
     state.output.meanfields = {'b':state.bbar}
 
     # Set up advection schemes
-    Vtdg = FunctionSpace(mesh, "DG", 1)
     ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
     beqn = AdvectionEquation(state, state.V[2], embedded_dg_space="Default", continuity=False)
     advection_dict = {}

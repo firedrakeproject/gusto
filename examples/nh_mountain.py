@@ -16,9 +16,12 @@ x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
 H = Constant(H)
 a = Constant(1000.)
 xc = Constant(L/2.)
-#new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
-xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
-new_coords = Function(Vc).interpolate(xexpr)
+smooth_z = True
+if smooth_z:
+    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
+    new_coords = Function(Vc).interpolate(xexpr)
+else:
+    new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
 mesh = Mesh(new_coords)
 
 # Space for initialising velocity
