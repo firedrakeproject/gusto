@@ -5,7 +5,7 @@ from firedrake import Function, LinearVariationalProblem, LinearVariationalSolve
 
 def embedded_dg(original_apply):
     """
-    Decorator to add interpolation and projection steps for embedded 
+    Decorator to add interpolation and projection steps for embedded
     DG advection.
     """
     def get_apply(self, x_in, x_out):
@@ -25,6 +25,12 @@ def embedded_dg(original_apply):
 class Advection(object):
     """
     Base class for advection schemes.
+
+    :arg state: :class:`.State` object.
+    :arg field: field to be advected
+    :arg equation: :class:`.Equation` object, specifying the equation
+    that field satisfies
+    :arg solver_params: solver_parameters
     """
     __metaclass__ = ABCMeta
 
@@ -32,7 +38,7 @@ class Advection(object):
 
         self.state = state
         self.field = field
-        
+
         if solver_params is None:
             self.solver_parameters = {'ksp_type':'preonly',
                                       'pc_type':'bjacobi',
@@ -146,7 +152,7 @@ class SSPRK3(Advection):
 class ImplicitMidpoint(Advection):
     """
     Class to implement the implicit midpoint timestepping method:
-    y_(n+1) = y_n + 0.5dt*L(y_n + y_(n+1)) where L is the advection operator. 
+    y_(n+1) = y_n + 0.5dt*L(y_n + y_(n+1)) where L is the advection operator.
     """
     def __init__(self, state, field, equation, solver_params=None):
         super(ImplicitMidpoint, self).__init__(state, field, equation, solver_params)
