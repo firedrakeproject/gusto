@@ -6,8 +6,8 @@ from firedrake import par_loop, WRITE, READ
 
 import numpy as np
 
-nlayers = 10  # 10 horizontal layers
-refinements = 4  # number of horizontal cells = 20*(4^refinements)
+nlayers = 2  # 10 horizontal layers
+refinements = 2  # number of horizontal cells = 20*(4^refinements)
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -190,10 +190,12 @@ for (int i=0; i<3; ++i) {
 state.zhat = zhat
 
 # Set up advection schemes
+rhoeqn = AdvectionEquation(state, state.V[1], linear_ref=rho_b)
+thetaeqn = AdvectionEquation(state, state.V[2], linear_ref=theta_b)
 advection_dict = {}
-advection_dict["u"] = NoAdvection(state)
-advection_dict["rho"] = LinearAdvection_V3(state, state.V[1], rho_b)
-advection_dict["theta"] = LinearAdvection_Vt(state, state.V[2], theta_b)
+advection_dict["u"] = NoAdvection(state, u0)
+advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
+advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
 
 # Set up linear solver
 params = {'pc_type': 'fieldsplit',
@@ -223,7 +225,7 @@ params = {'pc_type': 'fieldsplit',
 linear_solver = CompressibleSolver(state, params=params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, linear)
+compressible_forcing = CompressibleForcing(state, linear=True)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
