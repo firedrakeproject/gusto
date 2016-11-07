@@ -25,6 +25,7 @@ class Advection(object):
     def __init__(self, state, field, equation=None, solver_params=None):
 
         self.state = state
+        self.field = field
         if solver_params is None:
             self.solver_parameters = {'ksp_type':'preonly',
                                       'pc_type':'bjacobi',
@@ -49,7 +50,8 @@ class Advection(object):
 
     def update_solver(self):
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
-        self.solver = LinearVariationalSolver(problem, solver_parameters=self.solver_parameters)
+        solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
+        self.solver = LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply(self, x_in, x_out):
