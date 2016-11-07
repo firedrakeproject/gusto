@@ -12,7 +12,6 @@ else:
     tmax = 15.*60.
 
 L = 51200.
-res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
 
 # build volume mesh
 H = 6400.  # Height position of the model top
