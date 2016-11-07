@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
+from sys import exit
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
@@ -9,9 +10,22 @@ from firedrake import Function, TestFunction, TrialFunction, \
 
 class Equation(object):
     """
-    Base class for equations in Gusto.
+    Base class for advection and momentum equations in Gusto.
 
     :arg state: :class:`.State` object.
+    :arg V: Function space
+    : Keyword arguments:
+       continuity: `bool` if True the advection term is of the form div(u*q),
+                   if False the advection term is of the form u.grad(q).
+                   Defaults to False
+       linear_ref: if present we are solving a linear equation and the
+                   value of linear_ref is the function containing the
+                   state we have linearised about
+       ibp_twice: `bool` if True integrate the advection term by parts twice,
+                   if False only integrate by parts once. Defaults to False
+                   unless SUPG is specified, in which case it must be True.
+       supg: `dict` of options for SUPG
+       embedded_dg_space: `.FunctionSpace` to use for embedded DG advection
     """
     __metaclass__ = ABCMeta
 
@@ -20,7 +34,7 @@ class Equation(object):
         self.V = V
 
         # get parameters from kwargs:
-        self.continuity = kwargs.get("continuity")
+        self.continuity = kwargs.get("continuity", False)
         self.linear = "linear_ref" in kwargs
         if self.linear:
             self.qbar = kwargs.get("linear_ref")
@@ -28,6 +42,8 @@ class Equation(object):
         supg = "supg" in kwargs
         emb_dg = "embedded_dg_space" in kwargs
 
+        if emb_dg and supg:
+            exit("embedded DG and SUPG are incompatible. Choose one.")
         if emb_dg:
             Vdg_elt = BrokenElement(V.ufl_element())
             Vdg = FunctionSpace(state.mesh, Vdg_elt)
@@ -151,7 +167,15 @@ class AdvectionEquation(Equation):
 
 
 class MomentumEquation(AdvectionEquation):
+    """
+    Class defining the momentum equation.
 
+    :arg state: :class:`.State` object.
+    :arg V: Function space
+    : Keyword arguments:
+         vector_invariant: If present the velocity advection term is in vector
+                           invariant form.
+    """
     def __init__(self, state, V, **kwargs):
         super(MomentumEquation, self).__init__(state, V)
 
