@@ -47,16 +47,6 @@ state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
-
-# Thermodynamic constants required for setting initial conditions
-# and reference profiles
-g = parameters.g
-N = parameters.N
-p_0 = parameters.p_0
-c_p = parameters.cp
-R_d = parameters.R_d
-kappa = parameters.kappa
-
 # Isentropic background state
 Tsurf = 300.
 thetab = Constant(Tsurf)
@@ -65,27 +55,8 @@ theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1])
 
 # Calculate hydrostatic Pi
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-W = MixedFunctionSpace((state.Vv,state.V[1]))
-w1 = Function(W)
-v, rho = w1.split()
-rho.assign(rho_b)
-v, rho = split(w1)
-dv, dpi = TestFunctions(W)
-pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))
-F = (
-    (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-    + dpi*div(theta_b*v)*dx
-    + g*inner(dv,k)*dx
-    + c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
-)
-rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
-rhosolver.solve()
-v, rho = w1.split()
-rho_b.interpolate(rho)
+compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
-W_DG1 = FunctionSpace(mesh, "DG", 1)
 x = SpatialCoordinate(mesh)
 theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
 
