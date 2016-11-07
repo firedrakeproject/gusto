@@ -4,6 +4,10 @@ from firedrake import Function, LinearVariationalProblem, LinearVariationalSolve
 
 
 def embedded_dg(original_apply):
+    """
+    Decorator to add interpolation and projection steps for embedded 
+    DG advection.
+    """
     def get_apply(self, x_in, x_out):
         if hasattr(self, "Projector"):
             def new_apply(self, x_in, x_out):
