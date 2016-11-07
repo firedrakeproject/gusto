@@ -19,13 +19,16 @@ def embedded_dg(original_apply):
 
 
 class Advection(object):
-
+    """
+    Base class for advection schemes.
+    """
     __metaclass__ = ABCMeta
 
     def __init__(self, state, field, equation=None, solver_params=None):
 
         self.state = state
         self.field = field
+        
         if solver_params is None:
             self.solver_parameters = {'ksp_type':'preonly',
                                       'pc_type':'bjacobi',
@@ -34,6 +37,10 @@ class Advection(object):
             self.solver_parameters = solver_params
         self.dt = self.state.timestepping.dt
 
+        # check to see if we are using an embedded DG method - is we are then
+        # the projector and output function will have been set up in the
+        # equation class and we can get the correct function space from
+        # the output function.
         if hasattr(equation, "Projector"):
             fs = equation.xdg_out.function_space()
             self.Projector = equation.Projector
@@ -42,13 +49,19 @@ class Advection(object):
             self.x_projected = equation.x_projected
         else:
             fs = field.function_space()
+
+        # setup required functions
         self.dq = Function(fs)
         self.q1 = Function(fs)
+
+        # get ubar from the equation class if provided
         self.equation = equation
         if equation is not None:
             self.ubar = self.equation.ubar
 
     def update_solver(self):
+        # setup solver using lhs and rhs defined in derived class
+
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
         self.solver = LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
@@ -69,7 +82,11 @@ class NoAdvection(Advection):
 
 
 class ForwardEuler(Advection):
-
+    """
+    Class to implement the forward Euler timestepping scheme:
+    y_(n+1) = y_n + dt*L(y_n)
+    where L is the advection operator
+    """
     def __init__(self, state, field, equation, solver_params=None):
         super(ForwardEuler, self).__init__(state, field, equation, solver_params)
 
@@ -84,7 +101,15 @@ class ForwardEuler(Advection):
 
 
 class SSPRK3(Advection):
-
+    """
+    Class to implement the Strongly Structure Preserving Runge Kutta 3-stage
+    timestepping method:
+    y^1 = y_n + L(y_n)
+    y^2 = (3/4)y_n + (1/4)(y^1 + L(y^1))
+    y_(n+1) = (1/3)y_n + (2/3)(y^2 + L(y^2))
+    where subscripts indicate the timelevel, superscripts indicate the stage
+    number and L is the advection operator.
+    """
     def __init__(self, state, field, equation, solver_params=None):
         super(SSPRK3, self).__init__(state, field, equation, solver_params)
 
@@ -115,7 +140,10 @@ class SSPRK3(Advection):
 
 
 class ImplicitMidpoint(Advection):
-
+    """
+    Class to implement the implicit midpoint timestepping method:
+    y_(n+1) = y_n + 0.5dt*L(y_n + y_(n+1)) where L is the advection operator. 
+    """
     def __init__(self, state, field, equation, solver_params=None):
         super(ImplicitMidpoint, self).__init__(state, field, equation, solver_params)
         trial = self.equation.trial
