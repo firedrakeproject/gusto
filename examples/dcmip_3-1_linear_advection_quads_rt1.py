@@ -3,9 +3,17 @@ from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace
 from firedrake import exp, acos, cos, sin
 import numpy as np
+import sys
 
-nlayers = 12  # 10 horizontal layers
-refinements = 4  # number of horizontal cells = 20*(4^refinements)
+dt = 10.
+if '--running-tests' in sys.argv:
+    nlayers = 2  # 2 horizontal layers
+    refinements = 2  # number of horizontal cells = 20*(4^refinements)
+    tmax = 0.
+else:
+    nlayers = 12  # 10 horizontal layers
+    refinements = 4  # number of horizontal cells = 20*(4^refinements)
+    tmax = 3600.
 
 # build surface mesh
 a_ref = 6.37122e6
@@ -53,7 +61,7 @@ k = Function(W_VectorCG1).interpolate(
                 "x[2]/sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2])")))
 
 fieldlist = ['u','rho','theta']
-timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
+timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 output = OutputParameters(Verbose=True, dumpfreq=1, dirname='dcmip_new')
 parameters = CompressibleParameters()
 
@@ -166,4 +174,4 @@ compressible_forcing = CompressibleForcing(state, linear=True)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=tmax)

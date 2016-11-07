@@ -3,6 +3,13 @@ from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
     sin, SpatialCoordinate
 import numpy as np
+import sys
+
+dt = 6.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 3600.
 
 ##############################################################################
 # set up mesh
@@ -40,7 +47,7 @@ fieldlist = ['u', 'p', 'b']
 # class containing timestepping parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-timestepping = TimesteppingParameters(dt=6.0)
+timestepping = TimesteppingParameters(dt=dt)
 
 # class containing output parameters
 # all values not explicitly set here use the default values provided
@@ -142,4 +149,4 @@ stepper = Timestepper(state, advection_dict, linear_solver,
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=tmax)

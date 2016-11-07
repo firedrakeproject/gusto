@@ -3,11 +3,16 @@ from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
 from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
 
+dt = 1.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 700.
+
 L = 1000.
 H = 1000.
 nlayers = int(H/10.)
 ncolumns = int(L/10.)
-dt = 1.
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
@@ -132,4 +137,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=700.)
+stepper.run(t=0, tmax=tmax)
