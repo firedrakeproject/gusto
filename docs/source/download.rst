@@ -6,11 +6,33 @@ Gusto requires installation of `Firedrake
 principle other Linux and Linux-like systems) and must be run from
 within the Firedrake virtual environment.
 
-Having installed Firedrake, check out the `Gusto
-<http://github.com/firedrakeproject/gusto>`_ repository on Github under
-the Firedrake project. Then, start the Firedrake virtualenv add the
-`dcore` subdirectory to your Python path. Try executing files from
-the `examples` directory using e.g., ::
+If you installed Firedrake yourself
+-----------------------------------
+
+You can directly install Gusto in your Firedrake installation by
+activating the Firedrake virtualenv and running::
+
+    firedrake-update --install git+ssh://github.com/firedrakeproject/gusto#egg=gusto
+
+The Gusto source will be installed in the ``src/gusto`` subdirectory
+of your Firedrake install. Using this install method you should
+**not** add add Gusto to your ``PYTHONPATH``. Instead, Gusto will
+automatically be available to import whenever your Firedrake
+virtualenv is active.
+
+
+If you are using a shared, pre-installed Firedrake (such as on some clusters)
+-----------------------------------------------------------------------------
+
+Check out the `Gusto <http://github.com/firedrakeproject/gusto>`_
+repository on Github. Then, start the Firedrake virtualenv and add the
+``gusto`` subdirectory to your ``PYTHONPATH``.
+
+
+Testing your installation
+-------------------------
+
+Try executing files from the ``examples`` directory using e.g., ::
 
   python examples/embedded_DG.py
 
