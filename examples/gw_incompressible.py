@@ -8,8 +8,18 @@ import sys
 dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
+    # avoid using mumps on Travis
+    linear_solver_params = {'ksp_type':'gmres',
+                            'pc_type':'fieldsplit',
+                            'pc_fieldsplit_type':'additive',
+                            'fieldsplit_0_pc_type':'lu',
+                            'fieldsplit_1_pc_type':'lu',
+                            'fieldsplit_0_ksp_type':'preonly',
+                            'fieldsplit_1_ksp_type':'preonly'}
 else:
     tmax = 3600.
+    # use default linear solver parameters (i.e. mumps)
+    linear_solver_params = None
 
 ##############################################################################
 # set up mesh
@@ -133,7 +143,7 @@ advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuit
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L)
+linear_solver = IncompressibleSolver(state, L, params=linear_solver_params)
 
 ##############################################################################
 # Set up forcing
