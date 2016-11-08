@@ -76,8 +76,7 @@ source/teamgrid.rst: source/team.py
 	cd source; python team.py
 
 apidoc: $(GENERATED_FILES) # copy_demos
-	true
-	#sphinx-apidoc ../dcore -o source/ -f -T
+	sphinx-apidoc ../gusto -o source/ -f -T
 
 clean:
 	-rm -rf $(BUILDDIR)/*
