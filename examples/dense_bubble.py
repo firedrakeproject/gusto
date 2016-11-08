@@ -1,7 +1,6 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
 import sys
 
 if '--running-tests' in sys.argv:
