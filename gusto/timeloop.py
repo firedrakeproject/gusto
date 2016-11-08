@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
+from gusto.state import IncompressibleState, Expression
+from firedrake import DirichletBC
 
 
 class Timestepper(object):
@@ -43,7 +44,24 @@ class Timestepper(object):
         for field, advection in self.advection_dict.iteritems():
             advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
-    def run(self, t, tmax):
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.state.xnp1.split()[0]
+
+        if unp1.function_space().extruded:
+            dim = unp1.ufl_element().value_shape()[0]
+            bc = ("0.0",)*dim
+            M = unp1.function_space()
+            bcs = [DirichletBC(M, Expression(bc), "bottom"),
+                   DirichletBC(M, Expression(bc), "top")]
+
+            for bc in bcs:
+                bc.apply(unp1)
+
+    def run(self, t, tmax, pickup=False):
+
         state = self.state
 
         state.xn.assign(state.x_init)
@@ -56,10 +74,12 @@ class Timestepper(object):
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
         if state.mu is not None:
-            mu_alpha = dt
+            mu_alpha = [0., dt]
         else:
-            mu_alpha = None
-        state.dump()
+            mu_alpha = [None, None]
+
+        with timed_stage("Dump output"):
+            t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
@@ -67,7 +87,8 @@ class Timestepper(object):
 
             t += dt
             with timed_stage("Apply forcing terms"):
-                self.forcing.apply((1-alpha)*dt, state.xn, state.xn, state.xstar)
+                self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
+                                   state.xstar, mu_alpha=mu_alpha[0])
                 state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
@@ -84,14 +105,16 @@ class Timestepper(object):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha=mu_alpha,
+                                           state.xrhs, mu_alpha=mu_alpha[1],
                                            incompressible=self.incompressible)
+
                         state.xrhs -= state.xnp1
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
 
                     state.xnp1 += state.dy
 
+            self._apply_bcs()
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
@@ -99,6 +122,8 @@ class Timestepper(object):
                     diffusion.apply(state.field_dict[name], state.field_dict[name])
 
             with timed_stage("Dump output"):
-                state.dump()
+                state.dump(t, pickup=False)
 
         state.diagnostic_dump()
+
+        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
