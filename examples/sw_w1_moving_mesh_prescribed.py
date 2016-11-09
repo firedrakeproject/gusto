@@ -77,7 +77,7 @@ for ref_level, dt in ref_dt.iteritems():
     firsthalf = True
     def meshv_callback(self):
         global firsthalf  # again hacky, assumes that the call sequence each
-                          # timestep is precisely meshx, meshv, meshx
+                          # timestep is precisely meshv, meshx, meshv
         if firsthalf:
             self.deltax.dat.data[:] = np.load("meshes/mesh_" + str(step+1) + ".npy")[:] - np.load("meshes/mesh_" + str(step) + ".npy")[:]
         else:
