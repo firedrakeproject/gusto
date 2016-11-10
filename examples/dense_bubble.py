@@ -79,12 +79,12 @@ for delta, dt in res_dt.iteritems():
     rhoeqn = AdvectionEquation(state, state.V[1], continuity=True)
     supg = True
     if supg:
-        thetaeqn = AdvectionEquation(state, state.V[2], \
-                                     supg={"dg_directions":[0]}, \
+        thetaeqn = AdvectionEquation(state, state.V[2],
+                                     supg={"dg_directions":[0]},
                                      continuity=False)
     else:
-        thetaeqn = AdvectionEquation(state, state.V[2], \
-                                     embedded_dg_space="Default", \
+        thetaeqn = AdvectionEquation(state, state.V[2],
+                                     embedded_dg_space="Default",
                                      continuity=False)
     advection_dict = {}
     advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
