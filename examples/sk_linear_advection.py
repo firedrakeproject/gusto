@@ -3,6 +3,13 @@ from firedrake import Expression, \
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
     exp, sin
 import numpy as np
+import sys
+
+dt = 10.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 3600.
 
 nlayers = 50  # horizontal layers
 columns = 50  # number of columns
@@ -22,7 +29,7 @@ z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=10.0)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_linear', dumplist=['u'])
 parameters = CompressibleParameters()
 
@@ -111,4 +118,4 @@ compressible_forcing = CompressibleForcing(state, linear=True)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=tmax)

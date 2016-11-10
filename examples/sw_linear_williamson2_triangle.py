@@ -3,11 +3,19 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 
+import sys
+
+dt = 3600.
+day = 24.*60.*60.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 5*day
+
 refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 2000.
-day = 24.*60.*60.
 u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 mesh = IcosahedralSphereMesh(radius=R,
@@ -16,7 +24,7 @@ global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
-timestepping = TimesteppingParameters(dt=3600.)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err={'u':True, 'D':True})
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
@@ -64,4 +72,4 @@ sw_forcing = ShallowWaterForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       sw_forcing)
 
-stepper.run(t=0, tmax=5*day)
+stepper.run(t=0, tmax=tmax)

@@ -26,7 +26,7 @@
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.mathjax', 'sphinx.ext.intersphinx',
               'sphinx.ext.viewcode',
-              'sphinxcontrib.youtube',
+              #'sphinxcontrib.youtube',
               'sphinxcontrib.bibtex']
 
 mathjax_path = 'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'

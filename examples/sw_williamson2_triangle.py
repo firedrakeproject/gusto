@@ -2,13 +2,20 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
-# setup resolution and timestepping parameters for convergence test
-ref_dt = {3:3000., 4:1500., 5:750., 6:375}
+import sys
+
+day = 24.*60.*60.
+if '--running-tests' in sys.argv:
+    ref_dt = {3:3000.}
+    tmax = 3000.
+else:
+    # setup resolution and timestepping parameters for convergence test
+    ref_dt = {3:3000., 4:1500., 5:750., 6:375}
+    tmax = 5*day
 
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
-day = 24.*60.*60.
 u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
@@ -69,4 +76,4 @@ for ref_level, dt in ref_dt.iteritems():
     stepper = Timestepper(state, advection_dict, linear_solver,
                           sw_forcing)
 
-    stepper.run(t=0, tmax=5*day)
+    stepper.run(t=0, tmax=tmax)
