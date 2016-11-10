@@ -1,17 +1,23 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
-from firedrake import ds_b, NonlinearVariationalProblem, NonlinearVariationalSolver
+import sys
+
+if '--running-tests' in sys.argv:
+    res_dt = {800.:4.}
+    tmax = 4.
+else:
+    res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+    tmax = 15.*60.
 
 L = 51200.
-res_dt = {400.:2.}
 
 # build volume mesh
 H = 6400.  # Height position of the model top
 
 for delta, dt in res_dt.iteritems():
 
-    dirname = "withdstb_db_dx%s_dt%s" % (delta, dt)
+    dirname = "db_dx%s_dt%s" % (delta, dt)
     nlayers = int(H/delta)  # horizontal layers
     columns = int(L/delta)  # number of columns
 
@@ -47,15 +53,6 @@ for delta, dt in res_dt.iteritems():
     # Initial conditions
     u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
-    # Thermodynamic constants required for setting initial conditions
-    # and reference profiles
-    g = parameters.g
-    N = parameters.N
-    p_0 = parameters.p_0
-    c_p = parameters.cp
-    R_d = parameters.R_d
-    kappa = parameters.kappa
-
     # Isentropic background state
     Tsurf = 300.
     thetab = Constant(Tsurf)
@@ -64,33 +61,14 @@ for delta, dt in res_dt.iteritems():
     rho_b = Function(state.V[1])
 
     # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b)
-    W = MixedFunctionSpace((state.Vv,state.V[1]))
-    w1 = Function(W)
-    v, rho = w1.split()
-    rho.assign(rho_b)
-    v, rho = split(w1)
-    dv, dpi = TestFunctions(W)
-    pi = ((R_d/p_0)*rho*theta_b)**(kappa/(1.-kappa))
-    F = (
-        (c_p*inner(v,dv) - c_p*div(dv*theta_b)*pi)*dx
-        + dpi*div(theta_b*v)*dx
-        + g*inner(dv,k)*dx
-        + c_p*inner(dv,n)*theta_b*ds_b  # bottom surface value pi = 1.
-    )
-    rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-    rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
-    rhosolver.solve()
-    v, rho = w1.split()
-    rho_b.interpolate(rho)
+    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
-    W_DG1 = FunctionSpace(mesh, "DG", 1)
     x = SpatialCoordinate(mesh)
     a = 5.0e3
     deltaTheta = 1.0e-2
-    theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=g))
+    theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=parameters.g))
     theta0.interpolate(theta_b + theta_pert)
-    rho0.interpolate(rho_b)
+    rho0.assign(rho_b)
 
     state.initialise([u0, rho0, theta0])
     state.set_reference_profiles(rho_b, theta_b)
@@ -141,4 +119,4 @@ for delta, dt in res_dt.iteritems():
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing, diffusion_dict)
 
-    stepper.run(t=0, tmax=15.*60.)
+    stepper.run(t=0, tmax=tmax)

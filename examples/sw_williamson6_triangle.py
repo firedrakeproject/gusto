@@ -1,12 +1,19 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector, VectorFunctionSpace, cos, sin
+import sys
+
+dt = 120.
+day = 24.*60.*60.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 14*day
 
 refinements = 5  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 8000.
-day = 24.*60.*60.
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
@@ -14,7 +21,7 @@ global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
-timestepping = TimesteppingParameters(dt=120.)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sw_rossby_wave_ll', dumpfreq=1, dumplist_latlon=['D'])
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
@@ -72,4 +79,4 @@ sw_forcing = ShallowWaterForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       sw_forcing)
 
-stepper.run(t=0, tmax=14*day)
+stepper.run(t=0, tmax=tmax)

@@ -1,6 +1,13 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
+import sys
+
+dt = 5.0
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 9000.
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
@@ -28,7 +35,6 @@ W_DG = FunctionSpace(mesh, "DG", 2)
 z = Function(W_CG).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG).interpolate(Expression(("0.","1.")))
 
-dt = 5.0
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
 # mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
 mu = Function(W_DG).interpolate(mu_top)
@@ -158,4 +164,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=9000.0)
+stepper.run(t=0, tmax=tmax)
