@@ -26,7 +26,7 @@ z = Function(W_CG1).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=2.0, maxk=4, maxi=1)
+timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
