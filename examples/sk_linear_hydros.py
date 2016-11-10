@@ -3,6 +3,13 @@ from firedrake import Expression, \
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
     exp, sin, SpatialCoordinate
 import numpy as np
+import sys
+
+dt = 100.
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 6000.
 
 nlayers = 10  # horizontal layers
 columns = 100  # number of columns
@@ -23,7 +30,7 @@ k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
 Omega = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.e-4")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=100.0)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_linear_hydros', dumplist=['u','rho','theta'])
 parameters = CompressibleParameters()
 
@@ -56,7 +63,7 @@ theta_b = Function(state.V[2]).interpolate(thetab)
 rho_b = Function(state.V[1])
 
 # Calculate hydrostatic Pi
-compressible_hydrostatic_balance(state, theta_b, rho_b)
+compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
 x = SpatialCoordinate(mesh)
@@ -71,10 +78,12 @@ state.set_reference_profiles(rho_b, theta_b)
 state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
+rhoeqn = AdvectionEquation(state, state.V[1], linear_ref=rho_b)
+thetaeqn = AdvectionEquation(state, state.V[2], linear_ref=theta_b)
 advection_dict = {}
-advection_dict["u"] = NoAdvection(state)
-advection_dict["rho"] = LinearAdvection_V3(state, state.V[1], rho_b)
-advection_dict["theta"] = LinearAdvection_Vt(state, state.V[2], theta_b)
+advection_dict["u"] = NoAdvection(state, u0, None)
+advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
+advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
@@ -110,4 +119,4 @@ compressible_forcing = CompressibleForcing(state, linear=True)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=6000.0)
+stepper.run(t=0, tmax=tmax)

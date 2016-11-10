@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
-
 import sys
 
 dt = 3600.
@@ -60,8 +59,8 @@ D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 
 advection_dict = {}
-advection_dict["u"] = NoAdvection(state)
-advection_dict["D"] = NoAdvection(state)
+advection_dict["u"] = NoAdvection(state, u0, None)
+advection_dict["D"] = NoAdvection(state, D0, None)
 
 linear_solver = ShallowWaterSolver(state)
 

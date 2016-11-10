@@ -3,9 +3,18 @@ from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
     exp, sin
 import numpy as np
+import sys
 
-nlayers = 10  # horizontal layers
-columns = 150  # number of columns
+dt = 6.
+if '--running-tests' in sys.argv:
+    nlayers = 5  # horizontal layers
+    columns = 50  # number of columns
+    tmax = dt
+else:
+    nlayers = 10  # horizontal layers
+    columns = 150  # number of columns
+    tmax = 3600.
+
 L = 3.0e5
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
@@ -22,7 +31,7 @@ z = Function(W_CG1).interpolate(Expression("x[2]"))
 k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=6.0)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_nonlinear_3d', dumpfreq=1, dumplist=['u'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
@@ -117,4 +126,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=3600.0)
+stepper.run(t=0, tmax=tmax)
