@@ -14,9 +14,14 @@ class Forcing(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, euler_poincare=True):
+    def __init__(self, state, **kwargs):
         self.state = state
-        self.euler_poincare = euler_poincare
+        euler_poincare = kwargs.get('euler_poincare', True)
+        linear = kwargs.get('linear', False)
+        if linear:
+            self.euler_poincare = False
+        else:
+            self.euler_poincare = euler_poincare
 
         self._build_forcing_solver()
 
