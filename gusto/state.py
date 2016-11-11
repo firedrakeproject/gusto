@@ -281,8 +281,10 @@ class BaroclinicState(State):
             V = FunctionSpace(mesh, "CG", 1)
             if on_sphere:
                 self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-            else:
+            elif(self.mesh.geometric_dimension() == 2):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
+            elif(self.mesh.geometric_dimension() == 3):
+                self.Phi = Function(V).interpolate(Expression("x[2]"))
             self.Phi *= parameters.g
 
         if self.k is None:
