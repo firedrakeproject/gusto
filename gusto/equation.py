@@ -185,20 +185,24 @@ class MomentumEquation(AdvectionEquation):
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
         if V.extruded:
             self.dS = dS_v + dS_h
-            self.perp = lambda u: as_vector([-u[1], u[0]])
-            self.perp_u_upwind = lambda q: self.Upwind('+')*self.perp(q('+')) + self.Upwind('-')*self.perp(q('-'))
         else:
             self.dS = dS
-            outward_normals = CellNormal(state.mesh)
-            self.perp = lambda u: cross(outward_normals, u)
-            self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
-        self.gradperp = lambda u: self.perp(grad(u))
+
+        if self.state.mesh.topological_dimension() == 2:
+            if V.extruded:
+                self.perp = lambda u: as_vector([-u[1], u[0]])
+                self.perp_u_upwind = lambda q: self.Upwind('+')*self.perp(q('+')) + self.Upwind('-')*self.perp(q('-'))
+            else:
+                outward_normals = CellNormal(state.mesh)
+                self.perp = lambda u: cross(outward_normals, u)
+                self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
+            self.gradperp = lambda u: self.perp(grad(u))
 
     def advection_term(self, q):
 
         if self.vector_invariant_form is not None:
-            if self.state.mesh.topological_dimension() == 3:
 
+            if self.state.mesh.topological_dimension() == 3:
                 # <w,curl(u) cross ubar + grad( u.ubar)>
                 # =<curl(u),ubar cross w> - <div(w), u.ubar>
                 # =<u,curl(ubar cross w)> -
