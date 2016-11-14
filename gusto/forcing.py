@@ -92,7 +92,8 @@ class CompressibleForcing(Forcing):
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
-            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
+            u_init = state.x_init.split()[0]
+            L -= self.scaling*inner(w,cross(2*Omega,u0-u_init))*dx  # Coriolis term
 
         if mu is not None:
             self.mu_scaling = Constant(1.)
