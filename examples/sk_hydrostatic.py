@@ -14,7 +14,7 @@ if high_res:
 else:
     nlayers = 10  # horizontal layers
     columns = 300  # number of columns
-    dt = 50.
+    dt = 25.
     dirname = dirname
 L = 6.0e6
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
