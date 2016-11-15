@@ -3,19 +3,27 @@ from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
     exp, sin, SpatialCoordinate
 import numpy as np
+import sys
 
 dirname = 'sk_hydrostatic'
+
 high_res = False
 if high_res:
     nlayers = 20  # horizontal layers
     columns = 600  # number of columns
-    dt = 25.
+    dt = 12.5
     dirname = dirname+"_highres"
 else:
     nlayers = 10  # horizontal layers
     columns = 300  # number of columns
     dt = 25.
     dirname = dirname
+
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 60000.
+
 L = 6.0e6
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
@@ -153,4 +161,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=60000.0)
+stepper.run(t=0, tmax=tmax)

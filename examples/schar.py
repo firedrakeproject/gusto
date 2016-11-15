@@ -1,6 +1,13 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp, cos, pi
+import sys
+
+dt = 8.0
+if '--running-tests' in sys.argv:
+    tmax = dt
+else:
+    tmax = 18000.
 
 nlayers = 50  # horizontal layers
 columns = 100  # number of columns
@@ -16,9 +23,15 @@ x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
 H = Constant(H)
 a = Constant(5000.)
 xc = Constant(L/2.)
-#new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
-xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*exp(-pow((x[0]-xc)/a,2))*pow(cos(pi*(x[0]-xc)/ll),2) : x[1]"), zh=5000., h=250., a=a, xc=xc, H=H, ll=4000.)
-new_coords = Function(Vc).interpolate(xexpr)
+h = Constant(250.)
+ll = Constant(4000.)
+smooth_z = False
+if smooth_z:
+    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*exp(-pow((x[0]-xc)/a,2))*pow(cos(pi*(x[0]-xc)/ll),2) : x[1]"), zh=5000., h=h, a=a, xc=xc, H=H, ll=ll)
+    new_coords = Function(Vc).interpolate(xexpr)
+else:
+    new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*h*exp(-pow((x[0]-xc)/a,2))*pow(cos(pi*(x[0]-xc)/ll),2)/H]))
+
 mesh = Mesh(new_coords)
 
 # Space for initialising velocity
@@ -30,7 +43,6 @@ W_DG = FunctionSpace(mesh, "DG", 2)
 z = Function(W_CG).interpolate(Expression("x[1]"))
 k = Function(W_VectorCG).interpolate(Expression(("0.","1.")))
 
-dt = 8.0
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=1.2/dt)
 # mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
 mu = Function(W_DG).interpolate(mu_top)
@@ -166,4 +178,4 @@ compressible_forcing = CompressibleForcing(state)
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing)
 
-stepper.run(t=0, tmax=18000.0)
+stepper.run(t=0, tmax=tmax)
