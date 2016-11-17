@@ -1,6 +1,7 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,\
+    DirichletBC
 import sys
 
 if '--running-tests' in sys.argv:
@@ -123,8 +124,8 @@ for delta, dt in res_dt.iteritems():
     compressible_forcing = CompressibleForcing(state)
 
     V = state.V[0]
-    bcs = [DirichletBC(V, Expression(("0.0","0.0")), "bottom"),
-           DirichletBC(V, Expression(("0.0","0.0")), "top")]
+    bcs = [DirichletBC(V, 0.0, "bottom"),
+           DirichletBC(V, 0.0, "top")]
     diffusion_dict = {"u": InteriorPenalty(state, state.V[0], kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
                       "theta": InteriorPenalty(state, state.V[2], kappa=Constant(75.), mu=Constant(10./delta))}
 
