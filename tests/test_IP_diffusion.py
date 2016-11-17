@@ -59,8 +59,8 @@ def run(dirname, vector, DG):
 
     kappa = Constant(0.05)
     if vector:
-        kappa = as_tensor([[kappa, 0.],[0., kappa]])
-    mu = 5.
+        kappa = Constant([[0.05, 0.],[0., 0.05]])
+    mu = Constant(5.)
     dt = state.timestepping.dt
     tmax = 2.5
     t = 0.
