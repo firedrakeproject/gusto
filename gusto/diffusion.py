@@ -35,10 +35,10 @@ class InteriorPenalty(Diffusion):
     :arg state: :class:`.State` object.
     :arg V: Function space of diffused field
     :arg direction: list containing directions in which function space
-    is discontinuous: 1 corresponds to vertical, 2 to horizontal.
-    :arg params: dictionary containing the interior penalty parameters
-    :mu and kappa where mu is the penalty weighting function, which is
+    :arg: mu: the penalty weighting function, which is
     :recommended to be proportional to 1/dx
+    :arg: kappa: strength of diffusion
+    :arg: bcs: (optional) a list of boundary conditions to apply
 
     """
 
