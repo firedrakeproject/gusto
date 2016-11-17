@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Expression, \
-    VectorFunctionSpace, File, as_tensor
+    VectorFunctionSpace, File
 import pytest
 
 
