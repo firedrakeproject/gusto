@@ -170,7 +170,6 @@ class ImplicitMidpoint(Advection):
 class TaylorGalerkin(Advection):
     def __init__(self, state, field, equation, solver_params=None):
         super(TaylorGalerkin, self).__init__(state, field, equation, solver_params)
-        print "IN TG"
         self.q2 = Function(self.q1.function_space())
         self.update_solver()
 
@@ -202,9 +201,7 @@ class TaylorGalerkin(Advection):
 
     def apply(self, x_in, x_out):
         self.equation.q.assign(x_in)
-        print "solving q1"
         self.q1solver.solve()
-        print "solving q1"
         self.q2solver.solve()
         x_out.assign(self.q2)
 
