@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver
+from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver, inner, grad
 
 
 def embedded_dg(original_apply):
@@ -166,3 +166,46 @@ class ImplicitMidpoint(Advection):
         self.equation.q.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
+
+class TaylorGalerkin(Advection):
+    def __init__(self, state, field, equation, solver_params=None):
+        super(TaylorGalerkin, self).__init__(state, field, equation, solver_params)
+        print "IN TG"
+        self.q2 = Function(self.q1.function_space())
+        self.update_solver()
+
+    def update_solver(self):
+
+        # stable for eta>0.473ish
+        eta = 0.48
+        c1 = 0.5*(1 + (-1./3.+8*eta)**0.5)
+        mu11 = c1
+        mu12 = 0.
+        mu21 = 0.5*(3-1./c1)
+        mu22 = 0.5*(1./c1-1)
+        nu11 = 0.5*c1**2-eta
+        nu12 = 0.0
+        nu21 = 0.25*(3*c1-1)-eta
+        nu22 = 0.25*(1-c1)
+
+        dt = self.dt
+        trial = self.equation.trial
+        q = self.equation.q
+        lhs = self.equation.mass_term(trial) - eta*dt**2*self.equation.advection_term(inner(self.ubar, grad(trial)))
+        rhs1 = self.equation.mass_term(q) + mu11*dt*self.equation.advection_term(q) + nu11*dt**2*self.equation.advection_term(inner(self.ubar, grad(q)))
+        rhs2 = self.equation.mass_term(q) + mu21*dt*self.equation.advection_term(q) + nu21*dt**2*self.equation.advection_term(inner(self.ubar, grad(q))) + mu22*dt*self.equation.advection_term(self.q1) + nu22*dt**2*self.equation.advection_term(inner(self.ubar, grad(self.q1)))
+
+        q1problem = LinearVariationalProblem(lhs, rhs1, self.q1)
+        self.q1solver = LinearVariationalSolver(q1problem, solver_parameters={'ksp_type':'cg'})
+        q2problem = LinearVariationalProblem(lhs, rhs2, self.q2)
+        self.q2solver = LinearVariationalSolver(q2problem, solver_parameters={'ksp_type':'cg'})
+
+    def apply(self, x_in, x_out):
+        self.equation.q.assign(x_in)
+        print "solving q1"
+        self.q1solver.solve()
+        print "solving q1"
+        self.q2solver.solve()
+        x_out.assign(self.q2)
+
+
