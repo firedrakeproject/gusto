@@ -42,12 +42,10 @@ class InteriorPenalty(Diffusion):
 
     """
 
-    def __init__(self, state, V, direction=[1,2], params=None):
+    def __init__(self, state, V, kappa, mu, bcs=None):
         super(InteriorPenalty, self).__init__(state)
 
         dt = state.timestepping.dt
-        kappa = params['kappa']
-        mu = params['mu']
         gamma = TestFunction(V)
         phi = TrialFunction(V)
         self.phi1 = Function(V)
@@ -61,12 +59,10 @@ class InteriorPenalty(Diffusion):
                       + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
             return fluxes
 
-        if 1 in direction:
-            a += dt*get_flux_form(dS_v, kappa)
-        if 2 in direction:
-            a += dt*get_flux_form(dS_h, kappa)
+        a += dt*get_flux_form(dS_v, kappa)
+        a += dt*get_flux_form(dS_h, kappa)
         L = inner(gamma,phi)*dx
-        problem = LinearVariationalProblem(a, action(L,self.phi1), self.phi1)
+        problem = LinearVariationalProblem(a, action(L,self.phi1), self.phi1, bcs=bcs)
         self.solver = LinearVariationalSolver(problem)
 
     def apply(self, x_in, x_out):
