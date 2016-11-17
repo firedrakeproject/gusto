@@ -88,10 +88,9 @@ for delta, dt in res_dt.iteritems():
                                      embedded_dg_space="Default",
                                      continuity=False)
     advection_dict = {}
-    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-    advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
-    advection_dict["theta"] = SUPGAdvection(state, state.V[2], direction=[1])
-    # advection_dict["theta"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
+    advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
+    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
