@@ -115,7 +115,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
     if time_discretisation is "ssprk":
         f_advection = SSPRK3(state, f, fequation)
     elif time_discretisation is "implicit_midpoint":
-        f_advection = ImplicitMidpoint(state, f, fequation)
+        f_advection = ThetaMethod(state, f, fequation)
 
     advection_dict = {}
     advection_dict["f"] = f_advection

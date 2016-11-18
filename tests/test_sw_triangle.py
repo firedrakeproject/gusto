@@ -55,7 +55,7 @@ def setup_sw(dirname):
     ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
     Deqn = AdvectionEquation(state, state.V[1], continuity=True)
     advection_dict = {}
-    advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
+    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)

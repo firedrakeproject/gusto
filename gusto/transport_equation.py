@@ -8,7 +8,7 @@ from firedrake import Function, TestFunction, TrialFunction, \
     curl, warning, BrokenElement, FunctionSpace, Projector
 
 
-class Equation(object):
+class TransportEquation(object):
     """
     Base class for advection and momentum equations in Gusto.
 
@@ -130,7 +130,7 @@ class Equation(object):
         pass
 
 
-class AdvectionEquation(Equation):
+class AdvectionEquation(TransportEquation):
 
     def advection_term(self, q):
 

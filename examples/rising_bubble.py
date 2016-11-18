@@ -79,7 +79,7 @@ else:
                                  embedded_dg_space="Default",
                                  continuity=False)
 advection_dict = {}
-advection_dict["u"] = ImplicitMidpoint(state, u0, ueqn)
+advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
 advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
