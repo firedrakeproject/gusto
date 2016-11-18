@@ -149,17 +149,17 @@ class SSPRK3(Advection):
             self.solve_stage(x_in, x_out, i)
 
 
-class ImplicitMidpoint(Advection):
+class ThetaMethod(Advection):
     """
-    Class to implement the implicit midpoint timestepping method:
-    y_(n+1) = y_n + 0.5dt*L(y_n + y_(n+1)) where L is the advection operator.
+    Class to implement the theta timestepping method:
+    y_(n+1) = y_n + theta*dt*L(y_n + y_(n+1)) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, solver_params=None):
-        super(ImplicitMidpoint, self).__init__(state, field, equation, solver_params)
+    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
         trial = self.equation.trial
         q = self.equation.q
-        self.lhs = self.equation.mass_term(trial) + 0.5*self.dt*self.equation.advection_term(trial)
-        self.rhs = self.equation.mass_term(q) - 0.5*self.dt*self.equation.advection_term(q)
+        self.lhs = self.equation.mass_term(trial) + theta*self.dt*self.equation.advection_term(trial)
+        self.rhs = self.equation.mass_term(q) - theta*self.dt*self.equation.advection_term(q)
         self.update_solver()
 
     def apply(self, x_in, x_out):
