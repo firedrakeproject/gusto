@@ -153,27 +153,29 @@ def test_advection_dg(tmpdir, geometry, time_discretisation, ibp, vector, contin
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
-@pytest.mark.parametrize("geometry", ["slice"])
-@pytest.mark.parametrize("time_discretisation", ["ssprk"])
 @pytest.mark.parametrize("ibp", ["once", "twice"])
-@pytest.mark.parametrize("vector", [False])
 @pytest.mark.parametrize("continuity", [False, True])
 @pytest.mark.parametrize("space", ["Broken", "DG"])
-def test_advection_embedded_dg(tmpdir, geometry, time_discretisation, ibp, vector, continuity, space):
+def test_advection_embedded_dg(tmpdir, ibp, continuity, space):
 
+    geometry = "slice"
+    time_discretisation = "ssprk"
+    vector = False
     dirname = str(tmpdir)
     f_err = run(dirname, geometry, time_discretisation, ibp, vector, continuity, spatial_opts={"embedded_dg":{"space":space}})
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
-@pytest.mark.parametrize("geometry", ["slice"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp", ["twice"])
+@pytest.mark.parametrize("ibp", [None, "twice"])
 @pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-@pytest.mark.parametrize("direction", [None, "horizontal"])
-def test_advection_supg(tmpdir, geometry, time_discretisation, ibp, vector, continuity, direction):
-
+def test_advection_supg(tmpdir, time_discretisation, ibp, vector, continuity):
+    geometry = "slice"
+    if ibp is None:
+        direction = None
+    else:
+        direction = "horizontal"
     dirname = str(tmpdir)
     f_err = run(dirname, geometry, time_discretisation, ibp, vector, continuity, spatial_opts={"supg_params":{"dg_direction":direction}})
     assert(abs(f_err.dat.data.max()) < error[geometry])

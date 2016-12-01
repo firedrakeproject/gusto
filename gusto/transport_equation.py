@@ -259,6 +259,8 @@ class VectorInvariant(Advection):
                                  self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                 )
 
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+
         return L
 
 
@@ -266,5 +268,5 @@ class EulerPoincare(VectorInvariant):
 
     def advection_term(self, q):
         L = super(EulerPoincare, self).advection_term(q)
-        L -= div(self.test)*inner(q, self.ubar)*dx
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L
