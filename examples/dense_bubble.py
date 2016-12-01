@@ -8,7 +8,7 @@ if '--running-tests' in sys.argv:
     res_dt = {800.:4.}
     tmax = 4.
 else:
-    res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+    res_dt = {800.:4.}#,400.:2.,200.:1.,100.:0.5,50.:0.25}
     tmax = 15.*60.
 
 L = 51200.
@@ -81,7 +81,7 @@ for delta, dt in res_dt.iteritems():
     supg = True
     if supg:
         thetaeqn = SUPGAdvection(state, state.V[2],
-                                 supg_params={"dg_directions":[0]},
+                                 supg_params={"dg_direction":"horizontal"},
                                  continuity=False)
     else:
         thetaeqn = EmbeddedDGAdvection(state, state.V[2],

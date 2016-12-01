@@ -138,7 +138,7 @@ ueqn = EulerPoincare(state, state.V[0])
 supg = True
 if supg:
     beqn = SUPGAdvection(state, state.V[2],
-                         supg_params={"dg_directions":[0]},
+                         supg_params={"dg_direction":"horizontal"},
                          continuity=False)
 else:
     beqn = EmbeddedDGAdvection(state, state.V[2],

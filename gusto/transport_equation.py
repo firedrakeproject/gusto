@@ -76,13 +76,13 @@ class Advection(TransportEquation):
         # If there are as many dofs on vertices as there are vertices,
         # assume a continuous space.
         try:
-            is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
+            self.is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
         except KeyError:
-            is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+            self.is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
 
         # DG, embedded DG and hybrid SUPG methods need surface measures,
         # n and un
-        if is_cg:
+        if self.is_cg:
             self.dS = None
         else:
             if V.extruded:
@@ -142,12 +142,14 @@ class EmbeddedDGAdvection(Advection):
 
 class SUPGAdvection(Advection):
 
-    def __init__(self, state, V, ibp=None, continuity=False, supg_params=None):
+    def __init__(self, state, V, ibp="twice", continuity=False, supg_params=None):
         super(SUPGAdvection, self).__init__(state, V, ibp)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp is "once":
             raise ValueError("if using SUPG we cannot integrate by parts once")
+        if ibp is None and not self.is_cg:
+            raise ValueError("are you very sure you don't need surface terms?")
 
         # set default SUPG parameters
         dt = state.timestepping.dt
@@ -168,16 +170,11 @@ class SUPGAdvection(Advection):
             # if space is discontinuous in the horizontal direction, we
             # need to include surface integrals on the vertical faces
             self.dS = dS_v
-            self.n = FacetNormal(state.mesh)
-            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
         elif supg_params["dg_direction"] is "vertical":
             # if space is discontinuous in the vertical direction, we
             # need to include surface integrals on the horizontal faces
             self.dS = dS_h
-            self.n = FacetNormal(state.mesh)
-            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
         else:
-            print supg_params["dg_direction"]
             raise RuntimeError("Invalid dg_direction in supg_params.")
 
         # make SUPG test function

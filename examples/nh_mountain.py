@@ -133,7 +133,7 @@ ueqn = EulerPoincare(state, state.V[0])
 rhoeqn = Advection(state, state.V[1], continuity=True)
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_directions":[0]}, continuity=False)
+    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, continuity=False)
 else:
     thetaeqn = EmbeddedDGAdvection(state, state.V[2], continuity=False)
 advection_dict = {}
