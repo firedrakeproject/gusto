@@ -75,7 +75,7 @@ def setup_sk(dirname):
     # Set up advection schemes
     ueqn = EulerPoincare(state, state.V[0])
     rhoeqn = Advection(state, state.V[1], continuity=True)
-    thetaeqn = Advection(state, state.V[2], supg={"dg_directions":[1]})
+    thetaeqn = Advection(state, state.V[2], supg={"dg_direction":"horizontal"})
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
