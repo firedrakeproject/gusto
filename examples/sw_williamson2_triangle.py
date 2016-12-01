@@ -61,8 +61,8 @@ for ref_level, dt in ref_dt.iteritems():
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
-    ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
-    Deqn = AdvectionEquation(state, state.V[1], continuity=True)
+    ueqn = EulerPoincare(state, state.V[0])
+    Deqn = Advection(state, state.V[1], continuity=True)
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)

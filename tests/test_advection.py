@@ -8,7 +8,7 @@ from math import pi
 error = {"slice": 7e-2, "sphere": 2.5e-2}
 
 
-def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=None):
+def setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vector, spatial_opts=None):
 
     output = OutputParameters(dirname=dirname, dumplist=["f"], dumpfreq=15)
     if geometry is "sphere":
@@ -85,15 +85,15 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
         state.initialise([u0, rho0, theta0])
 
         if spatial_opts is not None:
-            if "supg" in spatial_opts:
+            if "supg_params" in spatial_opts:
                 # if the direction list is empty we are testing SUPG for a
                 # continuous space, else we are testing the hybrid SUPG /
                 # DG upwind scheme for the theta space
-                if len(spatial_opts["supg"].get("dg_directions")) == 0:
+                if spatial_opts["supg_params"]["dg_direction"] is None:
                     space = W_CG1
                 else:
                     space = state.V[2]
-            elif "embedded_dg_space" in spatial_opts:
+            elif "embedded_dg" in spatial_opts:
                 space = state.V[2]
         else:
             space = state.V[1]
@@ -108,10 +108,16 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
     state.field_dict["f"] = f
     f_end.interpolate(f_end_expr)
 
-    if spatial_opts is not None:
-        fequation = AdvectionEquation(state, f.function_space(), continuity=continuity, **spatial_opts)
-    else:
-        fequation = AdvectionEquation(state, f.function_space(), continuity=continuity)
+    if spatial_opts is None:
+        fequation = Advection(state, f.function_space(), ibp=ibp, continuity=continuity)
+    elif "supg_params" in spatial_opts:
+        fequation = SUPGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity, supg_params=spatial_opts["supg_params"])
+    elif "embedded_dg" in spatial_opts:
+        if spatial_opts["embedded_dg"]["space"] is "Broken":
+            fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity)
+        elif spatial_opts["embedded_dg"]["space"] is "DG":
+            fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity, Vdg=space)
+
     if time_discretisation is "ssprk":
         f_advection = SSPRK3(state, f, fequation)
     elif time_discretisation is "implicit_midpoint":
@@ -124,9 +130,9 @@ def setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuit
     return timestepper, tmax, f_end
 
 
-def run(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=None):
+def run(dirname, geometry, time_discretisation, ibp, continuity, vector, spatial_opts=None):
 
-    timestepper, tmax, f_end = setup_advection(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, spatial_opts=spatial_opts)
+    timestepper, tmax, f_end = setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vector, spatial_opts=spatial_opts)
 
     f_dict = timestepper.run(0, tmax, x_end=["f"])
     f = f_dict["f"]
@@ -137,36 +143,37 @@ def run(dirname, geometry, time_discretisation, ibp_twice, continuity, vector, s
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp_twice", [False, True])
+@pytest.mark.parametrize("ibp", ["once", "twice"])
 @pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-def test_advection_dg(tmpdir, geometry, time_discretisation, ibp_twice, vector, continuity):
+def test_advection_dg(tmpdir, geometry, time_discretisation, ibp, vector, continuity):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity)
+    f_err = run(dirname, geometry, time_discretisation, ibp, vector, continuity)
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
 @pytest.mark.parametrize("geometry", ["slice"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk"])
-@pytest.mark.parametrize("ibp_twice", [False, True])
+@pytest.mark.parametrize("ibp", ["once", "twice"])
 @pytest.mark.parametrize("vector", [False])
 @pytest.mark.parametrize("continuity", [False, True])
-def test_advection_embedded_dg(tmpdir, geometry, time_discretisation, ibp_twice, vector, continuity):
+@pytest.mark.parametrize("space", ["Broken", "DG"])
+def test_advection_embedded_dg(tmpdir, geometry, time_discretisation, ibp, vector, continuity, space):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity, spatial_opts={"embedded_dg_space":"default"})
+    f_err = run(dirname, geometry, time_discretisation, ibp, vector, continuity, spatial_opts={"embedded_dg":{"space":space}})
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
 @pytest.mark.parametrize("geometry", ["slice"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp_twice", [True])
+@pytest.mark.parametrize("ibp", ["twice"])
 @pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("continuity", [False, True])
-@pytest.mark.parametrize("direction", [[],[0]])
-def test_advection_supg(tmpdir, geometry, time_discretisation, ibp_twice, vector, continuity, direction):
+@pytest.mark.parametrize("direction", [None, "horizontal"])
+def test_advection_supg(tmpdir, geometry, time_discretisation, ibp, vector, continuity, direction):
 
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp_twice, vector, continuity, spatial_opts={"supg":{"dg_directions":direction}})
+    f_err = run(dirname, geometry, time_discretisation, ibp, vector, continuity, spatial_opts={"supg_params":{"dg_direction":direction}})
     assert(abs(f_err.dat.data.max()) < error[geometry])
