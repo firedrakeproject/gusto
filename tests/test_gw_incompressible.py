@@ -68,8 +68,8 @@ def setup_gw(dirname):
     state.output.meanfields = {'b':state.bbar}
 
     # Set up advection schemes
-    ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
-    beqn = AdvectionEquation(state, state.V[2], embedded_dg_space="Default", continuity=False)
+    ueqn = EulerPoincare(state, state.V[0])
+    beqn = EmbeddedDGAdvection(state, state.V[2], continuity=False)
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["b"] = SSPRK3(state, b0, beqn)

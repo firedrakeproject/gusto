@@ -134,16 +134,15 @@ state.output.meanfields = {'b':state.bbar}
 # Set up advection schemes
 ##############################################################################
 # advection_dict is a dictionary containing field_name: advection class
-ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
+ueqn = EulerPoincare(state, state.V[0])
 supg = True
 if supg:
-    beqn = AdvectionEquation(state, state.V[2],
-                             supg={"dg_directions":[0]},
-                             continuity=False)
+    beqn = SUPGAdvection(state, state.V[2],
+                         supg_params={"dg_directions":[0]},
+                         continuity=False)
 else:
-    beqn = AdvectionEquation(state, state.V[2],
-                             embedded_dg_space="Default",
-                             continuity=False)
+    beqn = EmbeddedDGAdvection(state, state.V[2],
+                               continuity=False)
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["b"] = SSPRK3(state, b0, beqn)

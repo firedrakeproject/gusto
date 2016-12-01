@@ -1,126 +1,38 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
-from sys import exit
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
     outer, sign, cross, CellNormal, as_vector, sqrt, Constant, \
-    curl, warning, BrokenElement, FunctionSpace, Projector
+    curl, BrokenElement, FunctionSpace, Projector
 
 
 class TransportEquation(object):
     """
-    Base class for advection and momentum equations in Gusto.
+    Base class for transport equations in Gusto.
+
+    The equation is assumed to be in the form:
+
+    q_t + L(q) = 0
+
+    where q is the field to be solved for and can be a scalar or a vector.
 
     :arg state: :class:`.State` object.
     :arg V: Function space
-    : Keyword arguments:
-       continuity: `bool` if True the advection term is of the form div(u*q),
-                   if False the advection term is of the form u.grad(q).
-                   Defaults to False
-       linear_ref: if present we are solving a linear equation and the
-                   value of linear_ref is the function containing the
-                   state we have linearised about
-       ibp_twice: `bool` if True integrate the advection term by parts twice,
-                   if False only integrate by parts once. Defaults to False
-                   unless SUPG is specified, in which case it must be True.
-       supg: `dict` of options for SUPG
-       embedded_dg_space: `.FunctionSpace` to use for embedded DG advection
+
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, V, **kwargs):
+    def __init__(self, state, V, ibp="once"):
         self.state = state
         self.V = V
-
-        # get parameters from kwargs:
-        self.continuity = kwargs.get("continuity", False)
-        self.linear = "linear_ref" in kwargs
-        if self.linear:
-            self.qbar = kwargs.get("linear_ref")
-        self.ibp_twice = kwargs.get("ibp_twice", False)
-        supg = "supg" in kwargs
-        emb_dg = "embedded_dg_space" in kwargs
-
-        if emb_dg and supg:
-            exit("embedded DG and SUPG are incompatible. Choose one.")
-        if emb_dg:
-            Vdg_elt = BrokenElement(V.ufl_element())
-            Vdg = FunctionSpace(state.mesh, Vdg_elt)
-            space = Vdg
-            self.xdg_out = Function(Vdg)
-            self.x_projected = Function(V)
-            pparameters = {'ksp_type':'cg',
-                           'pc_type':'bjacobi',
-                           'sub_pc_type':'ilu'}
-            self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=pparameters)
-
-        else:
-            space = V
+        self.ibp = ibp
 
         # set up functions required for forms
         self.ubar = Function(state.V[0])
-        self.test = TestFunction(space)
-        self.trial = TrialFunction(space)
-        self.q = Function(space)
-
-        # find out if we are DG
-        element = space.fiat_element
-        self.dg = element.entity_dofs() == element.entity_closure_dofs()
-
-        # DG and embedded DG methods need surface measures
-        if self.dg:
-            if space.extruded:
-                self.dS = (dS_h + dS_v)
-            else:
-                self.dS = dS
-        else:
-            self.dS = None
-
-        # DG and SUPG methods need n and un
-        if self.dg or supg:
-            self.n = FacetNormal(state.mesh)
-            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
-
-        if supg:
-            # if using SUPG we must integrate by parts twice
-            if not self.ibp_twice:
-                warning("if using SUPG we must integrate by parts twice")
-                self.ibp_twice = True
-
-            # set default SUPG parameters
-            dt = state.timestepping.dt
-            supg_params = kwargs.get("supg").copy() if kwargs.get("supg") else {}
-            supg_params.setdefault('a0', dt/sqrt(15.))
-            supg_params.setdefault('a1', dt/sqrt(15.))
-            supg_params.setdefault('a2', dt/sqrt(15.))
-            supg_params.setdefault('dg_directions', [])
-
-            # find out if we need to do DG upwinding in any direction and set
-            # self.dS accordingly
-            dg_interior_surfaces_dict = {0:dS_v, 1:dS_h}
-            dg_interior_surfaces = [dg_interior_surfaces_dict[k] for k in supg_params["dg_directions"]]
-            if len(dg_interior_surfaces) == 0:
-                self.dS = None
-            elif len(dg_interior_surfaces) == 1:
-                self.dS = dg_interior_surfaces[0]
-            elif len(dg_interior_surfaces) == 2:
-                self.dS = dg_interior_surfaces[0] + dg_interior_surfaces[1]
-
-            # make SUPG test function
-            if(state.mesh.topological_dimension() == 2):
-                taus = [supg_params["a0"], supg_params["a1"]]
-                for i in supg_params["dg_directions"]:
-                    taus[i] = 0.0
-                tau = Constant(((taus[0], 0.), (0., taus[1])))
-            elif(state.mesh.topological_dimension() == 3):
-                taus = [supg_params["a0"], supg_params["a1"], supg_params["a2"]]
-                for i in supg_params["dg_directions"]:
-                    taus[i] = 0.0
-                tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
-            dtest = dot(dot(self.ubar, tau), grad(self.test))
-            self.test += dtest
+        self.test = TestFunction(V)
+        self.trial = TrialFunction(V)
+        self.q = Function(V)
 
     def mass_term(self, q):
         return inner(self.test, q)*dx
@@ -130,63 +42,177 @@ class TransportEquation(object):
         pass
 
 
-class AdvectionEquation(TransportEquation):
+class LinearAdvection(TransportEquation):
+
+    def __init__(self, state, V, qbar, ibp=None, continuity=False):
+        super(LinearAdvection, self).__init__(state, V, ibp)
+        self.continuity = continuity
+        self.qbar = qbar
+        # currently only used with the following option combinations:
+        if continuity and ibp is not "once":
+            raise ValueError("If we are solving a linear continuity equation, we integrate by parts once")
+        if not continuity and ibp is not None:
+            raise ValueError("If we are solving a linear advection equation, we do not integrate by parts.")
 
     def advection_term(self, q):
 
-        if self.linear:
-            qbar = self.qbar
-
-            if self.dg:
-                L = (-dot(grad(self.test), self.ubar)*qbar*dx +
-                     jump(self.ubar*self.test, self.n)*avg(qbar)*self.dS)
-            else:
-                L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(qbar))*dx
-
+        if self.continuity:
+            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
+                 jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
-            if self.continuity:
-                if self.ibp_twice:
-                    L = inner(self.test, div(outer(q, self.ubar)))*dx
-                else:
-                    L = -inner(grad(self.test), outer(q, self.ubar))*dx
-            else:
-                if self.ibp_twice:
-                    L = inner(outer(self.test,self.ubar),grad(q))*dx
-                else:
-                    L = -inner(div(outer(self.test,self.ubar)),q)*dx
+            L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(self.qbar))*dx
+        return L
 
-            if self.dS is not None:
-                L += dot(jump(self.test), (self.un('+')*q('+')
-                                           - self.un('-')*q('-')))*self.dS
-                if self.ibp_twice:
-                    L -= (self.test('+')*dot(self.ubar('+'), self.n('+'))*q('+')
-                          + self.test('-')*dot(self.ubar('-'),
-                                               self.n('-'))*q('-'))*self.dS
+
+class Advection(TransportEquation):
+
+    def __init__(self, state, V, ibp="once", continuity=False, **kwargs):
+        super(Advection, self).__init__(state, V, ibp)
+        self.continuity = continuity
+
+        # find out if we are CG
+        nvertex = V.ufl_domain().ufl_cell().num_vertices()
+        entity_dofs = V.fiat_element.entity_dofs()
+        # If there are as many dofs on vertices as there are vertices,
+        # assume a continuous space.
+        try:
+            is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
+        except KeyError:
+            is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+
+        # DG, embedded DG and hybrid SUPG methods need surface measures,
+        # n and un
+        if is_cg:
+            self.dS = None
+        else:
+            if V.extruded:
+                self.dS = (dS_h + dS_v)
+            else:
+                self.dS = dS
+            self.n = FacetNormal(state.mesh)
+            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
+
+    def advection_term(self, q):
+
+        if self.continuity:
+            if self.ibp is "once":
+                L = -inner(grad(self.test), outer(q, self.ubar))*dx
+            else:
+                L = inner(self.test, div(outer(q, self.ubar)))*dx
+        else:
+            if self.ibp is "once":
+                L = -inner(div(outer(self.test,self.ubar)),q)*dx
+            else:
+                L = inner(outer(self.test,self.ubar),grad(q))*dx
+
+        if self.dS is not None and self.ibp is not None:
+            L += dot(jump(self.test), (self.un('+')*q('+')
+                                       - self.un('-')*q('-')))*self.dS
+            if self.ibp is "twice":
+                L -= (inner(self.test('+'),dot(self.ubar('+'), self.n('+'))*q('+'))
+                      + inner(self.test('-'),dot(self.ubar('-'),
+                                                 self.n('-'))*q('-')))*self.dS
 
         return L
 
 
-class MomentumEquation(AdvectionEquation):
+class EmbeddedDGAdvection(Advection):
+
+    def __init__(self, state, V, ibp="once", continuity=False, Vdg=None):
+
+        if Vdg is None:
+            # Create broken space, functions and projector
+            V_elt = BrokenElement(V.ufl_element())
+            space = FunctionSpace(state.mesh, V_elt)
+            self.xdg_out = Function(space)
+            self.x_projected = Function(V)
+            parameters = {'ksp_type':'cg',
+                          'pc_type':'bjacobi',
+                          'sub_pc_type':'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=parameters)
+        else:
+            space = Vdg
+
+        super(EmbeddedDGAdvection, self).__init__(state, space, ibp)
+
+        self.n = FacetNormal(state.mesh)
+        self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
+
+
+class SUPGAdvection(Advection):
+
+    def __init__(self, state, V, ibp=None, continuity=False, supg_params=None):
+        super(SUPGAdvection, self).__init__(state, V, ibp)
+
+        # if using SUPG we either integrate by parts twice, or not at all
+        if ibp is "once":
+            raise ValueError("if using SUPG we cannot integrate by parts once")
+
+        # set default SUPG parameters
+        dt = state.timestepping.dt
+        supg_params = supg_params.copy() if supg_params else {}
+        supg_params.setdefault('a0', dt/sqrt(15.))
+        supg_params.setdefault('a1', dt/sqrt(15.))
+        supg_params.setdefault('a2', dt/sqrt(15.))
+        # default assumes a continuous space
+        supg_params.setdefault('dg_direction', None)
+
+        # find out if we need to do DG upwinding in any direction and set
+        # self.dS accordingly
+        if supg_params["dg_direction"] is None:
+            # space is assumed to be continuous and we don't need
+            # any interior surface integrals
+            self.dS = None
+        elif supg_params["dg_direction"] is "horizontal":
+            # if space is discontinuous in the horizontal direction, we
+            # need to include surface integrals on the vertical faces
+            self.dS = dS_v
+            self.n = FacetNormal(state.mesh)
+            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
+        elif supg_params["dg_direction"] is "vertical":
+            # if space is discontinuous in the vertical direction, we
+            # need to include surface integrals on the horizontal faces
+            self.dS = dS_h
+            self.n = FacetNormal(state.mesh)
+            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
+        else:
+            print supg_params["dg_direction"]
+            raise RuntimeError("Invalid dg_direction in supg_params.")
+
+        # make SUPG test function
+        if(state.mesh.topological_dimension() == 2):
+            taus = [supg_params["a0"], supg_params["a1"]]
+            if supg_params["dg_direction"] is "horizontal":
+                taus[0] = 0.0
+            elif supg_params["dg_direction"] is "vertical":
+                taus[1] = 0.0
+            tau = Constant(((taus[0], 0.), (0., taus[1])))
+        elif(state.mesh.topological_dimension() == 3):
+            taus = [supg_params["a0"], supg_params["a1"], supg_params["a2"]]
+            if supg_params["dg_direction"] is "horizontal":
+                taus[0] = 0.0
+                taus[1] = 0.0
+            elif supg_params["dg_direction"] is "vertical":
+                taus[2] = 0.0
+
+            tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
+        dtest = dot(dot(self.ubar, tau), grad(self.test))
+        self.test += dtest
+
+
+class VectorInvariant(Advection):
     """
-    Class defining the momentum equation.
+    Class defining the vector invariant form of the vector advection equation.
 
     :arg state: :class:`.State` object.
     :arg V: Function space
-    : Keyword arguments:
-         vector_invariant: If present the velocity advection term is in vector
-                           invariant form.
     """
-    def __init__(self, state, V, **kwargs):
-        super(MomentumEquation, self).__init__(state, V)
-
-        self.vector_invariant_form = kwargs.get("vector_invariant", None)
+    def __init__(self, state, V, ibp="once"):
+        super(VectorInvariant, self).__init__(state, V, ibp)
 
         self.n = FacetNormal(state.mesh)
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
-        if V.extruded:
-            self.dS = dS_v + dS_h
-        else:
-            self.dS = dS
 
         if self.state.mesh.topological_dimension() == 2:
             if V.extruded:
@@ -197,45 +223,51 @@ class MomentumEquation(AdvectionEquation):
                 self.perp = lambda u: cross(outward_normals, u)
                 self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
             self.gradperp = lambda u: self.perp(grad(u))
+        elif self.state.mesh.topological_dimension() == 3:
+            if self.ibp is "twice":
+                raise RuntimeError("ibp=twice is not implemented for 3d problems")
+        else:
+            raise RuntimeError("topological mesh dimension must be 2 or 3")
 
     def advection_term(self, q):
 
-        if self.vector_invariant_form is not None:
+        if self.state.mesh.topological_dimension() == 3:
+            # <w,curl(u) cross ubar + grad( u.ubar)>
+            # =<curl(u),ubar cross w> - <div(w), u.ubar>
+            # =<u,curl(ubar cross w)> -
+            #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
 
-            if self.state.mesh.topological_dimension() == 3:
-                # <w,curl(u) cross ubar + grad( u.ubar)>
-                # =<curl(u),ubar cross w> - <div(w), u.ubar>
-                # =<u,curl(ubar cross w)> -
-                #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
+            both = lambda u: 2*avg(u)
 
-                both = lambda u: 2*avg(u)
-
-                L = (
-                    inner(q, curl(cross(self.ubar, self.test)))*dx
-                    - inner(both(self.Upwind*q),
-                            both(cross(self.n, cross(self.ubar, self.test))))*self.dS
-                )
-
-            else:
-
-                if self.ibp_twice:
-                    L = (
-                        (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
-                        - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
-                                self.perp_u_upwind(q))*self.dS
-                        + jump(inner(self.test,
-                                     self.perp(self.ubar))*self.perp(q), self.n)*self.dS
-                    )
-                else:
-                    L = (
-                        -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
-                        - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
-                                self.perp_u_upwind(q))*self.dS
-                    )
-
-            if self.vector_invariant_form is "EulerPoincare":
-                L -= div(self.test)*inner(q, self.ubar)*dx
+            L = (
+                inner(q, curl(cross(self.ubar, self.test)))*dx
+                - inner(both(self.Upwind*q),
+                        both(cross(self.n, cross(self.ubar, self.test))))*self.dS
+            )
 
         else:
-            L = super(MomentumEquation, self).advection_term(self, q)
+
+            if self.ibp is "once":
+                L = (
+                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
+                    - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
+                            self.perp_u_upwind(q))*self.dS
+                )
+            else:
+                L = (
+                    (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
+                    - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
+                            self.perp_u_upwind(q))*self.dS
+                    + jump(inner(self.test,
+                                 self.perp(self.ubar))*self.perp(q), self.n)*self.dS
+                )
+
+        return L
+
+
+class EulerPoincare(VectorInvariant):
+
+    def advection_term(self, q):
+        L = super(EulerPoincare, self).advection_term(q)
+        L -= div(self.test)*inner(q, self.ubar)*dx
         return L

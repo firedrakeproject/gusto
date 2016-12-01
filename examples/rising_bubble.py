@@ -67,17 +67,16 @@ state.set_reference_profiles(rho_b, theta_b)
 state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
-ueqn = MomentumEquation(state, state.V[0], vector_invariant="EulerPoincare")
-rhoeqn = AdvectionEquation(state, state.V[1], continuity=True)
+ueqn = EulerPoincare(state, state.V[0])
+rhoeqn = Advection(state, state.V[1], continuity=True)
 supg = True
 if supg:
-    thetaeqn = AdvectionEquation(state, state.V[2],
-                                 supg={"dg_directions":[0]},
-                                 continuity=False)
+    thetaeqn = SUPGAdvection(state, state.V[2],
+                             supg_params={"dg_directions":[0]},
+                             continuity=False)
 else:
-    thetaeqn = AdvectionEquation(state, state.V[2],
-                                 embedded_dg_space="Default",
-                                 continuity=False)
+    thetaeqn = EmbeddedDGAdvection(state, state.V[2],
+                                   continuity=False)
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
