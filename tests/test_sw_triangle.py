@@ -3,9 +3,10 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import json
+import pytest
 
 
-def setup_sw(dirname):
+def setup_sw(dirname, euler_poincare):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -52,16 +53,19 @@ def setup_sw(dirname):
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
-    ueqn = EulerPoincare(state, state.V[0])
+    if euler_poincare:
+        ueqn = EulerPoincare(state, state.V[0])
+        sw_forcing = ShallowWaterForcing(state)
+    else:
+        ueqn = VectorInvariant(state, state.V[0])
+        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
+
     Deqn = Advection(state, state.V[1], continuity=True)
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)
-
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,
@@ -70,16 +74,17 @@ def setup_sw(dirname):
     return stepper, 0.25*day
 
 
-def run_sw(dirname):
+def run_sw(dirname, euler_poincare):
 
-    stepper, tmax = setup_sw(dirname)
+    stepper, tmax = setup_sw(dirname, euler_poincare)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_sw_setup(tmpdir):
+@pytest.mark.parametrize("euler_poincare", [True, False])
+def test_sw_setup(tmpdir, euler_poincare):
 
     dirname = str(tmpdir)
-    run_sw(dirname)
+    run_sw(dirname, euler_poincare=euler_poincare)
     with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
         data = json.load(f)
     Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
