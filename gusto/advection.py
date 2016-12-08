@@ -127,10 +127,9 @@ class SSPRK3(Advection):
         self.rhs = self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
         self.update_solver()
 
-    def solve_stage(self, x_in, x_out, stage):
+    def solve_stage(self, x_in, stage):
 
         if stage == 0:
-            self.q1.assign(x_in)
             self.solver.solve()
             self.q1.assign(self.dq)
 
@@ -140,29 +139,29 @@ class SSPRK3(Advection):
 
         elif stage == 2:
             self.solver.solve()
-            x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
 
     @embedded_dg
     def apply(self, x_in, x_out):
 
+        self.q1.assign(x_in)
         for i in range(3):
-            self.solve_stage(x_in, x_out, i)
+            self.solve_stage(x_in, i)
+        x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
 
 
 class ThetaMethod(Advection):
     """
     Class to implement the theta timestepping method:
-    y_(n+1) = y_n + theta*dt*L(y_n + y_(n+1)) where L is the advection operator.
+    y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
     def __init__(self, state, field, equation, theta=0.5, solver_params=None):
         super(ThetaMethod, self).__init__(state, field, equation, solver_params)
         trial = self.equation.trial
-        q = self.equation.q
         self.lhs = self.equation.mass_term(trial) + theta*self.dt*self.equation.advection_term(trial)
-        self.rhs = self.equation.mass_term(q) - theta*self.dt*self.equation.advection_term(q)
+        self.rhs = self.equation.mass_term(self.q1) - (1.-theta)*self.dt*self.equation.advection_term(self.q1)
         self.update_solver()
 
     def apply(self, x_in, x_out):
-        self.equation.q.assign(x_in)
+        self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
