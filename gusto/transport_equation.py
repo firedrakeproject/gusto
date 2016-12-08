@@ -15,11 +15,12 @@ class TransportEquation(object):
 
     q_t + L(q) = 0
 
-    where q is the field to be solved for and can be a scalar or a vector.
+    where q is the (scalar or vector) field to be solved for.
 
     :arg state: :class:`.State` object.
-    :arg V: Function space
-
+    :arg V: :class:`.FunctionSpace object. The function space that q lives in.
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "once".
     """
     __metaclass__ = ABCMeta
 
@@ -32,7 +33,28 @@ class TransportEquation(object):
         self.ubar = Function(state.V[0])
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
-        self.q = Function(V)
+
+        # find out if we are CG
+        nvertex = V.ufl_domain().ufl_cell().num_vertices()
+        entity_dofs = V.fiat_element.entity_dofs()
+        # If there are as many dofs on vertices as there are vertices,
+        # assume a continuous space.
+        try:
+            self.is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
+        except KeyError:
+            self.is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+
+        # DG, embedded DG and hybrid SUPG methods need surface measures,
+        # n and un
+        if self.is_cg:
+            self.dS = None
+        else:
+            if V.extruded:
+                self.dS = (dS_h + dS_v)
+            else:
+                self.dS = dS
+            self.n = FacetNormal(state.mesh)
+            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
     def mass_term(self, q):
         return inner(self.test, q)*dx
@@ -69,28 +91,6 @@ class Advection(TransportEquation):
     def __init__(self, state, V, ibp="once", continuity=False, **kwargs):
         super(Advection, self).__init__(state, V, ibp)
         self.continuity = continuity
-
-        # find out if we are CG
-        nvertex = V.ufl_domain().ufl_cell().num_vertices()
-        entity_dofs = V.fiat_element.entity_dofs()
-        # If there are as many dofs on vertices as there are vertices,
-        # assume a continuous space.
-        try:
-            self.is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
-        except KeyError:
-            self.is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
-
-        # DG, embedded DG and hybrid SUPG methods need surface measures,
-        # n and un
-        if self.is_cg:
-            self.dS = None
-        else:
-            if V.extruded:
-                self.dS = (dS_h + dS_v)
-            else:
-                self.dS = dS
-            self.n = FacetNormal(state.mesh)
-            self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
     def advection_term(self, q):
 
@@ -208,7 +208,6 @@ class VectorInvariant(Advection):
     def __init__(self, state, V, ibp="once"):
         super(VectorInvariant, self).__init__(state, V, ibp)
 
-        self.n = FacetNormal(state.mesh)
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
 
         if self.state.mesh.topological_dimension() == 2:
