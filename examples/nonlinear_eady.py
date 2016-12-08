@@ -68,7 +68,7 @@ output = OutputParameters(dirname='nonlinear_eady', dumpfreq=10, dumplist=['u'])
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = EadyParameters()
+parameters = EadyParameters(H=H)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
