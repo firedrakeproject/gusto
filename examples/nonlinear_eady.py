@@ -45,6 +45,7 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 x = SpatialCoordinate(mesh)
 z = Function(W_CG1).interpolate(x[2])
 k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
+Omega = as_vector([0.,0.,1.e-4])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -81,7 +82,7 @@ diagnostic_fields = [CourantNumber()]
 # function spaces, z, k, and the classes above
 state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                             family="RTCF",
-                            z=z, k=k,
+                            z=z, k=k, Omega=Omega,
                             timestepping=timestepping,
                             output=output,
                             parameters=parameters,
