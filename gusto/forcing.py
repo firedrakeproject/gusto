@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS, Constant
+    CellNormal, dot, dS, Constant, Expression, as_vector
 
 
 class Forcing(object):
@@ -247,10 +247,13 @@ class EadyForcing(Forcing):
         state = self.state
         self.scaling = Constant(1.)
         Vu = state.V[0]
+        Vp = state.V[1]
         W = state.W
         f = state.f
         dbdy = state.dbdy
         Nsq = state.Nsq
+        H = state.parameters.H
+        exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
         self.x0 = Function(W)   # copy x to here
 
@@ -266,10 +269,11 @@ class EadyForcing(Forcing):
         mu = state.mu
 
         a = inner(w,F)*dx
-        L = (
-            self.scaling*div(w)*p0*dx  # pressure gradient
-            + self.scaling*b0*inner(w,state.k)*dx  # gravity term
-        )
+        L = self.scaling*(
+            div(w)*p0  # pressure gradient
+            + b0*inner(w,state.k)  # gravity term
+            - dbdy*exp*inner(w,as_vector([0.,1.,0.])) # Eady forcing
+        )*dx
 
         if not linear:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
