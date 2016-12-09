@@ -1,9 +1,8 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
-from gusto.advection import NoAdvection
-from firedrake import Function
+from gusto.forcing import IncompressibleForcing
+from firedrake import DirichletBC, Expression
 
 
 class BaseTimestepper(object):
@@ -21,6 +20,16 @@ class BaseTimestepper(object):
 
         self.state = state
         self.advection_dict = advection_dict
+        self.linear_solver = linear_solver
+        self.forcing = forcing
+        self.diffusion_dict = {}
+        if diffusion_dict is not None:
+            self.diffusion_dict.update(diffusion_dict)
+
+        if(isinstance(self.forcing, IncompressibleForcing)):
+            self.incompressible = True
+        else:
+            self.incompressible = False
 
     def _set_ubar(self):
         """
