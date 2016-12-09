@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState, Expression
-from firedrake import DirichletBC
+from gusto.forcing import IncompressibleForcing
+from firedrake import DirichletBC, Expression
 
 
 class Timestepper(object):
@@ -27,7 +27,7 @@ class Timestepper(object):
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
 
-        if(isinstance(self.state, IncompressibleState)):
+        if(isinstance(self.forcing, IncompressibleForcing)):
             self.incompressible = True
         else:
             self.incompressible = False

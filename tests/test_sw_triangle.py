@@ -25,13 +25,13 @@ def setup_sw(dirname):
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
-    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                              family="BDM",
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              diagnostics=diagnostics,
-                              fieldlist=fieldlist)
+    state = State(mesh, vertical_degree=None, horizontal_degree=1,
+                  family="BDM", on_sphere=True,
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  diagnostics=diagnostics,
+                  fieldlist=fieldlist)
 
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])

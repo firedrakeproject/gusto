@@ -260,15 +260,18 @@ class EulerPoincareForm(Advection):
         # for slice (i.e. if V.extruded is True) and shallow water
         # (V.extruded is False)
         else:
-            if V.extruded:
-                surface_measure = (dS_h + dS_v)
-                perp = lambda u: as_vector([-u[1], u[0]])
-                perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
-            else:
+            if state.on_sphere:
                 surface_measure = dS
                 outward_normals = CellNormal(state.mesh)
                 perp = lambda u: cross(outward_normals, u)
                 perp_u_upwind = Upwind('+')*cross(outward_normals('+'),ustar('+')) + Upwind('-')*cross(outward_normals('-'),ustar('-'))
+            else:
+                perp = lambda u: as_vector([-u[1], u[0]])
+                perp_u_upwind = Upwind('+')*perp(ustar('+')) + Upwind('-')*perp(ustar('-'))
+                if V.extruded:
+                    surface_measure = (dS_h + dS_v)
+                else:
+                    surface_measure = dS
 
             Eqn = (
                 (inner(w, u-self.u0)
