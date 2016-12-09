@@ -138,7 +138,7 @@ def setup_dcmip(dirname):
     linear_solver = CompressibleSolver(state, params=params)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, linear=True)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,

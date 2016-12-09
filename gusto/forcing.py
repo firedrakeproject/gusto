@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS, Constant, Expression, as_vector
+    CellNormal, dot, dS, Constant, warning
 
 
 class Forcing(object):
@@ -18,6 +18,7 @@ class Forcing(object):
         self.state = state
         if linear:
             self.euler_poincare = False
+            warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
 
