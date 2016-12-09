@@ -114,8 +114,8 @@ class CompressibleSolver(TimesteppingSolver):
         n = FacetNormal(state.mesh)
 
         # Get background fields
-        thetabar = state.thetabar
-        rhobar = state.rhobar
+        thetabar = state.ref['theta']
+        rhobar = state.ref['rho']
         pibar = exner(thetabar, rhobar, state)
         pibar_rho = exner_rho(thetabar, rhobar, state)
         pibar_theta = exner_theta(thetabar, rhobar, state)
@@ -257,7 +257,7 @@ class IncompressibleSolver(TimesteppingSolver):
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = state.bbar
+        bbar = state.ref['b']
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
+from gusto.forcing import IncompressibleForcing
 from firedrake import DirichletBC, Expression, Function
 
 

@@ -85,7 +85,7 @@ class CompressibleForcing(Forcing):
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
         )
 
-        if state.parameters.geopotential:
+        if state.geopotential:
             Phi = state.Phi
             L += self.scaling*div(w)*Phi*dx  # gravity term
         else:
@@ -371,8 +371,11 @@ class ShallowWaterForcing(Forcing):
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        outward_normals = CellNormal(state.mesh)
-        perp = lambda u: cross(outward_normals, u)
+        if state.on_sphere:
+            outward_normals = CellNormal(state.mesh)
+            perp = lambda u: cross(outward_normals, u)
+        else:
+            perp = lambda u: as_vector([-u[1], u[0]])
         a = inner(w, F)*dx
         L = (
             (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx

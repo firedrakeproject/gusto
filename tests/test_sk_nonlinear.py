@@ -31,16 +31,16 @@ def setup_sk(dirname):
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
-    state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                              family="CG",
-                              z=z, k=k,
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              diagnostics=diagnostics,
-                              fieldlist=fieldlist,
-                              diagnostic_fields=diagnostic_fields,
-                              on_sphere=False)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="CG",
+                  z=z, k=k,
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  diagnostics=diagnostics,
+                  fieldlist=fieldlist,
+                  diagnostic_fields=diagnostic_fields,
+                  on_sphere=False)
 
     # Initial conditions
     u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
@@ -69,8 +69,8 @@ def setup_sk(dirname):
     rho0.assign(rho_b)
 
     state.initialise([u0, rho0, theta0])
-    state.set_reference_profiles(rho_b, theta_b)
-    state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
+    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+    state.output.meanfields = ['rho', 'theta']
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, state.V[0])
