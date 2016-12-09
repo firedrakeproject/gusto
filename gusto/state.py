@@ -41,7 +41,7 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT", z=None, k=None, Omega=None, mu=None,
-                 geopotential_form=False,
+                 geopotential=False, on_sphere=False,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -53,7 +53,8 @@ class State(object):
         self.k = k
         self.Omega = Omega
         self.mu = mu
-        self.geopotential_form = geopotential_form
+        self.geopotential = geopotential
+        self.on_sphere = on_sphere
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -82,6 +83,24 @@ class State(object):
                            zip(self.fieldlist, self.xn.split())}
 
         self.dumpfile = None
+        #  build the geopotential
+        if geopotential:
+            V = FunctionSpace(mesh, "CG", 1)
+            if self.on_sphere:
+                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+            else:
+                self.Phi = Function(V).interpolate(Expression("x[1]"))
+            self.Phi *= parameters.g
+
+        if self.k is None and vertical_degree is not None:
+            # build the vertical normal
+            w = TestFunction(self.Vv)
+            u = TrialFunction(self.Vv)
+            self.k = Function(self.Vv)
+            n = FacetNormal(self.mesh)
+            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
+            klhs = inner(w,u)*dx
+            solve(klhs == krhs, self.k)
 
         self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
@@ -153,13 +172,13 @@ class State(object):
         # meanfields are provided in a dictionary. Here we set up the
         # perturbation fields.
         for field in self.output.meanfields:
-            field = field_dict[name]
+            field = self.field_dict[name]
             meanfield = self.ref[name]
             diff = Function(
                 field.function_space(),
                 name=field.name()+"_perturbation").assign(field - meanfield)
             self.diagnostics.register(name+"perturbation")
-            field_dict[name+"perturbation"] = diff
+            self.field_dict[name+"perturbation"] = diff
             to_dump.append(diff)
             mean_name = field.name() + "_bar"
             meanfield.rename(name=mean_name)
