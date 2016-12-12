@@ -103,7 +103,7 @@ class LinearAdvection(TransportEquation):
 
 class Advection(TransportEquation):
     """
-    Class for the transport equation.
+    Class for DG discretisation of the transport equation.
 
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
