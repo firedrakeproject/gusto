@@ -78,7 +78,14 @@ class Advection(object):
 
     @abstractmethod
     def apply(self, x_in, x_out):
-        pass
+        """
+        Function takes x as input, computes L(x) as defined by the equation,
+        and returns x_out as output.
+
+        :arg x: :class:`.Function` object, the input Function.
+        :arg x_out: :class:`.Function` object, the output Function.
+        """
+    pass
 
 
 class NoAdvection(Advection):
