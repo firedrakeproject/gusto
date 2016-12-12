@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver
+from gusto.transport_equation import LinearAdvection
 
 
 def embedded_dg(original_apply):
@@ -40,9 +41,14 @@ class Advection(object):
         self.field = field
 
         if solver_params is None:
-            self.solver_parameters = {'ksp_type':'preonly',
-                                      'pc_type':'bjacobi',
-                                      'sub_pc_type': 'ilu'}
+            if isinstance(equation, LinearAdvection):
+                self.solver_parameters = {'ksp_type':'cg',
+                                          'pc_type':'bjacobi',
+                                          'sub_pc_type': 'ilu'}
+            else:
+                self.solver_parameters = {'ksp_type':'preonly',
+                                          'pc_type':'bjacobi',
+                                          'sub_pc_type': 'ilu'}
         else:
             self.solver_parameters = solver_params
         self.dt = self.state.timestepping.dt
