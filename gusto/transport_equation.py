@@ -65,6 +65,21 @@ class TransportEquation(object):
 
 
 class LinearAdvection(TransportEquation):
+    """
+    Class for linear transport equation.
+
+    :arg state: :class:`.State` object.
+    :arg V: :class:`.FunctionSpace object. The function space that q lives in.
+    :arg qbar: The reference function that the equation has been linearised
+               about. It is assumed that the reference velocity is zero and
+               the ubar below is the nonlinear advecting velocity
+               0.5*(u'^(n+1) + u'(n)))
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "once".
+    :arg continuity: is the equation in continuity form L(q) = div(u'*qbar)?
+                     If False, the equation is assumed to be in advective
+                     form L(q) = u' dot grad(qbar)
+    """
 
     def __init__(self, state, V, qbar, ibp=None, continuity=False):
         super(LinearAdvection, self).__init__(state, V, ibp)
@@ -72,9 +87,9 @@ class LinearAdvection(TransportEquation):
         self.qbar = qbar
         # currently only used with the following option combinations:
         if continuity and ibp is not "once":
-            raise ValueError("If we are solving a linear continuity equation, we integrate by parts once")
+            raise NotImplementedError("If we are solving a linear continuity equation, we integrate by parts once")
         if not continuity and ibp is not None:
-            raise ValueError("If we are solving a linear advection equation, we do not integrate by parts.")
+            raise NotImplementedError("If we are solving a linear advection equation, we do not integrate by parts.")
 
     def advection_term(self, q):
 
@@ -87,8 +102,19 @@ class LinearAdvection(TransportEquation):
 
 
 class Advection(TransportEquation):
+    """
+    Class for the transport equation.
 
-    def __init__(self, state, V, ibp="once", continuity=False, **kwargs):
+    :arg state: :class:`.State` object.
+    :arg V: :class:`.FunctionSpace object. The function space that q lives in.
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "once".
+    :arg continuity: is the equation in continuity form L(q) = div(u*q)?
+                     If False, the equation is assumed to be in advective
+                     form L(q) = u dot grad(q)
+                     Defaults to False
+    """
+    def __init__(self, state, V, ibp="once", continuity=False):
         super(Advection, self).__init__(state, V, ibp)
         self.continuity = continuity
 
@@ -117,6 +143,22 @@ class Advection(TransportEquation):
 
 
 class EmbeddedDGAdvection(Advection):
+    """
+    Class for the transport equation, using an embedded DG advection scheme.
+
+    :arg state: :class:`.State` object.
+    :arg V: :class:`.FunctionSpace object. The function space that q lives in.
+    :arg ibp: (optional) string, stands for 'integrate by parts' and can take
+              the value None, "once" or "twice". Defaults to "once".
+    :arg continuity: (optional) Is the equation in continuity form
+                     L(q) = div(u*q)?
+                     If False, the equation is assumed to be in advective
+                     form L(q) = u dot grad(q)
+                     Defaults to False
+    :arg Vdg: (optional) :class:`.FunctionSpace object. The embedding function
+              space. Defaults to None which means that a broken space is
+              constructed for you.
+    """
 
     def __init__(self, state, V, ibp="once", continuity=False, Vdg=None):
 
@@ -141,22 +183,47 @@ class EmbeddedDGAdvection(Advection):
 
 
 class SUPGAdvection(Advection):
+    """
+    Class for the transport equation.
 
+    :arg state: :class:`.State` object.
+    :arg V: :class:`.FunctionSpace object. The function space that q lives in.
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "twice" since we commonly
+              use this scheme for parially continuous spaces, in which case
+              we don't want to take a derivative of the test function. If
+              using for a fully continuous space, we don't integrate by parts
+              at all (so you can set ibp=None).
+    :arg continuity: is the equation in continuity form L(q) = div(u*q)?
+                     If False, the equation is assumed to be in advective
+                     form L(q) = u dot grad(q)
+                     Defaults to False
+    :arg supg_params: (optional) dictionary of parameters for the SUPG method.
+                      Can contain:
+                      'ax', 'ay', 'az', which specify the coefficients in
+                      the x, y, z directions respectively
+                      'dg_direction', which can be 'horizontal' or 'vertical',
+                      and specifies the direction in which the function space
+                      is discontinuous so that we can apply DG upwinding in
+                      this direction.
+                      Appropriate defaults are provided for these parameters,
+                      in particular, the space is assumed to be continuous.
+    """
     def __init__(self, state, V, ibp="twice", continuity=False, supg_params=None):
         super(SUPGAdvection, self).__init__(state, V, ibp)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp is "once":
-            raise ValueError("if using SUPG we cannot integrate by parts once")
+            raise ValueError("if using SUPG we don't integrate by parts once")
         if ibp is None and not self.is_cg:
             raise ValueError("are you very sure you don't need surface terms?")
 
         # set default SUPG parameters
         dt = state.timestepping.dt
         supg_params = supg_params.copy() if supg_params else {}
-        supg_params.setdefault('a0', dt/sqrt(15.))
-        supg_params.setdefault('a1', dt/sqrt(15.))
-        supg_params.setdefault('a2', dt/sqrt(15.))
+        supg_params.setdefault('ax', dt/sqrt(15.))
+        supg_params.setdefault('ay', dt/sqrt(15.))
+        supg_params.setdefault('az', dt/sqrt(15.))
         # default assumes a continuous space
         supg_params.setdefault('dg_direction', None)
 
@@ -179,14 +246,14 @@ class SUPGAdvection(Advection):
 
         # make SUPG test function
         if(state.mesh.topological_dimension() == 2):
-            taus = [supg_params["a0"], supg_params["a1"]]
+            taus = [supg_params["ax"], supg_params["ay"]]
             if supg_params["dg_direction"] is "horizontal":
                 taus[0] = 0.0
             elif supg_params["dg_direction"] is "vertical":
                 taus[1] = 0.0
             tau = Constant(((taus[0], 0.), (0., taus[1])))
         elif(state.mesh.topological_dimension() == 3):
-            taus = [supg_params["a0"], supg_params["a1"], supg_params["a2"]]
+            taus = [supg_params["ax"], supg_params["ay"], supg_params["az"]]
             if supg_params["dg_direction"] is "horizontal":
                 taus[0] = 0.0
                 taus[1] = 0.0
@@ -204,6 +271,8 @@ class VectorInvariant(Advection):
 
     :arg state: :class:`.State` object.
     :arg V: Function space
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "once".
     """
     def __init__(self, state, V, ibp="once"):
         super(VectorInvariant, self).__init__(state, V, ibp)
@@ -221,7 +290,7 @@ class VectorInvariant(Advection):
             self.gradperp = lambda u: self.perp(grad(u))
         elif self.state.mesh.topological_dimension() == 3:
             if self.ibp is "twice":
-                raise RuntimeError("ibp=twice is not implemented for 3d problems")
+                raise NotImplementedError("ibp=twice is not implemented for 3d problems")
         else:
             raise RuntimeError("topological mesh dimension must be 2 or 3")
 
@@ -264,6 +333,14 @@ class VectorInvariant(Advection):
 
 
 class EulerPoincare(VectorInvariant):
+    """
+    Class defining the Euler-Poincare form of the vector advection equation.
+
+    :arg state: :class:`.State` object.
+    :arg V: Function space
+    :arg ibp: string, stands for 'integrate by parts' and can take the value
+              None, "once" or "twice". Defaults to "once".
+    """
 
     def advection_term(self, q):
         L = super(EulerPoincare, self).advection_term(q)
