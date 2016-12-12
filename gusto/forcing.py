@@ -12,6 +12,11 @@ class Forcing(object):
     Base class for forcing terms for Gusto.
 
     :arg state: x :class:`.State` object.
+    :arg euler_poincare: if True then the momentum equation is in Euler 
+    Poincare form and we need to add 0.5*grad(u^2) to the forcing term. 
+    If False then this term is not added.
+    :arg linear: if True then we are solving a linear equation so nonlinear 
+    terms (namely the Euler Poincare term) should not be added.
     """
     __metaclass__ = ABCMeta
 
@@ -92,8 +97,7 @@ class CompressibleForcing(Forcing):
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
-            u_init = state.x_init.split()[0]
-            L -= self.scaling*inner(w,cross(2*Omega,u0-u_init))*dx  # Coriolis term
+            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
 
         if mu is not None:
             self.mu_scaling = Constant(1.)
