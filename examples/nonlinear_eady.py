@@ -92,11 +92,9 @@ state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                             on_sphere=False)
 
 # Coriolis expression
-fexpr = Constant(1.0e-4)
-Nsqexpr = Constant(2.5e-05)
 V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
-state.Nsq = Function(V).interpolate(Nsqexpr)  
+state.f = Function(V).interpolate(Constant(1.0e-4))  # Coriolis frequency (1/s)
+state.Nsq = Function(V).interpolate(Constant(2.5e-05))  
 state.dbdy = Function(V).interpolate(Constant(-10./300.*3.0e-06))
 
 ##############################################################################
@@ -108,9 +106,9 @@ u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. x[1]=z and comes from x=SpatialCoordinate(mesh)
+# from the parameters class. x[2]=z and comes from x=SpatialCoordinate(mesh)
 N = parameters.N
-bref = x[1]*(N**2)
+bref = x[2]*(N**2)
 # interpolate the expression to the function
 b_b = Function(state.V[2]).interpolate(bref)
 
@@ -119,7 +117,7 @@ a = Constant(5.0e3)
 deltab = Constant(1.0e-2)
 H = Constant(H)
 L = Constant(L)
-b_pert = deltab*sin(np.pi*x[1]/H)/(1 + (x[0] - L/2)**2/a**2)
+b_pert = deltab*sin(np.pi*x[2]/H)/(1 + (x[0] - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
