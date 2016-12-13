@@ -76,7 +76,8 @@ class EadyParameters(Configuration):
     Physical parameters for nonlinear eady
     """
     g = 9.810616
-    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
+    dbdy = -10./300.*3.0e-06
     cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p

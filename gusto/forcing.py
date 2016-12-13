@@ -256,8 +256,8 @@ class EadyForcing(Forcing):
         Vp = state.V[1]
         W = state.W
         f = state.f
-        dbdy = state.dbdy
-        Nsq = state.Nsq
+        dbdy = state.parameters.dbdy
+        Nsq = state.parameters.Nsq
         H = state.parameters.H
         exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
@@ -309,7 +309,8 @@ class EadyForcing(Forcing):
         self.bF = Function(Vb)
 
         a = gamma*F*dx
-        L = -gamma*self.scaling*(Nsq*u0[2] + dbdy*u0[1])*dx
+        L = -gamma*self.scaling*(dbdy*u0[1])*dx
+#        L = -gamma*self.scaling*(Nsq*u0[2] + dbdy*u0[1])*dx
 
         b_forcing_problem = LinearVariationalProblem(
             a,L,self.bF
