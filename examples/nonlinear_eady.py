@@ -4,8 +4,9 @@ from firedrake import Expression, FunctionSpace, as_vector,\
     sin, SpatialCoordinate
 import numpy as np
 import sys
+import inifns
 
-dt = 6.
+dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -17,7 +18,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = 600.
+    tmax = 30*24*60*60.
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -25,13 +26,13 @@ else:
 # set up mesh
 ##############################################################################
 # Construct 1d periodic base mesh
-columns = 300  # number of columns
-L = 3.0e5
-m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
+columns = 30  # number of columns
+L = 1000000.
+m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e4, quadrilateral=True)
 
 # build 2D mesh by extruding the base mesh
-nlayers = 10  # horizontal layers
-H = 1.0e4  # Height position of the model top
+nlayers = 30  # horizontal layers
+H = 10000.  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 ##############################################################################
@@ -63,7 +64,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -94,8 +95,6 @@ state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
 # Coriolis expression
 V = FunctionSpace(mesh, "CG", 1)
 state.f = Function(V).interpolate(Constant(1.0e-4))  # Coriolis frequency (1/s)
-state.Nsq = Function(V).interpolate(Constant(2.5e-05))  
-state.dbdy = Function(V).interpolate(Constant(-10./300.*3.0e-06))
 
 ##############################################################################
 # Initial conditions
@@ -107,17 +106,18 @@ u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
 # from the parameters class. x[2]=z and comes from x=SpatialCoordinate(mesh)
-N = parameters.N
-bref = x[2]*(N**2)
+Nsq = parameters.Nsq
+bref = x[2]*Nsq
 # interpolate the expression to the function
 b_b = Function(state.V[2]).interpolate(bref)
 
 # setup constants
-a = Constant(5.0e3)
-deltab = Constant(1.0e-2)
-H = Constant(H)
-L = Constant(L)
-b_pert = deltab*sin(np.pi*x[2]/H)/(1 + (x[0] - L/2)**2/a**2)
+a = -7.5
+Bu = 0.5
+template_s = inifns.template_target_strings()
+b_exp = Expression(template_s,a=a,Nsq=Nsq,Bu=Bu,H=H,L=L)
+b_pert = Function(state.V[2]).interpolate(b_exp)
+
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
@@ -150,7 +150,7 @@ advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuit
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L, params=linear_solver_params)
+linear_solver = IncompressibleSolver(state, 2.*L, params=linear_solver_params)
 
 ##############################################################################
 # Set up forcing
