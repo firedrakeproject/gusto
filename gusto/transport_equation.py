@@ -166,20 +166,17 @@ class EmbeddedDGAdvection(Advection):
             # Create broken space, functions and projector
             V_elt = BrokenElement(V.ufl_element())
             space = FunctionSpace(state.mesh, V_elt)
-            self.xdg_out = Function(space)
-            self.x_projected = Function(V)
-            parameters = {'ksp_type':'cg',
-                          'pc_type':'bjacobi',
-                          'sub_pc_type':'ilu'}
-            self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=parameters)
         else:
             space = Vdg
+        self.xdg_out = Function(space)
+        self.x_projected = Function(V)
+        parameters = {'ksp_type':'cg',
+                      'pc_type':'bjacobi',
+                      'sub_pc_type':'ilu'}
+        self.Projector = Projector(self.xdg_out, self.x_projected,
+                                   solver_parameters=parameters)
 
         super(EmbeddedDGAdvection, self).__init__(state, space, ibp)
-
-        self.n = FacetNormal(state.mesh)
-        self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
 
 class SUPGAdvection(Advection):

@@ -94,7 +94,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vec
                 else:
                     space = state.V[2]
             elif "embedded_dg" in spatial_opts:
-                space = state.V[2]
+                space = state.V[1]
         else:
             space = state.V[1]
         f = Function(space, name='f')
