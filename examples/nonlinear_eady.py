@@ -46,6 +46,8 @@ W_CG1 = FunctionSpace(mesh, "CG", 1)
 x = SpatialCoordinate(mesh)
 z = Function(W_CG1).interpolate(x[2])
 k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
+
+# Coriolis expression
 Omega = as_vector([0.,0.,1.e-4])
 
 # list of prognostic fieldnames
@@ -91,10 +93,6 @@ state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
                             fieldlist=fieldlist,
                             diagnostic_fields=diagnostic_fields,
                             on_sphere=False)
-
-# Coriolis expression
-V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(Constant(1.0e-4))  # Coriolis frequency (1/s)
 
 ##############################################################################
 # Initial conditions
