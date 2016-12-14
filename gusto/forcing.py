@@ -255,11 +255,11 @@ class EadyForcing(Forcing):
         Vu = state.V[0]
         Vp = state.V[1]
         W = state.W
-        f = state.f
+
         dbdy = state.parameters.dbdy
         Nsq = state.parameters.Nsq
         H = state.parameters.H
-        exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
+        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
         self.x0 = Function(W)   # copy x to here
 
@@ -278,7 +278,7 @@ class EadyForcing(Forcing):
         L = self.scaling*(
             div(w)*p0  # pressure gradient
             + b0*inner(w,state.k)  # gravity term
-            - dbdy*exp*inner(w,as_vector([0.,1.,0.])) # Eady forcing
+            - dbdy*eady_exp*inner(w,as_vector([0.,1.,0.])) # Eady forcing
         )*dx
 
         if not linear:
