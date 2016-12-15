@@ -88,7 +88,7 @@ class LinearAdvection(TransportEquation):
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
-            raise ValueError("equation_form must be either 'advective' or 'continuity', not %s" %equation_form)
+            raise ValueError("equation_form must be either 'advective' or 'continuity', not %s" % equation_form)
         self.qbar = qbar
         # currently only used with the following option combinations:
         if self.continuity and ibp is not "once":
