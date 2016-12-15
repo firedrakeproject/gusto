@@ -103,7 +103,7 @@ def setup_dcmip(dirname):
     state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
 
     # Set up advection schemes
-    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", continuity=True)
+    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
     thetaeqn = LinearAdvection(state, state.V[2], qbar=theta_b)
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0)

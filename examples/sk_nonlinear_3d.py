@@ -85,7 +85,7 @@ state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, state.V[0])
-rhoeqn = Advection(state, state.V[1], continuity=True)
+rhoeqn = Advection(state, state.V[1], equation_form="continuity")
 thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"})
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)

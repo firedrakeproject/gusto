@@ -139,10 +139,10 @@ supg = True
 if supg:
     beqn = SUPGAdvection(state, state.V[2],
                          supg_params={"dg_direction":"horizontal"},
-                         continuity=False)
+                         equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, state.V[2],
-                               continuity=False)
+                               equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["b"] = SSPRK3(state, b0, beqn)
