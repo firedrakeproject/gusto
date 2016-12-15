@@ -4,7 +4,7 @@ from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
     outer, sign, cross, CellNormal, as_vector, sqrt, Constant, \
-    curl, BrokenElement, FunctionSpace, Projector
+    curl, BrokenElement, FunctionSpace
 
 
 class TransportEquation(object):
@@ -174,18 +174,11 @@ class EmbeddedDGAdvection(Advection):
         if Vdg is None:
             # Create broken space, functions and projector
             V_elt = BrokenElement(V.ufl_element())
-            space = FunctionSpace(state.mesh, V_elt)
+            self.space = FunctionSpace(state.mesh, V_elt)
         else:
-            space = Vdg
-        self.xdg_out = Function(space)
-        self.x_projected = Function(V)
-        parameters = {'ksp_type':'cg',
-                      'pc_type':'bjacobi',
-                      'sub_pc_type':'ilu'}
-        self.Projector = Projector(self.xdg_out, self.x_projected,
-                                   solver_parameters=parameters)
+            self.space = Vdg
 
-        super(EmbeddedDGAdvection, self).__init__(state, space, ibp, equation_form)
+        super(EmbeddedDGAdvection, self).__init__(state, self.space, ibp, equation_form)
 
 
 class SUPGAdvection(Advection):

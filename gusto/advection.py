@@ -1,7 +1,8 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, LinearVariationalProblem, LinearVariationalSolver
-from gusto.transport_equation import LinearAdvection
+from firedrake import Function, LinearVariationalProblem, \
+    LinearVariationalSolver, Projector
+from gusto.transport_equation import LinearAdvection, EmbeddedDGAdvection
 
 
 def embedded_dg(original_apply):
@@ -10,7 +11,7 @@ def embedded_dg(original_apply):
     DG advection.
     """
     def get_apply(self, x_in, x_out):
-        if hasattr(self, "Projector"):
+        if self.embedded_dg:
             def new_apply(self, x_in, x_out):
                 self.xdg_in.interpolate(x_in)
                 original_apply(self, self.xdg_in, self.xdg_out)
@@ -57,13 +58,20 @@ class Advection(object):
         # the projector and output function will have been set up in the
         # equation class and we can get the correct function space from
         # the output function.
-        if hasattr(equation, "Projector"):
-            fs = equation.xdg_out.function_space()
-            self.Projector = equation.Projector
-            self.xdg_out = equation.xdg_out
+        if isinstance(equation, EmbeddedDGAdvection):
+            self.embedded_dg = True
+            fs = equation.space
+            self.xdg_in = Function(equation.space)
+            self.xdg_out = Function(equation.space)
+            self.x_projected = Function(field.function_space())
+            parameters = {'ksp_type':'cg',
+                          'pc_type':'bjacobi',
+                          'sub_pc_type':'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=parameters)
             self.xdg_in = Function(fs)
-            self.x_projected = equation.x_projected
         else:
+            self.embedded_dg = False
             fs = field.function_space()
 
         # setup required functions
