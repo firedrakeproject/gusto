@@ -69,7 +69,7 @@ def setup_gw(dirname):
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, state.V[0])
-    beqn = EmbeddedDGAdvection(state, state.V[2], continuity=False)
+    beqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["b"] = SSPRK3(state, b0, beqn)

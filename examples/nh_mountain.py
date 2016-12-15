@@ -130,12 +130,12 @@ state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, state.V[0])
-rhoeqn = Advection(state, state.V[1], continuity=True)
+rhoeqn = Advection(state, state.V[1], equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, continuity=False)
+    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, state.V[2], continuity=False)
+    thetaeqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

@@ -58,7 +58,7 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 
-Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", continuity=True)
+Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", equation_form="continuity")
 advection_dict = {}
 advection_dict["u"] = NoAdvection(state, u0, None)
 advection_dict["D"] = ForwardEuler(state, D0, Deqn)

@@ -71,7 +71,7 @@ def setup_sk(dirname):
     state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
     # Set up advection schemes
-    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", continuity=True)
+    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
     thetaeqn = LinearAdvection(state, state.V[2], qbar=theta_b)
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
