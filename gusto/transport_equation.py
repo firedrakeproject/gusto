@@ -121,12 +121,12 @@ class Advection(TransportEquation):
     def advection_term(self, q):
 
         if self.continuity:
-            if self.ibp is "once":
+            if self.ibp == "once":
                 L = -inner(grad(self.test), outer(q, self.ubar))*dx
             else:
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
         else:
-            if self.ibp is "once":
+            if self.ibp == "once":
                 L = -inner(div(outer(self.test,self.ubar)),q)*dx
             else:
                 L = inner(outer(self.test,self.ubar),grad(q))*dx
@@ -134,7 +134,7 @@ class Advection(TransportEquation):
         if self.dS is not None and self.ibp is not None:
             L += dot(jump(self.test), (self.un('+')*q('+')
                                        - self.un('-')*q('-')))*self.dS
-            if self.ibp is "twice":
+            if self.ibp == "twice":
                 L -= (inner(self.test('+'),dot(self.ubar('+'), self.n('+'))*q('+'))
                       + inner(self.test('-'),dot(self.ubar('-'),
                                                  self.n('-'))*q('-')))*self.dS
@@ -210,7 +210,7 @@ class SUPGAdvection(Advection):
         super(SUPGAdvection, self).__init__(state, V, ibp)
 
         # if using SUPG we either integrate by parts twice, or not at all
-        if ibp is "once":
+        if ibp == "once":
             raise ValueError("if using SUPG we don't integrate by parts once")
         if ibp is None and not self.is_cg:
             raise ValueError("are you very sure you don't need surface terms?")
@@ -230,11 +230,11 @@ class SUPGAdvection(Advection):
             # space is assumed to be continuous and we don't need
             # any interior surface integrals
             self.dS = None
-        elif supg_params["dg_direction"] is "horizontal":
+        elif supg_params["dg_direction"] == "horizontal":
             # if space is discontinuous in the horizontal direction, we
             # need to include surface integrals on the vertical faces
             self.dS = dS_v
-        elif supg_params["dg_direction"] is "vertical":
+        elif supg_params["dg_direction"] == "vertical":
             # if space is discontinuous in the vertical direction, we
             # need to include surface integrals on the horizontal faces
             self.dS = dS_h
@@ -244,17 +244,17 @@ class SUPGAdvection(Advection):
         # make SUPG test function
         if(state.mesh.topological_dimension() == 2):
             taus = [supg_params["ax"], supg_params["ay"]]
-            if supg_params["dg_direction"] is "horizontal":
+            if supg_params["dg_direction"] == "horizontal":
                 taus[0] = 0.0
-            elif supg_params["dg_direction"] is "vertical":
+            elif supg_params["dg_direction"] == "vertical":
                 taus[1] = 0.0
             tau = Constant(((taus[0], 0.), (0., taus[1])))
         elif(state.mesh.topological_dimension() == 3):
             taus = [supg_params["ax"], supg_params["ay"], supg_params["az"]]
-            if supg_params["dg_direction"] is "horizontal":
+            if supg_params["dg_direction"] == "horizontal":
                 taus[0] = 0.0
                 taus[1] = 0.0
-            elif supg_params["dg_direction"] is "vertical":
+            elif supg_params["dg_direction"] == "vertical":
                 taus[2] = 0.0
 
             tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
@@ -286,7 +286,7 @@ class VectorInvariant(Advection):
                 self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
             self.gradperp = lambda u: self.perp(grad(u))
         elif self.state.mesh.topological_dimension() == 3:
-            if self.ibp is "twice":
+            if self.ibp == "twice":
                 raise NotImplementedError("ibp=twice is not implemented for 3d problems")
         else:
             raise RuntimeError("topological mesh dimension must be 2 or 3")
@@ -309,7 +309,7 @@ class VectorInvariant(Advection):
 
         else:
 
-            if self.ibp is "once":
+            if self.ibp == "once":
                 L = (
                     -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
                     - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
