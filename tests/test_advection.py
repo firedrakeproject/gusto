@@ -11,7 +11,7 @@ error = {"slice": 7e-2, "sphere": 2.5e-2}
 def setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vector, spatial_opts=None):
 
     output = OutputParameters(dirname=dirname, dumplist=["f"], dumpfreq=15)
-    if geometry is "sphere":
+    if geometry == "sphere":
         refinements = 3  # number of horizontal cells = 20*(4^refinements)
         R = 1.
         dt = pi/3*0.01
@@ -48,7 +48,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vec
             f_end = Function(state.V[1])
             f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
 
-    elif geometry is "slice":
+    elif geometry == "slice":
         nlayers = 25  # horizontal layers
         columns = 25  # number of columns
         L = 1.0
@@ -113,14 +113,14 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, continuity, vec
     elif "supg_params" in spatial_opts:
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity, supg_params=spatial_opts["supg_params"])
     elif "embedded_dg" in spatial_opts:
-        if spatial_opts["embedded_dg"]["space"] is "Broken":
+        if spatial_opts["embedded_dg"]["space"] == "Broken":
             fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity)
-        elif spatial_opts["embedded_dg"]["space"] is "DG":
+        elif spatial_opts["embedded_dg"]["space"] == "DG":
             fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, continuity=continuity, Vdg=space)
 
-    if time_discretisation is "ssprk":
+    if time_discretisation == "ssprk":
         f_advection = SSPRK3(state, f, fequation)
-    elif time_discretisation is "implicit_midpoint":
+    elif time_discretisation == "implicit_midpoint":
         f_advection = ThetaMethod(state, f, fequation)
 
     advection_dict = {}
