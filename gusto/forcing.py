@@ -85,7 +85,7 @@ class CompressibleForcing(Forcing):
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
         )
 
-        if state.geopotential:
+        if state.geopotential_form:
             Phi = state.Phi
             L += self.scaling*div(w)*Phi*dx  # gravity term
         else:

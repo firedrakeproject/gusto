@@ -41,7 +41,7 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT", z=None, k=None, Omega=None, mu=None,
-                 geopotential=False, on_sphere=False,
+                 geopotential_form=False,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -53,8 +53,7 @@ class State(object):
         self.k = k
         self.Omega = Omega
         self.mu = mu
-        self.geopotential = geopotential
-        self.on_sphere = on_sphere
+        self.geopotential_form = geopotential_form
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -83,8 +82,11 @@ class State(object):
                            zip(self.fieldlist, self.xn.split())}
 
         self.dumpfile = None
+
+        self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
+
         #  build the geopotential
-        if geopotential:
+        if geopotential_form:
             V = FunctionSpace(mesh, "CG", 1)
             if self.on_sphere:
                 self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
