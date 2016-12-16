@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.advection import NoAdvection
 from gusto.state import IncompressibleState
 from firedrake import DirichletBC, Expression, Function
 
@@ -21,19 +20,6 @@ class BaseTimestepper(object):
 
         self.state = state
         self.advection_dict = advection_dict
-
-    def _set_ubar(self):
-        """
-        Update ubar in the advection methods.
-        """
-
-        state = self.state
-        un = state.xn.split()[0]
-        unp1 = state.xnp1.split()[0]
-
-        for field, advection in self.advection_dict.iteritems():
-            if not isinstance(advection, NoAdvection):
-                advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
 
     def _apply_bcs(self):
         """
@@ -114,11 +100,11 @@ class Timestepper(BaseTimestepper):
                 state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
-                with timed_stage("Compute ubar"):
-                    self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
 
                 with timed_stage("Advection"):
                     for field, advection in self.advection_dict.iteritems():
+                        # first computes ubar from state.xn and state.xnp1
+                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
                         advection.apply(xstar_fields[field], xp_fields[field])
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
@@ -178,8 +164,9 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
             for field, advection in self.advection_dict.iteritems():
+                # first computes ubar from state.xn and state.xnp1
+                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(xn_fields[field], xnp1_fields[field])
 

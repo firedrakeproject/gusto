@@ -83,6 +83,11 @@ class Advection(object):
         if equation is not None:
             self.ubar = self.equation.ubar
 
+    def update_ubar(self, xn, xnp1, alpha):
+        un = xn.split()[0]
+        unp1 = xnp1.split()[0]
+        self.ubar.assign(un + alpha*(unp1-un))
+
     def update_solver(self):
         # setup solver using lhs and rhs defined in derived class
 
@@ -106,6 +111,9 @@ class NoAdvection(Advection):
     """
     An non-advection scheme that does nothing.
     """
+
+    def update_ubar(self, xn, xnp1, alpha):
+        pass
 
     def apply(self, x_in, x_out):
 
