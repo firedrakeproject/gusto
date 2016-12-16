@@ -74,7 +74,7 @@ class Timestepper(BaseTimestepper):
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
 
-        if(isinstance(self.state, IncompressibleState)):
+        if(isinstance(self.forcing, IncompressibleForcing)):
             self.incompressible = True
         else:
             self.incompressible = False

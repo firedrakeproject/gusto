@@ -25,11 +25,11 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         fieldlist = ['u','D']
         timestepping = TimesteppingParameters(dt=dt)
 
-        state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                                  family="BDM",
-                                  timestepping=timestepping,
-                                  output=output,
-                                  fieldlist=fieldlist)
+        state = State(mesh, horizontal_degree=1,
+                      family="BDM",
+                      timestepping=timestepping,
+                      output=output,
+                      fieldlist=fieldlist)
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
         u0, D0 = Function(state.V[0], name="velocity"), Function(state.V[1])
@@ -71,13 +71,13 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         timestepping = TimesteppingParameters(dt=dt)
         parameters = CompressibleParameters()
 
-        state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                  family="CG",
-                                  z=z, k=k,
-                                  timestepping=timestepping,
-                                  output=output,
-                                  parameters=parameters,
-                                  fieldlist=fieldlist)
+        state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                      family="CG",
+                      z=z, k=k,
+                      timestepping=timestepping,
+                      output=output,
+                      parameters=parameters,
+                      fieldlist=fieldlist)
 
         uexpr = as_vector([1.0, 0.0])
         u0, rho0, theta0 = Function(state.V[0], name="velocity"), Function(state.V[1]), Function(state.V[2])
