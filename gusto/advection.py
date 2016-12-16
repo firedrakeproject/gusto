@@ -91,12 +91,12 @@ class Advection(object):
         unp1 = xnp1.split()[0]
         self.ubar.assign(un + alpha*(unp1-un))
 
-    def create_solver(self):
+    @cached_property
+    def solver(self):
         # setup solver using lhs and rhs defined in derived class
-
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
-        self.solver = LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply(self, x_in, x_out):
@@ -135,9 +135,6 @@ class ForwardEuler(Advection):
     y_(n+1) = y_n + dt*L(y_n)
     where L is the advection operator
     """
-    def __init__(self, state, field, equation, solver_params=None):
-        super(ForwardEuler, self).__init__(state, field, equation, solver_params)
-        self.create_solver()
 
     @cached_property
     def lhs(self):
@@ -163,10 +160,6 @@ class SSPRK3(Advection):
     where subscripts indicate the timelevel, superscripts indicate the stage
     number and L is the advection operator.
     """
-    def __init__(self, state, field, equation, solver_params=None):
-        super(SSPRK3, self).__init__(state, field, equation, solver_params)
-
-        self.create_solver()
 
     @cached_property
     def lhs(self):
@@ -207,7 +200,6 @@ class ThetaMethod(Advection):
         super(ThetaMethod, self).__init__(state, field, equation, solver_params)
 
         self.theta = theta
-        self.create_solver()
 
     @cached_property
     def lhs(self):
