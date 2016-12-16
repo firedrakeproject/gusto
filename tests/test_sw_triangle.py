@@ -60,7 +60,7 @@ def setup_sw(dirname, euler_poincare):
         ueqn = VectorInvariant(state, state.V[0])
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
-    Deqn = Advection(state, state.V[1], equation_form="continuity")
+    Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)

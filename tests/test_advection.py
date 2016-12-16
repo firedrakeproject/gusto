@@ -109,7 +109,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     f_end.interpolate(f_end_expr)
 
     if spatial_opts is None:
-        fequation = Advection(state, f.function_space(), ibp=ibp, equation_form=equation_form)
+        fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)
     elif "supg_params" in spatial_opts:
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form, supg_params=spatial_opts["supg_params"])
     elif "embedded_dg" in spatial_opts:
