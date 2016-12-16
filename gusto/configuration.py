@@ -70,6 +70,7 @@ class ShallowWaterParameters(Configuration):
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
 
+
 class EadyParameters(Configuration):
 
     """

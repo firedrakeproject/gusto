@@ -277,7 +277,7 @@ class EadyForcing(Forcing):
         L = self.scaling*(
             div(w)*p0  # pressure gradient
             + b0*inner(w,state.k)  # gravity term
-            - dbdy*eady_exp*inner(w,as_vector([0.,1.,0.])) # Eady forcing
+            - dbdy*eady_exp*inner(w,as_vector([0.,1.,0.]))  # Eady forcing
         )*dx
 
         if not linear:
@@ -349,6 +349,7 @@ class EadyForcing(Forcing):
         if kwargs.get("incompressible", False):
             self.divergence_solver.solve()
             p_out.assign(self.divu)
+
 
 class ShallowWaterForcing(Forcing):
 
