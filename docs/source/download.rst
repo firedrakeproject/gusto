@@ -12,7 +12,7 @@ If you installed Firedrake yourself
 You can directly install Gusto in your Firedrake installation by
 activating the Firedrake virtualenv and running::
 
-    firedrake-update --install git+ssh://github.com/firedrakeproject/gusto#egg=gusto
+    firedrake-update --install gusto
 
 The Gusto source will be installed in the ``src/gusto`` subdirectory
 of your Firedrake install. Using this install method you should

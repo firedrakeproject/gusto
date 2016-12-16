@@ -1,6 +1,7 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,\
+    DirichletBC
 import sys
 
 if '--running-tests' in sys.argv:
@@ -80,7 +81,7 @@ for delta, dt in res_dt.iteritems():
     advection_dict["u"] = EulerPoincareForm(state, state.V[0])
     advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
     advection_dict["theta"] = SUPGAdvection(state, state.V[2], direction=[1])
-    # theta_advection = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
+    # advection_dict["theta"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -112,8 +113,11 @@ for delta, dt in res_dt.iteritems():
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
 
-    diffusion_dict = {"u": InteriorPenalty(state, state.V[0],direction=[2], params={"kappa":Constant(75.), "mu":Constant(1./delta)}),
-                      "theta": InteriorPenalty(state, state.V[2],direction=[2], params={"kappa":75., "mu":0.005})}
+    V = state.V[0]
+    bcs = [DirichletBC(V, 0.0, "bottom"),
+           DirichletBC(V, 0.0, "top")]
+    diffusion_dict = {"u": InteriorPenalty(state, state.V[0], kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
+                      "theta": InteriorPenalty(state, state.V[2], kappa=Constant(75.), mu=Constant(10./delta))}
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,
