@@ -48,12 +48,13 @@ z = Function(W_CG1).interpolate(x[2])
 k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
 
 # Coriolis expression
-Omega = as_vector([0.,0.,1.e-4])
+f = 1.e-04
+Omega = as_vector([0.,0.,f*0.5])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
 # state.field_dict so that we can access fields by name
-# u is the 2D velocity
+# u is the 3D velocity
 # p is the pressure
 # b is the buoyancy
 fieldlist = ['u', 'p', 'b']
