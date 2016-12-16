@@ -106,9 +106,9 @@ class LinearAdvection(TransportEquation):
         return L
 
 
-class Advection(TransportEquation):
+class AdvectionEquation(TransportEquation):
     """
-    Class for DG discretisation of the transport equation.
+    Class for discretisation of the transport equation.
 
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
@@ -121,7 +121,7 @@ class Advection(TransportEquation):
                         Default is "advective"
     """
     def __init__(self, state, V, ibp="once", equation_form="advective"):
-        super(Advection, self).__init__(state, V, ibp)
+        super(AdvectionEquation, self).__init__(state, V, ibp)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
@@ -151,7 +151,7 @@ class Advection(TransportEquation):
         return L
 
 
-class EmbeddedDGAdvection(Advection):
+class EmbeddedDGAdvection(AdvectionEquation):
     """
     Class for the transport equation, using an embedded DG advection scheme.
 
@@ -181,7 +181,7 @@ class EmbeddedDGAdvection(Advection):
         super(EmbeddedDGAdvection, self).__init__(state, self.space, ibp, equation_form)
 
 
-class SUPGAdvection(Advection):
+class SUPGAdvection(AdvectionEquation):
     """
     Class for the transport equation.
 
@@ -265,7 +265,7 @@ class SUPGAdvection(Advection):
         self.test += dtest
 
 
-class VectorInvariant(Advection):
+class VectorInvariant(TransportEquation):
     """
     Class defining the vector invariant form of the vector advection equation.
 
