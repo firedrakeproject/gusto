@@ -1,7 +1,8 @@
 from __future__ import absolute_import
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector
+from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
 
 
@@ -38,15 +39,20 @@ class Advection(object):
 
     def __init__(self, state, field, equation=None, solver_params=None):
 
-        self.state = state
-        self.field = field
+        if equation is not None:
 
-        # get default solver options if none passed in
-        if solver_params is None:
-            self.solver_parameters = equation.solver_parameters
-        else:
-            self.solver_parameters = solver_params
-        self.dt = self.state.timestepping.dt
+            self.state = state
+            self.field = field
+            self.equation = equation
+            # get ubar from the equation class
+            self.ubar = self.equation.ubar
+            self.dt = self.state.timestepping.dt
+
+            # get default solver options if none passed in
+            if solver_params is None:
+                self.solver_parameters = equation.solver_parameters
+            else:
+                self.solver_parameters = solver_params
 
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
@@ -72,17 +78,20 @@ class Advection(object):
         self.dq = Function(fs)
         self.q1 = Function(fs)
 
-        # get ubar from the equation class if provided
-        self.equation = equation
-        if equation is not None:
-            self.ubar = self.equation.ubar
+    @abstractproperty
+    def lhs(self):
+        return self.equation.mass_term(self.equation.trial)
+
+    @abstractproperty
+    def rhs(self):
+        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
 
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
         unp1 = xnp1.split()[0]
         self.ubar.assign(un + alpha*(unp1-un))
 
-    def update_solver(self):
+    def create_solver(self):
         # setup solver using lhs and rhs defined in derived class
 
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
@@ -106,6 +115,12 @@ class NoAdvection(Advection):
     An non-advection scheme that does nothing.
     """
 
+    def lhs(self):
+        pass
+
+    def rhs(self):
+        pass
+
     def update_ubar(self, xn, xnp1, alpha):
         pass
 
@@ -122,15 +137,20 @@ class ForwardEuler(Advection):
     """
     def __init__(self, state, field, equation, solver_params=None):
         super(ForwardEuler, self).__init__(state, field, equation, solver_params)
+        self.create_solver()
 
-        self.lhs = self.equation.mass_term(self.equation.trial)
-        self.rhs = -self.equation.advection_term(self.q1)
-        self.update_solver()
+    @cached_property
+    def lhs(self):
+        return super(ForwardEuler, self).lhs
+
+    @cached_property
+    def rhs(self):
+        return super(ForwardEuler, self).rhs
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(x_in + self.dt*self.dq)
+        x_out.assign(self.dq)
 
 
 class SSPRK3(Advection):
@@ -146,9 +166,15 @@ class SSPRK3(Advection):
     def __init__(self, state, field, equation, solver_params=None):
         super(SSPRK3, self).__init__(state, field, equation, solver_params)
 
-        self.lhs = self.equation.mass_term(self.equation.trial)
-        self.rhs = self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
-        self.update_solver()
+        self.create_solver()
+
+    @cached_property
+    def lhs(self):
+        return super(SSPRK3, self).lhs
+
+    @cached_property
+    def rhs(self):
+        return super(SSPRK3, self).rhs
 
     def solve_stage(self, x_in, stage):
 
@@ -179,10 +205,20 @@ class ThetaMethod(Advection):
     """
     def __init__(self, state, field, equation, theta=0.5, solver_params=None):
         super(ThetaMethod, self).__init__(state, field, equation, solver_params)
-        trial = self.equation.trial
-        self.lhs = self.equation.mass_term(trial) + theta*self.dt*self.equation.advection_term(trial)
-        self.rhs = self.equation.mass_term(self.q1) - (1.-theta)*self.dt*self.equation.advection_term(self.q1)
-        self.update_solver()
+
+        self.theta = theta
+        self.create_solver()
+
+    @cached_property
+    def lhs(self):
+        eqn = self.equation
+        trial = eqn.trial
+        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(trial)
+
+    @cached_property
+    def rhs(self):
+        eqn = self.equation
+        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.q1)
 
     def apply(self, x_in, x_out):
         # SSPRK Stage 1
