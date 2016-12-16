@@ -22,13 +22,13 @@ def setup_IPdiffusion(vector, DG):
     z = Function(W_CG1).interpolate(Expression("x[1]"))
     k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
-    state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                              family="CG",
-                              z=z, k=k,
-                              timestepping=timestepping,
-                              parameters=parameters,
-                              output=output,
-                              fieldlist=fieldlist)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="CG",
+                  z=z, k=k,
+                  timestepping=timestepping,
+                  parameters=parameters,
+                  output=output,
+                  fieldlist=fieldlist)
 
     if vector:
         if DG:

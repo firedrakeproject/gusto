@@ -27,7 +27,7 @@ def setup_sw(dirname, euler_poincare):
     diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM", on_sphere=True,
+                  family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,

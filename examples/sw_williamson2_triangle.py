@@ -34,13 +34,13 @@ for ref_level, dt in ref_dt.iteritems():
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D','Derr'], steady_state_dump_err={'D':True,'u':True})
 
-    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                              family="BDM",
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              diagnostics=diagnostics,
-                              fieldlist=fieldlist)
+    state = State(mesh, horizontal_degree=1,
+                  family="BDM",
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  diagnostics=diagnostics,
+                  fieldlist=fieldlist)
 
     # interpolate initial conditions
     u0, D0 = Function(state.V[0]), Function(state.V[1])

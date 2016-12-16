@@ -25,7 +25,7 @@ def setup_sw(dirname):
     diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, horizontal_degree=1,
-                  family="BDM", on_sphere=True,
+                  family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
