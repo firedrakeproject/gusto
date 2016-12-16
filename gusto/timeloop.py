@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.forcing import IncompressibleForcing
-from firedrake import DirichletBC, Expression
+from gusto.state import IncompressibleState
+from firedrake import DirichletBC, Expression, Function
 
 
 class BaseTimestepper(object):
@@ -31,18 +31,21 @@ class BaseTimestepper(object):
         else:
             self.incompressible = False
 
-    def _set_ubar(self):
+    def _apply_bcs(self):
         """
-        Update ubar in the advection methods.
+        Set the zero boundary conditions in the velocity.
         """
+        unp1 = self.state.xnp1.split()[0]
 
-        state = self.state
-        un = state.xn.split()[0]
-        unp1 = state.xnp1.split()[0]
+        if unp1.function_space().extruded:
+            dim = unp1.ufl_element().value_shape()[0]
+            bc = ("0.0",)*dim
+            M = unp1.function_space()
+            bcs = [DirichletBC(M, Expression(bc), "bottom"),
+                   DirichletBC(M, Expression(bc), "top")]
 
-        for field, advection in self.advection_dict.iteritems():
-            if not isinstance(advection, NoAdvection):
-                advection.ubar.assign(un + state.timestepping.alpha*(unp1-un))
+            for bc in bcs:
+                bc.apply(unp1)
 
     @abstractmethod
     def run(self):
@@ -107,11 +110,11 @@ class Timestepper(BaseTimestepper):
                 state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
-                with timed_stage("Compute ubar"):
-                    self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
 
                 with timed_stage("Advection"):
                     for field, advection in self.advection_dict.iteritems():
+                        # first computes ubar from state.xn and state.xnp1
+                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
                         advection.apply(xstar_fields[field], xp_fields[field])
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
@@ -170,8 +173,9 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            self._set_ubar()  # computes state.ubar from state.xn and state.xnp1
             for field, advection in self.advection_dict.iteritems():
+                # first computes ubar from state.xn and state.xnp1
+                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(xn_fields[field], xnp1_fields[field])
 
