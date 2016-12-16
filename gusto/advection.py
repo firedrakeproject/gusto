@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector
-from gusto.transport_equation import LinearAdvection, EmbeddedDGAdvection
+from gusto.transport_equation import EmbeddedDGAdvection
 
 
 def embedded_dg(original_apply):
@@ -41,15 +41,9 @@ class Advection(object):
         self.state = state
         self.field = field
 
+        # get default solver options if none passed in
         if solver_params is None:
-            if isinstance(equation, LinearAdvection):
-                self.solver_parameters = {'ksp_type':'cg',
-                                          'pc_type':'bjacobi',
-                                          'sub_pc_type': 'ilu'}
-            else:
-                self.solver_parameters = {'ksp_type':'preonly',
-                                          'pc_type':'bjacobi',
-                                          'sub_pc_type': 'ilu'}
+            self.solver_parameters = equation.solver_parameters
         else:
             self.solver_parameters = solver_params
         self.dt = self.state.timestepping.dt
