@@ -78,5 +78,5 @@ class EadyParameters(Configuration):
     """
     Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
-    geopotential = False  # use geopotential for gravity term
     H = None
+    geopotential = False  # use geopotential for gravity term
