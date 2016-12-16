@@ -56,6 +56,11 @@ class TransportEquation(object):
             self.n = FacetNormal(state.mesh)
             self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
+        # default solver options
+        self.solver_parameters = {'ksp_type':'preonly',
+                                  'pc_type':'bjacobi',
+                                  'sub_pc_type': 'ilu'}
+
     def mass_term(self, q):
         return inner(self.test, q)*dx
 
@@ -89,12 +94,19 @@ class LinearAdvection(TransportEquation):
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity', not %s" % equation_form)
+
         self.qbar = qbar
+
         # currently only used with the following option combinations:
         if self.continuity and ibp is not "once":
             raise NotImplementedError("If we are solving a linear continuity equation, we integrate by parts once")
         if not self.continuity and ibp is not None:
             raise NotImplementedError("If we are solving a linear advection equation, we do not integrate by parts.")
+
+        # default solver options
+        self.solver_parameters = {'ksp_type':'cg',
+                                  'pc_type':'bjacobi',
+                                  'sub_pc_type': 'ilu'}
 
     def advection_term(self, q):
 
