@@ -16,7 +16,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = 30*24*60*60.
+    tmax = 100.
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -64,7 +64,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=1, dumplist=['u','p'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
