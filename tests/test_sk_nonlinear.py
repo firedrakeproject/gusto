@@ -39,8 +39,7 @@ def setup_sk(dirname):
                   parameters=parameters,
                   diagnostics=diagnostics,
                   fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields,
-                  on_sphere=False)
+                  diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
     u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])

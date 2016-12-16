@@ -33,14 +33,13 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_linear', dumplist=['u'])
 parameters = CompressibleParameters()
 
-state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
-                          z=z, k=k,
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          fieldlist=fieldlist,
-                          on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              z=z, k=k,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              fieldlist=fieldlist)
 
 # Initial conditions
 u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])

@@ -28,19 +28,18 @@ def setup_gw(dirname):
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
     diagnostics = Diagnostics(*fieldlist)
-    parameters = CompressibleParameters(geopotential=False)
+    parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
-    state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="CG",
-                                z=z, k=k,
-                                timestepping=timestepping,
-                                output=output,
-                                parameters=parameters,
-                                diagnostics=diagnostics,
-                                fieldlist=fieldlist,
-                                diagnostic_fields=diagnostic_fields,
-                                on_sphere=False)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="CG",
+                  z=z, k=k,
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  diagnostics=diagnostics,
+                  fieldlist=fieldlist,
+                  diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
     u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])

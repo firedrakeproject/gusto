@@ -27,14 +27,14 @@ parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                          family="BDM",
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields)
+state = State(mesh, horizontal_degree=1,
+              family="BDM",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 g = parameters.g
 Omega = parameters.Omega

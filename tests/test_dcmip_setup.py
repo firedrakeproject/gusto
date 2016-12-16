@@ -45,12 +45,12 @@ def setup_dcmip(dirname):
     output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
     parameters = CompressibleParameters()
 
-    state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
-                              family="RTCF", k=k, Omega=Omega,
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              fieldlist=fieldlist)
+    state = State(mesh, vertical_degree=0, horizontal_degree=0,
+                  family="RTCF", k=k, Omega=Omega,
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  fieldlist=fieldlist)
 
     # interpolate initial conditions
     g = parameters.g

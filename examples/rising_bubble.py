@@ -32,16 +32,15 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
-                          z=z, k=k,
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields,
-                          on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              z=z, k=k,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
 u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])

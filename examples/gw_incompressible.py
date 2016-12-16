@@ -79,16 +79,15 @@ diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces, z, k, and the classes above
-state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="CG",
-                            z=z, k=k,
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            diagnostics=diagnostics,
-                            fieldlist=fieldlist,
-                            diagnostic_fields=diagnostic_fields,
-                            on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              z=z, k=k,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 ##############################################################################
 # Initial conditions

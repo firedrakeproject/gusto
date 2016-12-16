@@ -28,13 +28,13 @@ output = OutputParameters(dirname='sw_linear_w2', steady_state_dump_err={'u':Tru
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                          family="BDM",
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist)
+state = State(mesh, horizontal_degree=1,
+              family="BDM",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist)
 
 g = parameters.g
 Omega = parameters.Omega
