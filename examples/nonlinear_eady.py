@@ -1,8 +1,7 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
-    sin, SpatialCoordinate
-import numpy as np
+    SpatialCoordinate
 import sys
 import inifns
 
