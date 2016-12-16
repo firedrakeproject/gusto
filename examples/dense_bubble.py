@@ -81,11 +81,11 @@ for delta, dt in res_dt.iteritems():
     supg = True
     if supg:
         thetaeqn = SUPGAdvection(state, state.V[2],
-                                         supg_params={"dg_direction":"horizontal"},
-                                         equation_form="advective")
+                                 supg_params={"dg_direction":"horizontal"},
+                                 equation_form="advective")
     else:
         thetaeqn = EmbeddedDGAdvection(state, state.V[2],
-                                               equation_form="advective")
+                                       equation_form="advective")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

@@ -138,11 +138,11 @@ ueqn = EulerPoincare(state, state.V[0])
 supg = True
 if supg:
     beqn = SUPGAdvection(state, state.V[2],
-                                 supg_params={"dg_direction":"horizontal"},
-                                 equation_form="advective")
+                         supg_params={"dg_direction":"horizontal"},
+                         equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, state.V[2],
-                                       equation_form="advective")
+                               equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["b"] = SSPRK3(state, b0, beqn)
