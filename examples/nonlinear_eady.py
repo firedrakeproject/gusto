@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
+from firedrake import FunctionSpace, as_vector, SpatialCoordinate, \
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
-    SpatialCoordinate, cos, sin, cosh, sinh, tanh, pi
+    cos, sin, cosh, sinh, tanh, pi
 import sys
 
 dt = 100.
@@ -107,13 +107,20 @@ bref = z*Nsq
 # interpolate the expression to the function
 b_b = Function(state.V[2]).interpolate(bref)
 
+
 # setup constants
 def coth(x):
     return cosh(x)/sinh(x)
+
+
 def Z(z):
     return Bu*((z/H)-0.5)
+
+
 def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
+
+
 a = -7.5
 Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
