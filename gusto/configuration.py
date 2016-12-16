@@ -70,3 +70,14 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+
+
+class EadyParameters(Configuration):
+
+    """
+    Physical parameters for nonlinear eady
+    """
+    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
+    dbdy = -1.0e-07
+    H = None
+    geopotential = False  # use geopotential for gravity term
