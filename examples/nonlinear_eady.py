@@ -1,9 +1,8 @@
 from gusto import *
 from firedrake import Expression, FunctionSpace, as_vector,\
     VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
-    SpatialCoordinate
+    SpatialCoordinate, cos, sin, cosh, sinh, tanh, pi
 import sys
-import inifns
 
 dt = 100.
 if '--running-tests' in sys.argv:
@@ -109,10 +108,15 @@ bref = z*Nsq
 b_b = Function(state.V[2]).interpolate(bref)
 
 # setup constants
+def coth(x):
+    return cosh(x)/sinh(x)
+def Z(z):
+    return Bu*((z/H)-0.5)
+def n():
+    return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 a = -7.5
 Bu = 0.5
-template_s = inifns.template_target_strings()
-b_exp = Expression(template_s,a=a,Nsq=Nsq,Bu=Bu,H=H,L=L)
+b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(state.V[2]).interpolate(b_exp)
 
 # interpolate the expression to the function
