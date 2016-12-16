@@ -346,7 +346,7 @@ class EadyForcing(Forcing):
         u_out += self.uF
         b_out += self.bF
 
-        if 'incompressible' in kwargs and kwargs['incompressible']:
+        if kwargs.get("incompressible", False):
             self.divergence_solver.solve()
             p_out.assign(self.divu)
 

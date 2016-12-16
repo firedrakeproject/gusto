@@ -43,9 +43,8 @@ W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 W_CG1 = FunctionSpace(mesh, "CG", 1)
 
 # vertical coordinate and normal
-x = SpatialCoordinate(mesh)
-z = Function(W_CG1).interpolate(x[2])
-k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
+x, y, z = SpatialCoordinate(mesh)
+k = Constant([0, 0, 1])
 
 # Coriolis expression
 f = 1.e-04
@@ -104,9 +103,9 @@ u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. x[2]=z and comes from x=SpatialCoordinate(mesh)
+# from the parameters class. z comes from x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
-bref = x[2]*Nsq
+bref = z*Nsq
 # interpolate the expression to the function
 b_b = Function(state.V[2]).interpolate(bref)
 
