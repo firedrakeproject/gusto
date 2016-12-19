@@ -42,7 +42,7 @@ def setup_dcmip(dirname):
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=0, horizontal_degree=0,
-                  family="RTCF", vertical_normal=k,
+                  family="RTCF",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,

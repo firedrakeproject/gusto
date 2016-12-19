@@ -9,8 +9,8 @@ from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
-    Expression, File, TestFunction, TrialFunction, inner, div, FacetNormal, \
-    ds_tb, dx, solve, op2, par_loop, READ, WRITE, DumbCheckpoint, \
+    Expression, File, SpatialCoordinate, sqrt, Constant, inner, \
+    dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ
 import numpy as np
 
@@ -31,13 +31,6 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg vertical_coord: (optional) vector or function specifying the vertical
-    coordinate
-    :arg vertical_normal: (optional) vector or function specifying the
-    vertical normal.
-    Note, one of vertical_ccord or vertical_normal must be specified. If
-    vertical_normal is not specified, vertical_ccord will be used to
-    calculate it.
     :arg geopotential_form: if True use the geopotential form for the
     gravitational forcing term. Defaults to False.
     :arg Coriolis: (optional) Coriolis function.
@@ -51,7 +44,7 @@ class State(object):
     """
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
-                 family="RT", vertical_coord=None, vertical_normal=None,
+                 family="RT",
                  Coriolis=None, sponge_function=None,
                  geopotential_form=False,
                  timestepping=None,
@@ -61,7 +54,6 @@ class State(object):
                  fieldlist=None,
                  diagnostic_fields=[]):
 
-        self.k = vertical_normal
         self.Omega = Coriolis
         self.mu = sponge_function
         self.geopotential_form = geopotential_form
@@ -94,7 +86,22 @@ class State(object):
 
         self.dumpfile = None
 
-        self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
+        # figure out if we're on a sphere
+        try:
+            self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
+        except AttributeError:
+            self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
+
+        #  build the vertical normal
+        if self.on_sphere:
+            x = SpatialCoordinate(mesh)
+            R = sqrt(inner(x, x))
+            self.k = x/R
+        else:
+            dim = mesh.geometric_dimension()
+            kvec = [0.0]*dim
+            kvec[dim-1] = 1.0
+            self.k = Constant(kvec)
 
         #  build the geopotential
         if geopotential_form:
@@ -104,40 +111,6 @@ class State(object):
             else:
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
-
-        if self.k is None and vertical_degree is not None:
-            if vertical_coord is None:
-                raise RuntimeError("You must specify either the vertical coordinate or the vertical normal")
-            # build the vertical normal
-            z = vertical_coord
-            w = TestFunction(self.Vv)
-            u = TrialFunction(self.Vv)
-            self.k = Function(self.Vv)
-            n = FacetNormal(self.mesh)
-            krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
-            klhs = inner(w,u)*dx
-            solve(klhs == krhs, self.k)
-
-        self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
-
-        #  build the geopotential
-        if geopotential_form:
-            V = FunctionSpace(mesh, "CG", 1)
-            if self.on_sphere:
-                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-            else:
-                self.Phi = Function(V).interpolate(Expression("x[1]"))
-            self.Phi *= parameters.g
-
-        if self.k is None and vertical_degree is not None:
-            # build the vertical normal
-            w = TestFunction(self.Vv)
-            u = TrialFunction(self.Vv)
-            self.k = Function(self.Vv)
-            n = FacetNormal(self.mesh)
-            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
-            klhs = inner(w,u)*dx
-            solve(klhs == krhs, self.k)
 
     def dump(self, t=0, pickup=False):
         """

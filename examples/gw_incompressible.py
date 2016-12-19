@@ -75,7 +75,6 @@ diagnostic_fields = [CourantNumber()]
 # function spaces, z, k, and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              vertical_normal=k,
               timestepping=timestepping,
               output=output,
               parameters=parameters,

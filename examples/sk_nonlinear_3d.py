@@ -33,7 +33,6 @@ diagnostic_fields = [CourantNumber()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
-              vertical_normal=k,
               timestepping=timestepping,
               output=output,
               parameters=parameters,

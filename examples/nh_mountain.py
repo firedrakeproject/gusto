@@ -48,7 +48,7 @@ diagnostic_fields = [CourantNumber(), VerticalVelocity()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              vertical_normal=k, sponge_function=mu,
+              sponge_function=mu,
               timestepping=timestepping,
               output=output,
               parameters=parameters,

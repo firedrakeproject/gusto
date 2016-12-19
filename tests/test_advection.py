@@ -59,16 +59,12 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         dt = 0.01
         tmax = 2.5
 
-        # vertical normal
-        k = Constant([0, 1])
-
         fieldlist = ['u','rho', 'theta']
         timestepping = TimesteppingParameters(dt=dt)
         parameters = CompressibleParameters()
 
         state = State(mesh, vertical_degree=1, horizontal_degree=1,
                       family="CG",
-                      vertical_normal=k,
                       timestepping=timestepping,
                       output=output,
                       parameters=parameters,
