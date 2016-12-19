@@ -17,9 +17,6 @@ ncolumns = int(L/10.)
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# vertical coordinate and normal
-k = Constant([0, 1])
-
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'])

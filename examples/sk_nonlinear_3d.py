@@ -21,9 +21,6 @@ m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# vertical normal
-k = Constant([0, 0, 1])
-
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_nonlinear_3d', dumpfreq=1, dumplist=['u'])

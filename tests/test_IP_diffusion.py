@@ -16,9 +16,6 @@ def setup_IPdiffusion(vector, DG):
     parameters = CompressibleParameters()
     output = OutputParameters(dirname="IPdiffusion")
 
-    # vertical normal
-    k = Constant([0, 1])
-
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
                   timestepping=timestepping,
