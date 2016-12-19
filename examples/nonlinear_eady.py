@@ -36,9 +36,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# vertical normal
-k = Constant([0, 0, 1])
-
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0.,0.,f*0.5])
@@ -75,7 +72,7 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
-# function spaces, vertical normal, and the classes above
+# function spaces and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
               Coriolis=Omega,

@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 from gusto import *
-from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
-    VectorFunctionSpace
+from firedrake import CubedSphereMesh, ExtrudedMesh, Expression
 import numpy as np
 
 
@@ -31,10 +30,6 @@ def setup_dcmip(dirname):
     z_top = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
                         extrusion_type="radial")
-
-    # Make a vertical direction for the linearised advection
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)

@@ -31,9 +31,6 @@ else:
     new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
 mesh = Mesh(new_coords)
 
-# vertical normal
-k = Constant([0, 1])
-
 # sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)

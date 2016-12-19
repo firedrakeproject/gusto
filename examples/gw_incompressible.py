@@ -37,8 +37,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# vertical normal
-k = Constant([0, 1])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,

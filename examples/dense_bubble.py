@@ -24,9 +24,6 @@ for delta, dt in res_dt.iteritems():
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # vertical normal
-    k = Constant([0, 1])
-
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname, dumpfreq=5, dumplist=['u'])

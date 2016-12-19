@@ -15,9 +15,6 @@ def setup_sk(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # vertical normal
-    k = Constant([0, 1])
-
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)

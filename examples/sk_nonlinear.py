@@ -19,9 +19,6 @@ m = PeriodicIntervalMesh(columns, L)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# vertical normal
-k = Constant([0, 1])
-
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=6.0)
 output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'])
