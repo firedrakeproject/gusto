@@ -78,7 +78,7 @@ diagnostic_fields = [CourantNumber()]
 # function spaces, vertical normal, and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
-              vertical_normal=k, Coriolis=Omega,
+              Coriolis=Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,

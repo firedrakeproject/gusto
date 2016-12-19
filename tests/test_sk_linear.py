@@ -27,7 +27,6 @@ def setup_sk(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  vertical_normal=k,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,

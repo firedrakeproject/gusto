@@ -21,7 +21,6 @@ def setup_IPdiffusion(vector, DG):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  vertical_normal=k,
                   timestepping=timestepping,
                   parameters=parameters,
                   output=output,

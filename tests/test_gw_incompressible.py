@@ -15,9 +15,6 @@ def setup_gw(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # vertical normal
-    k = Constant([0, 1])
-
     fieldlist = ['u', 'p', 'b']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
@@ -27,7 +24,6 @@ def setup_gw(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  vertical_normal=k,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
