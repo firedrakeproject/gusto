@@ -1,7 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,\
-    DirichletBC
+from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, DirichletBC
 import sys
 
 if '--running-tests' in sys.argv:
@@ -25,13 +24,8 @@ for delta, dt in res_dt.iteritems():
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # Space for initialising velocity
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-    # vertical coordinate and normal
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+    # vertical normal
+    k = Constant([0, 1])
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
@@ -42,7 +36,7 @@ for delta, dt in res_dt.iteritems():
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  z=z, k=k,
+                  vertical_normal=k,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,

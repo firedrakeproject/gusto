@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import FunctionSpace, as_vector, SpatialCoordinate, \
-    VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
+from firedrake import as_vector, SpatialCoordinate, \
+    PeriodicRectangleMesh, ExtrudedMesh, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
@@ -36,12 +36,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Spaces for initialising z, k and velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-x, y, z = SpatialCoordinate(mesh)
+# vertical normal
 k = Constant([0, 0, 1])
 
 # Coriolis expression
@@ -80,10 +75,10 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
-# function spaces, z, k, and the classes above
+# function spaces, vertical normal, and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
-              z=z, k=k, Omega=Omega,
+              vertical_normal=k, Coriolis=Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -100,7 +95,8 @@ u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. z comes from x, y, z = SpatialCoordinate(mesh)
+# from the parameters class.
+x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
 bref = z*Nsq
 # interpolate the expression to the function
@@ -127,14 +123,6 @@ b_pert = Function(state.V[2]).interpolate(b_exp)
 
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
-
-# interpolate velocity to vector valued function space
-uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
-# project to the function space we actually want to use
-# this step is purely because it is not yet possible to interpolate to the
-# vector function spaces we require for the compatible finite element
-# methods that we use
-u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
 state.initialise([u0, p0, b0])

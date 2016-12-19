@@ -1,7 +1,6 @@
 from gusto import *
-from firedrake import Expression, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    sin
+from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, sin
 import numpy as np
 
 
@@ -16,13 +15,8 @@ def setup_gw(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # Space for initialising velocity
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-    # vertical coordinate and normal
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+    # vertical normal
+    k = Constant([0, 1])
 
     fieldlist = ['u', 'p', 'b']
     timestepping = TimesteppingParameters(dt=dt)
@@ -33,7 +27,7 @@ def setup_gw(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  z=z, k=k,
+                  vertical_normal=k,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
@@ -44,12 +38,9 @@ def setup_gw(dirname):
     # Initial conditions
     u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
-    # Thermodynamic constants required for setting initial conditions
-    # and reference profiles
-    N = parameters.N
-
     # z.grad(bref) = N**2
     N = parameters.N
+    x, z = SpatialCoordinate(mesh)
     bref = z*(N**2)
 
     b_b = Function(state.V[2]).interpolate(bref)
