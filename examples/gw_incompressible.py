@@ -67,7 +67,7 @@ output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleParameters(geopotential=False)
+parameters = CompressibleParameters()
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -124,10 +124,10 @@ u0.project(uinit)
 # pass these initial conditions to the state.initialise method
 state.initialise([u0, p0, b0])
 # set the background buoyancy
-state.set_reference_profiles(b_b)
+state.set_reference_profiles({'b':b_b})
 # we want to output the perturbation buoyancy, so tell the dump method
 # which background field to subtract
-state.output.meanfields = {'b':state.bbar}
+state.output.meanfields = ['b']
 
 ##############################################################################
 # Set up advection schemes
