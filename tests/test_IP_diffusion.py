@@ -16,15 +16,12 @@ def setup_IPdiffusion(vector, DG):
     parameters = CompressibleParameters()
     output = OutputParameters(dirname="IPdiffusion")
 
-    # vertical coordinate and normal
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+    # vertical normal
+    k = Constant([0, 1])
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  z=z, k=k,
+                  vertical_normal=k,
                   timestepping=timestepping,
                   parameters=parameters,
                   output=output,

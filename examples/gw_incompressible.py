@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
+from firedrake import as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
     sin, SpatialCoordinate
 import numpy as np
@@ -37,14 +37,8 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Spaces for initialising z, k and velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-x = SpatialCoordinate(mesh)
-z = Function(W_CG1).interpolate(x[1])
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+# vertical normal
+k = Constant([0, 1])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -81,7 +75,7 @@ diagnostic_fields = [CourantNumber()]
 # function spaces, z, k, and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              z=z, k=k,
+              vertical_normal=k,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -95,12 +89,14 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 # set up functions on the spaces constructed by state
 u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
 
+x, z = SpatialCoordinate(mesh)
+
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. x[1]=z and comes from x=SpatialCoordinate(mesh)
+# from the parameters class.
 N = parameters.N
-bref = x[1]*(N**2)
+bref = z*(N**2)
 # interpolate the expression to the function
 b_b = Function(state.V[2]).interpolate(bref)
 
@@ -109,11 +105,12 @@ a = Constant(5.0e3)
 deltab = Constant(1.0e-2)
 H = Constant(H)
 L = Constant(L)
-b_pert = deltab*sin(np.pi*x[1]/H)/(1 + (x[0] - L/2)**2/a**2)
+b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
 # interpolate velocity to vector valued function space
+W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
 # project to the function space we actually want to use
 # this step is purely because it is not yet possible to interpolate to the

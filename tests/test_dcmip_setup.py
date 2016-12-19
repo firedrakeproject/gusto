@@ -32,13 +32,9 @@ def setup_dcmip(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
                         extrusion_type="radial")
 
-    # Space for initialising velocity
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-
     # Make a vertical direction for the linearised advection
+    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
     k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
-
-    Omega = Function(W_VectorCG1).assign(0.0)
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)
@@ -46,7 +42,7 @@ def setup_dcmip(dirname):
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=0, horizontal_degree=0,
-                  family="RTCF", k=k, Omega=Omega,
+                  family="RTCF", vertical_normal=k,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,

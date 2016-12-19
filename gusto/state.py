@@ -20,9 +20,9 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
-    :arg vertical_degree: integer, the degree for spaces in the vertical
-    (specifies the degree for the pressure space, other spaces are inferred)
-    defaults to 1.
+    :arg vertical_degree: integer, required for vertically extruded meshes.
+    Specifies the degree for the pressure space in the vertical
+    (the degrees for other spaces are inferred). Defaults to None.
     :arg horizontal_degree: integer, the degree for spaces in the horizontal
     (specifies the degree for the pressure space, other spaces are inferred)
     defaults to 1.
@@ -31,16 +31,28 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
+    :arg vertical_coord: (optional) vector or function specifying the vertical
+    coordinate
+    :arg vertical_normal: (optional) vector or function specifying the
+    vertical normal.
+    Note, one of vertical_ccord or vertical_normal must be specified. If
+    vertical_normal is not specified, vertical_ccord will be used to
+    calculate it.
+    :arg geopotential_form: if True use the geopotential form for the
+    gravitational forcing term. Defaults to False.
+    :arg Coriolis: (optional) Coriolis function.
+    :arg sponge_function: (optional) Function specifying a sponge layer.
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
-
+    :arg diagnostic_fields: list of diagnostic field classes
     """
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
-                 family="RT", z=None, k=None, Omega=None, mu=None,
+                 family="RT", vertical_coord=None, vertical_normal=None,
+                 Coriolis=None, sponge_function=None,
                  geopotential_form=False,
                  timestepping=None,
                  output=None,
@@ -49,10 +61,9 @@ class State(object):
                  fieldlist=None,
                  diagnostic_fields=[]):
 
-        self.z = z
-        self.k = k
-        self.Omega = Omega
-        self.mu = mu
+        self.k = vertical_normal
+        self.Omega = Coriolis
+        self.mu = sponge_function
         self.geopotential_form = geopotential_form
         self.timestepping = timestepping
         if output is None:
@@ -95,12 +106,15 @@ class State(object):
             self.Phi *= parameters.g
 
         if self.k is None and vertical_degree is not None:
+            if vertical_coord is None:
+                raise RuntimeError("You must specify either the vertical coordinate or the vertical normal")
             # build the vertical normal
+            z = vertical_coord
             w = TestFunction(self.Vv)
             u = TrialFunction(self.Vv)
             self.k = Function(self.Vv)
             n = FacetNormal(self.mesh)
-            krhs = -div(w)*self.z*dx + inner(w,n)*self.z*ds_tb
+            krhs = -div(w)*z*dx + inner(w,n)*z*ds_tb
             klhs = inner(w,u)*dx
             solve(klhs == krhs, self.k)
 

@@ -31,15 +31,11 @@ else:
     new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
 mesh = Mesh(new_coords)
 
-# Space for initialising velocity
-W_VectorCG = VectorFunctionSpace(mesh, "CG", 2)
-W_CG = FunctionSpace(mesh, "CG", 2)
+# vertical normal
+k = Constant([0, 1])
+
+# sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
-
-# vertical coordinate and normal
-z = Function(W_CG).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG).interpolate(Expression(("0.","1.")))
-
 mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
 # mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
 mu = Function(W_DG).interpolate(mu_top)
@@ -52,7 +48,7 @@ diagnostic_fields = [CourantNumber(), VerticalVelocity()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              z=z, k=k, mu=mu,
+              vertical_normal=k, sponge_function=mu,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -71,6 +67,8 @@ p_0 = parameters.p_0
 c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
+
+x, z = SpatialCoordinate(mesh)
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.

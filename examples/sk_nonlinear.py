@@ -1,7 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    exp, sin
+from firedrake import Expression, FunctionSpace, as_vector, SpatialCoordinate,\
+    PeriodicIntervalMesh, ExtrudedMesh, exp, sin
 import numpy as np
 import sys
 
@@ -20,13 +19,8 @@ m = PeriodicIntervalMesh(columns, L)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+# vertical normal
+k = Constant([0, 1])
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
@@ -37,7 +31,7 @@ diagnostic_fields = [CourantNumber()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              z=z, k=k,
+              vertical_normal=k,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -56,6 +50,8 @@ p_0 = parameters.p_0
 c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
+
+x, z = SpatialCoordinate(mesh)
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.

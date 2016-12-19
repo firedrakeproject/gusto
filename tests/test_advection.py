@@ -59,13 +59,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         dt = 0.01
         tmax = 2.5
 
-        # Spaces for initialising k and z
-        W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-        W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-        # vertical coordinate and normal
-        z = Function(W_CG1).interpolate(Expression("x[1]"))
-        k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+        # vertical normal
+        k = Constant([0, 1])
 
         fieldlist = ['u','rho', 'theta']
         timestepping = TimesteppingParameters(dt=dt)
@@ -73,7 +68,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
 
         state = State(mesh, vertical_degree=1, horizontal_degree=1,
                       family="CG",
-                      z=z, k=k,
+                      vertical_normal=k,
                       timestepping=timestepping,
                       output=output,
                       parameters=parameters,
@@ -90,7 +85,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                 # continuous space, else we are testing the hybrid SUPG /
                 # DG upwind scheme for the theta space
                 if spatial_opts["supg_params"]["dg_direction"] is None:
-                    space = W_CG1
+                    space = FunctionSpace(mesh, "CG", 1)
                 else:
                     space = state.V[2]
             elif "embedded_dg" in spatial_opts:
