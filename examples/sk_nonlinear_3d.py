@@ -37,16 +37,15 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="RTCF",
-                          z=z, k=k,
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields,
-                          on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="RTCF",
+              z=z, k=k,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
 u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
@@ -80,8 +79,8 @@ rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
 state.initialise([u0, rho0, theta0])
-state.set_reference_profiles(rho_b, theta_b)
-state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
+state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.output.meanfields = ['rho', 'theta']
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, state.V[0])

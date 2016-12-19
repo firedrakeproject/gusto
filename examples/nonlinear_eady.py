@@ -81,16 +81,15 @@ diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces, z, k, and the classes above
-state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="RTCF",
-                            z=z, k=k, Omega=Omega,
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            diagnostics=diagnostics,
-                            fieldlist=fieldlist,
-                            diagnostic_fields=diagnostic_fields,
-                            on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="RTCF",
+              z=z, k=k, Omega=Omega,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 ##############################################################################
 # Initial conditions
@@ -140,10 +139,10 @@ u0.project(uinit)
 # pass these initial conditions to the state.initialise method
 state.initialise([u0, p0, b0])
 # set the background buoyancy
-state.set_reference_profiles(b_b)
+state.set_reference_profiles({'b':b_b})
 # we want to output the perturbation buoyancy, so tell the dump method
 # which background field to subtract
-state.output.meanfields = {'b':state.bbar}
+state.output.meanfields = ['b']
 
 ##############################################################################
 # Set up advection schemes

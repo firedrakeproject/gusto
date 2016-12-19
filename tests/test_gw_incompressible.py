@@ -63,8 +63,8 @@ def setup_gw(dirname):
     u0.project(as_vector([20.0,0.0]))
 
     state.initialise([u0, p0, b0])
-    state.set_reference_profiles(b_b)
-    state.output.meanfields = {'b':state.bbar}
+    state.set_reference_profiles({'b':b_b})
+    state.output.meanfields = ['b']
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, state.V[0])

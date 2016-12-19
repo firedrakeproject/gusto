@@ -77,8 +77,8 @@ rho0.assign(rho_b)
 u0.project(as_vector([20.0,0.0]))
 
 state.initialise([u0, rho0, theta0])
-state.set_reference_profiles(rho_b, theta_b)
-state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
+state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.output.meanfields = ['rho', 'theta']
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, state.V[0])

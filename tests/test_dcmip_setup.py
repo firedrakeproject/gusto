@@ -99,8 +99,8 @@ def setup_dcmip(dirname):
     rho0.assign(rho_b)
 
     state.initialise([u0, rho0, theta0])
-    state.set_reference_profiles(rho_b, theta_b)
-    state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
+    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+    state.output.meanfields = ['rho', 'theta']
 
     # Set up advection schemes
     rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
