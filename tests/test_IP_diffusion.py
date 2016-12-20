@@ -14,6 +14,7 @@ def setup_IPdiffusion(vector, DG):
     fieldlist = ['u','D']
     timestepping = TimesteppingParameters(dt=dt)
     parameters = CompressibleParameters()
+    output = OutputParameters(dirname="IPdiffusion")
 
     # vertical coordinate and normal
     W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
@@ -26,6 +27,7 @@ def setup_IPdiffusion(vector, DG):
                               z=z, k=k,
                               timestepping=timestepping,
                               parameters=parameters,
+                              output=output,
                               fieldlist=fieldlist)
 
     if vector:

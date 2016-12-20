@@ -64,11 +64,12 @@ u_init = Function(VX).interpolate(uexpr)
 u0.project(u_init)
 D0.interpolate(Dexpr)
 
-Vdg = VectorFunctionSpace(mesh, "DG", 2)
 state.initialise([u0, D0])
+ueqn = EulerPoincare(state, state.V[0])
+Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
 advection_dict = {}
-advection_dict["u"] = NoAdvection(state)
-advection_dict["D"] = DGAdvection(state, state.V[1], continuity=True)
+advection_dict["u"] = NoAdvection(state, u0, None)
+advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
 linear_solver = ShallowWaterSolver(state)
 

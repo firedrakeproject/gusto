@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS, Constant, Expression, as_vector
+    CellNormal, dot, dS, Constant, warning, Expression, as_vector
 
 
 class Forcing(object):
@@ -11,11 +11,27 @@ class Forcing(object):
     Base class for forcing terms for Gusto.
 
     :arg state: x :class:`.State` object.
+    :arg euler_poincare: if True then the momentum equation is in Euler
+    Poincare form and we need to add 0.5*grad(u^2) to the forcing term.
+    If False then this term is not added.
+    :arg linear: if True then we are solving a linear equation so nonlinear
+    terms (namely the Euler Poincare term) should not be added.
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state):
+    def __init__(self, state, euler_poincare=True, linear=False):
         self.state = state
+        if linear:
+            self.euler_poincare = False
+            warning('Setting euler_poincare to False because you have set linear=True')
+        else:
+            self.euler_poincare = euler_poincare
+
+        self._build_forcing_solver()
+
+    @abstractmethod
+    def _build_forcing_solver(self):
+        pass
 
     @abstractmethod
     def apply(self, scale, x, x_nl, x_out, **kwargs):
@@ -37,12 +53,7 @@ class CompressibleForcing(Forcing):
     Forcing class for compressible Euler equations.
     """
 
-    def __init__(self, state, linear=False):
-        self.state = state
-
-        self._build_forcing_solver(linear)
-
-    def _build_forcing_solver(self, linear):
+    def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
         """
@@ -81,7 +92,7 @@ class CompressibleForcing(Forcing):
             g = state.parameters.g
             L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
 
-        if not linear:
+        if self.euler_poincare:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
@@ -146,12 +157,7 @@ class IncompressibleForcing(Forcing):
     Forcing class for incompressible Euler Boussinesq equations.
     """
 
-    def __init__(self, state, linear=False):
-        self.state = state
-
-        self._build_forcing_solver(linear)
-
-    def _build_forcing_solver(self, linear):
+    def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
         """
@@ -178,7 +184,7 @@ class IncompressibleForcing(Forcing):
             + self.scaling*b0*inner(w,state.k)*dx  # gravity term
         )
 
-        if not linear:
+        if self.euler_poincare:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
@@ -346,9 +352,9 @@ class EadyForcing(Forcing):
 
 class ShallowWaterForcing(Forcing):
 
-    def __init__(self, state, linear=False):
-        self.state = state
+    def _build_forcing_solver(self):
 
+        state = self.state
         g = state.parameters.g
         f = state.f
 
@@ -372,7 +378,7 @@ class ShallowWaterForcing(Forcing):
             (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
 
-        if not linear:
+        if self.euler_poincare:
             L -= 0.5*div(w)*inner(u0, u0)*dx
 
         u_forcing_problem = LinearVariationalProblem(

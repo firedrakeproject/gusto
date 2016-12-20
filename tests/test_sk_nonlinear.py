@@ -73,12 +73,13 @@ def setup_sk(dirname):
     state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
     # Set up advection schemes
-    Vtdg = FunctionSpace(mesh, "DG", 2)
+    ueqn = EulerPoincare(state, state.V[0])
+    rhoeqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"})
     advection_dict = {}
-    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-    advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
-    advection_dict["theta"] = EmbeddedDGAdvection(state, state.V[2],
-                                                  Vdg=Vtdg, continuity=False)
+    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',

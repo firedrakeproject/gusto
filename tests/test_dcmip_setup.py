@@ -103,10 +103,12 @@ def setup_dcmip(dirname):
     state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
 
     # Set up advection schemes
+    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
+    thetaeqn = LinearAdvection(state, state.V[2], qbar=theta_b)
     advection_dict = {}
-    advection_dict["u"] = NoAdvection(state)
-    advection_dict["rho"] = LinearAdvection_V3(state, state.V[1], rho_b)
-    advection_dict["theta"] = LinearAdvection_Vt(state, state.V[2], theta_b)
+    advection_dict["u"] = NoAdvection(state, u0)
+    advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
+    advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
 
     # Set up linear solver
     params = {'pc_type': 'fieldsplit',
@@ -136,7 +138,7 @@ def setup_dcmip(dirname):
     linear_solver = CompressibleSolver(state, params=params)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, linear=True)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,

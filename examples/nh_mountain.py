@@ -23,7 +23,12 @@ x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
 H = Constant(H)
 a = Constant(1000.)
 xc = Constant(L/2.)
-new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
+smooth_z = True
+if smooth_z:
+    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
+    new_coords = Function(Vc).interpolate(xexpr)
+else:
+    new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
 mesh = Mesh(new_coords)
 
 # Space for initialising velocity
@@ -40,7 +45,7 @@ mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain', dumpfreq=18, dumplist=['u'])
+output = OutputParameters(dirname='nh_mountain_smootherz', dumpfreq=18, dumplist=['u'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VerticalVelocity()]
@@ -124,11 +129,17 @@ state.set_reference_profiles(rho_b, theta_b)
 state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
 
 # Set up advection schemes
-Vtdg = FunctionSpace(mesh, "DG", 1)
+ueqn = EulerPoincare(state, state.V[0])
+rhoeqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+supg = True
+if supg:
+    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+else:
+    thetaeqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
 advection_dict = {}
-advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-advection_dict["rho"] = DGAdvection(state, state.V[1], continuity=True)
-advection_dict["theta"] = SUPGAdvection(state, state.V[2], direction=[1])
+advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',

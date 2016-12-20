@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
-
 import sys
 
 dt = 3600.
@@ -59,14 +58,15 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 state.initialise([u0, D0])
 
+Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", equation_form="continuity")
 advection_dict = {}
-advection_dict["u"] = NoAdvection(state)
-advection_dict["D"] = NoAdvection(state)
+advection_dict["u"] = NoAdvection(state, u0, None)
+advection_dict["D"] = ForwardEuler(state, D0, Deqn)
 
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-sw_forcing = ShallowWaterForcing(state)
+sw_forcing = ShallowWaterForcing(state, linear=True)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,

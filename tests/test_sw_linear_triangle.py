@@ -54,9 +54,10 @@ def setup_sw(dirname):
     D0.interpolate(Dexpr)
     state.initialise([u0, D0])
 
+    Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", equation_form="continuity")
     advection_dict = {}
-    advection_dict["u"] = NoAdvection(state)
-    advection_dict["D"] = NoAdvection(state)
+    advection_dict["u"] = NoAdvection(state, u0, None)
+    advection_dict["D"] = ForwardEuler(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)
 
@@ -84,5 +85,5 @@ def test_sw_linear(tmpdir):
     Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
     ul2 = data["uerr"]["l2"][-1]/data["u"]["l2"][0]
 
-    assert Dl2 < 1.e-3
+    assert Dl2 < 3.e-3
     assert ul2 < 6.e-2

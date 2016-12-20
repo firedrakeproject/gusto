@@ -55,7 +55,10 @@ class State(object):
         self.Omega = Omega
         self.mu = mu
         self.timestepping = timestepping
-        self.output = output
+        if output is None:
+            raise RuntimeError("You must provide a directory name for dumping results")
+        else:
+            self.output = output
         self.parameters = parameters
         if fieldlist is None:
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
@@ -100,10 +103,10 @@ class State(object):
             mesh_ll = get_latlon_mesh(self.mesh)
 
         funcs = self.xn.split()
-        field_dict = {name: func for (name, func) in zip(self.fieldlist, funcs)}
+
         to_dump = []  # fields to output to dump and checkpoint
         to_pickup = []  # fields to pick up from checkpoint
-        for name, f in field_dict.iteritems():
+        for name, f in self.field_dict.iteritems():
             if name in self.output.dumplist:
                 to_dump.append(f)
                 to_pickup.append(f)
@@ -121,7 +124,7 @@ class State(object):
         for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
             if steady_state_dump_err[name]:
                 err = Function(f.function_space(), name=name+'err').assign(f-f_init)
-                field_dict[name+"err"] = err
+                self.field_dict[name+"err"] = err
                 self.diagnostics.register(name+"err")
                 to_dump.append(err)
                 f_init.rename(f.name()+"_init")
@@ -135,12 +138,12 @@ class State(object):
         meanfields.update(self.output.meanfields)
         for name, meanfield in meanfields.iteritems():
             if meanfield is not None:
-                field = field_dict[name]
+                field = self.field_dict[name]
                 diff = Function(
                     field.function_space(),
                     name=field.name()+"_perturbation").assign(field - meanfield)
                 self.diagnostics.register(name+"perturbation")
-                field_dict[name+"perturbation"] = diff
+                self.field_dict[name+"perturbation"] = diff
                 to_dump.append(diff)
             mean_name = field.name() + "_bar"
             meanfield.rename(name=mean_name)
@@ -150,7 +153,7 @@ class State(object):
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
         for name in self.output.dumplist_latlon:
-            f = field_dict[name]
+            f = self.field_dict[name]
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             field_dict_ll[name] = f_ll
             to_dump_latlon.append(f_ll)
@@ -158,7 +161,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and path.exists(self.dumpdir) and not pickup:
+            if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir) and not pickup:
                 exit("results directory '%s' already exists" % self.dumpdir)
             self.dumpcount = itertools.count()
             self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -193,7 +196,7 @@ class State(object):
 
             # compute diagnostics
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(field_dict[name])
+                data = self.diagnostics.l2(self.field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
             # Open the checkpointing file (backup version)
@@ -220,7 +223,6 @@ class State(object):
         """
         Initialise state variables
         """
-
         for x, ic in zip(self.x_init.split(), initial_conditions):
             x.assign(ic)
 
@@ -279,8 +281,10 @@ class BaroclinicState(State):
             V = FunctionSpace(mesh, "CG", 1)
             if on_sphere:
                 self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-            else:
+            elif(self.mesh.geometric_dimension() == 2):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
+            elif(self.mesh.geometric_dimension() == 3):
+                self.Phi = Function(V).interpolate(Expression("x[2]"))
             self.Phi *= parameters.g
 
         if self.k is None:

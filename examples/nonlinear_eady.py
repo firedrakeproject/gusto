@@ -149,11 +149,18 @@ state.output.meanfields = {'b':state.bbar}
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
-Vtdg = FunctionSpace(mesh, "DG", 1)
-# advection_dict is a dictionary containing field_name: advection class
+ueqn = EulerPoincare(state, state.V[0])
+supg = True
+if supg:
+    beqn = SUPGAdvection(state, state.V[2],
+                         supg_params={"dg_direction":"horizontal"},
+                         equation_form="advective")
+else:
+    beqn = EmbeddedDGAdvection(state, state.V[2],
+                               equation_form="advective")
 advection_dict = {}
-advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
+advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+advection_dict["b"] = SSPRK3(state, b0, beqn)
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme

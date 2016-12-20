@@ -68,11 +68,11 @@ def setup_gw(dirname):
     state.output.meanfields = {'b':state.bbar}
 
     # Set up advection schemes
-    Vtdg = FunctionSpace(mesh, "DG", 1)
+    ueqn = EulerPoincare(state, state.V[0])
+    beqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
     advection_dict = {}
-    advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-    advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2],
-                                              Vdg=Vtdg, continuity=False)
+    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+    advection_dict["b"] = SSPRK3(state, b0, beqn)
 
     # Set up linear solver
     params = {'ksp_type':'gmres',
