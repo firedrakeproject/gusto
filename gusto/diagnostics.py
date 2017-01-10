@@ -90,3 +90,47 @@ class HorizontalalVelocity(DiagnosticField):
         u = getattr(state.fields, 'u')
         uh = u[0]
         return self.field(state.mesh).interpolate(uh)
+
+
+class Difference(DiagnosticField):
+
+    def __init__(self, state, field1, field2):
+        self.field1 = field1
+        self.field2 = field2
+
+
+    @property
+    def name(self):
+        return self.field1.name+"_minus_"+self.field2.name
+
+    def field(self, field1):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(self.field1.function_space(), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        return self.field(self.field1).assign(self.field1 - self.field2)
+
+
+class SteadyStateError(Difference):
+
+    def __init__(self, state, name):
+        self.field1 = getattr(state.fields, name)
+        self.field2 = getattr(state.initial_fields, name)
+
+    @property
+    def name(self):
+        return self.field_name+"_error"
+
+
+class Perturbation(Difference):
+
+    def __init__(self, state, name):
+        self.field_name = name
+        self.field1 = getattr(state.fields, name)
+        self.field2 = getattr(state.reference_fields, name)
+
+    @property
+    def name(self):
+        return self.field_name+"_perturbation"
