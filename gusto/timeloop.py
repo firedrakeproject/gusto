@@ -2,8 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.forcing import IncompressibleForcing
-from gusto.state import FieldCreator
-from firedrake import DirichletBC, Expression, Function
+from firedrake import DirichletBC, Expression
 
 
 class BaseTimestepper(object):
@@ -73,19 +72,14 @@ class Timestepper(BaseTimestepper):
     def run(self, t, tmax, pickup=False):
         state = self.state
 
-        # state.xn.assign(state.x_init)
-
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
         # list of fields that are passively advected (and possibly diffused)
         passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
-        xn_fields = {}
-        xnp1_fields = {}
-        for field in passive_fieldlist:
-            xn_fields[field] = getattr(state.fields, field)
-            # xnp1_fields[field] = Function(xn_fields[field].function_space())
+        # list of fields that are advected as part of the nonlinear iteration
+        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -111,7 +105,7 @@ class Timestepper(BaseTimestepper):
             for k in range(state.timestepping.maxk):
 
                 with timed_stage("Advection"):
-                    for field in state.fieldlist:
+                    for field in fieldlist:
                         advection = self.advection_dict[field]
                         # first computes ubar from state.xn and state.xnp1
                         advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
@@ -134,13 +128,13 @@ class Timestepper(BaseTimestepper):
 
             self._apply_bcs()
 
-            for field in passive_fieldlist:
-                print "HERE!!"
-                advection = self.advection_dict[field]
+            for name in passive_fieldlist:
+                field = getattr(state.fields, name)
+                advection = self.advection_dict[name]
                 # first computes ubar from state.xn and state.xnp1
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
-                advection.apply(xn_fields[field], xn_fields[field])
+                advection.apply(field, field)
 
             state.xn.assign(state.xnp1)
 
@@ -161,17 +155,10 @@ class AdvectionTimestepper(BaseTimestepper):
     def run(self, t, tmax, x_end=None):
         state = self.state
 
-        state.xn.assign(state.x_init)
-
-        xn_fields = state.fields
-        xnp1_fields = FieldCreator(state.fieldlist, state.xnp1)
-        # for name, func in state.field_dict.iteritems():
-        #     if name not in state.fieldlist and name in self.advection_dict.keys():
-        #         xnp1_fields(name, func.function_space).assign(getattr(state.fields, name))
-
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
 
+        state.setup_dump()
         state.dump()
 
         while t < tmax + 0.5*dt:
@@ -180,16 +167,12 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            for field, advection in self.advection_dict.iteritems():
+            for name, advection in self.advection_dict.iteritems():
+                field = getattr(state.fields, name)
                 # first computes ubar from state.xn and state.xnp1
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects a field from xn and puts result in xnp1
-                advection.apply(xn_fields[field], xnp1_fields[field])
-
-            state.xn.assign(state.xnp1)
-            #for name, func in state.field_dict.iteritems():
-            #    if name not in state.fieldlist and name in self.advection_dict.keys():
-            #        xn_fields[name].assign(xnp1_fields[name])
+                # advects field
+                advection.apply(field, field)
 
             state.dump()
 

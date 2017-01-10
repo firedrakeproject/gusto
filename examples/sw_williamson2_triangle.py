@@ -32,7 +32,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D','Derr'], steady_state_dump_err={'D':True,'u':True})
+    output = OutputParameters(dirname=dirname, dumplist_latlon=['D'], steady_state_error_fields=['D','u'])
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
@@ -43,7 +43,8 @@ for ref_level, dt in ref_dt.iteritems():
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    u0 = state.fields.u
+    D0 = state.fields.D
     x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
     R0 = Constant(R)
@@ -59,10 +60,10 @@ for ref_level, dt in ref_dt.iteritems():
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([u0, D0])
+    state.initialise({'u':u0, 'D':D0})
 
-    ueqn = EulerPoincare(state, state.V[0])
-    Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+    ueqn = EulerPoincare(state, u0.function_space())
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)

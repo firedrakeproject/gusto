@@ -20,7 +20,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=3600.)
-    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_dump_err={'u':True,'D':True}, dumpfreq=12)
+    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u','D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
@@ -46,15 +46,16 @@ def setup_sw(dirname):
 
     # interpolate initial conditions
     # Initial/current conditions
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    u0 = state.fields.u
+    D0 = state.fields.D
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = Constant(parameters.g)
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([u0, D0])
+    state.initialise({'u': u0, 'D': D0})
 
-    Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", equation_form="continuity")
+    Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
     advection_dict["D"] = ForwardEuler(state, D0, Deqn)

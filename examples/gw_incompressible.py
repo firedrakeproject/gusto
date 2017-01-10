@@ -54,7 +54,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -84,7 +84,14 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 ##############################################################################
 # set up functions on the spaces constructed by state
-u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+p0 = state.fields.p
+b0 = state.fields.b
+
+# spaces
+Vu = u0.function_space()
+Vp = p0.function_space()
+Vb = b0.function_space()
 
 x, z = SpatialCoordinate(mesh)
 
@@ -95,7 +102,7 @@ x, z = SpatialCoordinate(mesh)
 N = parameters.N
 bref = z*(N**2)
 # interpolate the expression to the function
-b_b = Function(state.V[2]).interpolate(bref)
+b_b = Function(Vb).interpolate(bref)
 
 # setup constants
 a = Constant(5.0e3)
@@ -116,25 +123,22 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise([u0, p0, b0])
+state.initialise({'u': u0, 'p': p0, 'b': b0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
-# we want to output the perturbation buoyancy, so tell the dump method
-# which background field to subtract
-state.output.meanfields = ['b']
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # advection_dict is a dictionary containing field_name: advection class
-ueqn = EulerPoincare(state, state.V[0])
+ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, state.V[2],
+    beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
                          equation_form="advective")
 else:
-    beqn = EmbeddedDGAdvection(state, state.V[2],
+    beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)

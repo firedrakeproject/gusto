@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -86,8 +86,13 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 ##############################################################################
 # Initial conditions
 ##############################################################################
-# set up functions on the spaces constructed by state
-u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+p0 = state.fields.p
+b0 = state.fields.b
+
+# spaces
+Vu = u0.function_space()
+Vb = b0.function_space()
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
@@ -97,7 +102,7 @@ x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
 bref = z*Nsq
 # interpolate the expression to the function
-b_b = Function(state.V[2]).interpolate(bref)
+b_b = Function(Vb).interpolate(bref)
 
 
 # setup constants
@@ -116,31 +121,28 @@ def n():
 a = -7.5
 Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
-b_pert = Function(state.V[2]).interpolate(b_exp)
+b_pert = Function(Vb).interpolate(b_exp)
 
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
 # pass these initial conditions to the state.initialise method
-state.initialise([u0, p0, b0])
+state.initialise({'u': u0, 'p': p0, 'b': b0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
-# we want to output the perturbation buoyancy, so tell the dump method
-# which background field to subtract
-state.output.meanfields = ['b']
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
-ueqn = EulerPoincare(state, state.V[0])
+ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, state.V[2],
+    beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
                          equation_form="advective")
 else:
-    beqn = EmbeddedDGAdvection(state, state.V[2],
+    beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)

@@ -32,21 +32,19 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
-        u0, D0 = Function(state.V[0], name="velocity"), Function(state.V[1])
+        u0 = state.fields.u
         u0.project(uexpr)
-        state.initialise([u0, D0])
 
         if vector:
-            VectorDGSpace = VectorFunctionSpace(mesh, "DG", 1)
-            f = Function(VectorDGSpace, name="f")
+            space = VectorFunctionSpace(mesh, "DG", 1)
             fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
-            f_end = Function(VectorDGSpace)
             f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
         else:
-            f = Function(state.V[1], name='f')
+            space = state.spaces.DG
             fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-            f_end = Function(state.V[1])
             f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
+        f = state.fields("f", space)
+        f_end = Function(space)
 
     elif geometry == "slice":
         nlayers = 25  # horizontal layers
@@ -71,9 +69,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
 
         uexpr = as_vector([1.0, 0.0])
-        u0, rho0, theta0 = Function(state.V[0], name="velocity"), Function(state.V[1]), Function(state.V[2])
+        u0 = state.fields.u
         u0.project(uexpr)
-        state.initialise([u0, rho0, theta0])
 
         if spatial_opts is not None:
             if "supg_params" in spatial_opts:
@@ -83,12 +80,12 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                 if spatial_opts["supg_params"]["dg_direction"] is None:
                     space = FunctionSpace(mesh, "CG", 1)
                 else:
-                    space = state.V[2]
+                    space = state.spaces.HDiv_v
             elif "embedded_dg" in spatial_opts:
-                space = state.V[1]
+                space = state.spaces.HDiv_v
         else:
-            space = state.V[1]
-        f = Function(space, name='f')
+            space = state.spaces.DG
+        f = state.fields("f", space)
         x = SpatialCoordinate(mesh)
         fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
         f_end = Function(space)
@@ -96,8 +93,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
 
     # interpolate initial conditions
     f.interpolate(fexpr)
-    state.field_dict["f"] = f
     f_end.interpolate(f_end_expr)
+    state.initialise({'u':u0, 'f':f})
 
     if spatial_opts is None:
         fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)
