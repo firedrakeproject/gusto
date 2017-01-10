@@ -15,6 +15,33 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
 import numpy as np
 
 
+class SpaceCreator(object):
+
+    def __call__(self, name, mesh, family, degree=None):
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            value = FunctionSpace(mesh, family, degree, name=name)
+            setattr(self, name, value)
+            return value
+
+
+class FieldCreator(object):
+
+    def __init__(self, fieldlist=None, xn=None):
+        if fieldlist is not None:
+            for name, func in zip(fieldlist, xn.split()):
+                setattr(self, name, func)
+
+    def __call__(self, name, space):
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            value = Function(space, name=name)
+            setattr(self, name, value)
+            return value
+
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
@@ -81,8 +108,8 @@ class State(object):
 
         # Allocate state
         self._allocate_state()
-        self.field_dict = {name: func for (name, func) in
-                           zip(self.fieldlist, self.xn.split())}
+        self.fields = FieldCreator(fieldlist, self.xn)
+        self.initial_fields = FieldCreator(fieldlist, self.x_init)
 
         self.dumpfile = None
 
@@ -130,56 +157,45 @@ class State(object):
             field_dict_ll = {}
             mesh_ll = get_latlon_mesh(self.mesh)
 
-        funcs = self.xn.split()
-
         to_dump = []  # fields to output to dump and checkpoint
         to_pickup = []  # fields to pick up from checkpoint
-        for name, f in self.field_dict.iteritems():
-            if name in self.output.dumplist:
-                to_dump.append(f)
-                to_pickup.append(f)
-            f.rename(name=name)
+        for name in self.output.dumplist:
+            to_dump.append(getattr(self.fields, name))
+            to_pickup.append(getattr(self.fields, name))
 
         # append diagnostic fields for to_dump
         for diagnostic in self.diagnostic_fields:
             to_dump.append(diagnostic(self))
 
         # check if we are running a steady state simulation and if so
-        # set up the error fields and save the
-        # initial fields so that we can compute the error fields
-        steady_state_dump_err = defaultdict(bool)
-        steady_state_dump_err.update(self.output.steady_state_dump_err)
-        for name, f, f_init in zip(self.fieldlist, funcs, self.x_init.split()):
-            if steady_state_dump_err[name]:
-                err = Function(f.function_space(), name=name+'err').assign(f-f_init)
-                self.field_dict[name+"err"] = err
-                self.diagnostics.register(name+"err")
-                to_dump.append(err)
-                f_init.rename(f.name()+"_init")
-                to_dump.append(f_init)
-                to_pickup.append(f_init)
+        # set up the error fields
+        for name in self.output.steady_state_dump_err:
+            f = getattr(self.fields, name)
+            f_init = getattr(self.initial_fields, name)
+            new_name = name+"_perturbation"
+            err = self.fields(new_name, f.function_space())
+            err.assign(f-f_init)
+            self.diagnostics.register(new_name)
+            to_dump.append(err)
+            to_dump.append(f_init)
+            to_pickup.append(f_init)
 
-        # check if we are dumping perturbation fields. If we are, the
-        # meanfields are provided in a dictionary. Here we set up the
-        # perturbation fields.
-        for field in self.output.meanfields:
-            field = self.field_dict[name]
-            meanfield = self.ref[name]
-            diff = Function(
-                field.function_space(),
-                name=field.name()+"_perturbation").assign(field - meanfield)
-            self.diagnostics.register(name+"perturbation")
-            self.field_dict[name+"perturbation"] = diff
+        # check if we are dumping perturbation fields and set them up if we are
+        for name in self.output.meanfields:
+            field = getattr(self.fields, name)
+            meanfield = getattr(self.reference_fields, name)
+            new_name = name+"_perturbation"
+            diff = self.fields(new_name, field.function_space())
+            diff.assign(field - meanfield)
+            self.diagnostics.register(new_name)
             to_dump.append(diff)
-            mean_name = field.name() + "_bar"
-            meanfield.rename(name=mean_name)
             to_dump.append(meanfield)
             to_pickup.append(meanfield)
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         to_dump_latlon = []
         for name in self.output.dumplist_latlon:
-            f = self.field_dict[name]
+            f = getattr(self.fields, name)
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             field_dict_ll[name] = f_ll
             to_dump_latlon.append(f_ll)
@@ -222,7 +238,7 @@ class State(object):
 
             # compute diagnostics
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(self.field_dict[name])
+                data = self.diagnostics.l2(getattr(self.fields, name))
                 self.diagnostic_data[name]["l2"].append(data)
 
             # Open the checkpointing file (backup version)
@@ -249,17 +265,20 @@ class State(object):
         """
         Initialise state variables
         """
-        for x, ic in zip(self.x_init.split(), initial_conditions):
-            x.assign(ic)
+        for name, ic in initial_conditions.iteritems():
+            f_init = getattr(self.initial_fields, name)
+            f_init.assign(ic)
+            f_init.rename(name)
 
     def set_reference_profiles(self, reference_profiles):
         """
         Initialise reference profiles
         """
-        self.ref = {}
+        self.reference_fields = FieldCreator()
         for name, profile in reference_profiles.iteritems():
-            field = self.field_dict[name]
-            self.ref[name] = Function(field.function_space()).project(profile)
+            field = getattr(self.fields, name)
+            ref = self.reference_fields(name, field.function_space())
+            ref.project(profile)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
@@ -270,6 +289,7 @@ class State(object):
         mixed function space self.W = (V2,V3,Vt)
         """
 
+        self.spaces = SpaceCreator()
         if vertical_degree is not None:
             # horizontal base spaces
             cell = mesh._base_mesh.ufl_cell().cellname()
@@ -287,28 +307,22 @@ class State(object):
             V2v_elt = HDiv(V2t_elt)
             V2_elt = V2h_elt + V2v_elt
 
-            self.V_elt = [0,0,0]
-            self.V_elt[0] = V2_elt
-            self.V_elt[1] = V3_elt
-            self.V_elt[2] = V2t_elt
+            V0 = self.spaces("HDiv", mesh, V2_elt)
+            V1 = self.spaces("DG", mesh, V3_elt)
+            V2 = self.spaces("HDiv_v", mesh, V2t_elt)
 
-            self.V = [0,0,0]
-            self.V[0] = FunctionSpace(mesh, V2_elt)
-            self.V[1] = FunctionSpace(mesh, V3_elt)
-            self.V[2] = FunctionSpace(mesh, V2t_elt)
+            self.Vv = self.spaces("Vv", mesh, V2v_elt)
 
-            self.Vv = FunctionSpace(mesh, V2v_elt)
-
-            self.W = MixedFunctionSpace((self.V[0], self.V[1], self.V[2]))
+            self.W = MixedFunctionSpace((V0, V1, V2))
 
         else:
             cell = mesh.ufl_cell().cellname()
             V1_elt = FiniteElement(family, cell, horizontal_degree+1)
-            self.V = [0,0]
-            self.V[0] = FunctionSpace(mesh,V1_elt)
-            self.V[1] = FunctionSpace(mesh,"DG",horizontal_degree)
 
-            self.W = MixedFunctionSpace((self.V[0], self.V[1]))
+            V0 = self.spaces(family, mesh, V1_elt)
+            V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
+
+            self.W = MixedFunctionSpace((V0, V1))
 
     def _allocate_state(self):
         """
