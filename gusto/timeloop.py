@@ -83,7 +83,7 @@ class Timestepper(BaseTimestepper):
     def run(self, t, tmax):
         state = self.state
 
-        state.xn.assign(state.x_init)
+        # state.xn.assign(state.x_init)
 
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
@@ -91,6 +91,11 @@ class Timestepper(BaseTimestepper):
                      zip(state.fieldlist, state.xp.split())}
         # list of fields that are passively advected (and possibly diffused)
         passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
+        xn_fields = {}
+        xnp1_fields = {}
+        for field in passive_fieldlist:
+            xn_fields[field] = getattr(state.fields, field)
+            # xnp1_fields[field] = Function(xn_fields[field].function_space())
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -100,6 +105,7 @@ class Timestepper(BaseTimestepper):
             mu_alpha = [None, None]
 
         with timed_stage("Dump output"):
+            state.setup_dump()
             t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
@@ -115,7 +121,8 @@ class Timestepper(BaseTimestepper):
             for k in range(state.timestepping.maxk):
 
                 with timed_stage("Advection"):
-                    for field, advection in self.advection_dict.iteritems():
+                    for field in state.fieldlist:
+                        advection = self.advection_dict[field]
                         # first computes ubar from state.xn and state.xnp1
                         advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
@@ -136,14 +143,16 @@ class Timestepper(BaseTimestepper):
                     state.xnp1 += state.dy
 
             self._apply_bcs()
-            state.xn.assign(state.xnp1)
 
             for field in passive_fieldlist:
                 print "HERE!!"
+                advection = self.advection_dict[field]
                 # first computes ubar from state.xn and state.xnp1
-                advection[field].update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
-                advection.apply(xn_fields[field], xnp1_fields[field])
+                advection.apply(xn_fields[field], xn_fields[field])
+
+            state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
                 for name, diffusion in self.diffusion_dict.iteritems():

@@ -20,8 +20,8 @@ H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=6.0)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'])
+timestepping = TimesteppingParameters(dt=dt)
+output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -70,7 +70,6 @@ u0.project(as_vector([20.0,0.0]))
 
 state.initialise({'u':u0, 'rho':rho0, 'theta': theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
-state.output.meanfields = ['rho', 'theta']
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, u0.function_space())

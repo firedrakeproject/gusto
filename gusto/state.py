@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
-from gusto.diagnostics import Diagnostics
+from gusto.diagnostics import Diagnostics, Perturbation
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
@@ -28,18 +28,28 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, xn=None):
+    def __init__(self, fieldlist=None, xn=None, dump=True, pickup=True):
+        self.fields = []
         if fieldlist is not None:
             for name, func in zip(fieldlist, xn.split()):
                 setattr(self, name, func)
+                func.dump = dump
+                func.pickup = pickup
+                self.fields.append(func)
 
-    def __call__(self, name, space):
+    def __call__(self, name, space, dump=True, pickup=True):
         try:
             return getattr(self, name)
         except AttributeError:
             value = Function(space, name=name)
             setattr(self, name, value)
+            value.dump = dump
+            value.pickup = pickup
+            self.fields.append(value)
             return value
+
+    def __iter__(self):
+        return iter(self.fields)
 
 
 class State(object):
@@ -109,7 +119,7 @@ class State(object):
         # Allocate state
         self._allocate_state()
         self.fields = FieldCreator(fieldlist, self.xn)
-        self.initial_fields = FieldCreator(fieldlist, self.x_init)
+        # self.initial_fields = FieldCreator(fieldlist, self.x_init, dump=False)
 
         self.dumpfile = None
 
@@ -139,17 +149,14 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
-    def dump(self, t=0, pickup=False):
-        """
-        Dump output
-        :arg t: the current model time (default is zero).
-        :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk. (default is False).
-        """
+    def setup_dump(self):
 
         # default behaviour is to dump all prognostic fields
         if self.output.dumplist is None:
             self.output.dumplist = self.fieldlist
+
+        for name in self.output.perturbation_fields:
+            self.diagnostic_fields.append(Perturbation(self, name))
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh
@@ -157,48 +164,13 @@ class State(object):
             field_dict_ll = {}
             mesh_ll = get_latlon_mesh(self.mesh)
 
-        to_dump = []  # fields to output to dump and checkpoint
-        to_pickup = []  # fields to pick up from checkpoint
-        for name in self.output.dumplist:
-            to_dump.append(getattr(self.fields, name))
-            to_pickup.append(getattr(self.fields, name))
-
-        # append diagnostic fields for to_dump
-        for diagnostic in self.diagnostic_fields:
-            to_dump.append(diagnostic(self))
-
-        # check if we are running a steady state simulation and if so
-        # set up the error fields
-        for name in self.output.steady_state_dump_err:
-            f = getattr(self.fields, name)
-            f_init = getattr(self.initial_fields, name)
-            new_name = name+"_perturbation"
-            err = self.fields(new_name, f.function_space())
-            err.assign(f-f_init)
-            self.diagnostics.register(new_name)
-            to_dump.append(err)
-            to_dump.append(f_init)
-            to_pickup.append(f_init)
-
-        # check if we are dumping perturbation fields and set them up if we are
-        for name in self.output.meanfields:
-            field = getattr(self.fields, name)
-            meanfield = getattr(self.reference_fields, name)
-            new_name = name+"_perturbation"
-            diff = self.fields(new_name, field.function_space())
-            diff.assign(field - meanfield)
-            self.diagnostics.register(new_name)
-            to_dump.append(diff)
-            to_dump.append(meanfield)
-            to_pickup.append(meanfield)
-
         # make functions on latlon mesh, as specified by dumplist_latlon
-        to_dump_latlon = []
+        self.to_dump_latlon = []
         for name in self.output.dumplist_latlon:
             f = getattr(self.fields, name)
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             field_dict_ll[name] = f_ll
-            to_dump_latlon.append(f_ll)
+            self.to_dump_latlon.append(f_ll)
 
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
@@ -214,6 +186,17 @@ class State(object):
                 outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
                 self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
                                             comm=self.mesh.comm)
+
+    def dump(self, t=0, pickup=False):
+        """
+        Dump output
+        :arg t: the current model time (default is zero).
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk. (default is False).
+        """
+        to_dump = [field for field in self.fields if field.dump]
+        for diagnostic in self.diagnostic_fields:
+            to_dump.append(diagnostic(self))
 
         if(pickup):
             # Open the checkpointing file for writing
@@ -234,7 +217,7 @@ class State(object):
 
             # dump fields on latlon mesh
             if len(self.output.dumplist_latlon) > 0:
-                self.dumpfile_latlon.write(*to_dump_latlon)
+                self.dumpfile_latlon.write(*self.to_dump_latlon)
 
             # compute diagnostics
             for name in self.diagnostics.fields:
@@ -266,7 +249,7 @@ class State(object):
         Initialise state variables
         """
         for name, ic in initial_conditions.iteritems():
-            f_init = getattr(self.initial_fields, name)
+            f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
 
@@ -277,7 +260,7 @@ class State(object):
         self.reference_fields = FieldCreator()
         for name, profile in reference_profiles.iteritems():
             field = getattr(self.fields, name)
-            ref = self.reference_fields(name, field.function_space())
+            ref = self.reference_fields(name, field.function_space(), False)
             ref.project(profile)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):

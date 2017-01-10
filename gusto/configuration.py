@@ -45,7 +45,7 @@ class OutputParameters(Configuration):
     #: List of fields to dump error fields for steady state simulation
     steady_state_dump_err = []
     #: List of fields for computing perturbations
-    meanfields = []
+    perturbation_fields = []
 
 
 class CompressibleParameters(Configuration):
