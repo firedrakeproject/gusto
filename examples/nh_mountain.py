@@ -38,7 +38,7 @@ mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain_smootherz', dumpfreq=18, dumplist=['u'])
+output = OutputParameters(dirname='nh_mountain_smootherz', dumpfreq=18, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VerticalVelocity()]
@@ -54,7 +54,14 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
-u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+rho0 = state.fields.rho
+theta0 = state.fields.theta
+
+# spaces
+Vu = u0.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -70,7 +77,7 @@ x, z = SpatialCoordinate(mesh)
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
-theta_b = Function(state.V[2]).interpolate(thetab)
+theta_b = Function(Vt).interpolate(thetab)
 
 # Calculate hydrostatic Pi
 params = {'pc_type': 'fieldsplit',
@@ -90,8 +97,8 @@ params = {'pc_type': 'fieldsplit',
           "fieldsplit_1_ksp_monitor_true_residual": True,
           'fieldsplit_1_pc_type': 'bjacobi',
           'fieldsplit_1_sub_pc_type': 'ilu'}
-Pi = Function(state.V[1])
-rho_b = Function(state.V[1])
+Pi = Function(Vr)
+rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
 
 
@@ -118,18 +125,17 @@ rho0.assign(rho_b)
 u0.project(as_vector([10.0,0.0]))
 remove_initial_w(u0, state.Vv)
 
-state.initialise([u0, rho0, theta0])
+state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
-state.output.meanfields = ['rho', 'theta']
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, state.V[0])
-rhoeqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+ueqn = EulerPoincare(state, Vu)
+rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"}, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

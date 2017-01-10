@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
-from gusto.diagnostics import Diagnostics, Perturbation
+from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
@@ -35,6 +35,7 @@ class FieldCreator(object):
                 setattr(self, name, func)
                 func.dump = dump
                 func.pickup = pickup
+                func.rename(name)
                 self.fields.append(func)
 
     def __call__(self, name, space, dump=True, pickup=True):
@@ -119,7 +120,6 @@ class State(object):
         # Allocate state
         self._allocate_state()
         self.fields = FieldCreator(fieldlist, self.xn)
-        # self.initial_fields = FieldCreator(fieldlist, self.x_init, dump=False)
 
         self.dumpfile = None
 
@@ -151,6 +151,24 @@ class State(object):
 
     def setup_dump(self):
 
+        # setup dump files
+        self.dumpdir = path.join("results", self.output.dirname)
+        outfile = path.join(self.dumpdir, "field_output.pvd")
+        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
+                exit("results directory '%s' already exists" % self.dumpdir)
+        self.dumpcount = itertools.count()
+        self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
+        self.diagnostic_data = defaultdict(partial(defaultdict, list))
+
+        # if there are fields to be dumped in latlon coordinates,
+        # setup the latlon coordinate mesh and make output file
+        if len(self.output.dumplist_latlon) > 0:
+            mesh_ll = get_latlon_mesh(self.mesh)
+            outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
+            self.dumpfile_ll = File(outfile_ll,
+                                    project_output=self.output.project_fields,
+                                    comm=self.mesh.comm)
+
         # default behaviour is to dump all prognostic fields
         if self.output.dumplist is None:
             self.output.dumplist = self.fieldlist
@@ -158,34 +176,21 @@ class State(object):
         for name in self.output.perturbation_fields:
             self.diagnostic_fields.append(Perturbation(self, name))
 
-        # if there are fields to be dumped in latlon coordinates,
-        # setup the latlon coordinate mesh
-        if len(self.output.dumplist_latlon) > 0:
-            field_dict_ll = {}
-            mesh_ll = get_latlon_mesh(self.mesh)
+        for name in self.output.steady_state_error_fields:
+            self.diagnostic_fields.append(SteadyStateError(self, name))
+
+        self.to_dump = [field for field in self.fields if field.dump]
+        for diagnostic in self.diagnostic_fields:
+            self.to_dump.append(diagnostic(self))
+
+        self.to_pickup = [field for field in self.fields if field.pickup]
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
         for name in self.output.dumplist_latlon:
             f = getattr(self.fields, name)
             f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            field_dict_ll[name] = f_ll
             self.to_dump_latlon.append(f_ll)
-
-        self.dumpdir = path.join("results", self.output.dirname)
-        outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.dumpfile is None:
-            if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
-                exit("results directory '%s' already exists" % self.dumpdir)
-            self.dumpcount = itertools.count()
-            self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-            self.diagnostic_data = defaultdict(partial(defaultdict, list))
-
-            # make output file for fields on latlon mesh if required
-            if len(self.output.dumplist_latlon) > 0:
-                outfile_latlon = path.join(self.dumpdir, "field_output_latlon.pvd")
-                self.dumpfile_latlon = File(outfile_latlon, project_output=self.output.project_fields,
-                                            comm=self.mesh.comm)
 
     def dump(self, t=0, pickup=False):
         """
@@ -194,16 +199,15 @@ class State(object):
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
-        to_dump = [field for field in self.fields if field.dump]
         for diagnostic in self.diagnostic_fields:
-            to_dump.append(diagnostic(self))
+            diagnostic(self)
 
         if(pickup):
             # Open the checkpointing file for writing
             chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
-                for field in to_pickup:
+                for field in self.to_pickup:
                     chk.load(field)
                 t = chk.read_attribute("/","time")
                 next(self.dumpcount)
@@ -213,11 +217,11 @@ class State(object):
             print "DBG dumping", t
 
             # dump fields
-            self.dumpfile.write(*to_dump)
+            self.dumpfile.write(*self.to_dump)
 
             # dump fields on latlon mesh
             if len(self.output.dumplist_latlon) > 0:
-                self.dumpfile_latlon.write(*self.to_dump_latlon)
+                self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
             for name in self.diagnostics.fields:
@@ -230,7 +234,7 @@ class State(object):
                 chkfile = path.join(self.dumpdir, file)
                 with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
                     # Dump all the fields to a checkpoint
-                    for field in to_dump:
+                    for field in self.to_pickup:
                         chk.store(field)
                     chk.write_attribute("/","time",t)
 
@@ -257,11 +261,10 @@ class State(object):
         """
         Initialise reference profiles
         """
-        self.reference_fields = FieldCreator()
         for name, profile in reference_profiles.iteritems():
             field = getattr(self.fields, name)
-            ref = self.reference_fields(name, field.function_space(), False)
-            ref.project(profile)
+            ref = self.fields(name+'bar', field.function_space(), False)
+            ref.interpolate(profile)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
@@ -302,7 +305,7 @@ class State(object):
             cell = mesh.ufl_cell().cellname()
             V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
-            V0 = self.spaces(family, mesh, V1_elt)
+            V0 = self.spaces("HDiv", mesh, V1_elt)
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
             self.W = MixedFunctionSpace((V0, V1))
@@ -314,7 +317,6 @@ class State(object):
 
         W = self.W
         self.xn = Function(W)
-        self.x_init = Function(W)
         self.xstar = Function(W)
         self.xp = Function(W)
         self.xnp1 = Function(W)

@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector, SpatialCoordinate,\
-    PeriodicIntervalMesh, ExtrudedMesh, exp, sin
+from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
+    ExtrudedMesh, exp, sin
 import numpy as np
 import sys
 
@@ -36,9 +36,14 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
-u0 = getattr(state.initial_fields, "u")
-rho0 = getattr(state.initial_fields, "rho")
-theta0 = getattr(state.initial_fields, "theta")
+u0 = state.fields.u
+rho0 = state.fields.rho
+theta0 = state.fields.theta
+
+# spaces
+Vu = u0.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -55,8 +60,8 @@ x, z = SpatialCoordinate(mesh)
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 
-theta_b = Function(getattr(state.spaces, "HDiv_v")).interpolate(thetab)
-rho_b = Function(getattr(state.spaces, "DG"))
+theta_b = Function(Vt).interpolate(thetab)
+rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
@@ -72,13 +77,13 @@ state.initialise({'u':u0, 'rho':rho0, 'theta': theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, u0.function_space())
-rhoeqn = AdvectionEquation(state, rho0.function_space(), equation_form="continuity")
+ueqn = EulerPoincare(state, Vu)
+rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, theta0.function_space(), supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"}, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, theta0.function_space(), equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

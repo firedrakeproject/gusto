@@ -27,14 +27,14 @@ def setup_IPdiffusion(vector, DG):
         if DG:
             Space = VectorFunctionSpace(mesh, "DG", 1)
         else:
-            Space = state.V[0]
+            Space = state.spaces.HDiv
         f = Function(Space, name="f")
         fexpr = Expression(("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", "0.0"), L=L)
     else:
         if DG:
-            Space = state.V[1]
+            Space = state.spaces.DG
         else:
-            Space = state.V[2]
+            Space = state.spaces.HDiv_v
         f = Function(Space, name='f')
         fexpr = Expression("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", L=L)
 

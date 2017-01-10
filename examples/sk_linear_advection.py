@@ -21,7 +21,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_linear', dumplist=['u'])
+output = OutputParameters(dirname='sk_linear', dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -32,7 +32,14 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               fieldlist=fieldlist)
 
 # Initial conditions
-u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+rho0 = state.fields.rho
+theta0 = state.fields.theta
+
+# spaces
+Vu = u0.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -49,8 +56,8 @@ x, z = SpatialCoordinate(mesh)
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 
-theta_b = Function(state.V[2]).interpolate(thetab)
-rho_b = Function(state.V[1])
+theta_b = Function(Vt).interpolate(thetab)
+rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
@@ -63,13 +70,12 @@ theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
-state.initialise([u0, rho0, theta0])
+state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
-state.output.meanfields = ['rho', 'theta']
 
 # Set up advection schemes
-rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
-thetaeqn = LinearAdvection(state, state.V[2], qbar=theta_b)
+rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
+thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
 advection_dict = {}
 advection_dict["u"] = NoAdvection(state, u0, None)
 advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)

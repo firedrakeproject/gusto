@@ -41,7 +41,8 @@ Omega = parameters.Omega
 
 # interpolate initial conditions
 # Initial/current conditions
-u0, D0 = Function(state.V[0]), Function(state.V[1])
+u0 = state.fields.u
+D0 = state.fields.D
 x = SpatialCoordinate(mesh)
 R = Constant(R)
 V = FunctionSpace(mesh, "CG", 2)
@@ -64,9 +65,9 @@ u_init = Function(VX).interpolate(uexpr)
 u0.project(u_init)
 D0.interpolate(Dexpr)
 
-state.initialise([u0, D0])
-ueqn = EulerPoincare(state, state.V[0])
-Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+state.initialise({'u': u0, 'D': D0})
+ueqn = EulerPoincare(state, u0.function_space())
+Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 advection_dict = {}
 advection_dict["u"] = NoAdvection(state, u0, None)
 advection_dict["D"] = SSPRK3(state, D0, Deqn)

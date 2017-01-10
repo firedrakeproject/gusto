@@ -41,17 +41,22 @@ for delta, dt in res_dt.iteritems():
                   diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
-    u0 = getattr(state.fields, "u")
-    rho0 = getattr(state.fields, "rho")
-    theta0 = getattr(state.fields, "theta")
+    u0 = state.fields.u
+    rho0 = state.fields.rho
+    theta0 = state.fields.theta
     water0 = state.fields("water", theta0.function_space())
-    
+
+    # spaces
+    Vu = u0.function_space()
+    Vt = theta0.function_space()
+    Vr = rho0.function_space()
+
     # Isentropic background state
     Tsurf = 300.
     thetab = Constant(Tsurf)
 
-    theta_b = Function(getattr(state.spaces, "HDiv_v")).interpolate(thetab)
-    rho_b = Function(getattr(state.spaces, "DG"))
+    theta_b = Function(Vt).interpolate(thetab)
+    rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
     compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
@@ -68,18 +73,20 @@ for delta, dt in res_dt.iteritems():
     state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, u0.function_space())
-    rhoeqn = AdvectionEquation(state, rho0.function_space(), equation_form="continuity")
+    ueqn = EulerPoincare(state, Vu)
+    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     supg = True
     if supg:
-        thetaeqn = SUPGAdvection(state, theta0.function_space(),
+        thetaeqn = SUPGAdvection(state, Vt,
                                  supg_params={"dg_direction":"horizontal"},
                                  equation_form="advective")
-        watereqn = SUPGAdvection(state, theta0.function_space(),
+        watereqn = SUPGAdvection(state, Vt,
                                  supg_params={"dg_direction":"horizontal"},
                                  equation_form="advective")
     else:
-        thetaeqn = EmbeddedDGAdvection(state, theta0.function_space(),
+        thetaeqn = EmbeddedDGAdvection(state, Vt,
+                                       equation_form="advective")
+        watereqn = EmbeddedDGAdvection(state, Vt,
                                        equation_form="advective")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
@@ -117,11 +124,10 @@ for delta, dt in res_dt.iteritems():
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
 
-    V = u0.function_space()
-    bcs = [DirichletBC(V, 0.0, "bottom"),
-           DirichletBC(V, 0.0, "top")]
-    diffusion_dict = {"u": InteriorPenalty(state, u0.function_space(), kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
-                      "theta": InteriorPenalty(state, theta0.function_space(), kappa=Constant(75.), mu=Constant(10./delta))}
+    bcs = [DirichletBC(Vu, 0.0, "bottom"),
+           DirichletBC(Vu, 0.0, "top")]
+    diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
+                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.), mu=Constant(10./delta))}
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,

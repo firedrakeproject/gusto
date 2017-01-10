@@ -43,7 +43,7 @@ class OutputParameters(Configuration):
     #: a linear space?  Default is interpolation.
     project_fields = False
     #: List of fields to dump error fields for steady state simulation
-    steady_state_dump_err = []
+    steady_state_error_fields = []
     #: List of fields for computing perturbations
     perturbation_fields = []
 

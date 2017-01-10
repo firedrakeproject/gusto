@@ -22,7 +22,7 @@ def setup_sw(dirname, euler_poincare):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
-    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D','Derr'], steady_state_dump_err={'D':True,'u':True})
+    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D'], steady_state_error_fields=['D','u'])
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
@@ -35,7 +35,8 @@ def setup_sw(dirname, euler_poincare):
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    u0 = state.fields.u
+    D0 = state.fields.D
     x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
     R = Constant(R)
@@ -51,16 +52,16 @@ def setup_sw(dirname, euler_poincare):
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([u0, D0])
+    state.initialise({'u':u0, 'D':D0})
 
     if euler_poincare:
-        ueqn = EulerPoincare(state, state.V[0])
+        ueqn = EulerPoincare(state, u0.function_space())
         sw_forcing = ShallowWaterForcing(state)
     else:
-        ueqn = VectorInvariant(state, state.V[0])
+        ueqn = VectorInvariant(state, u0.function_space())
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
-    Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
