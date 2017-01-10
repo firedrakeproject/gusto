@@ -30,7 +30,7 @@ class TransportEquation(object):
         self.ibp = ibp
 
         # set up functions required for forms
-        self.ubar = Function(state.V[0])
+        self.ubar = Function(getattr(state.spaces, "HDiv"))
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 

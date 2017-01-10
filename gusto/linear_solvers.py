@@ -102,20 +102,23 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
+        Vu = state.spaces.HDiv
+        Vtheta = state.spaces.HDiv_v
+        Vrho = state.spaces.DG
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
         # Build the reduced function space for u,rho
-        M = MixedFunctionSpace((state.V[0], state.V[1]))
+        M = MixedFunctionSpace((Vu, Vrho))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
         n = FacetNormal(state.mesh)
 
         # Get background fields
-        thetabar = state.ref['theta']
-        rhobar = state.ref['rho']
+        thetabar = state.reference_fields.theta
+        rhobar = state.reference_fields.rho
         pibar = exner(thetabar, rhobar, state)
         pibar_rho = exner_rho(thetabar, rhobar, state)
         pibar_theta = exner_theta(thetabar, rhobar, state)
@@ -171,11 +174,11 @@ class CompressibleSolver(TimesteppingSolver):
                                                    options_prefix='ImplicitSolver')
 
         # Reconstruction of theta
-        theta = TrialFunction(state.V[2])
-        gamma = TestFunction(state.V[2])
+        theta = TrialFunction(Vtheta)
+        gamma = TestFunction(Vtheta)
 
         u, rho = self.urho.split()
-        self.theta = Function(state.V[2])
+        self.theta = Function(Vtheta)
 
         theta_eqn = gamma*(theta - theta_in +
                            dot(k,u)*dot(k,grad(thetabar))*beta)*dx
@@ -247,17 +250,20 @@ class IncompressibleSolver(TimesteppingSolver):
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
         mu = state.mu
+        Vu = state.spaces.HDiv
+        Vb = state.spaces.HDiv_v
+        Vp = state.spaces.DG
 
         # Split up the rhs vector (symbolically)
         u_in, p_in, b_in = split(state.xrhs)
 
         # Build the reduced function space for u,p
-        M = MixedFunctionSpace((state.V[0], state.V[1]))
+        M = MixedFunctionSpace((Vu, Vp))
         w, phi = TestFunctions(M)
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = state.ref['b']
+        bbar = state.reference_fields.b
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
@@ -308,11 +314,11 @@ class IncompressibleSolver(TimesteppingSolver):
                                                  nullspace=nullspace)
 
         # Reconstruction of b
-        b = TrialFunction(state.V[2])
-        gamma = TestFunction(state.V[2])
+        b = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
 
         u, p = self.up.split()
-        self.b = Function(state.V[2])
+        self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in +
                        dot(k,u)*dot(k,grad(bbar))*beta)*dx

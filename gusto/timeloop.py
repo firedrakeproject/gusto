@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.forcing import IncompressibleForcing
+from gusto.state import FieldCreator
 from firedrake import DirichletBC, Expression, Function
 
 
@@ -88,6 +89,8 @@ class Timestepper(BaseTimestepper):
                         zip(state.fieldlist, state.xstar.split())}
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
+        # list of fields that are passively advected (and possibly diffused)
+        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -135,9 +138,17 @@ class Timestepper(BaseTimestepper):
             self._apply_bcs()
             state.xn.assign(state.xnp1)
 
+            for field in passive_fieldlist:
+                print "HERE!!"
+                # first computes ubar from state.xn and state.xnp1
+                advection[field].update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                # advects a field from xn and puts result in xnp1
+                advection.apply(xn_fields[field], xnp1_fields[field])
+
             with timed_stage("Diffusion"):
                 for name, diffusion in self.diffusion_dict.iteritems():
-                    diffusion.apply(state.field_dict[name], state.field_dict[name])
+                    field = getattr(state.fields, name)
+                    diffusion.apply(field, field)
 
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
@@ -152,18 +163,14 @@ class AdvectionTimestepper(BaseTimestepper):
 
         state.xn.assign(state.x_init)
 
-        xn_fields = state.field_dict
-        xnp1_fields = {name: func for (name, func) in
-                       zip(state.fieldlist, state.xnp1.split())}
-        for name, func in state.field_dict.iteritems():
-            if name not in state.fieldlist and name in self.advection_dict.keys():
-                xnp1_fields[name] = Function(func.function_space())
+        xn_fields = state.fields
+        xnp1_fields = FieldCreator(state.fieldlist, state.xnp1)
+        # for name, func in state.field_dict.iteritems():
+        #     if name not in state.fieldlist and name in self.advection_dict.keys():
+        #         xnp1_fields(name, func.function_space).assign(getattr(state.fields, name))
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
-        for name, func in state.field_dict.iteritems():
-            if name not in state.fieldlist:
-                xnp1_fields[name].assign(xn_fields[name])
 
         state.dump()
 
@@ -180,13 +187,13 @@ class AdvectionTimestepper(BaseTimestepper):
                 advection.apply(xn_fields[field], xnp1_fields[field])
 
             state.xn.assign(state.xnp1)
-            for name, func in state.field_dict.iteritems():
-                if name not in state.fieldlist and name in self.advection_dict.keys():
-                    xn_fields[name].assign(xnp1_fields[name])
+            #for name, func in state.field_dict.iteritems():
+            #    if name not in state.fieldlist and name in self.advection_dict.keys():
+            #        xn_fields[name].assign(xnp1_fields[name])
 
             state.dump()
 
         state.diagnostic_dump()
 
         if x_end is not None:
-            return {field: state.field_dict[field] for field in x_end}
+            return {field: getattr(state.fields, field) for field in x_end}
