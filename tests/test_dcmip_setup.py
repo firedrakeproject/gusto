@@ -99,7 +99,7 @@ def setup_dcmip(dirname):
     rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
     thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
     advection_dict = {}
-    advection_dict["u"] = NoAdvection(state, u0)
+    advection_dict["u"] = NoAdvection(state, state.fields.u)
     advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
     advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
 
