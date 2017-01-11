@@ -22,16 +22,14 @@ def setup_sw(dirname, euler_poincare):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
-    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D'], steady_state_error_fields=['D','u'])
+    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D','u'])
     parameters = ShallowWaterParameters(H=H)
-    diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
@@ -88,8 +86,9 @@ def test_sw_setup(tmpdir, euler_poincare):
     run_sw(dirname, euler_poincare=euler_poincare)
     with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
         data = json.load(f)
-    Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["uerr"]["l2"][-1]/data["u"]["l2"][0]
+    print data.keys()
+    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
+    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 
     assert Dl2 < 5.e-4
     assert ul2 < 5.e-3

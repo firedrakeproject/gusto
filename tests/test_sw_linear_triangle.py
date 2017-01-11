@@ -83,8 +83,8 @@ def test_sw_linear(tmpdir):
     run_sw(dirname)
     with open(path.join(dirname, "sw_linear_w2/diagnostics.json"), "r") as f:
         data = json.load(f)
-    Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["uerr"]["l2"][-1]/data["u"]["l2"][0]
+    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
+    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 
     assert Dl2 < 3.e-3
     assert ul2 < 6.e-2
