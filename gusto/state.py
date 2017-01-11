@@ -174,12 +174,11 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
-        print self.field_dict
         for diagnostic in self.diagnostic_fields:
             f = diagnostic(self)
             f.dump = True
             self.field_dict[f.name()] = f
-        self.to_dump = [f for (n, f) in self.field_dict.iteritems() if f.dump]
+        self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
