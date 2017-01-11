@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.forcing import IncompressibleForcing
+from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC, Expression
 
 
@@ -64,7 +64,7 @@ class Timestepper(BaseTimestepper):
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
 
-        if(isinstance(self.forcing, IncompressibleForcing)):
+        if(isinstance(self.linear_solver, IncompressibleSolver)):
             self.incompressible = True
         else:
             self.incompressible = False
