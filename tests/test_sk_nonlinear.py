@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, exp, sin
 import numpy as np
 
