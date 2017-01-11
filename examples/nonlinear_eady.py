@@ -87,7 +87,6 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 ##############################################################################
 u0 = state.fields.u
-p0 = state.fields.p
 b0 = state.fields.b
 
 # spaces
@@ -127,7 +126,7 @@ b_pert = Function(Vb).interpolate(b_exp)
 b0.interpolate(b_b + b_pert)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'p': p0, 'b': b0})
+state.initialise({'b': b0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
 

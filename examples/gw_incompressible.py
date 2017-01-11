@@ -85,12 +85,10 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 ##############################################################################
 # set up functions on the spaces constructed by state
 u0 = state.fields.u
-p0 = state.fields.p
 b0 = state.fields.b
 
 # spaces
 Vu = u0.function_space()
-Vp = p0.function_space()
 Vb = b0.function_space()
 
 x, z = SpatialCoordinate(mesh)
@@ -123,7 +121,7 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'p': p0, 'b': b0})
+state.initialise({'u': u0, 'b': b0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
 

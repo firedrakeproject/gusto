@@ -32,7 +32,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D'], steady_state_error_fields=['D','u'])
+    output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D','u'])
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",

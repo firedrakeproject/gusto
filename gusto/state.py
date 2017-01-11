@@ -28,12 +28,12 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, xn=None, dump=True, pickup=True):
+    def __init__(self, fieldlist=None, xn=None, dumplist=None, pickup=True):
         self.fields = []
         if fieldlist is not None:
             for name, func in zip(fieldlist, xn.split()):
                 setattr(self, name, func)
-                func.dump = dump
+                func.dump = name in dumplist
                 func.pickup = pickup
                 func.rename(name)
                 self.fields.append(func)
@@ -119,7 +119,9 @@ class State(object):
 
         # Allocate state
         self._allocate_state()
-        self.fields = FieldCreator(fieldlist, self.xn)
+        if self.output.dumplist is None:
+            self.output.dumplist = fieldlist
+        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         self.dumpfile = None
 
@@ -160,6 +162,25 @@ class State(object):
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
+        self.field_dict = {field.name(): field for field in self.fields}
+
+        for name in self.output.perturbation_fields:
+            f = Perturbation(self, name)
+            self.diagnostic_fields.append(f)
+            self.diagnostics.register(f.name)
+
+        for name in self.output.steady_state_error_fields:
+            f = SteadyStateError(self, name)
+            self.diagnostic_fields.append(f)
+            self.diagnostics.register(f.name)
+
+        print self.field_dict
+        for diagnostic in self.diagnostic_fields:
+            f = diagnostic(self)
+            f.dump = True
+            self.field_dict[f.name()] = f
+        self.to_dump = [f for (n, f) in self.field_dict.iteritems() if f.dump]
+
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
@@ -169,28 +190,15 @@ class State(object):
                                     project_output=self.output.project_fields,
                                     comm=self.mesh.comm)
 
-        # default behaviour is to dump all prognostic fields
-        if self.output.dumplist is None:
-            self.output.dumplist = self.fieldlist
-
-        for name in self.output.perturbation_fields:
-            self.diagnostic_fields.append(Perturbation(self, name))
-
-        for name in self.output.steady_state_error_fields:
-            self.diagnostic_fields.append(SteadyStateError(self, name))
-
-        self.to_dump = [field for field in self.fields if field.dump]
-        for diagnostic in self.diagnostic_fields:
-            self.to_dump.append(diagnostic(self))
-
         self.to_pickup = [field for field in self.fields if field.pickup]
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
+        fields_ll = {}
         for name in self.output.dumplist_latlon:
-            f = getattr(self.fields, name)
-            f_ll = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(f_ll)
+            f = self.field_dict[name]
+            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            self.to_dump_latlon.append(fields_ll[name])
 
     def dump(self, t=0, pickup=False):
         """
@@ -199,9 +207,6 @@ class State(object):
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
-        for diagnostic in self.diagnostic_fields:
-            diagnostic(self)
-
         if(pickup):
             # Open the checkpointing file for writing
             chkfile = path.join(self.dumpdir, "chkpt")
@@ -225,7 +230,7 @@ class State(object):
 
             # compute diagnostics
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(getattr(self.fields, name))
+                data = self.diagnostics.l2(self.field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
 
             # Open the checkpointing file (backup version)
