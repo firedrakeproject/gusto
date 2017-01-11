@@ -164,7 +164,7 @@ class IncompressibleForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = getattr(state.spaces, "HDiv")
+        Vu = state.spaces.HDiv
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
@@ -203,7 +203,7 @@ class IncompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-        Vp = getattr(state.spaces, "DG")
+        Vp = state.spaces.DG
         p = TrialFunction(Vp)
         q = TestFunction(Vp)
         self.divu = Function(Vp)
