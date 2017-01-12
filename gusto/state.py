@@ -11,7 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     interval, Function, Mesh, functionspaceimpl,\
     Expression, File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ, interpolate
+    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
 
 
@@ -131,16 +131,21 @@ class State(object):
         except AttributeError:
             self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
-        #  build the vertical normal
+        #  build the vertical normal and define perp for 2d geometries
+        dim = mesh.topological_dimension()
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
             self.k = interpolate(x/R, mesh.coordinates.function_space())
+            if dim == 2:
+                outward_normals = CellNormal(mesh)
+                self.perp = lambda u: cross(outward_normals, u)
         else:
-            dim = mesh.geometric_dimension()
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
+            if dim == 2:
+                self.perp = lambda u: as_vector([-u[1], u[0]])
 
         #  build the geopotential
         if geopotential_form:

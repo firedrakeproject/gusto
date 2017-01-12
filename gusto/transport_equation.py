@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
-    outer, sign, cross, CellNormal, as_vector, sqrt, Constant, \
+    outer, sign, cross, CellNormal, sqrt, Constant, \
     curl, BrokenElement, FunctionSpace
 
 
@@ -289,17 +289,16 @@ class VectorInvariant(TransportEquation):
     def __init__(self, state, V, ibp="once"):
         super(VectorInvariant, self).__init__(state, V, ibp)
 
+        self.perp = state.perp
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
 
         if self.state.mesh.topological_dimension() == 2:
             if V.extruded:
-                self.perp = lambda u: as_vector([-u[1], u[0]])
-                self.perp_u_upwind = lambda q: self.Upwind('+')*self.perp(q('+')) + self.Upwind('-')*self.perp(q('-'))
+                self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
             else:
                 outward_normals = CellNormal(state.mesh)
-                self.perp = lambda u: cross(outward_normals, u)
                 self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
-            self.gradperp = lambda u: self.perp(grad(u))
+            self.gradperp = lambda u: state.perp(grad(u))
         elif self.state.mesh.topological_dimension() == 3:
             if self.ibp == "twice":
                 raise NotImplementedError("ibp=twice is not implemented for 3d problems")
