@@ -90,6 +90,7 @@ class Timestepper(BaseTimestepper):
             t = state.dump(t, pickup)
 
         while t < tmax + 0.5*dt:
+            state.t = t
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -159,6 +160,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.dump()
 
         while t < tmax + 0.5*dt:
+            state.t = t
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -175,7 +177,7 @@ class AdvectionTimestepper(BaseTimestepper):
                 if name not in state.fieldlist and name in self.advection_dict.keys():
                     xn_fields[name].assign(xnp1_fields[name])
 
-            state.dump()
+            state.dump(t, pickup=False)
 
         state.diagnostic_dump()
 

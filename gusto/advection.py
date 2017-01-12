@@ -1,8 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector
-from firedrake.utils import cached_property
+    LinearVariationalSolver, Projector, Constant
 from gusto.transport_equation import EmbeddedDGAdvection
 
 
@@ -19,10 +18,27 @@ def embedded_dg(original_apply):
                 self.Projector.project()
                 x_out.assign(self.x_projected)
             return new_apply(self, x_in, x_out)
-
         else:
             return original_apply(self, x_in, x_out)
     return get_apply
+
+
+def move_mesh_solver(solver):
+    def get_solver(self, **kwargs):
+        if(self.moving_mesh):
+            def moving_mesh_solver(self, **kwargs):
+                if "stage" in kwargs:
+                    i = kwargs["stage"]
+                else:
+                    i = 1
+                self.lhs_domain = self.domains[i]
+                self.rhs_domain = self.domains[0]
+                solver(self, **kwargs)
+                self.move_mesh(**kwargs)
+            return moving_mesh_solver(self, **kwargs)
+        else:
+            return solver(self, **kwargs)
+    return get_solver
 
 
 class Advection(object):
@@ -37,7 +53,7 @@ class Advection(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, field, equation=None, solver_params=None):
+    def __init__(self, state, field, equation=None, solver_params=None, moving_mesh_params=None):
 
         if equation is not None:
 
@@ -53,6 +69,18 @@ class Advection(object):
                 self.solver_parameters = equation.solver_parameters
             else:
                 self.solver_parameters = solver_params
+
+            self.moving_mesh = moving_mesh_params is not None
+            if moving_mesh_params is not None:
+                self.base_mesh = state.mesh
+                self.domains = moving_mesh_params["domains"]
+                self.xexpr = moving_mesh_params["xexpr"]
+                self.x = state.mesh.coordinates
+                self.v = Function(state.V[0])
+            else:
+                self.base_mesh = None
+                self.lhs_domain = None
+                self.rhs_domain = None
 
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
@@ -80,18 +108,18 @@ class Advection(object):
 
     @abstractproperty
     def lhs(self):
-        return self.equation.mass_term(self.equation.trial)
+        return self.equation.mass_term(self.equation.trial, domain=self.lhs_domain) + Constant(0)*self.equation.mass_term(self.equation.trial, domain=self.base_mesh)
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        return self.equation.mass_term(self.q1, self.rhs_domain) - self.dt*self.equation.advection_term(self.q1, self.rhs_domain)
 
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
         unp1 = xnp1.split()[0]
         self.ubar.assign(un + alpha*(unp1-un))
 
-    @cached_property
+    @property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
@@ -136,11 +164,11 @@ class ForwardEuler(Advection):
     where L is the advection operator
     """
 
-    @cached_property
+    @property
     def lhs(self):
         return super(ForwardEuler, self).lhs
 
-    @cached_property
+    @property
     def rhs(self):
         return super(ForwardEuler, self).rhs
 
@@ -161,16 +189,16 @@ class SSPRK3(Advection):
     number and L is the advection operator.
     """
 
-    @cached_property
+    @property
     def lhs(self):
         return super(SSPRK3, self).lhs
 
-    @cached_property
+    @property
     def rhs(self):
         return super(SSPRK3, self).rhs
 
+    @move_mesh_solver
     def solve_stage(self, x_in, stage):
-
         if stage == 0:
             self.solver.solve()
             self.q1.assign(self.dq)
@@ -182,12 +210,27 @@ class SSPRK3(Advection):
         elif stage == 2:
             self.solver.solve()
 
+    def move_mesh(self, stage):
+        if stage == 0:
+            self.x0.dat.data[:] = self.x.dat.data[:]
+            t = self.state.t + 0.5*self.dt
+            self.x1.project(self.xexpr)
+            t += 0.5*self.dt
+            self.x2.project(self.xexpr)
+            self.x.dat.data[:] = self.x2.dat.data[:]
+        elif stage == 1:
+            self.x.dat.data[:] = self.x1.dat.data[:]
+        elif stage == 2:
+            self.x.dat.data[:] = self.x2.dat.data[:]
+        dx = self.x2 - self.x0
+        self.v.project(dx/self.dt)
+        self.ubar.project(self.ubar-self.v)
+
     @embedded_dg
     def apply(self, x_in, x_out):
-
         self.q1.assign(x_in)
         for i in range(3):
-            self.solve_stage(x_in, i)
+            self.solve_stage(x_in=x_in, stage=i)
         x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
 
 
@@ -201,18 +244,30 @@ class ThetaMethod(Advection):
 
         self.theta = theta
 
-    @cached_property
+    @property
     def lhs(self):
         eqn = self.equation
         trial = eqn.trial
         return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(trial)
 
-    @cached_property
+    @property
     def rhs(self):
         eqn = self.equation
         return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.q1)
 
+    def move_mesh(self, **kwargs):
+        self.x0.dat.data[:] = self.x.dat.data[:]
+        self.x1.project(self.xexpr)
+        self.x.dat.data[:] = self.x1.dat.data[:]
+        dx = self.x1 - self.x0
+        self.v.project(dx/self.dt)
+        self.ubar.project(self.ubar-self.v)
+
+    @move_mesh_solver
+    def solve(self):
+        self.solver.solve()
+
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
-        self.solver.solve()
+        self.solve()
         x_out.assign(self.dq)

@@ -61,11 +61,15 @@ class TransportEquation(object):
                                   'pc_type':'bjacobi',
                                   'sub_pc_type': 'ilu'}
 
-    def mass_term(self, q):
-        return inner(self.test, q)*dx
+    def mass_term(self, q, domain=None):
+        if domain is not None:
+            dx_ = dx(domain=domain)
+        else:
+            dx_ = dx
+        return inner(self.test, q)*dx_
 
     @abstractmethod
-    def advection_term(self):
+    def advection_term(self, q, domain=None):
         pass
 
 
@@ -108,13 +112,18 @@ class LinearAdvection(TransportEquation):
                                   'pc_type':'bjacobi',
                                   'sub_pc_type': 'ilu'}
 
-    def advection_term(self, q):
+    def advection_term(self, q, domain=None):
+        if domain is not None:
+            dx_ = dx(domain=domain)
+            self.dS = self.dS(domain=domain)
+        else:
+            dx_ = dx
 
         if self.continuity:
-            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
+            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx_ +
                  jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
-            L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(self.qbar))*dx
+            L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(self.qbar))*dx_
         return L
 
 
@@ -139,18 +148,23 @@ class AdvectionEquation(TransportEquation):
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
 
-    def advection_term(self, q):
+    def advection_term(self, q, domain=None):
+        if domain is not None:
+            dx_ = dx(domain=domain)
+            self.dS = self.dS(domain=domain)
+        else:
+            dx_ = dx
 
         if self.continuity:
             if self.ibp == "once":
-                L = -inner(grad(self.test), outer(q, self.ubar))*dx
+                L = -inner(grad(self.test), outer(q, self.ubar))*dx_
             else:
-                L = inner(self.test, div(outer(q, self.ubar)))*dx
+                L = inner(self.test, div(outer(q, self.ubar)))*dx_
         else:
             if self.ibp == "once":
-                L = -inner(div(outer(self.test,self.ubar)),q)*dx
+                L = -inner(div(outer(self.test,self.ubar)),q)*dx_
             else:
-                L = inner(outer(self.test,self.ubar),grad(q))*dx
+                L = inner(outer(self.test,self.ubar),grad(q))*dx_
 
         if self.dS is not None and self.ibp is not None:
             L += dot(jump(self.test), (self.un('+')*q('+')
@@ -306,7 +320,12 @@ class VectorInvariant(TransportEquation):
         else:
             raise RuntimeError("topological mesh dimension must be 2 or 3")
 
-    def advection_term(self, q):
+    def advection_term(self, q, domain=None):
+        if domain is not None:
+            dx_ = dx(domain=domain)
+            self.dS = self.dS(domain=domain)
+        else:
+            dx_ = dx
 
         if self.state.mesh.topological_dimension() == 3:
             # <w,curl(u) cross ubar + grad( u.ubar)>
@@ -317,7 +336,7 @@ class VectorInvariant(TransportEquation):
             both = lambda u: 2*avg(u)
 
             L = (
-                inner(q, curl(cross(self.ubar, self.test)))*dx
+                inner(q, curl(cross(self.ubar, self.test)))*dx_
                 - inner(both(self.Upwind*q),
                         both(cross(self.n, cross(self.ubar, self.test))))*self.dS
             )
@@ -326,13 +345,13 @@ class VectorInvariant(TransportEquation):
 
             if self.ibp == "once":
                 L = (
-                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
+                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx_
                     - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
                             self.perp_u_upwind(q))*self.dS
                 )
             else:
                 L = (
-                    (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
+                    (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx_
                     - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
                             self.perp_u_upwind(q))*self.dS
                     + jump(inner(self.test,
@@ -354,7 +373,11 @@ class EulerPoincare(VectorInvariant):
               None, "once" or "twice". Defaults to "once".
     """
 
-    def advection_term(self, q):
-        L = super(EulerPoincare, self).advection_term(q)
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+    def advection_term(self, q, domain=None):
+        if domain is not None:
+            dx_ = dx(domain=domain)
+        else:
+            dx_ = dx
+        L = super(EulerPoincare, self).advection_term(q, domain)
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx_
         return L
