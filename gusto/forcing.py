@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS, Constant, warning, Expression, as_vector
+    dot, dS, Constant, warning, Expression, as_vector
 
 
 class Forcing(object):
@@ -371,14 +371,9 @@ class ShallowWaterForcing(Forcing):
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        if state.on_sphere:
-            outward_normals = CellNormal(state.mesh)
-            perp = lambda u: cross(outward_normals, u)
-        else:
-            perp = lambda u: as_vector([-u[1], u[0]])
         a = inner(w, F)*dx
         L = (
-            (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
+            (-f*inner(w, state.perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
 
         if self.euler_poincare:
