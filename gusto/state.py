@@ -11,7 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     interval, Function, Mesh, functionspaceimpl,\
     Expression, File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ
+    FILE_CREATE, FILE_READ, interpolate
 import numpy as np
 
 
@@ -135,7 +135,7 @@ class State(object):
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
-            self.k = x/R
+            self.k = interpolate(x/R, mesh.coordinates.function_space())
         else:
             dim = mesh.geometric_dimension()
             kvec = [0.0]*dim

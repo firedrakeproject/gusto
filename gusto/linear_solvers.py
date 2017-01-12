@@ -139,14 +139,18 @@ class CompressibleSolver(TimesteppingSolver):
         def V(u):
             return k*inner(u,k)
 
+        # specify degree for some terms as estimated degree is too large
+        dxp = dx(degree=(5,5))
+        dS_vp = dS_v(degree=(5,5))
+
         eqn = (
             inner(w, (u - u_in))*dx
-            - beta*cp*div(theta*V(w))*pibar*dx
+            - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
-            - beta*cp*div(thetabar*w)*pi*dx
-            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_v
+            - beta*cp*div(thetabar*w)*pi*dxp
+            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
