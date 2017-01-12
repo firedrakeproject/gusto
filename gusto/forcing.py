@@ -61,7 +61,7 @@ class CompressibleForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = getattr(state.spaces, "HDiv")
+        Vu = state.spaces.HDiv
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
@@ -252,8 +252,8 @@ class EadyForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = getattr(state.spaces, "HDiv")
-        Vp = getattr(state.spaces, "DG")
+        Vu = state.spaces.HDiv
+        Vp = state.spaces.DG
         W = state.W
 
         dbdy = state.parameters.dbdy
@@ -299,9 +299,9 @@ class EadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-# b_forcing
+        # b_forcing
 
-        Vb = getattr(state.spaces, "HDiv_v")
+        Vb = state.spaces.HDiv_v
 
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
@@ -316,9 +316,9 @@ class EadyForcing(Forcing):
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
 
-# divergence_free
+        # divergence_free
 
-        Vp = getattr(state.spaces, "DG")
+        Vp = state.spaces.DG
         p = TrialFunction(Vp)
         q = TestFunction(Vp)
         self.divu = Function(Vp)
@@ -359,7 +359,7 @@ class ShallowWaterForcing(Forcing):
         g = state.parameters.g
         f = state.f
 
-        Vu = getattr(state.spaces, "HDiv")
+        Vu = state.spaces.HDiv
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
