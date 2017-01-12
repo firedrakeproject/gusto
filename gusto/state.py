@@ -220,6 +220,10 @@ class State(object):
 
             print "DBG dumping", t
 
+            # calculate diagnostic fields
+            for field in self.diagnostic_fields:
+                field(self)
+
             # dump fields
             self.dumpfile.write(*self.to_dump)
 
