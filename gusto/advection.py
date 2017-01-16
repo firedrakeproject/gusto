@@ -25,7 +25,7 @@ def embedded_dg(original_apply):
 
 def move_mesh_solver(solver):
     def get_solver(self, **kwargs):
-        if(self.moving_mesh):
+        if(self.mesh_movement):
             def moving_mesh_solver(self, **kwargs):
                 if "stage" in kwargs:
                     i = kwargs["stage"]
@@ -55,6 +55,10 @@ class Advection(object):
 
     def __init__(self, state, field, equation=None, solver_params=None, moving_mesh_params=None):
 
+        self.mesh_movement = state.timestepping.mesh_movement
+        if self.mesh_movement and moving_mesh_params is None:
+            exit("mesh_movement is expected but moving mesh parameters have not been specified for field %s" % field.name())
+
         if equation is not None:
 
             self.state = state
@@ -70,17 +74,19 @@ class Advection(object):
             else:
                 self.solver_parameters = solver_params
 
-            self.moving_mesh = moving_mesh_params is not None
-            if moving_mesh_params is not None:
-                self.base_mesh = state.mesh
-                self.domains = moving_mesh_params["domains"]
-                self.xexpr = moving_mesh_params["xexpr"]
-                self.x = state.mesh.coordinates
-                self.v = Function(state.V[0])
-            else:
-                self.base_mesh = None
-                self.lhs_domain = None
-                self.rhs_domain = None
+        if self.mesh_movement:
+            self.base_mesh = state.mesh
+            self.domains = moving_mesh_params["domains"]
+            self.xexpr = moving_mesh_params["xexpr"]
+            self.fexpr = moving_mesh_params["fexpr"]
+            self.uexpr = moving_mesh_params["uexpr"]
+            self.x = state.mesh.coordinates
+            self.v = Function(state.V[0])
+            self.ubar0 = Function(state.V[0])
+        else:
+            self.base_mesh = None
+            self.lhs_domain = None
+            self.rhs_domain = None
 
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
@@ -153,8 +159,10 @@ class NoAdvection(Advection):
         pass
 
     def apply(self, x_in, x_out):
-
-        x_out.assign(x_in)
+        if self.mesh_movement:
+            x_out.project(self.fexpr)
+        else:
+            x_out.assign(x_in)
 
 
 class ForwardEuler(Advection):
@@ -210,21 +218,24 @@ class SSPRK3(Advection):
         elif stage == 2:
             self.solver.solve()
 
-    def move_mesh(self, stage):
+    def move_mesh(self, **kwargs):
+        stage = kwargs["stage"]
         if stage == 0:
-            self.x0.dat.data[:] = self.x.dat.data[:]
+            self.domains[0].dat.data[:] = self.state.coords.dat.data[:]
             t = self.state.t + 0.5*self.dt
-            self.x1.project(self.xexpr)
+            self.domains[1].project(self.xexpr)
             t += 0.5*self.dt
-            self.x2.project(self.xexpr)
-            self.x.dat.data[:] = self.x2.dat.data[:]
+            self.domains[2].project(self.xexpr)
+            self.x.dat.data[:] = self.domains[2].dat.data[:]
+            self.ubar0.assign(self.ubar)
         elif stage == 1:
-            self.x.dat.data[:] = self.x1.dat.data[:]
+            self.x.dat.data[:] = self.domains[1].dat.data[:]
         elif stage == 2:
-            self.x.dat.data[:] = self.x2.dat.data[:]
-        dx = self.x2 - self.x0
+            self.x.dat.data[:] = self.domains[2].dat.data[:]
+        dx = self.domains[2] - self.domains[0]
         self.v.project(dx/self.dt)
-        self.ubar.project(self.ubar-self.v)
+        self.ubar.project(self.uexpr-self.v)
+        # self.ubar.project(self.ubar0-self.v)
 
     @embedded_dg
     def apply(self, x_in, x_out):
@@ -239,8 +250,8 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+    def __init__(self, state, field, equation, theta=0.5, solver_params=None, moving_mesh_params=None):
+        super(ThetaMethod, self).__init__(state, field, equation, solver_params, moving_mesh_params)
 
         self.theta = theta
 
@@ -256,10 +267,10 @@ class ThetaMethod(Advection):
         return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.q1)
 
     def move_mesh(self, **kwargs):
-        self.x0.dat.data[:] = self.x.dat.data[:]
-        self.x1.project(self.xexpr)
-        self.x.dat.data[:] = self.x1.dat.data[:]
-        dx = self.x1 - self.x0
+        self.domains[0].dat.data[:] = self.state.coords.dat.data[:]
+        self.domains[1].project(self.xexpr)
+        self.x.dat.data[:] = self.domains[1].dat.data[:]
+        dx = self.domains[1] - self.domains[0]
         self.v.project(dx/self.dt)
         self.ubar.project(self.ubar-self.v)
 

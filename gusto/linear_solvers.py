@@ -23,6 +23,7 @@ class TimesteppingSolver(object):
     def __init__(self, state, params=None):
 
         self.state = state
+        self.constant_jacobian = not self.state.timestepping.mesh_movement
 
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
@@ -372,6 +373,7 @@ class ShallowWaterSolver(TimesteppingSolver):
             aeqn, Leqn, self.state.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 constant_jacobian=self.constant_jacobian,
                                                  solver_parameters=self.params,
                                                  options_prefix='SWimplicit')
 

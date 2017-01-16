@@ -26,6 +26,7 @@ class TimesteppingParameters(Configuration):
     alpha = 0.5
     maxk = 4
     maxi = 1
+    mesh_movement = False
 
 
 class OutputParameters(Configuration):

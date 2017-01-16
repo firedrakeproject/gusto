@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.state import IncompressibleState
-from firedrake import DirichletBC, Expression, Function
+from firedrake import DirichletBC, Expression, Function, SpatialCoordinate
 
 
 class BaseTimestepper(object):
@@ -89,6 +89,8 @@ class Timestepper(BaseTimestepper):
         with timed_stage("Dump output"):
             t = state.dump(t, pickup)
 
+        state.coords = Function(state.mesh.coordinates.function_space())
+
         while t < tmax + 0.5*dt:
             state.t = t
             if state.output.Verbose:
@@ -102,6 +104,8 @@ class Timestepper(BaseTimestepper):
 
             for k in range(state.timestepping.maxk):
 
+                # save mesh coords
+                state.coords.interpolate(SpatialCoordinate(state.mesh))
                 with timed_stage("Advection"):
                     for field, advection in self.advection_dict.iteritems():
                         # first computes ubar from state.xn and state.xnp1
@@ -122,6 +126,9 @@ class Timestepper(BaseTimestepper):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
 
                     state.xnp1 += state.dy
+
+                if k < state.timestepping.maxk - 1:
+                    state.mesh.coordinates.assign(state.coords)
 
             self._apply_bcs()
             state.xn.assign(state.xnp1)

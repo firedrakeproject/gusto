@@ -358,7 +358,7 @@ class VectorInvariant(TransportEquation):
                                  self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                 )
 
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx_
 
         return L
 

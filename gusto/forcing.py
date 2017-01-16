@@ -355,6 +355,7 @@ class ShallowWaterForcing(Forcing):
     def _build_forcing_solver(self):
 
         state = self.state
+        self.constant_jacobian = not self.state.timestepping.mesh_movement
         g = state.parameters.g
         f = state.f
 
@@ -384,7 +385,7 @@ class ShallowWaterForcing(Forcing):
         u_forcing_problem = LinearVariationalProblem(
             a, L, self.uF)
 
-        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem, constant_jacobian=self.constant_jacobian)
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
