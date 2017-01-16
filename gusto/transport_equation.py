@@ -289,10 +289,10 @@ class VectorInvariant(TransportEquation):
     def __init__(self, state, V, ibp="once"):
         super(VectorInvariant, self).__init__(state, V, ibp)
 
-        self.perp = state.perp
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
 
         if self.state.mesh.topological_dimension() == 2:
+            self.perp = state.perp
             if V.extruded:
                 self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
             else:
