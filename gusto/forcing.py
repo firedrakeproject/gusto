@@ -37,8 +37,8 @@ class Forcing(object):
         # find out which terms we need
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state, "f")
-        print "JEMMA: ", self.coriolis
         self.sponge = state.mu is not None
+        print "JEMMA: ", self.coriolis, self.extruded, self.sponge, state.mu
         self.scaling = Constant(1.)
 
         self._build_forcing_solvers()
@@ -207,7 +207,7 @@ class IncompressibleForcing(Forcing):
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
-        super(IncompressibleForcing, self)._apply(scaling, x_in, x_nl, x_out, **kwargs)
+        super(IncompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         if 'incompressible' in kwargs and kwargs['incompressible']:
             _, p_out, _ = self.x_out.split()
             self.divergence_solver.solve()
@@ -219,9 +219,9 @@ class EadyForcing(IncompressibleForcing):
     Forcing class for Eady Boussinesq equations.
     """
 
-    def forcing_term(self, linear):
+    def forcing_term(self):
 
-        L = super(EadyForcing, self).forcing_term(self, linear)
+        L = super(EadyForcing, self).forcing_term()
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
         Vp = self.state.spaces.DG
@@ -233,27 +233,28 @@ class EadyForcing(IncompressibleForcing):
     def _build_forcing_solvers(self):
 
         super(EadyForcing, self)._build_forcing_solvers()
-
+        print "JEMMA: made uforcing solver"
         # b_forcing
         dbdy = self.state.parameters.dbdy
         Vb = self.state.spaces.HDiv_v
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
         self.bF = Function(Vb)
-        u0, p0, b0 = split(self.x0)
+        u0, _, b0 = split(self.x0)
 
         a = gamma*F*dx
         L = -gamma*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
 
         b_forcing_problem = LinearVariationalProblem(
-            a,L,self.bF
+            a, L, self.bF
         )
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
+        print "JEMMA: made bforcing solver"
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
-        super(EadyForcing, self)._apply(scaling, x_in, x_nl, x_out, **kwargs)
+        super(EadyForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         self.b_forcing_solver.solve()  # places forcing in self.bF
         _, _, b_out = self.x_out.split()
         b_out += self.bF
