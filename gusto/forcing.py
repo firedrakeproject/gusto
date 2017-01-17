@@ -48,7 +48,7 @@ class Forcing(object):
 
     def coriolis_term(self):
         u0 = split(self.x0)[0]
-        return -self.scaling*inner(self.test, cross(2*self.state.Omega, u0))*dx
+        return -inner(self.test, cross(2*self.state.Omega, u0))*dx
 
     def sponge_term(self):
         u0 = split(self.x0)[0]
@@ -73,7 +73,7 @@ class Forcing(object):
             L += self.coriolis_term()
         if self.euler_poincare:
             L += self.euler_poincare_term()
-        # L *= self.scaling
+        L = self.scaling * L
         if self.sponge:
             L += self.mu_scaling*self.sponge_term()
         return L
@@ -109,7 +109,6 @@ class Forcing(object):
         if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
             self.mu_scaling.assign(kwargs['mu_alpha'])
         self.u_forcing_solver.solve()  # places forcing in self.uF
-        self.uF *= scaling
 
         uF = self.x_out.split()[0]
 
@@ -130,21 +129,22 @@ class CompressibleForcing(Forcing):
 
         pi = exner(theta0, rho0, self.state)
 
-        L = self.scaling*(
-            + cp*div(theta0*self.test)*pi*dx  # pressure gradient [volume]
-            - cp*jump(self.test*theta0, n)*avg(pi)*dS_v  # pressure gradient [surface]
+        L = (
+            + cp*div(theta0*self.test)*pi*dx
+            - cp*jump(self.test*theta0, n)*avg(pi)*dS_v
         )
         return L
 
     def gravity_term(self):
 
         if self.state.geopotential_form:
-            L = self.scaling*div(self.test)*self.state.Phi*dx  # gravity term
+            L = div(self.test)*self.state.Phi*dx
         else:
             g = self.state.parameters.g
-            L = -self.scaling*g*inner(self.test, self.state.k)*dx  # gravity term
+            L = -g*inner(self.test, self.state.k)*dx
 
         return L
+
 
 def exner(theta,rho,state):
     """
@@ -179,19 +179,13 @@ class IncompressibleForcing(Forcing):
     """
 
     def pressure_gradient_term(self):
-
         _, p0, _ = split(self.x0)
-
-        L = self.scaling*div(self.test)*p0*dx
-
+        L = div(self.test)*p0*dx
         return L
 
     def gravity_term(self):
-
         _, _, b0 = split(self.x0)
-
-        L = self.scaling*b0*inner(self.test,self.state.k)*dx
-
+        L = b0*inner(self.test,self.state.k)*dx
         return L
 
     def _build_forcing_solvers(self):
@@ -233,7 +227,7 @@ class EadyForcing(IncompressibleForcing):
         Vp = self.state.spaces.DG
         eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
-        L -= self.scaling*dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
+        L -= dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
         return L
 
     def _build_forcing_solvers(self):
@@ -249,7 +243,7 @@ class EadyForcing(IncompressibleForcing):
         u0, p0, b0 = split(self.x0)
 
         a = gamma*F*dx
-        L = -gamma*self.scaling*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
+        L = -gamma*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
 
         b_forcing_problem = LinearVariationalProblem(
             a,L,self.bF
@@ -260,11 +254,8 @@ class EadyForcing(IncompressibleForcing):
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         super(EadyForcing, self)._apply(scaling, x_in, x_nl, x_out, **kwargs)
-
         self.b_forcing_solver.solve()  # places forcing in self.bF
-
         _, _, b_out = self.x_out.split()
-
         b_out += self.bF
 
 
@@ -274,9 +265,7 @@ class ShallowWaterForcing(Forcing):
 
         f = self.state.f
         u0, _ = split(self.x0)
-
         L = -f*inner(self.test, self.state.perp(u0))*dx
-
         return L
 
     def pressure_gradient_term(self):
