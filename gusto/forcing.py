@@ -38,7 +38,6 @@ class Forcing(object):
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state, "f")
         self.sponge = state.mu is not None
-        print "JEMMA: ", self.coriolis, self.extruded, self.sponge, state.mu
         self.scaling = Constant(1.)
 
         self._build_forcing_solvers()
@@ -104,6 +103,7 @@ class Forcing(object):
         :arg x_out: :class:`.Function` object
         :arg mu_alpha: scale for sponge term, if present
         """
+        self.scaling.assign(scaling)
         self.x0.assign(x_nl)
         self.x_out = x_out
         if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
