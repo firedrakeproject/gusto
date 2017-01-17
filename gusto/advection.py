@@ -81,8 +81,9 @@ class Advection(object):
             self.fexpr = moving_mesh_params["fexpr"]
             self.uexpr = moving_mesh_params["uexpr"]
             self.x = state.mesh.coordinates
-            self.v = Function(state.V[0])
-            self.ubar0 = Function(state.V[0])
+            uspace = state.spaces.HDiv
+            self.v = Function(uspace)
+            self.ubar0 = Function(uspace)
         else:
             self.base_mesh = None
             self.lhs_domain = None
