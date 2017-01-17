@@ -90,7 +90,7 @@ class State(object):
                  parameters=None,
                  diagnostics=None,
                  fieldlist=None,
-                 diagnostic_fields=[]):
+                 diagnostic_fields=None):
 
         self.Omega = Coriolis
         self.mu = sponge_function
@@ -109,7 +109,10 @@ class State(object):
             self.diagnostics = diagnostics
         else:
             self.diagnostics = Diagnostics(*fieldlist)
-        self.diagnostic_fields = diagnostic_fields
+        if diagnostic_fields is not None:
+            self.diagnostic_fields = diagnostic_fields
+        else:
+            self.diagnostic_fields = []
 
         # The mesh
         self.mesh = mesh
