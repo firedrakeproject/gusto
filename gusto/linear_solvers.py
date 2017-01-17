@@ -67,9 +67,14 @@ class CompressibleSolver(TimesteppingSolver):
     :arg state: a :class:`.State` object containing everything else.
     """
 
-    def __init__(self, state, params=None):
+    def __init__(self, state, quadrature_degree=None, params=None):
 
         self.state = state
+
+        if quadrature_degree is not None:
+            self.quadrature_degree = quadrature_degree
+        else:
+            self.quadrature_degree = 5
 
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
@@ -140,8 +145,8 @@ class CompressibleSolver(TimesteppingSolver):
             return k*inner(u,k)
 
         # specify degree for some terms as estimated degree is too large
-        dxp = dx(degree=(5,5))
-        dS_vp = dS_v(degree=(5,5))
+        dxp = dx(degree=(self.quadrature_degree, self.quadrature_degree))
+        dS_vp = dS_v(degree=(self.quadrature_degree, self.quadrature_degree))
 
         eqn = (
             inner(w, (u - u_in))*dx
