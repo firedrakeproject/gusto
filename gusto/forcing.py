@@ -39,6 +39,7 @@ class Forcing(object):
         self.coriolis = state.Omega is not None or hasattr(state, "f")
         self.sponge = state.mu is not None
         self.scaling = Constant(1.)
+        self.mu_scaling = Constant(1.)
 
         self._build_forcing_solvers()
 
