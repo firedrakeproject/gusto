@@ -21,7 +21,7 @@ class SpaceCreator(object):
         try:
             return getattr(self, name)
         except AttributeError:
-            value = FunctionSpace(mesh, family, degree, name=name)
+            value = FunctionSpace(mesh, family, degree)
             setattr(self, name, value)
             return value
 
@@ -90,7 +90,7 @@ class State(object):
                  parameters=None,
                  diagnostics=None,
                  fieldlist=None,
-                 diagnostic_fields=[]):
+                 diagnostic_fields=None):
 
         self.Omega = Coriolis
         self.mu = sponge_function
@@ -109,7 +109,10 @@ class State(object):
             self.diagnostics = diagnostics
         else:
             self.diagnostics = Diagnostics(*fieldlist)
-        self.diagnostic_fields = diagnostic_fields
+        if diagnostic_fields is not None:
+            self.diagnostic_fields = diagnostic_fields
+        else:
+            self.diagnostic_fields = []
 
         # The mesh
         self.mesh = mesh
@@ -159,16 +162,21 @@ class State(object):
     def setup_dump(self):
 
         # setup dump files
+
+        # check for existence of directory so as not to overwrite
+        # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
-                exit("results directory '%s' already exists" % self.dumpdir)
+            exit("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
+        # create field dictionary
         self.field_dict = {field.name(): field for field in self.fields}
 
+        # add special case diagnostic fields
         for name in self.output.perturbation_fields:
             f = Perturbation(self, name)
             self.diagnostic_fields.append(f)
@@ -179,10 +187,13 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
+        # add diagnostic fields to field dictionary and ensure they are dumped
         for diagnostic in self.diagnostic_fields:
             f = diagnostic(self)
             f.dump = True
             self.field_dict[f.name()] = f
+
+        # make list of fields to dump
         self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
@@ -194,6 +205,7 @@ class State(object):
                                     project_output=self.output.project_fields,
                                     comm=self.mesh.comm)
 
+        # make list of fields to pickup (this doesn't include diagnostic fields)
         self.to_pickup = [field for field in self.fields if field.pickup]
 
         # make functions on latlon mesh, as specified by dumplist_latlon
