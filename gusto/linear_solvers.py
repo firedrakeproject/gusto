@@ -103,20 +103,23 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
+        Vu = state.spaces.HDiv
+        Vtheta = state.spaces.HDiv_v
+        Vrho = state.spaces.DG
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
         # Build the reduced function space for u,rho
-        M = MixedFunctionSpace((state.V[0], state.V[1]))
+        M = MixedFunctionSpace((Vu, Vrho))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
         n = FacetNormal(state.mesh)
 
         # Get background fields
-        thetabar = state.thetabar
-        rhobar = state.rhobar
+        thetabar = state.fields.thetabar
+        rhobar = state.fields.rhobar
         pibar = exner(thetabar, rhobar, state)
         pibar_rho = exner_rho(thetabar, rhobar, state)
         pibar_theta = exner_theta(thetabar, rhobar, state)
@@ -137,14 +140,18 @@ class CompressibleSolver(TimesteppingSolver):
         def V(u):
             return k*inner(u,k)
 
+        # specify degree for some terms as estimated degree is too large
+        dxp = dx(degree=(5,5))
+        dS_vp = dS_v(degree=(5,5))
+
         eqn = (
             inner(w, (u - u_in))*dx
-            - beta*cp*div(theta*V(w))*pibar*dx
+            - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
-            - beta*cp*div(thetabar*w)*pi*dx
-            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_v
+            - beta*cp*div(thetabar*w)*pi*dxp
+            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
@@ -172,11 +179,11 @@ class CompressibleSolver(TimesteppingSolver):
                                                    options_prefix='ImplicitSolver')
 
         # Reconstruction of theta
-        theta = TrialFunction(state.V[2])
-        gamma = TestFunction(state.V[2])
+        theta = TrialFunction(Vtheta)
+        gamma = TestFunction(Vtheta)
 
         u, rho = self.urho.split()
-        self.theta = Function(state.V[2])
+        self.theta = Function(Vtheta)
 
         theta_eqn = gamma*(theta - theta_in +
                            dot(k,u)*dot(k,grad(thetabar))*beta)*dx
@@ -248,17 +255,20 @@ class IncompressibleSolver(TimesteppingSolver):
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
         mu = state.mu
+        Vu = state.spaces.HDiv
+        Vb = state.spaces.HDiv_v
+        Vp = state.spaces.DG
 
         # Split up the rhs vector (symbolically)
         u_in, p_in, b_in = split(state.xrhs)
 
         # Build the reduced function space for u,p
-        M = MixedFunctionSpace((state.V[0], state.V[1]))
+        M = MixedFunctionSpace((Vu, Vp))
         w, phi = TestFunctions(M)
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = state.bbar
+        bbar = state.fields.bbar
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
@@ -309,11 +319,11 @@ class IncompressibleSolver(TimesteppingSolver):
                                                  nullspace=nullspace)
 
         # Reconstruction of b
-        b = TrialFunction(state.V[2])
-        gamma = TestFunction(state.V[2])
+        b = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
 
         u, p = self.up.split()
-        self.b = Function(state.V[2])
+        self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in +
                        dot(k,u)*dot(k,grad(bbar))*beta)*dx

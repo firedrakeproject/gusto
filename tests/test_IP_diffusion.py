@@ -16,32 +16,25 @@ def setup_IPdiffusion(vector, DG):
     parameters = CompressibleParameters()
     output = OutputParameters(dirname="IPdiffusion")
 
-    # vertical coordinate and normal
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
-
-    state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                              family="CG",
-                              z=z, k=k,
-                              timestepping=timestepping,
-                              parameters=parameters,
-                              output=output,
-                              fieldlist=fieldlist)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="CG",
+                  timestepping=timestepping,
+                  parameters=parameters,
+                  output=output,
+                  fieldlist=fieldlist)
 
     if vector:
         if DG:
             Space = VectorFunctionSpace(mesh, "DG", 1)
         else:
-            Space = state.V[0]
+            Space = state.spaces.HDiv
         f = Function(Space, name="f")
         fexpr = Expression(("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", "0.0"), L=L)
     else:
         if DG:
-            Space = state.V[1]
+            Space = state.spaces.DG
         else:
-            Space = state.V[2]
+            Space = state.spaces.HDiv_v
         f = Function(Space, name='f')
         fexpr = Expression("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", L=L)
 

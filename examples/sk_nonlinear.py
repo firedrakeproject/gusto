@@ -1,7 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    exp, sin
+from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
+    ExtrudedMesh, exp, sin
 import numpy as np
 import sys
 
@@ -20,34 +19,31 @@ m = PeriodicIntervalMesh(columns, L)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
-
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
-                          z=z, k=k,
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields,
-                          on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
-u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+rho0 = state.fields.rho
+theta0 = state.fields.theta
+
+# spaces
+Vu = u0.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -58,18 +54,18 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 
+x, z = SpatialCoordinate(mesh)
+
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 
-theta_b = Function(state.V[2]).interpolate(thetab)
-rho_b = Function(state.V[1])
+theta_b = Function(Vt).interpolate(thetab)
+rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
-W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = Function(W_DG1).interpolate(Expression("x[0]"))
 a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
@@ -77,18 +73,17 @@ theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0,0.0]))
 
-state.initialise([u0, rho0, theta0])
-state.set_reference_profiles(rho_b, theta_b)
-state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
+state.initialise({'u':u0, 'rho':rho0, 'theta': theta0})
+state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, state.V[0])
-rhoeqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+ueqn = EulerPoincare(state, Vu)
+rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, state.V[2], supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"}, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import FunctionSpace, as_vector, SpatialCoordinate, \
-    VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
+from firedrake import as_vector, SpatialCoordinate, \
+    PeriodicRectangleMesh, ExtrudedMesh, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
@@ -36,14 +36,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Spaces for initialising z, k and velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-x, y, z = SpatialCoordinate(mesh)
-k = Constant([0, 0, 1])
-
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0.,0.,f*0.5])
@@ -64,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -80,32 +72,36 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
-# function spaces, z, k, and the classes above
-state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="RTCF",
-                            z=z, k=k, Omega=Omega,
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            diagnostics=diagnostics,
-                            fieldlist=fieldlist,
-                            diagnostic_fields=diagnostic_fields,
-                            on_sphere=False)
+# function spaces and the classes above
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="RTCF",
+              Coriolis=Omega,
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 ##############################################################################
 # Initial conditions
 ##############################################################################
-# set up functions on the spaces constructed by state
-u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields.u
+b0 = state.fields.b
+
+# spaces
+Vu = u0.function_space()
+Vb = b0.function_space()
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. z comes from x, y, z = SpatialCoordinate(mesh)
+# from the parameters class.
+x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
 bref = z*Nsq
 # interpolate the expression to the function
-b_b = Function(state.V[2]).interpolate(bref)
+b_b = Function(Vb).interpolate(bref)
 
 
 # setup constants
@@ -124,39 +120,28 @@ def n():
 a = -7.5
 Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
-b_pert = Function(state.V[2]).interpolate(b_exp)
+b_pert = Function(Vb).interpolate(b_exp)
 
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
-# interpolate velocity to vector valued function space
-uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
-# project to the function space we actually want to use
-# this step is purely because it is not yet possible to interpolate to the
-# vector function spaces we require for the compatible finite element
-# methods that we use
-u0.project(uinit)
-
 # pass these initial conditions to the state.initialise method
-state.initialise([u0, p0, b0])
+state.initialise({'b': b0})
 # set the background buoyancy
-state.set_reference_profiles(b_b)
-# we want to output the perturbation buoyancy, so tell the dump method
-# which background field to subtract
-state.output.meanfields = {'b':state.bbar}
+state.set_reference_profiles({'b':b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
-ueqn = EulerPoincare(state, state.V[0])
+ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, state.V[2],
+    beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
                          equation_form="advective")
 else:
-    beqn = EmbeddedDGAdvection(state, state.V[2],
+    beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)

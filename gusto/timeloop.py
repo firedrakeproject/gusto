@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
-from gusto.state import IncompressibleState
+from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC, Expression, Function, SpatialCoordinate
 
 
@@ -64,7 +64,7 @@ class Timestepper(BaseTimestepper):
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
 
-        if(isinstance(self.state, IncompressibleState)):
+        if(isinstance(self.linear_solver, IncompressibleSolver)):
             self.incompressible = True
         else:
             self.incompressible = False
@@ -72,12 +72,14 @@ class Timestepper(BaseTimestepper):
     def run(self, t, tmax, pickup=False):
         state = self.state
 
-        state.xn.assign(state.x_init)
-
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
+        # list of fields that are passively advected (and possibly diffused)
+        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
+        # list of fields that are advected as part of the nonlinear iteration
+        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -87,6 +89,7 @@ class Timestepper(BaseTimestepper):
             mu_alpha = [None, None]
 
         with timed_stage("Dump output"):
+            state.setup_dump()
             t = state.dump(t, pickup)
 
         state.coords = Function(state.mesh.coordinates.function_space())
@@ -107,7 +110,8 @@ class Timestepper(BaseTimestepper):
                 # save mesh coords
                 state.coords.interpolate(SpatialCoordinate(state.mesh))
                 with timed_stage("Advection"):
-                    for field, advection in self.advection_dict.iteritems():
+                    for field in fieldlist:
+                        advection = self.advection_dict[field]
                         # first computes ubar from state.xn and state.xnp1
                         advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
@@ -131,11 +135,21 @@ class Timestepper(BaseTimestepper):
                     state.mesh.coordinates.assign(state.coords)
 
             self._apply_bcs()
+
+            for name in passive_fieldlist:
+                field = getattr(state.fields, name)
+                advection = self.advection_dict[name]
+                # first computes ubar from state.xn and state.xnp1
+                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                # advects a field from xn and puts result in xnp1
+                advection.apply(field, field)
+
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
                 for name, diffusion in self.diffusion_dict.iteritems():
-                    diffusion.apply(state.field_dict[name], state.field_dict[name])
+                    field = getattr(state.fields, name)
+                    diffusion.apply(field, field)
 
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
@@ -149,21 +163,10 @@ class AdvectionTimestepper(BaseTimestepper):
     def run(self, t, tmax, x_end=None):
         state = self.state
 
-        state.xn.assign(state.x_init)
-
-        xn_fields = state.field_dict
-        xnp1_fields = {name: func for (name, func) in
-                       zip(state.fieldlist, state.xnp1.split())}
-        for name, func in state.field_dict.iteritems():
-            if name not in state.fieldlist and name in self.advection_dict.keys():
-                xnp1_fields[name] = Function(func.function_space())
-
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
-        for name, func in state.field_dict.iteritems():
-            if name not in state.fieldlist:
-                xnp1_fields[name].assign(xn_fields[name])
 
+        state.setup_dump()
         state.dump()
 
         while t < tmax + 0.5*dt:
@@ -173,20 +176,16 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            for field, advection in self.advection_dict.iteritems():
+            for name, advection in self.advection_dict.iteritems():
+                field = getattr(state.fields, name)
                 # first computes ubar from state.xn and state.xnp1
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects a field from xn and puts result in xnp1
-                advection.apply(xn_fields[field], xnp1_fields[field])
-
-            state.xn.assign(state.xnp1)
-            for name, func in state.field_dict.iteritems():
-                if name not in state.fieldlist and name in self.advection_dict.keys():
-                    xn_fields[name].assign(xnp1_fields[name])
+                # advects field
+                advection.apply(field, field)
 
             state.dump(t, pickup=False)
 
         state.diagnostic_dump()
 
         if x_end is not None:
-            return {field: state.field_dict[field] for field in x_end}
+            return {field: getattr(state.fields, field) for field in x_end}

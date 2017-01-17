@@ -29,7 +29,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     """
 
     # Calculate hydrostatic Pi
-    W = MixedFunctionSpace((state.Vv,state.V[1]))
+    V1 = getattr(state.spaces, "DG")
+    W = MixedFunctionSpace((state.Vv, V1))
     v, pi = TrialFunctions(W)
     dv, dpi = TestFunctions(W)
 
@@ -50,7 +51,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bstring = "top"
 
     arhs = -cp*inner(dv,n)*theta0*pi_boundary*bmeasure
-    if state.parameters.geopotential:
+    if state.geopotential_form:
         Phi = state.Phi
         arhs += div(dv)*Phi*dx - inner(dv,n)*Phi*bmeasure
     else:
@@ -108,7 +109,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
             + dpi*div(theta0*v)*dx
             + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
         )
-        if state.parameters.geopotential:
+        if state.geopotential_form:
             F += - div(dv)*Phi*dx + inner(dv,n)*Phi*bmeasure
         else:
             F += g*inner(dv,state.k)*dx

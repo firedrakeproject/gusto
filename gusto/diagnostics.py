@@ -57,7 +57,7 @@ class CourantNumber(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.field_dict['u']
+        u = state.fields.u
         dt = Constant(state.timestepping.dt)
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
 
@@ -72,7 +72,7 @@ class VerticalVelocity(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.field_dict['u']
+        u = state.fields.u
         w = u[1]
         return self.field(state.mesh).interpolate(w)
 
@@ -87,6 +87,50 @@ class HorizontalalVelocity(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.field_dict['u']
+        u = state.fields.u
         uh = u[0]
         return self.field(state.mesh).interpolate(uh)
+
+
+class Difference(DiagnosticField):
+
+    def __init__(self, state, field1, field2):
+        self.field1 = field1
+        self.field2 = field2
+
+    @property
+    def name(self):
+        return self.field1.name+"_minus_"+self.field2.name
+
+    def field(self, field1):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(self.field1.function_space(), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        return self.field(self.field1).assign(self.field1 - self.field2)
+
+
+class SteadyStateError(Difference):
+
+    def __init__(self, state, name):
+        self.field_name = name
+        self.field1 = getattr(state.fields, name)
+        self.field2 = Function(self.field1.function_space()).assign(self.field1)
+
+    @property
+    def name(self):
+        return self.field_name+"_error"
+
+
+class Perturbation(Difference):
+
+    def __init__(self, state, name):
+        self.field_name = name
+        self.field1 = getattr(state.fields, name)
+        self.field2 = getattr(state.fields, name+'bar')
+
+    @property
+    def name(self):
+        return self.field_name+"_perturbation"
