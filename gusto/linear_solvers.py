@@ -13,10 +13,10 @@ class TimesteppingSolver(object):
     """
     Base class for timestepping linear solvers for Gusto.
 
-    This is a dummy base class where the input is just copied to the output.
+    This is a dummy base class.
 
-    :arg x_in: :class:`.Function` object for the input
-    :arg x_out: :class:`.Function` object for the output
+    :arg state: :class:`.State` object.
+    :arg params (optional): solver parameters
     """
     __metaclass__ = ABCMeta
 
@@ -65,6 +65,10 @@ class CompressibleSolver(TimesteppingSolver):
     (3) Reconstruct theta
 
     :arg state: a :class:`.State` object containing everything else.
+    :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
+    quadrature degree in the horizontal direction and q_v is that in
+    the vertical direction
+    :arg params (optional): solver parameters
     """
 
     def __init__(self, state, quadrature_degree=None, params=None):
@@ -74,7 +78,7 @@ class CompressibleSolver(TimesteppingSolver):
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
         else:
-            self.quadrature_degree = 5
+            self.quadrature_degree = (5, 5)
 
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
@@ -145,8 +149,8 @@ class CompressibleSolver(TimesteppingSolver):
             return k*inner(u,k)
 
         # specify degree for some terms as estimated degree is too large
-        dxp = dx(degree=(self.quadrature_degree, self.quadrature_degree))
-        dS_vp = dS_v(degree=(self.quadrature_degree, self.quadrature_degree))
+        dxp = dx(degree=(self.quadrature_degree))
+        dS_vp = dS_v(degree=(self.quadrature_degree))
 
         eqn = (
             inner(w, (u - u_in))*dx
