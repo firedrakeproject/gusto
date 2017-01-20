@@ -111,6 +111,8 @@ b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
+incompressible_hydrostatic_balance(state, b_b, p0)
+
 # interpolate velocity to vector valued function space
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
