@@ -356,7 +356,7 @@ class ShallowWaterForcing(Forcing):
 
         state = self.state
         g = state.parameters.g
-        f = state.f
+        f = state.fields.coriolis
 
         Vu = state.spaces.HDiv
         W = state.W
@@ -376,11 +376,12 @@ class ShallowWaterForcing(Forcing):
             (-f*inner(w, state.perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
 
-        if hasattr(state, "topography"):
-            print "JEMMA, putting topography in forcing"
-            b = state.topography
+        try:
+            b = state.fields.topography
             print b.dat.data.min(), b.dat.data.max()
             L += g*div(w)*b*dx - g*inner(jump(w, n), un('+')*b('+') - un('-')*b('-'))*dS
+        except AttributeError:
+            pass
 
         if self.euler_poincare:
             L -= 0.5*div(w)*inner(u0, u0)*dx
