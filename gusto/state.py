@@ -38,7 +38,7 @@ class FieldCreator(object):
                 func.rename(name)
                 self.fields.append(func)
 
-    def __call__(self, name, space, dump=True, pickup=True):
+    def __call__(self, name, space=None, dump=True, pickup=True):
         try:
             return getattr(self, name)
         except AttributeError:

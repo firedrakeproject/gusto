@@ -46,7 +46,8 @@ def setup_sw(dirname, euler_poincare):
     # Coriolis expression
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
-    state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+    f = state.fields("coriolis", Function(V))
+    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
