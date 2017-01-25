@@ -45,7 +45,8 @@ Omega = Constant(parameters.Omega)
 x = SpatialCoordinate(mesh)
 fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+f = state.fields("coriolis", V)
+f.interpolate(fexpr)  # Coriolis frequency (1/s)
 u_max = Constant(u_0)
 
 # interpolate initial conditions

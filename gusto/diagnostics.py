@@ -77,8 +77,8 @@ class VerticalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(w)
 
 
-class HorizontalalVelocity(DiagnosticField):
-    name = "HorizontalalVelocity"
+class HorizontalVelocity(DiagnosticField):
+    name = "HorizontalVelocity"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -92,45 +92,70 @@ class HorizontalalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(uh)
 
 
-class Difference(DiagnosticField):
+class Sum(DiagnosticField):
 
-    def __init__(self, state, field1, field2):
-        self.field1 = field1
-        self.field2 = field2
+    def __init__(self, fieldname1, fieldname2):
+        self.fieldname1 = fieldname1
+        self.fieldname2 = fieldname2
 
     @property
     def name(self):
-        return self.field1.name+"_minus_"+self.field2.name
+        return self.fieldname1+"_plus_"+self.fieldname2
 
     def field(self, field1):
         if hasattr(self, "_field"):
             return self._field
-        self._field = Function(self.field1.function_space(), name=self.name)
+        self._field = Function(field1.function_space(), name=self.name)
         return self._field
 
     def compute(self, state):
-        return self.field(self.field1).assign(self.field1 - self.field2)
+        field1 = state.fields(self.fieldname1)
+        field2 = state.fields(self.fieldname2)
+        return self.field(field1).assign(field1 + field2)
+
+
+class Difference(DiagnosticField):
+
+    def __init__(self, fieldname1, fieldname2):
+        self.fieldname1 = fieldname1
+        self.fieldname2 = fieldname2
+
+    @property
+    def name(self):
+        return self.fieldname1+"_minus_"+self.fieldname2
+
+    def field(self, field1):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(field1.function_space(), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        field1 = state.fields(self.fieldname1)
+        field2 = state.fields(self.fieldname2)
+        return self.field(field1).assign(field1 - field2)
 
 
 class SteadyStateError(Difference):
 
     def __init__(self, state, name):
-        self.field_name = name
-        self.field1 = getattr(state.fields, name)
-        self.field2 = Function(self.field1.function_space()).assign(self.field1)
+        self.fieldname1 = name
+        self.fieldname2 = name+'_init'
+        field1 = state.fields(name)
+        field2 = state.fields(self.fieldname2, field1.function_space())
+        field2.assign(field1)
 
     @property
     def name(self):
-        return self.field_name+"_error"
+        return self.fieldname1+"_error"
 
 
 class Perturbation(Difference):
 
     def __init__(self, state, name):
-        self.field_name = name
-        self.field1 = getattr(state.fields, name)
-        self.field2 = getattr(state.fields, name+'bar')
+        self.fieldname1 = name
+        self.fieldname2 = name+'bar'
 
     @property
     def name(self):
-        return self.field_name+"_perturbation"
+        return self.fieldname1+"_perturbation"
