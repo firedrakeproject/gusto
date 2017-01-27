@@ -18,18 +18,14 @@ def incompressible_hydrostatic_balance(state, b0, p0, params=None):
     v = TrialFunction(state.Vv)
     w = TestFunction(state.Vv)
 
-    if(state.mesh.geometric_dimension() == 2):
-        bcs = [DirichletBC(state.Vv, Expression(("0.", "0.")), "bottom")]
-    elif(state.mesh.geometric_dimension() == 3):
-        bcs = [DirichletBC(state.Vv, Expression(("0.", "0.", "0.")), "bottom")]
+    unp1 = state.xnp1.split()[0]
+    dim = unp1.ufl_element().value_shape()[0]
+    bc = ("0.0",)*dim
+
+    bcs = [DirichletBC(state.Vv, Expression(bc), "bottom")]
 
     a = inner(w, v)*dx
-
-    if(state.mesh.geometric_dimension() == 2):
-        L = w[1]*b0*dx
-    elif(state.mesh.geometric_dimension() == 3):
-        L = w[2]*b0*dx
-
+    L = inner(state.k, w)*b0*dx
     F = Function(state.Vv)
 
     solve(a == L, F, bcs=bcs)
@@ -41,10 +37,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    if(state.mesh.geometric_dimension() == 2):
-        bcs = [DirichletBC(WV[0], Expression(("0.", "0.")), "bottom")]
-    elif(state.mesh.geometric_dimension() == 3):
-        bcs = [DirichletBC(WV[0], Expression(("0.", "0.", "0.")), "bottom")]
+    bcs = [DirichletBC(WV[0], Expression(bc), "bottom")]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
