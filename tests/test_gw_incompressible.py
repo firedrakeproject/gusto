@@ -61,6 +61,7 @@ def setup_gw(dirname):
     deltaTheta = 1.0e-2
     theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
     b0.interpolate(b_b + theta_pert)
+    incompressible_hydrostatic_balance(state, b_b, p0)
     u0.project(as_vector([20.0,0.0]))
 
     state.initialise([u0, p0, b0])
