@@ -162,13 +162,10 @@ class State(object):
     def setup_dump(self):
 
         # setup dump files
-
         # check for existence of directory so as not to overwrite
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir):
-            exit("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
