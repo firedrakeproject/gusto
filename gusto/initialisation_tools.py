@@ -12,7 +12,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve
 
 
-def incompressible_hydrostatic_balance(state, b0, p0, params=None):
+def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
 
     # get F
     v = TrialFunction(state.Vv)
@@ -22,7 +22,12 @@ def incompressible_hydrostatic_balance(state, b0, p0, params=None):
     dim = unp1.ufl_element().value_shape()[0]
     bc = ("0.0",)*dim
 
-    bcs = [DirichletBC(state.Vv, Expression(bc), "bottom")]
+    if top:
+        bstring = "top"
+    else:
+        bstring = "bottom"
+
+    bcs = [DirichletBC(state.Vv, Expression(bc), bstring)]
 
     a = inner(w, v)*dx
     L = inner(state.k, w)*b0*dx
@@ -37,7 +42,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], Expression(bc), "bottom")]
+    bcs = [DirichletBC(WV[0], Expression(bc), bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
