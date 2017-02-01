@@ -1,15 +1,24 @@
 from gusto import *
-from firedrake import Expression, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    sin
-import numpy as np
+from firedrake import SpatialCoordinate, \
+    VectorFunctionSpace, PeriodicRectangleMesh, ExtrudedMesh, \
+    sin, pi
+
+
+def max(f):
+    fmax = op2.Global(1, [-1000], dtype=float)
+    op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
+    {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+    }""", "maxify"),
+                 f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+    return fmax.data[0]
 
 
 def setup_gw(dirname):
     nlayers = 10  # horizontal layers
     columns = 30  # number of columns
     L = 1.e5
-    m = PeriodicIntervalMesh(columns, L)
+    m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
     dt = 6.0
 
     # build volume mesh
@@ -18,11 +27,10 @@ def setup_gw(dirname):
 
     # Space for initialising velocity
     W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
 
     # vertical coordinate and normal
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
+    x, y, z = SpatialCoordinate(mesh)
+    k = Constant([0, 0, 1])
 
     fieldlist = ['u', 'p', 'b']
     timestepping = TimesteppingParameters(dt=dt)
@@ -32,7 +40,7 @@ def setup_gw(dirname):
     diagnostic_fields = [CourantNumber()]
 
     state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="CG",
+                                family="RTCF",
                                 z=z, k=k,
                                 timestepping=timestepping,
                                 output=output,
@@ -55,14 +63,15 @@ def setup_gw(dirname):
 
     b_b = Function(state.V[2]).interpolate(bref)
 
-    W_DG1 = FunctionSpace(mesh, "DG", 1)
-    x = Function(W_DG1).interpolate(Expression("x[0]"))
-    a = 5.0e3
-    deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
-    b0.interpolate(b_b + theta_pert)
-    incompressible_hydrostatic_balance(state, b_b, p0)
-    u0.project(as_vector([20.0,0.0]))
+    a = Constant(5.0e3)
+    deltab = Constant(1.0e-2)
+    H = Constant(H)
+    L = Constant(L)
+    b_pert = deltab*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
+    b0.interpolate(b_b + b_pert)
+    incompressible_hydrostatic_balance(state, b0, p0)
+    uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0,0.0]))
+    u0.project(uinit)
 
     state.initialise([u0, p0, b0])
     state.set_reference_profiles(b_b)
@@ -92,16 +101,54 @@ def setup_gw(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           forcing)
 
-    return stepper, 10*dt
+    return b0, p0, mesh, state, stepper, 5*dt
 
 
 def run_gw_incompressible(dirname):
 
-    stepper, tmax = setup_gw(dirname)
+    b0, p0, mesh, state, stepper, tmax = setup_gw(dirname)
     stepper.run(t=0, tmax=tmax)
+
+    # get pressure gradient
+    V0 = state.V[0]
+    g = TrialFunction(V0)
+    wg = TestFunction(V0)
+
+    n = FacetNormal(mesh)
+
+    a = inner(wg,g)*dx
+    L = -div(wg)*p0*dx + inner(wg,n)*p0*ds_tb
+    pgrad = Function(V0)
+    solve(a == L, pgrad)
+
+    # get difference between b0 and dp0/dz
+    V1 = state.V[1]
+    phi = TestFunction(V1)
+    m = TrialFunction(V1)
+
+    a = phi*m*dx
+    L = phi*(b0-pgrad[2])*dx
+    diff = Function(V1)
+    solve(a == L, diff)
+
+    # get v component of the velocity
+    u = state.field_dict['u']
+    v = u[1]
+
+    tri = TrialFunction(V1)
+    tes = TestFunction(V1)
+
+    ax = inner(tes,tri)*dx
+    Lx = inner(tes,v)*dx
+    vproj = Function(V1)
+    solve(ax == Lx, vproj)
+
+    return diff, vproj
 
 
 def test_gw(tmpdir):
 
     dirname = str(tmpdir)
-    run_gw_incompressible(dirname)
+    diff, v = run_gw_incompressible(dirname)
+    assert max(diff) < 0.05
+    assert max(v) < 1.e-10
