@@ -129,6 +129,9 @@ b_pert = Function(state.V[2]).interpolate(b_exp)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
+# hydrostatic initialisation
+incompressible_hydrostatic_balance(state, b0, p0)
+
 # interpolate velocity to vector valued function space
 uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
 # project to the function space we actually want to use

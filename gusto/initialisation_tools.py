@@ -5,10 +5,69 @@ as balanced initial conditions.
 
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
+    TestFunction, TrialFunction, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
     Expression, Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, split
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
+
+
+def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
+
+    # get F
+    v = TrialFunction(state.Vv)
+    w = TestFunction(state.Vv)
+
+    unp1 = state.xnp1.split()[0]
+    bc = zero(unp1.ufl_shape)
+
+    if top:
+        bstring = "top"
+    else:
+        bstring = "bottom"
+
+    bcs = [DirichletBC(state.Vv, bc, bstring)]
+
+    a = inner(w, v)*dx
+    L = inner(state.k, w)*b0*dx
+    F = Function(state.Vv)
+
+    solve(a == L, F, bcs=bcs)
+
+    # define mixed function space
+    WV = (state.Vv)*(state.V[1])
+
+    # get pprime
+    v, pprime = TrialFunctions(WV)
+    w, phi = TestFunctions(WV)
+
+    bcs = [DirichletBC(WV[0], bc, bstring)]
+
+    a = (
+        inner(w, v) + div(w)*pprime + div(v)*phi
+    )*dx
+    L = phi*div(F)*dx
+    w1 = Function(WV)
+
+    if(params is None):
+        params = {'ksp_type':'gmres',
+                  'pc_type': 'fieldsplit',
+                  'pc_fieldsplit_type': 'schur',
+                  'pc_fieldsplit_schur_fact_type': 'full',
+                  'pc_fieldsplit_schur_precondition': 'selfp',
+                  'fieldsplit_1_ksp_type': 'preonly',
+                  'fieldsplit_1_pc_type': 'gamg',
+                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
+                  'fieldsplit_0_ksp_type': 'richardson',
+                  'fieldsplit_0_ksp_max_it': 4,
+                  'ksp_atol': 1.e-08,
+                  'ksp_rtol': 1.e-08}
+
+    solve(a == L, w1, bcs=bcs, solver_parameters=params)
+
+    v, pprime = w1.split()
+    p0.project(pprime)
 
 
 def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
