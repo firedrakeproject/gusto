@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
     Expression, Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -19,15 +19,14 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     w = TestFunction(state.Vv)
 
     unp1 = state.xnp1.split()[0]
-    dim = unp1.ufl_element().value_shape()[0]
-    bc = ("0.0",)*dim
+    bc = zero(unp1.ufl_shape)
 
     if top:
         bstring = "top"
     else:
         bstring = "bottom"
 
-    bcs = [DirichletBC(state.Vv, Expression(bc), bstring)]
+    bcs = [DirichletBC(state.Vv, bc, bstring)]
 
     a = inner(w, v)*dx
     L = inner(state.k, w)*b0*dx
