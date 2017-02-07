@@ -41,7 +41,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], Expression(bc), bstring)]
+    bcs = [DirichletBC(WV[0], bc, bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
@@ -49,22 +49,22 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     L = phi*div(F)*dx
     w1 = Function(WV)
 
-    solver_parameters = {'ksp_type':'gmres',
-                         'pc_type': 'fieldsplit',
-                         'pc_fieldsplit_type': 'schur',
-                         'pc_fieldsplit_schur_fact_type': 'full',
-                         'pc_fieldsplit_schur_precondition': 'selfp',
-                         'fieldsplit_1_ksp_type': 'preonly',
-                         'fieldsplit_1_pc_type': 'gamg',
-                         'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                         'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
-                         'fieldsplit_0_ksp_type': 'richardson',
-                         'fieldsplit_0_ksp_max_it': 4,
-                         'ksp_atol': 1.e-08,
-                         'ksp_rtol': 1.e-08}
+    if(params is None):
+        params = {'ksp_type':'gmres',
+                  'pc_type': 'fieldsplit',
+                  'pc_fieldsplit_type': 'schur',
+                  'pc_fieldsplit_schur_fact_type': 'full',
+                  'pc_fieldsplit_schur_precondition': 'selfp',
+                  'fieldsplit_1_ksp_type': 'preonly',
+                  'fieldsplit_1_pc_type': 'gamg',
+                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
+                  'fieldsplit_0_ksp_type': 'richardson',
+                  'fieldsplit_0_ksp_max_it': 4,
+                  'ksp_atol': 1.e-08,
+                  'ksp_rtol': 1.e-08}
 
-    solve(a == L, w1, bcs=bcs,
-          solver_parameters=solver_parameters)
+    solve(a == L, w1, bcs=bcs, solver_parameters=params)
 
     v, pprime = w1.split()
     p0.project(pprime)
