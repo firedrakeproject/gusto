@@ -40,7 +40,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
             fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
             f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
         else:
-            space = state.spaces.DG
+            space = state.spaces("DG")
             fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
             f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
         f = state.fields("f", space)
@@ -80,11 +80,11 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                 if spatial_opts["supg_params"]["dg_direction"] is None:
                     space = FunctionSpace(mesh, "CG", 1)
                 else:
-                    space = state.spaces.HDiv_v
+                    space = state.spaces("HDiv_v")
             elif "embedded_dg" in spatial_opts:
-                space = state.spaces.HDiv_v
+                space = state.spaces("HDiv_v")
         else:
-            space = state.spaces.DG
+            space = state.spaces("DG")
         f = state.fields("f", space)
         x = SpatialCoordinate(mesh)
         fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
