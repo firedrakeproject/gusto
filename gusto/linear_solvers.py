@@ -114,9 +114,9 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
-        Vu = state.spaces.HDiv
-        Vtheta = state.spaces.HDiv_v
-        Vrho = state.spaces.DG
+        Vu = state.spaces("HDiv")
+        Vtheta = state.spaces("HDiv_v")
+        Vrho = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
@@ -266,9 +266,9 @@ class IncompressibleSolver(TimesteppingSolver):
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
         mu = state.mu
-        Vu = state.spaces.HDiv
-        Vb = state.spaces.HDiv_v
-        Vp = state.spaces.DG
+        Vu = state.spaces("HDiv")
+        Vb = state.spaces("HDiv_v")
+        Vp = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
         u_in, p_in, b_in = split(state.xrhs)
