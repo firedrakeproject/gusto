@@ -10,12 +10,13 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3:3000., 4:1500., 5:750., 6:375}
+    # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
+    ref_dt = {6:375}
     tmax = 5*day
 
 # setup shallow water parameters
 R = 6371220.
-H = 5960.
+H = 1.
 u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
@@ -25,7 +26,7 @@ diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "sw_W2_ref%s_dt%s" % (ref_level, dt)
+    dirname = "sw_hollingsworth_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
@@ -52,18 +53,25 @@ for ref_level, dt in ref_dt.iteritems():
     h0 = Constant(H)
     Omega = Constant(parameters.Omega)
     g = Constant(parameters.g)
-    Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
+    Dexpr = Constant(1.0)
+    bexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
     # Coriolis expression
     fexpr = 2*Omega*x[2]/R0
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)
+    b = state.fields("topography", D0.function_space())
+    b.interpolate(bexpr)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
     state.initialise({'u':u0, 'D':D0})
 
-    ueqn = EulerPoincare(state, u0.function_space())
+    euler_poincare = False
+    if euler_poincare:
+        ueqn = EulerPoincare(state, u0.function_space())
+    else:
+        ueqn = VectorInvariant(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
@@ -72,7 +80,7 @@ for ref_level, dt in ref_dt.iteritems():
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
+    sw_forcing = ShallowWaterForcing(state, euler_poincare=euler_poincare)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,

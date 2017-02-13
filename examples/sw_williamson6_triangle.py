@@ -58,7 +58,8 @@ Dexpr = h0 + R**2/g*(0.5*omega*(2*Omega+omega)*cos(lambda0)**2 + 0.25*K**2*cos(l
 # Coriolis expression
 fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+f = state.fields("coriolis", V)
+f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
 VX = VectorFunctionSpace(mesh, "Lagrange", 1)
 u_init = Function(VX).interpolate(uexpr)
