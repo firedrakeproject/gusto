@@ -57,7 +57,7 @@ class CourantNumber(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.fields.u
+        u = state.fields("u")
         dt = Constant(state.timestepping.dt)
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
 
@@ -72,7 +72,7 @@ class VerticalVelocity(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.fields.u
+        u = state.fields("u")
         w = u[1]
         return self.field(state.mesh).interpolate(w)
 
@@ -87,7 +87,7 @@ class HorizontalVelocity(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.fields.u
+        u = state.fields("u")
         uh = u[0]
         return self.field(state.mesh).interpolate(uh)
 
