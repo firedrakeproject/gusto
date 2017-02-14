@@ -54,7 +54,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=10, dumplist=['u'], perturbation_fields=['b'])
+output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=10, dumplist=['u', 'p', 'b'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -120,7 +120,7 @@ m1 = Constant(2*np.pi/lmda_z1)		# Vertical wavenumber of internal waves
 # Define bouyancy perturbation to represent background soup of internal waves in idealised lab scenario of Park et al.
 b_pert = A_x1*sin(k1*x[0]) + A_z1*sin(m1*x[1])
 # interpolate the expression to the function
-b0.interpolate(b_b)
+b0.interpolate(b_b + b_pert)
 
 incompressible_hydrostatic_balance(state, b_b, p0)
 
