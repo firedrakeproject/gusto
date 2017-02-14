@@ -28,7 +28,7 @@ class Forcing(object):
             self.euler_poincare = euler_poincare
 
         # set up functions
-        self.Vu = state.spaces.HDiv
+        self.Vu = state.spaces("HDiv")
         self.x0 = Function(state.W)   # copy x to here
         self.test = TestFunction(self.Vu)
         self.trial = TrialFunction(self.Vu)
@@ -225,7 +225,7 @@ class EadyForcing(IncompressibleForcing):
         L = super(EadyForcing, self).forcing_term()
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
-        Vp = self.state.spaces.DG
+        Vp = self.state.spaces("DG")
         eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
         L -= dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
