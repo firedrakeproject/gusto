@@ -36,10 +36,11 @@ class Forcing(object):
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
-        self.coriolis = state.Omega is not None or hasattr(state, "f")
+        self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
         self.scaling = Constant(1.)
         self.mu_scaling = Constant(1.)
+        self.topography = hasattr(state.fields, "topography")
 
         self._build_forcing_solvers()
 
@@ -76,6 +77,8 @@ class Forcing(object):
         L = self.scaling * L
         if self.sponge:
             L += self.mu_scaling*self.sponge_term()
+        if self.topography:
+            L += self.topography_term()
         return L
 
     def _build_forcing_solvers(self):
@@ -263,7 +266,7 @@ class ShallowWaterForcing(Forcing):
 
     def coriolis_term(self):
 
-        f = self.state.f
+        f = self.state.fields("coriolis")
         u0, _ = split(self.x0)
         L = -f*inner(self.test, self.state.perp(u0))*dx
         return L
@@ -278,4 +281,14 @@ class ShallowWaterForcing(Forcing):
         L = g*(div(self.test)*D0*dx
                - inner(jump(self.test, n), un('+')*D0('+')
                        - un('-')*D0('-'))*dS)
+        return L
+
+    def topography_term(self):
+        g = self.state.parameters.g
+        u0, _ = split(self.x0)
+        b = self.state.fields("topography")
+        n = FacetNormal(self.state.mesh)
+        un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
+
+        L = g*div(self.w)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
