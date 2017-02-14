@@ -37,14 +37,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Spaces for initialising z, k and velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
 
-# vertical coordinate and normal
-x = SpatialCoordinate(mesh)
-z = Function(W_CG1).interpolate(x[1])
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -62,12 +55,12 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=10, dumplist=['u'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleParameters(geopotential=False, p_0=106141.3045, N=1.957)
+parameters = CompressibleParameters(p_0=106141.3045, N=1.957)
 
 #Physical parameters adjusted for idealised lab experiment of Park et al. (1994):
 #The value of the background buoyancy frequency N is that for their run number 18, which has clear stair-step features.
@@ -86,31 +79,33 @@ diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces, z, k, and the classes above
-state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="CG",
-                            z=z, k=k,
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            diagnostics=diagnostics,
-                            fieldlist=fieldlist,
-                            diagnostic_fields=diagnostic_fields,
-                            on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 ##############################################################################
 # Initial conditions
 ##############################################################################
 # set up functions on the spaces constructed by state
-u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields("u")
+p0 = state.fields("p")
+b0 = state.fields("b")
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
 # from the parameters class. x[1]=z and comes from x=SpatialCoordinate(mesh)
+x = SpatialCoordinate(mesh)
 N = parameters.N
 bref = x[1]*(N**2)
 # interpolate the expression to the function
-b_b = Function(state.V[2]).interpolate(bref)
+Vb = b0.function_space()
+b_b = Function(Vb).interpolate(bref)
 
 # Define constants for bouyancy perturbation:
 g = Constant(9.810616)
@@ -128,37 +123,25 @@ b_pert = A_x1*sin(k1*x[0]) + A_z1*sin(m1*x[1])
 # interpolate the expression to the function
 b0.interpolate(b_b)
 
-
 incompressible_hydrostatic_balance(state, b_b, p0)
 
-# interpolate velocity to vector valued function space
-uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0]))
-# project to the function space we actually want to use
-# this step is purely because it is not yet possible to interpolate to the
-# vector function spaces we require for the compatible finite element
-# methods that we use
-u0.project(uinit)
-
 # pass these initial conditions to the state.initialise method
-state.initialise([u0, p0, b0])
+state.initialise({"u": u0, "p": p0, "b": b0})
 # set the background buoyancy
-state.set_reference_profiles(b_b)
-# we want to output the perturbation buoyancy, so tell the dump method
-# which background field to subtract
-state.output.meanfields = {'b':state.bbar}
+state.set_reference_profiles({"b": b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # advection_dict is a dictionary containing field_name: advection class
-ueqn = EulerPoincare(state, state.V[0])
+ueqn = EulerPoincare(state, u0.function_space())
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, state.V[2],
+    beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
                          equation_form="advective")
 else:
-    beqn = EmbeddedDGAdvection(state, state.V[2],
+    beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
