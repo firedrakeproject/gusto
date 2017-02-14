@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    CellNormal, dot, dS, Constant, warning, Expression, as_vector
+    dot, dS, Constant, warning, Expression, as_vector
 
 
 class Forcing(object):
@@ -60,7 +60,7 @@ class CompressibleForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = state.V[0]
+        Vu = state.spaces("HDiv")
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
@@ -85,7 +85,7 @@ class CompressibleForcing(Forcing):
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
         )
 
-        if state.parameters.geopotential:
+        if state.geopotential_form:
             Phi = state.Phi
             L += self.scaling*div(w)*Phi*dx  # gravity term
         else:
@@ -164,7 +164,7 @@ class IncompressibleForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = state.V[0]
+        Vu = state.spaces("HDiv")
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
@@ -203,7 +203,7 @@ class IncompressibleForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-        Vp = state.V[1]
+        Vp = state.spaces("DG")
         p = TrialFunction(Vp)
         q = TestFunction(Vp)
         self.divu = Function(Vp)
@@ -251,8 +251,8 @@ class EadyForcing(Forcing):
 
         state = self.state
         self.scaling = Constant(1.)
-        Vu = state.V[0]
-        Vp = state.V[1]
+        Vu = state.spaces("HDiv")
+        Vp = state.spaces("DG")
         W = state.W
 
         dbdy = state.parameters.dbdy
@@ -298,9 +298,9 @@ class EadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-# b_forcing
+        # b_forcing
 
-        Vb = state.V[2]
+        Vb = state.spaces("HDiv_v")
 
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
@@ -315,9 +315,9 @@ class EadyForcing(Forcing):
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
 
-# divergence_free
+        # divergence_free
 
-        Vp = state.V[1]
+        Vp = state.spaces("DG")
         p = TrialFunction(Vp)
         q = TestFunction(Vp)
         self.divu = Function(Vp)
@@ -356,9 +356,9 @@ class ShallowWaterForcing(Forcing):
 
         state = self.state
         g = state.parameters.g
-        f = state.f
+        f = state.fields("coriolis")
 
-        Vu = state.V[0]
+        Vu = state.spaces("HDiv")
         W = state.W
 
         self.x0 = Function(W)   # copy x to here
@@ -371,12 +371,14 @@ class ShallowWaterForcing(Forcing):
         w = TestFunction(Vu)
         self.uF = Function(Vu)
 
-        outward_normals = CellNormal(state.mesh)
-        perp = lambda u: cross(outward_normals, u)
         a = inner(w, F)*dx
         L = (
-            (-f*inner(w, perp(u0)) + g*div(w)*D0)*dx
+            (-f*inner(w, state.perp(u0)) + g*div(w)*D0)*dx
             - g*inner(jump(w, n), un('+')*D0('+') - un('-')*D0('-'))*dS)
+
+        if hasattr(state.fields, "topography"):
+            b = state.fields("topography")
+            L += g*div(w)*b*dx - g*inner(jump(w, n), un('+')*b('+') - un('-')*b('-'))*dS
 
         if self.euler_poincare:
             L -= 0.5*div(w)*inner(u0, u0)*dx

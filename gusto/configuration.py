@@ -42,10 +42,10 @@ class OutputParameters(Configuration):
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
-    #: Dump error fields for steady state simulation. Default is False.
-    steady_state_dump_err = {}
-    #: Dictionary of fields for computing perturbations. Default is False.
-    meanfields = {}
+    #: List of fields to dump error fields for steady state simulation
+    steady_state_error_fields = []
+    #: List of fields for computing perturbations
+    perturbation_fields = []
 
 
 class CompressibleParameters(Configuration):
@@ -59,7 +59,6 @@ class CompressibleParameters(Configuration):
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    geopotential = True  # use geopotential for gravity term
 
 
 class ShallowWaterParameters(Configuration):

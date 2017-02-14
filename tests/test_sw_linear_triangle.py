@@ -20,17 +20,17 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=3600.)
-    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_dump_err={'u':True,'D':True}, dumpfreq=12)
+    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u','D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
-    state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                              family="BDM",
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              diagnostics=diagnostics,
-                              fieldlist=fieldlist)
+    state = State(mesh, horizontal_degree=1,
+                  family="BDM",
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  diagnostics=diagnostics,
+                  fieldlist=fieldlist)
 
     g = parameters.g
     Omega = parameters.Omega
@@ -41,20 +41,22 @@ def setup_sw(dirname):
     x = SpatialCoordinate(mesh)
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
-    state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+    f = state.fields("coriolis", Function(V))
+    f.interpolate(fexpr)  # Coriolis frequency (1/s)
     u_max = Constant(u_0)
 
     # interpolate initial conditions
     # Initial/current conditions
-    u0, D0 = Function(state.V[0]), Function(state.V[1])
+    u0 = state.fields("u")
+    D0 = state.fields("D")
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = Constant(parameters.g)
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([u0, D0])
+    state.initialise({'u': u0, 'D': D0})
 
-    Deqn = LinearAdvection(state, state.V[1], state.parameters.H, ibp="once", equation_form="continuity")
+    Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
     advection_dict["D"] = ForwardEuler(state, D0, Deqn)
@@ -82,8 +84,8 @@ def test_sw_linear(tmpdir):
     run_sw(dirname)
     with open(path.join(dirname, "sw_linear_w2/diagnostics.json"), "r") as f:
         data = json.load(f)
-    Dl2 = data["Derr"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["uerr"]["l2"][-1]/data["u"]["l2"][0]
+    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
+    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 
     assert Dl2 < 3.e-3
     assert ul2 < 6.e-2

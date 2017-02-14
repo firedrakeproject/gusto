@@ -15,8 +15,9 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
 
     # get F
-    v = TrialFunction(state.Vv)
-    w = TestFunction(state.Vv)
+    Vv = state.spaces("Vv")
+    v = TrialFunction(Vv)
+    w = TestFunction(Vv)
 
     unp1 = state.xnp1.split()[0]
     bc = zero(unp1.ufl_shape)
@@ -26,16 +27,17 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     else:
         bstring = "bottom"
 
-    bcs = [DirichletBC(state.Vv, bc, bstring)]
+    bcs = [DirichletBC(Vv, bc, bstring)]
 
     a = inner(w, v)*dx
     L = inner(state.k, w)*b0*dx
-    F = Function(state.Vv)
+    F = Function(Vv)
 
     solve(a == L, F, bcs=bcs)
 
     # define mixed function space
-    WV = (state.Vv)*(state.V[1])
+    VDG = state.spaces("DG")
+    WV = (Vv)*(VDG)
 
     # get pprime
     v, pprime = TrialFunctions(WV)
@@ -88,7 +90,9 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     """
 
     # Calculate hydrostatic Pi
-    W = MixedFunctionSpace((state.Vv,state.V[1]))
+    VDG = state.spaces("DG")
+    Vv = state.spaces("Vv")
+    W = MixedFunctionSpace((Vv, VDG))
     v, pi = TrialFunctions(W)
     dv, dpi = TestFunctions(W)
 
@@ -109,7 +113,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bstring = "top"
 
     arhs = -cp*inner(dv,n)*theta0*pi_boundary*bmeasure
-    if state.parameters.geopotential:
+    if state.geopotential_form:
         Phi = state.Phi
         arhs += div(dv)*Phi*dx - inner(dv,n)*Phi*bmeasure
     else:
@@ -167,7 +171,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
             + dpi*div(theta0*v)*dx
             + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
         )
-        if state.parameters.geopotential:
+        if state.geopotential_form:
             F += - div(dv)*Phi*dx + inner(dv,n)*Phi*bmeasure
         else:
             F += g*inner(dv,state.k)*dx

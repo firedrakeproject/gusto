@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 from gusto import *
-from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
-    VectorFunctionSpace
+from firedrake import CubedSphereMesh, ExtrudedMesh, Expression
 import numpy as np
 
 
@@ -32,25 +31,17 @@ def setup_dcmip(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=z_top/nlayers,
                         extrusion_type="radial")
 
-    # Space for initialising velocity
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-    # Make a vertical direction for the linearised advection
-    k = Function(W_VectorCG1).interpolate(Expression(("x[0]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[1]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)","x[2]/pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)")))
-
-    Omega = Function(W_VectorCG1).assign(0.0)
-
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=10.0)
-    output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip")
+    output = OutputParameters(Verbose=True, dumpfreq=1, dirname=dirname+"/dcmip", perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
 
-    state = CompressibleState(mesh, vertical_degree=0, horizontal_degree=0,
-                              family="RTCF", k=k, Omega=Omega,
-                              timestepping=timestepping,
-                              output=output,
-                              parameters=parameters,
-                              fieldlist=fieldlist)
+    state = State(mesh, vertical_degree=0, horizontal_degree=0,
+                  family="RTCF",
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  fieldlist=fieldlist)
 
     # interpolate initial conditions
     g = parameters.g
@@ -62,7 +53,10 @@ def setup_dcmip(dirname):
 
     # interpolate initial conditions
     # Initial/current conditions
-    u0, theta0, rho0 = Function(state.V[0]), Function(state.V[2]), Function(state.V[1])
+    theta0 = state.fields("theta")
+    rho0 = state.fields("rho")
+    Vt = theta0.function_space()
+    Vr = rho0.function_space()
 
     # Helper string processing
     string_expander = {'lat': "asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))", 'lon': "atan2(x[1], x[0])", 'r': "sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])", 'z': "(sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a)"}
@@ -82,13 +76,13 @@ def setup_dcmip(dirname):
 
     rho_expr = "(%(p)s)/(R_d*(%(T_b)s))" % {'p': p_expr, 'T_b': T_b_expr} % string_expander
 
-    theta_b = Function(state.V[2])
+    theta_b = Function(Vt)
     theta_b.interpolate(Expression(theta_b_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 
-    rho_b = Function(state.V[1])
+    rho_b = Function(Vr)
     rho_b.interpolate(Expression(rho_expr, a=a, G=G, T_eq=T_eq, u_0=u_0, N=N, g=g, p_eq=p_eq, R_d=R_d, kappa=kappa, p_0=p_0))
 
-    theta_prime = Function(state.V[2])
+    theta_prime = Function(Vt)
     dis_expr = "a*acos(sin(phi_c)*sin(%(lat)s) + cos(phi_c)*cos(%(lat)s)*cos(%(lon)s - lamda_c))"
 
     theta_prime_expr = "dT*(d*d/(d*d + pow((%(dis)s), 2)))*sin(2*pi*%%(z)s/L_z)" % {'dis': dis_expr} % string_expander
@@ -98,15 +92,14 @@ def setup_dcmip(dirname):
     theta0.assign(theta_b + theta_prime)
     rho0.assign(rho_b)
 
-    state.initialise([u0, rho0, theta0])
-    state.set_reference_profiles(rho_b, theta_b)
-    state.output.meanfields = {'rho':rho_b, 'theta':theta_b}
+    state.initialise({'rho': rho0, 'theta': theta0})
+    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # Set up advection schemes
-    rhoeqn = LinearAdvection(state, state.V[1], qbar=rho_b, ibp="once", equation_form="continuity")
-    thetaeqn = LinearAdvection(state, state.V[2], qbar=theta_b)
+    rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
+    thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
     advection_dict = {}
-    advection_dict["u"] = NoAdvection(state, u0)
+    advection_dict["u"] = NoAdvection(state, state.fields("u"))
     advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
     advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
 

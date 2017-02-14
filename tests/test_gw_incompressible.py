@@ -13,35 +13,32 @@ def setup_gw(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # vertical coordinate and normal
-    x, y, z = SpatialCoordinate(mesh)
-    k = Constant([0, 0, 1])
-
     fieldlist = ['u', 'p', 'b']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
-    parameters = CompressibleParameters(geopotential=False)
+    parameters = CompressibleParameters()
 
-    state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="RTCF",
-                                z=z, k=k,
-                                timestepping=timestepping,
-                                output=output,
-                                parameters=parameters,
-                                fieldlist=fieldlist,
-                                on_sphere=False)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="RTCF",
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  fieldlist=fieldlist)
 
     # Initial conditions
-    u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+    u0 = state.fields("u")
+    p0 = state.fields("p")
+    b0 = state.fields("b")
 
     # z.grad(bref) = N**2
+    x, y, z = SpatialCoordinate(mesh)
     N = parameters.N
     bref = z*(N**2)
 
-    b_b = Function(state.V[2]).interpolate(bref)
+    b_b = Function(b0.function_space()).interpolate(bref)
     b0.interpolate(b_b)
     incompressible_hydrostatic_balance(state, b0, p0)
-    state.initialise([u0, p0, b0])
+    state.initialise({'u': u0, 'p': p0, 'b': b0})
 
     # Set up forcing
     forcing = IncompressibleForcing(state)
@@ -55,7 +52,7 @@ def run_gw_incompressible(dirname):
     dt = state.timestepping.dt
     forcing.apply(dt, state.xn, state.xn, state.xn)
     u = state.xn.split()[0]
-    w = Function(state.V[1]).interpolate(u[2])
+    w = Function(state.spaces("DG")).interpolate(u[2])
     return w
 
 

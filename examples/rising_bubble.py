@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate
+from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate
 import sys
 
 dt = 1.
@@ -17,65 +17,61 @@ ncolumns = int(L/10.)
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# Space for initialising velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-z = Function(W_CG1).interpolate(Expression("x[1]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
-
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'])
+output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = CompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                          family="CG",
-                          z=z, k=k,
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields,
-                          on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
-u0, rho0, theta0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields("u")
+rho0 = state.fields("rho")
+theta0 = state.fields("theta")
+
+# spaces
+Vu = u0.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 
 # Isentropic background state
 Tsurf = 300.
 thetab = Constant(Tsurf)
 
-theta_b = Function(state.V[2]).interpolate(thetab)
-rho_b = Function(state.V[1])
+theta_b = Function(Vt).interpolate(thetab)
+rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
 x = SpatialCoordinate(mesh)
-theta_pert = Function(state.V[2]).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
+theta_pert = Function(Vt).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
 
 theta0.interpolate(theta_b + theta_pert)
 rho0.interpolate(rho_b)
 
-state.initialise([u0, rho0, theta0])
-state.set_reference_profiles(rho_b, theta_b)
-state.output.meanfields = {'rho':state.rhobar, 'theta':state.thetabar}
+state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, state.V[0])
-rhoeqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+ueqn = EulerPoincare(state, Vu)
+rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, state.V[2],
+    thetaeqn = SUPGAdvection(state, Vt,
                              supg_params={"dg_direction":"horizontal"},
                              equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, state.V[2],
+    thetaeqn = EmbeddedDGAdvection(state, Vt,
                                    equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
