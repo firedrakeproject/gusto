@@ -192,7 +192,7 @@ class IncompressibleForcing(Forcing):
     def _build_forcing_solvers(self):
 
         super(IncompressibleForcing, self)._build_forcing_solvers()
-        Vp = self.state.spaces.DG
+        Vp = self.state.spaces("DG")
         p = TrialFunction(Vp)
         q = TestFunction(Vp)
         self.divu = Function(Vp)
@@ -234,10 +234,9 @@ class EadyForcing(IncompressibleForcing):
     def _build_forcing_solvers(self):
 
         super(EadyForcing, self)._build_forcing_solvers()
-        print "JEMMA: made uforcing solver"
         # b_forcing
         dbdy = self.state.parameters.dbdy
-        Vb = self.state.spaces.HDiv_v
+        Vb = self.state.spaces("HDiv_v")
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
         self.bF = Function(Vb)
@@ -251,7 +250,6 @@ class EadyForcing(IncompressibleForcing):
         )
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
-        print "JEMMA: made bforcing solver"
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -280,5 +278,4 @@ class ShallowWaterForcing(Forcing):
         L = g*(div(self.test)*D0*dx
                - inner(jump(self.test, n), un('+')*D0('+')
                        - un('-')*D0('-'))*dS)
-
         return L

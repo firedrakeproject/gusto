@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis
+    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -13,10 +13,10 @@ class TimesteppingSolver(object):
     """
     Base class for timestepping linear solvers for Gusto.
 
-    This is a dummy base class where the input is just copied to the output.
+    This is a dummy base class.
 
-    :arg x_in: :class:`.Function` object for the input
-    :arg x_out: :class:`.Function` object for the output
+    :arg state: :class:`.State` object.
+    :arg params (optional): solver parameters
     """
     __metaclass__ = ABCMeta
 
@@ -65,11 +65,23 @@ class CompressibleSolver(TimesteppingSolver):
     (3) Reconstruct theta
 
     :arg state: a :class:`.State` object containing everything else.
+    :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
+    quadrature degree in the horizontal direction and q_v is that in
+    the vertical direction
+    :arg params (optional): solver parameters
     """
 
-    def __init__(self, state, params=None):
+    def __init__(self, state, quadrature_degree=None, params=None):
 
         self.state = state
+
+        if quadrature_degree is not None:
+            self.quadrature_degree = quadrature_degree
+        else:
+            dgspace = state.spaces("DG")
+            if any(deg > 2 for deg in dgspace.ufl_element().degree()):
+                warning("default quadrature degree most likely not sufficient for this degree element")
+            self.quadrature_degree = (5, 5)
 
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
@@ -102,9 +114,9 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
-        Vu = state.spaces.HDiv
-        Vtheta = state.spaces.HDiv_v
-        Vrho = state.spaces.DG
+        Vu = state.spaces("HDiv")
+        Vtheta = state.spaces("HDiv_v")
+        Vrho = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
@@ -117,8 +129,8 @@ class CompressibleSolver(TimesteppingSolver):
         n = FacetNormal(state.mesh)
 
         # Get background fields
-        thetabar = state.fields.thetabar
-        rhobar = state.fields.rhobar
+        thetabar = state.fields("thetabar")
+        rhobar = state.fields("rhobar")
         pibar = exner(thetabar, rhobar, state)
         pibar_rho = exner_rho(thetabar, rhobar, state)
         pibar_theta = exner_theta(thetabar, rhobar, state)
@@ -140,8 +152,8 @@ class CompressibleSolver(TimesteppingSolver):
             return k*inner(u,k)
 
         # specify degree for some terms as estimated degree is too large
-        dxp = dx(degree=(5,5))
-        dS_vp = dS_v(degree=(5,5))
+        dxp = dx(degree=(self.quadrature_degree))
+        dS_vp = dS_v(degree=(self.quadrature_degree))
 
         eqn = (
             inner(w, (u - u_in))*dx
@@ -254,9 +266,9 @@ class IncompressibleSolver(TimesteppingSolver):
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
         mu = state.mu
-        Vu = state.spaces.HDiv
-        Vb = state.spaces.HDiv_v
-        Vp = state.spaces.DG
+        Vu = state.spaces("HDiv")
+        Vb = state.spaces("HDiv_v")
+        Vp = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
         u_in, p_in, b_in = split(state.xrhs)
@@ -267,7 +279,7 @@ class IncompressibleSolver(TimesteppingSolver):
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = state.fields.bbar
+        bbar = state.fields("bbar")
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector

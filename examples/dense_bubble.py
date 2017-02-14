@@ -41,9 +41,9 @@ for delta, dt in res_dt.iteritems():
                   diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
-    u0 = state.fields.u
-    rho0 = state.fields.rho
-    theta0 = state.fields.theta
+    u0 = state.fields("u")
+    rho0 = state.fields("rho")
+    theta0 = state.fields("theta")
 
     # spaces
     Vu = u0.function_space()
