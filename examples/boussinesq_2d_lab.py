@@ -1,11 +1,10 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     sin, SpatialCoordinate
 import numpy as np
 import sys
 
-dt = 6.
+dt = 0.05
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -62,11 +61,11 @@ output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=10, dumplist=['u
 # and documented in configuration.py
 parameters = CompressibleParameters(p_0=106141.3045, N=1.957)
 
-#Physical parameters adjusted for idealised lab experiment of Park et al. (1994):
-#The value of the background buoyancy frequency N is that for their run number 18, which has clear stair-step features.
-#p_0 was set by assuming an initially hydrostatic fluid and a reference density rho_0=1090.95075 kg m^(-3). 
-#The reference density was found by estimating drho/dz from Fig. 7a of Park et al. (1994), converting to SI units, 
-#and then using the N^2 value above.
+# Physical parameters adjusted for idealised lab experiment of Park et al. (1994):
+# The value of the background buoyancy frequency N is that for their run number 18, which has clear stair-step features.
+# p_0 was set by assuming an initially hydrostatic fluid and a reference density rho_0=1090.95075 kg m^(-3).
+# The reference density was found by estimating drho/dz from Fig. 7a of Park et al. (1994), converting to SI units,
+# and then using the N^2 value above.
 
 
 # class for diagnostics
@@ -110,15 +109,15 @@ b_b = Function(Vb).interpolate(bref)
 # Define constants for bouyancy perturbation:
 g = Constant(9.810616)
 rho_0 = Constant(1090.95075)
-A_x1 = Constant(0) 			#Initial amplitude of internal waves in x-direction (e.g., try setting to zero initially)
-A_z1 = Constant( g/rho_0 * 100./3 ) 	#Initial amplitude of internal waves in z-direction
-lmda_x1 = Constant(1.3/100)		#Horizontal wavelength of internal waves 
-lmda_z1 = Constant(1.3/100)		#Vertical wavelength of internal waves 
-k1 = Constant(2*np.pi/lmda_x1)		#Horizontal wavenumber of internal waves 
-m1 = Constant(2*np.pi/lmda_z1)		#Vertical wavenumber of internal waves
+A_x1 = Constant(0) 			# Initial amplitude of internal waves in x-direction (e.g., try setting to zero initially)
+A_z1 = Constant(g/rho_0 * 100./3) 	# Initial amplitude of internal waves in z-direction
+lmda_x1 = Constant(1.3/100)		# Horizontal wavelength of internal waves
+lmda_z1 = Constant(1.3/100)		# Vertical wavelength of internal waves
+k1 = Constant(2*np.pi/lmda_x1)		# Horizontal wavenumber of internal waves
+m1 = Constant(2*np.pi/lmda_z1)		# Vertical wavenumber of internal waves
 
 
-#Define bouyancy perturbation to represent background soup of internal waves in idealised lab scenario of Park et al.
+# Define bouyancy perturbation to represent background soup of internal waves in idealised lab scenario of Park et al.
 b_pert = A_x1*sin(k1*x[0]) + A_z1*sin(m1*x[1])
 # interpolate the expression to the function
 b0.interpolate(b_b)
