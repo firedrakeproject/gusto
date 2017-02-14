@@ -290,5 +290,5 @@ class ShallowWaterForcing(Forcing):
         n = FacetNormal(self.state.mesh)
         un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
 
-        L = g*div(self.w)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
+        L = g*div(self.test)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
