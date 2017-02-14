@@ -44,8 +44,8 @@ for ref_level, dt in ref_dt.iteritems():
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0 = state.fields.u
-    D0 = state.fields.D
+    u0 = state.fields("u")
+    D0 = state.fields("D")
     x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
     R0 = Constant(R)

@@ -86,8 +86,9 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 ##############################################################################
 # Initial conditions
 ##############################################################################
-u0 = state.fields.u
-b0 = state.fields.b
+u0 = state.fields("u")
+b0 = state.fields("b")
+p0 = state.fields("p")
 
 # spaces
 Vu = u0.function_space()
@@ -124,6 +125,9 @@ b_pert = Function(Vb).interpolate(b_exp)
 
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
+
+# hydrostatic initialisation
+incompressible_hydrostatic_balance(state, b0, p0)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'b': b0})

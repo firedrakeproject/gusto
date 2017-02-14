@@ -32,7 +32,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
-        u0 = state.fields.u
+        u0 = state.fields("u")
         u0.project(uexpr)
 
         if vector:
@@ -69,7 +69,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
 
         uexpr = as_vector([1.0, 0.0])
-        u0 = state.fields.u
+        u0 = state.fields("u")
         u0.project(uexpr)
 
         if spatial_opts is not None:

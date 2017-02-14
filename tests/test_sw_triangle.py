@@ -33,8 +33,8 @@ def setup_sw(dirname, euler_poincare):
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
-    u0 = state.fields.u
-    D0 = state.fields.D
+    u0 = state.fields("u")
+    D0 = state.fields("D")
     x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
     R = Constant(R)
