@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 100.
+dt = 20.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=12*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=60*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -100,9 +100,9 @@ Vb = b0.function_space()
 # from the parameters class.
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
-bref = z*Nsq
+bref = (z-H/2)*Nsq
 # interpolate the expression to the function
-b_b = Function(Vb).interpolate(bref)
+b_b = Function(Vb).project(bref)
 
 
 # setup constants
@@ -138,7 +138,7 @@ state.set_reference_profiles({'b':b_b})
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
-ueqn = EulerPoincare(state, Vu)
+ueqn = AdvectionEquation(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
@@ -148,7 +148,7 @@ else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+advection_dict["u"] = SSPRK3(state, u0, ueqn)
 advection_dict["b"] = SSPRK3(state, b0, beqn)
 
 ##############################################################################
@@ -159,7 +159,7 @@ linear_solver = IncompressibleSolver(state, 2.*L, params=linear_solver_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-forcing = EadyForcing(state)
+forcing = EadyForcing(state, linear=True)
 
 ##############################################################################
 # build time stepper
