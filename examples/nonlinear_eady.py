@@ -159,7 +159,7 @@ linear_solver = IncompressibleSolver(state, 2.*L, params=linear_solver_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-forcing = EadyForcing(state, linear=True)
+forcing = EadyForcing(state, euler_poincare=False)
 
 ##############################################################################
 # build time stepper

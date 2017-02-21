@@ -239,14 +239,9 @@ class EadyForcing(Forcing):
     Forcing class for Eady Boussinesq equations.
     """
 
-    def __init__(self, state, linear=False):
-        self.state = state
-
-        self._build_forcing_solver(linear)
-
-    def _build_forcing_solver(self, linear):
+    def _build_forcing_solver(self):
         """
-        Only put forcing terms into the u equation.
+        Put forcing terms into the u & b equations.
         """
 
         state = self.state
@@ -279,7 +274,7 @@ class EadyForcing(Forcing):
             - dbdy*eady_exp*inner(w,as_vector([0.,1.,0.]))  # Eady forcing
         )*dx
 
-        if not linear:
+        if self.euler_poincare:
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:
@@ -298,7 +293,7 @@ class EadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-        # b_forcing
+# b_forcing
 
         Vb = state.spaces("HDiv_v")
 
@@ -315,7 +310,7 @@ class EadyForcing(Forcing):
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
 
-        # divergence_free
+# divergence_free
 
         Vp = state.spaces("DG")
         p = TrialFunction(Vp)
