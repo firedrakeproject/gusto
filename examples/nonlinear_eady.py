@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 20.
+dt = 30.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=60*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=40*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -139,7 +139,7 @@ state.set_reference_profiles({'b':b_b})
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
-supg = True
+supg = False
 if supg:
     beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
