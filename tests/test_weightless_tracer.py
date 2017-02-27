@@ -42,7 +42,7 @@ def setup_tracer(dirname):
     # spaces
     Vu = u0.function_space()
     Vt = theta0.function_space()
-    Vr = rho.function_space()
+    Vr = rho0.function_space()
 
     # Isentropic background state
     Tsurf = 300.
@@ -65,7 +65,7 @@ def setup_tracer(dirname):
     rho0.interpolate(rho_b)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # set up advection schemes
     ueqn = EulerPoincare(state, Vu)
