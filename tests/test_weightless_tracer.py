@@ -6,73 +6,114 @@ import json
 import pytest
 
 
-def setup_(dirname):
+def setup_tracer(dirname):
 
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H/10.)
-    ncolumns = int(L/10.)
+    nlayers = int(H / 10.)
+    ncolumns = int(L / 10.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-
-    day = 24.*60.*60.
-    u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
+    mesh = ExtrudedMesh(m, layers = nlayers, layer_height = H / nlayers)
 
 
+    fieldlist = ['u', 'rho', 'theta']
+    timestepping = TimesteppingParameters(dt = 1.0, maxk = 4, maxi = 1)
+    output = OutputParameters(dirname=dirname+"/tracer",
+                              dumpfreq = 1,
+                              #dumplist = ['u'],
+                              perturbation_fields=['theta','rho'])
+    parameters = CompressibleParameters()
 
-    fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=1500.)
-    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D','u'])
-    parameters = ShallowWaterParameters(H=H)
+    state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
+                  family="CG",
+                  timestepping = timestepping,
+                  output = output,
+                  parameters = parameters,
+                  fieldlist = fieldlist)
 
-    state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist)
-
-    # interpolate initial conditions
+    # Initial conditions
     u0 = state.fields("u")
-    D0 = state.fields("D")
+    rho0 = state.fields("rho")
+    theta0 = state.fields("theta")
+
+    # spaces
+    Vu = u0.function_space()
+    Vt = theta0.function_space()
+    Vr = rho.function_space()
+
+    # Isentropic background state
+    Tsurf = 300.
+    thetab = Constant(Tsurf)
+
+    theta_b = Function(Vt).interpolate(thetab)
+    rho_b = Function(Vr)
+
+    # Calculate initial rho
+    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+
+    # set up perturbation to theta
     x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
-    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis expression
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
+    theta_pert = Function(Vt).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
+                                                     "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
+                                                     "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
+                                                     xc=500., zc=350., rc=250.))
 
-    u0.project(uexpr)
-    D0.interpolate(Dexpr)
-    state.initialise({'u':u0, 'D':D0})
+    theta0.interpolate(theta_b + theta_pert)
+    rho0.interpolate(rho_b)
 
-    if euler_poincare:
-        ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
-    else:
-        ueqn = VectorInvariant(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
+    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
+    # set up advection schemes
+    ueqn = EulerPoincare(state, Vu)
+    rhoeqn = AdvectionEquation(state, Vr, equation_form = "continuity")
+    thetaeqn = SUPGAdvection(state, Vt,
+                             supg_params = {"dg_direction":"horizontal"},
+                             equation_form = "advective")
+    
+
+    # build advection dictionary
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["D"] = SSPRK3(state, D0, Deqn)
+    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
-    linear_solver = ShallowWaterSolver(state)
+
+    # Set up linear solver
+    schur_params = {'pc_type': 'fieldsplit',
+                'pc_fieldsplit_type': 'schur',
+                'ksp_type': 'gmres',
+                'ksp_monitor_true_residual': True,
+                'ksp_max_it': 100,
+                'ksp_gmres_restart': 50,
+                'pc_fieldsplit_schur_fact_type': 'FULL',
+                'pc_fieldsplit_schur_precondition': 'selfp',
+                'fieldsplit_0_ksp_type': 'richardson',
+                'fieldsplit_0_ksp_max_it': 5,
+                'fieldsplit_0_pc_type': 'bjacobi',
+                'fieldsplit_0_sub_pc_type': 'ilu',
+                'fieldsplit_1_ksp_type': 'richardson',
+                'fieldsplit_1_ksp_max_it': 5,
+                "fieldsplit_1_ksp_monitor_true_residual": True,
+                'fieldsplit_1_pc_type': 'gamg',
+                'fieldsplit_1_pc_gamg_sym_graph': True,
+                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+
+    linear_solver = CompressibleSolver(state, params = schur_params)
+
+    compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,
-                          sw_forcing)
+                          compressible_forcing)
 
     return stepper, 0.25*day
 
