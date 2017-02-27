@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
+from firedrake import as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
     sin, SpatialCoordinate
 import numpy as np
@@ -37,14 +37,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Spaces for initialising z, k and velocity
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-# vertical coordinate and normal
-x = SpatialCoordinate(mesh)
-z = Function(W_CG1).interpolate(x[1])
-k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -62,12 +54,12 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'])
+output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleParameters(geopotential=False)
+parameters = CompressibleParameters()
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -79,42 +71,51 @@ diagnostic_fields = [CourantNumber()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces, z, k, and the classes above
-state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                            family="CG",
-                            z=z, k=k,
-                            timestepping=timestepping,
-                            output=output,
-                            parameters=parameters,
-                            diagnostics=diagnostics,
-                            fieldlist=fieldlist,
-                            diagnostic_fields=diagnostic_fields,
-                            on_sphere=False)
+state = State(mesh, vertical_degree=1, horizontal_degree=1,
+              family="CG",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 ##############################################################################
 # Initial conditions
 ##############################################################################
 # set up functions on the spaces constructed by state
-u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
+u0 = state.fields("u")
+b0 = state.fields("b")
+p0 = state.fields("p")
+
+# spaces
+Vu = u0.function_space()
+Vb = b0.function_space()
+
+x, z = SpatialCoordinate(mesh)
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
 # the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class. x[1]=z and comes from x=SpatialCoordinate(mesh)
+# from the parameters class.
 N = parameters.N
-bref = x[1]*(N**2)
+bref = z*(N**2)
 # interpolate the expression to the function
-b_b = Function(state.V[2]).interpolate(bref)
+b_b = Function(Vb).interpolate(bref)
 
 # setup constants
 a = Constant(5.0e3)
 deltab = Constant(1.0e-2)
 H = Constant(H)
 L = Constant(L)
-b_pert = deltab*sin(np.pi*x[1]/H)/(1 + (x[0] - L/2)**2/a**2)
+b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
+incompressible_hydrostatic_balance(state, b_b, p0)
+
 # interpolate velocity to vector valued function space
+W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
 # project to the function space we actually want to use
 # this step is purely because it is not yet possible to interpolate to the
@@ -123,25 +124,22 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise([u0, p0, b0])
+state.initialise({'u': u0, 'b': b0})
 # set the background buoyancy
-state.set_reference_profiles(b_b)
-# we want to output the perturbation buoyancy, so tell the dump method
-# which background field to subtract
-state.output.meanfields = {'b':state.bbar}
+state.set_reference_profiles({'b':b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # advection_dict is a dictionary containing field_name: advection class
-ueqn = EulerPoincare(state, state.V[0])
+ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, state.V[2],
+    beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
                          equation_form="advective")
 else:
-    beqn = EmbeddedDGAdvection(state, state.V[2],
+    beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)

@@ -1,24 +1,34 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, sin
-import numpy as np
+from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, DirichletBC
+import sys
 
+if '--running-tests' in sys.argv:
+    res_dt = {800.:4.}
+    tmax = 4.
+else:
+    res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+    tmax = 15.*60.
 
-def setup_sk(dirname):
-    nlayers = 10  # horizontal layers
-    columns = 30  # number of columns
-    L = 1.e5
+L = 51200.
+
+# build volume mesh
+H = 6400.  # Height position of the model top
+
+for delta, dt in res_dt.iteritems():
+
+    dirname = "tracer_dx%s_dt%s" % (delta, dt)
+    nlayers = int(H/delta)  # horizontal layers
+    columns = int(L/delta)  # number of columns
+
     m = PeriodicIntervalMesh(columns, L)
-    dt = 6.0
-
-    # build volume mesh
-    H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
+    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
+    output = OutputParameters(dirname=dirname, dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
+    diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [CourantNumber()]
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -26,6 +36,7 @@ def setup_sk(dirname):
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
+                  diagnostics=diagnostics,
                   fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
 
@@ -33,46 +44,55 @@ def setup_sk(dirname):
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
+    water0 = state.fields("water", theta0.function_space())
 
     # spaces
     Vu = u0.function_space()
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
-    # Thermodynamic constants required for setting initial conditions
-    # and reference profiles
-    g = parameters.g
-    N = parameters.N
-
-    # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-    x, z = SpatialCoordinate(mesh)
+    # Isentropic background state
     Tsurf = 300.
-    thetab = Tsurf*exp(N**2*z/g)
+    thetab = Constant(Tsurf)
 
     theta_b = Function(Vt).interpolate(thetab)
     rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b)
+    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
+    x = SpatialCoordinate(mesh)
     a = 5.0e3
     deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+    theta_pert = Function(theta0.function_space()).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=parameters.g))
     theta0.interpolate(theta_b + theta_pert)
+    water0.interpolate(theta_pert)
     rho0.assign(rho_b)
-    u0.project(as_vector([20.0,0.0]))
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise({'u':u0, 'rho':rho0, 'theta': theta0, 'water': water0})
+    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
+    supg = True
+    if supg:
+        thetaeqn = SUPGAdvection(state, Vt,
+                                 supg_params={"dg_direction":"horizontal"},
+                                 equation_form="advective")
+        watereqn = SUPGAdvection(state, Vt,
+                                 supg_params={"dg_direction":"horizontal"},
+                                 equation_form="advective")
+    else:
+        thetaeqn = EmbeddedDGAdvection(state, Vt,
+                                       equation_form="advective")
+        watereqn = EmbeddedDGAdvection(state, Vt,
+                                       equation_form="advective")
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
     advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+    advection_dict["water"] = SSPRK3(state, water0, watereqn)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -104,27 +124,13 @@ def setup_sk(dirname):
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
 
+    bcs = [DirichletBC(Vu, 0.0, "bottom"),
+           DirichletBC(Vu, 0.0, "top")]
+    diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
+                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.), mu=Constant(10./delta))}
+
     # build time stepper
     stepper = Timestepper(state, advection_dict, linear_solver,
-                          compressible_forcing)
+                          compressible_forcing, diffusion_dict)
 
-    return stepper, 10*dt
-
-
-def run_sk_linear(dirname):
-
-    stepper, tmax = setup_sk(dirname)
-    stepper.run(t=0., tmax=tmax)
-    import os
-    os.system('mkdir sk_nonlinear/bk')
-    os.system('mv sk_nonlinear/field_output* sk_nonlinear/bk')
-    stepper, tmax = setup_sk(dirname)
-    # should pick up from the end of the previous run.
-    dt = stepper.state.timestepping.dt
-    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
-
-
-def test_sk(tmpdir):
-
-    dirname = str(tmpdir)
-    run_sk_linear(dirname)
+    stepper.run(t=0, tmax=tmax)

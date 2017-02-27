@@ -27,21 +27,22 @@ parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = ShallowWaterState(mesh, vertical_degree=None, horizontal_degree=1,
-                          family="BDM",
-                          timestepping=timestepping,
-                          output=output,
-                          parameters=parameters,
-                          diagnostics=diagnostics,
-                          fieldlist=fieldlist,
-                          diagnostic_fields=diagnostic_fields)
+state = State(mesh, horizontal_degree=1,
+              family="BDM",
+              timestepping=timestepping,
+              output=output,
+              parameters=parameters,
+              diagnostics=diagnostics,
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 g = parameters.g
 Omega = parameters.Omega
 
 # interpolate initial conditions
 # Initial/current conditions
-u0, D0 = Function(state.V[0]), Function(state.V[1])
+u0 = state.fields("u")
+D0 = state.fields("D")
 x = SpatialCoordinate(mesh)
 R = Constant(R)
 V = FunctionSpace(mesh, "CG", 2)
@@ -57,16 +58,17 @@ Dexpr = h0 + R**2/g*(0.5*omega*(2*Omega+omega)*cos(lambda0)**2 + 0.25*K**2*cos(l
 # Coriolis expression
 fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
+f = state.fields("coriolis", V)
+f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
 VX = VectorFunctionSpace(mesh, "Lagrange", 1)
 u_init = Function(VX).interpolate(uexpr)
 u0.project(u_init)
 D0.interpolate(Dexpr)
 
-state.initialise([u0, D0])
-ueqn = EulerPoincare(state, state.V[0])
-Deqn = AdvectionEquation(state, state.V[1], equation_form="continuity")
+state.initialise({'u': u0, 'D': D0})
+ueqn = EulerPoincare(state, u0.function_space())
+Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 advection_dict = {}
 advection_dict["u"] = NoAdvection(state, u0, None)
 advection_dict["D"] = SSPRK3(state, D0, Deqn)

@@ -1,106 +1,63 @@
 from gusto import *
-from firedrake import Expression, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    sin
-import numpy as np
+from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh
 
 
 def setup_gw(dirname):
     nlayers = 10  # horizontal layers
     columns = 30  # number of columns
     L = 1.e5
-    m = PeriodicIntervalMesh(columns, L)
+    m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
     dt = 6.0
 
     # build volume mesh
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # Space for initialising velocity
-    W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    W_CG1 = FunctionSpace(mesh, "CG", 1)
-
-    # vertical coordinate and normal
-    z = Function(W_CG1).interpolate(Expression("x[1]"))
-    k = Function(W_VectorCG1).interpolate(Expression(("0.","1.")))
-
     fieldlist = ['u', 'p', 'b']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
-    diagnostics = Diagnostics(*fieldlist)
-    parameters = CompressibleParameters(geopotential=False)
-    diagnostic_fields = [CourantNumber()]
+    parameters = CompressibleParameters()
 
-    state = IncompressibleState(mesh, vertical_degree=1, horizontal_degree=1,
-                                family="CG",
-                                z=z, k=k,
-                                timestepping=timestepping,
-                                output=output,
-                                parameters=parameters,
-                                diagnostics=diagnostics,
-                                fieldlist=fieldlist,
-                                diagnostic_fields=diagnostic_fields,
-                                on_sphere=False)
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="RTCF",
+                  timestepping=timestepping,
+                  output=output,
+                  parameters=parameters,
+                  fieldlist=fieldlist)
 
     # Initial conditions
-    u0, p0, b0 = Function(state.V[0]), Function(state.V[1]), Function(state.V[2])
-
-    # Thermodynamic constants required for setting initial conditions
-    # and reference profiles
-    N = parameters.N
+    u0 = state.fields("u")
+    p0 = state.fields("p")
+    b0 = state.fields("b")
 
     # z.grad(bref) = N**2
+    x, y, z = SpatialCoordinate(mesh)
     N = parameters.N
     bref = z*(N**2)
 
-    b_b = Function(state.V[2]).interpolate(bref)
-
-    W_DG1 = FunctionSpace(mesh, "DG", 1)
-    x = Function(W_DG1).interpolate(Expression("x[0]"))
-    a = 5.0e3
-    deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
-    b0.interpolate(b_b + theta_pert)
-    u0.project(as_vector([20.0,0.0]))
-
-    state.initialise([u0, p0, b0])
-    state.set_reference_profiles(b_b)
-    state.output.meanfields = {'b':state.bbar}
-
-    # Set up advection schemes
-    ueqn = EulerPoincare(state, state.V[0])
-    beqn = EmbeddedDGAdvection(state, state.V[2], equation_form="advective")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["b"] = SSPRK3(state, b0, beqn)
-
-    # Set up linear solver
-    params = {'ksp_type':'gmres',
-              'pc_type':'fieldsplit',
-              'pc_fieldsplit_type':'additive',
-              'fieldsplit_0_pc_type':'lu',
-              'fieldsplit_1_pc_type':'lu',
-              'fieldsplit_0_ksp_type':'preonly',
-              'fieldsplit_1_ksp_type':'preonly'}
-    linear_solver = IncompressibleSolver(state, L, params=params)
+    b_b = Function(b0.function_space()).interpolate(bref)
+    b0.interpolate(b_b)
+    incompressible_hydrostatic_balance(state, b0, p0)
+    state.initialise({'u': u0, 'p': p0, 'b': b0})
 
     # Set up forcing
     forcing = IncompressibleForcing(state)
 
-    # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
-                          forcing)
-
-    return stepper, 10*dt
+    return state, forcing
 
 
 def run_gw_incompressible(dirname):
 
-    stepper, tmax = setup_gw(dirname)
-    stepper.run(t=0, tmax=tmax)
+    state, forcing = setup_gw(dirname)
+    dt = state.timestepping.dt
+    forcing.apply(dt, state.xn, state.xn, state.xn)
+    u = state.xn.split()[0]
+    w = Function(state.spaces("DG")).interpolate(u[2])
+    return w
 
 
 def test_gw(tmpdir):
 
     dirname = str(tmpdir)
-    run_gw_incompressible(dirname)
+    w = run_gw_incompressible(dirname)
+    assert max(abs(w.dat.data.min()), w.dat.data.max()) < 3e-8
