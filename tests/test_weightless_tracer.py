@@ -26,12 +26,14 @@ def setup_tracer(dirname):
                               #dumplist = ['u'],
                               perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
+    diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
                   family="CG",
                   timestepping = timestepping,
                   output = output,
                   parameters = parameters,
+                  diagnostics = diagnostics,
                   fieldlist = fieldlist)
 
     # Initial conditions
