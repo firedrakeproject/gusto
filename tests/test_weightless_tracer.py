@@ -11,8 +11,8 @@ def setup_tracer(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 10.)
-    ncolumns = int(L / 10.)
+    nlayers = int(H / 100.)
+    ncolumns = int(L / 100.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
