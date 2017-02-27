@@ -24,7 +24,7 @@ def setup_tracer(dirname):
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
                               #dumplist = ['u'],
-                              perturbation_fields=['theta','rho'])
+                              perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
@@ -115,25 +115,22 @@ def setup_tracer(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 0.25*day
+    return stepper, 5.0
 
 
-def run_sw(dirname, euler_poincare):
+def run_tracer(dirname):
 
-    stepper, tmax = setup_sw(dirname, euler_poincare)
+    stepper, tmax = setup_tracer(dirname)
     stepper.run(t=0, tmax=tmax)
 
-
-@pytest.mark.parametrize("euler_poincare", [True, False])
-def test_sw_setup(tmpdir, euler_poincare):
+def test_tracer_setup(tmpdir):
 
     dirname = str(tmpdir)
-    run_sw(dirname, euler_poincare=euler_poincare)
-    with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
+    run_tracer(dirname)
+    with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
         data = json.load(f)
     print data.keys()
-    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
+#    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
+#    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 
-    assert Dl2 < 5.e-4
-    assert ul2 < 5.e-3
+#    assert Dl2 < 5.e-4
