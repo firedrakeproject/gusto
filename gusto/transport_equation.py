@@ -36,7 +36,7 @@ class TransportEquation(object):
 
         # find out if we are CG
         nvertex = V.ufl_domain().ufl_cell().num_vertices()
-        entity_dofs = V.fiat_element.entity_dofs()
+        entity_dofs = V.finat_element.entity_dofs()
         # If there are as many dofs on vertices as there are vertices,
         # assume a continuous space.
         try:
