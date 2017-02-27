@@ -135,7 +135,7 @@ class AdvectionEquation(TransportEquation):
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
-    :arg vector_manifold: Boolean. If true adds extra terms that are needed for 
+    :arg vector_manifold: Boolean. If true adds extra terms that are needed for
     advecting vector equations on manifolds.
     :arg equation_form: (optional) string, can take the values 'continuity',
                         which means the equation is in continuity form
@@ -174,17 +174,18 @@ class AdvectionEquation(TransportEquation):
             L += dot(jump(self.test), (self.un('+')*q('+')
                                        - self.un('-')*q('-')))*self.dS
             if self.ibp == "twice":
-                L -= (inner(self.test('+'), dot(self.ubar('+'), self.n('+'))*q('+'))
-                      + inner(self.test('-'), dot(self.ubar('-'),
-                                                  self.n('-'))*q('-')))*self.dS
+                L -= (inner(self.test('+'),
+                            dot(self.ubar('+'), self.n('+'))*q('+'))
+                      + inner(self.test('-'),
+                              dot(self.ubar('-'), self.n('-'))*q('-')))*self.dS
         if self.vector_manifold:
             un = self.un
             w = self.test
             u = q
             n = self.n
-            L += un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))
-            L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))
-
+            dS = self.dS
+            L += un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))*dS
+            L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))*dS
         return L
 
 
