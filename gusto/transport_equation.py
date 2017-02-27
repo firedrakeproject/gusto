@@ -135,6 +135,8 @@ class AdvectionEquation(TransportEquation):
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
+    :arg vector_manifold: Boolean. If true adds extra terms that are needed for 
+    advecting vector equations on manifolds.
     :arg equation_form: (optional) string, can take the values 'continuity',
                         which means the equation is in continuity form
                         L(q) = div(u*q), or 'advective', which means the
@@ -143,12 +145,17 @@ class AdvectionEquation(TransportEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="once", equation_form="advective", solver_params=None):
+    def __init__(self, state, V, ibp="once", equation_form="advective",
+                 vector_manifold=False, solver_params=None):
         super(AdvectionEquation, self).__init__(state, V, ibp, solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
+        if vector_manifold:
+            self.vector_manifold = True
+        else:
+            self.vector_manifold = False
 
     def advection_term(self, q):
 
@@ -170,6 +177,13 @@ class AdvectionEquation(TransportEquation):
                 L -= (inner(self.test('+'), dot(self.ubar('+'), self.n('+'))*q('+'))
                       + inner(self.test('-'), dot(self.ubar('-'),
                                                   self.n('-'))*q('-')))*self.dS
+        if self.vector_manifold:
+            un = self.un
+            w = self.test
+            u = q
+            n = self.n
+            L += un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))
+            L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))
 
         return L
 
