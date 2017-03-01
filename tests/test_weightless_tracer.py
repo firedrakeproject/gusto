@@ -69,7 +69,7 @@ def setup_tracer(dirname):
     theta0.interpolate(theta_b + theta_pert)
     tracerb.interpolate(theta_b)
     rho0.interpolate(rho_b)
-    tracer0.interpolate(theta)
+    tracer0.interpolate(theta0)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'tracer' : tracer0})
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b, 'tracer': tracerb})
