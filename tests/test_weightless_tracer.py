@@ -121,7 +121,7 @@ def setup_tracer(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 4.0
+    return stepper, 100.0
 
 
 def run_tracer(dirname):
