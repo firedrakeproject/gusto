@@ -4,7 +4,8 @@ import itertools
 from collections import defaultdict
 from functools import partial
 import json
-from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
+from gusto.diagnostics import Diagnostics, Perturbation, \
+    SteadyStateError, Difference
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
@@ -186,8 +187,8 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
-        for name in self.output.difference_fields:
-            f = Difference(self, name)
+        for field_pair in self.output.difference_fields:
+            f = Difference(field_pair[0], field_pair[1])
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
