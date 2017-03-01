@@ -43,7 +43,7 @@ def setup_tracer(dirname):
     Vr = rho0.function_space()
 
     # declare tracer field and a background field
-    tracer0 =  state.fields("tracer", Vt)
+    tracer0 = state.fields("tracer", Vt)
 
     # Isentropic background state
     Tsurf = 300.
@@ -57,7 +57,6 @@ def setup_tracer(dirname):
                                      solve_for_rho=True)
 
     # set up perturbation to theta
-    x = SpatialCoordinate(mesh)
     theta_pert = Function(Vt).interpolate(
         Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
                    "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
@@ -121,13 +120,15 @@ def setup_tracer(dirname):
 
     return stepper, 100.0
 
-def run_tracer(dirname):
 
+def run_tracer(dirname):
+    
     stepper, tmax = setup_tracer(dirname)
     stepper.run(t=0, tmax=tmax)
 
+    
 def test_tracer_setup(tmpdir):
-
+    
     dirname = str(tmpdir)
     run_tracer(dirname)
     with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
