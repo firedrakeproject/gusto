@@ -20,7 +20,7 @@ def setup_tracer(dirname):
 
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt = 1.0, maxk = 4, maxi = 1)
+    timestepping = TimesteppingParameters(dt = 10.0, maxk = 4, maxi = 1)
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
                               dumplist = ['u'],
