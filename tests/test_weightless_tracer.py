@@ -24,7 +24,8 @@ def setup_tracer(dirname):
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
                               dumplist = ['u'],
-                              perturbation_fields=['theta', 'rho', 'tracer'])
+                              perturbation_fields = ['theta', 'rho', 'tracer'],
+                              difference_fields = [['theta', 'tracer']])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
@@ -46,7 +47,7 @@ def setup_tracer(dirname):
 
     # declare tracer field and a background field
     tracer0 =  state.fields("tracer", Vt)
-    tracerb = Function(Vt).interpolate(Expression("0.0"))
+    tracerb = Function(Vt)
 
     # Isentropic background state
     Tsurf = 300.
@@ -66,8 +67,9 @@ def setup_tracer(dirname):
                                                      xc=500., zc=350., rc=250.))
 
     theta0.interpolate(theta_b + theta_pert)
+    tracerb.interpolate(theta_b)
     rho0.interpolate(rho_b)
-    tracer0.interpolate(theta_pert)
+    tracer0.interpolate(theta)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'tracer' : tracer0})
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b, 'tracer': tracerb})
