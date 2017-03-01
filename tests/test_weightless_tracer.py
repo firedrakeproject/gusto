@@ -23,20 +23,18 @@ def setup_tracer(dirname):
     timestepping = TimesteppingParameters(dt = 1.0, maxk = 4, maxi = 1)
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
-                              #dumplist = ['u'],
+                              dumplist = ['u'],
                               perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
                   family="CG",
                   timestepping = timestepping,
                   output = output,
                   parameters = parameters,
-                  diagnostics = diagnostics,
                   fieldlist = fieldlist)
 
-    # Initial conditions
+    # declare initial fields
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
@@ -46,6 +44,9 @@ def setup_tracer(dirname):
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
+    # declare tracer field
+    tracer0 =  state.fields("tracer", Vt)
+
     # Isentropic background state
     Tsurf = 300.
     thetab = Constant(Tsurf)
@@ -54,7 +55,7 @@ def setup_tracer(dirname):
     rho_b = Function(Vr)
 
     # Calculate initial rho
-    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho = True)
 
     # set up perturbation to theta
     x = SpatialCoordinate(mesh)
@@ -65,8 +66,9 @@ def setup_tracer(dirname):
 
     theta0.interpolate(theta_b + theta_pert)
     rho0.interpolate(rho_b)
+    tracer0.interpolate(theta_pert)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'tracer' : tracer0})
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # set up advection schemes
@@ -82,6 +84,7 @@ def setup_tracer(dirname):
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
     advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+    advection_dict["tracer"] = SSPRK3(state, tracer0, thetaeqn)
 
 
     # Set up linear solver
@@ -117,7 +120,7 @@ def setup_tracer(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 5.0
+    return stepper, 2.0
 
 
 def run_tracer(dirname):
