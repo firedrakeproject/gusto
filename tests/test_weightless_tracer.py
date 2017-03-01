@@ -24,7 +24,7 @@ def setup_tracer(dirname):
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
                               dumplist = ['u'],
-                              perturbation_fields=['theta', 'rho'])
+                              perturbation_fields=['theta', 'rho', 'tracer'])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree = 1, horizontal_degree = 1,
@@ -44,8 +44,9 @@ def setup_tracer(dirname):
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
-    # declare tracer field
+    # declare tracer field and a background field
     tracer0 =  state.fields("tracer", Vt)
+    tracerb = Function(Vt).interpolate(Expression("0.0"))
 
     # Isentropic background state
     Tsurf = 300.
@@ -69,7 +70,7 @@ def setup_tracer(dirname):
     tracer0.interpolate(theta_pert)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'tracer' : tracer0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b, 'tracer': tracerb})
 
     # set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -120,7 +121,7 @@ def setup_tracer(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 2.0
+    return stepper, 4.0
 
 
 def run_tracer(dirname):
@@ -135,7 +136,8 @@ def test_tracer_setup(tmpdir):
     with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
         data = json.load(f)
     print data.keys()
-#    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
-#    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
+    
+    tracerl2 = data["tracer_perturbation"]["l2"][-1] / data["theta"]["l2"][0]
+    thetal2 = data["theta_perturbation"]["l2"][-1] / data["theta"]["l2"][0]
 
-#    assert Dl2 < 5.e-4
+    assert abs(tracerl2 - thetal2) < 1e-10
