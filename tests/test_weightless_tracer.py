@@ -20,11 +20,11 @@ def setup_tracer(dirname):
 
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt = 10.0, maxk = 4, maxi = 1)
+    timestepping = TimesteppingParameters(dt = 50.0, maxk = 4, maxi = 1)
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq = 1,
                               dumplist = ['u'],
-                              perturbation_fields = ['theta', 'rho', 'tracer'],
+                              perturbation_fields = ['theta', 'rho'],
                               difference_fields = [['theta', 'tracer']])
     parameters = CompressibleParameters()
 
@@ -47,7 +47,6 @@ def setup_tracer(dirname):
 
     # declare tracer field and a background field
     tracer0 =  state.fields("tracer", Vt)
-    tracerb = Function(Vt)
 
     # Isentropic background state
     Tsurf = 300.
@@ -67,12 +66,11 @@ def setup_tracer(dirname):
                                                      xc=500., zc=350., rc=250.))
 
     theta0.interpolate(theta_b + theta_pert)
-    tracerb.interpolate(theta_b)
     rho0.interpolate(rho_b)
     tracer0.interpolate(theta0)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'tracer' : tracer0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b, 'tracer': tracerb})
+    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -123,7 +121,7 @@ def setup_tracer(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 100.0
+    return stepper, 500.0
 
 
 def run_tracer(dirname):
@@ -139,7 +137,6 @@ def test_tracer_setup(tmpdir):
         data = json.load(f)
     print data.keys()
     
-    tracerl2 = data["tracer_perturbation"]["l2"][-1] / data["theta"]["l2"][0]
-    thetal2 = data["theta_perturbation"]["l2"][-1] / data["theta"]["l2"][0]
+    diffl2 = data[theta_minus_tracer][l2][-1] / data[theta][l2][0]
 
-    assert abs(tracerl2 - thetal2) < 1e-10
+    assert abs(diffl2) < 1e-10
