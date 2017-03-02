@@ -47,8 +47,13 @@ def setup_sw(dirname):
 
     # interpolate initial conditions
     # Initial/current conditions
+<<<<<<< HEAD
     u0 = state.fields.u
     D0 = state.fields.D
+=======
+    u0 = state.fields("u")
+    D0 = state.fields("D")
+>>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = Constant(parameters.g)
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g

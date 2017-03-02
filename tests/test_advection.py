@@ -32,7 +32,11 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
+<<<<<<< HEAD
         u0 = state.fields.u
+=======
+        u0 = state.fields("u")
+>>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
         u0.project(uexpr)
 
         if vector:
@@ -69,7 +73,11 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       fieldlist=fieldlist)
 
         uexpr = as_vector([1.0, 0.0])
+<<<<<<< HEAD
         u0 = state.fields.u
+=======
+        u0 = state.fields("u")
+>>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
         u0.project(uexpr)
 
         if spatial_opts is not None:

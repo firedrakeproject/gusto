@@ -20,16 +20,6 @@ class BaseTimestepper(object):
 
         self.state = state
         self.advection_dict = advection_dict
-        self.linear_solver = linear_solver
-        self.forcing = forcing
-        self.diffusion_dict = {}
-        if diffusion_dict is not None:
-            self.diffusion_dict.update(diffusion_dict)
-
-        if(isinstance(self.forcing, IncompressibleForcing)):
-            self.incompressible = True
-        else:
-            self.incompressible = False
 
     def _apply_bcs(self):
         """
@@ -79,7 +69,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax):
+    def run(self, t, tmax, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -157,6 +147,7 @@ class Timestepper(BaseTimestepper):
                 state.dump(t, pickup=False)
 
         state.diagnostic_dump()
+        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
 
 
 class AdvectionTimestepper(BaseTimestepper):

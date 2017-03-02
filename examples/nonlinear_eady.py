@@ -86,8 +86,9 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 ##############################################################################
 # Initial conditions
 ##############################################################################
-u0 = state.fields.u
-b0 = state.fields.b
+u0 = state.fields("u")
+b0 = state.fields("b")
+p0 = state.fields("p")
 
 # spaces
 Vu = u0.function_space()
@@ -128,6 +129,7 @@ b0.interpolate(b_b + b_pert)
 # hydrostatic initialisation
 incompressible_hydrostatic_balance(state, b0, p0)
 
+<<<<<<< HEAD
 # interpolate velocity to vector valued function space
 uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
 # project to the function space we actually want to use
@@ -136,6 +138,8 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
 # methods that we use
 u0.project(uinit)
 
+=======
+>>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
 # pass these initial conditions to the state.initialise method
 state.initialise({'b': b0})
 # set the background buoyancy
@@ -155,8 +159,13 @@ else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
+<<<<<<< HEAD
 advection_dict["u"] = EulerPoincareForm(state, state.V[0])
 advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
+=======
+advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+advection_dict["b"] = SSPRK3(state, b0, beqn)
+>>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme

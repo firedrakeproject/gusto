@@ -84,8 +84,9 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 ##############################################################################
 # set up functions on the spaces constructed by state
-u0 = state.fields.u
-b0 = state.fields.b
+u0 = state.fields("u")
+b0 = state.fields("b")
+p0 = state.fields("p")
 
 # spaces
 Vu = u0.function_space()

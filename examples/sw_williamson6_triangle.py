@@ -41,8 +41,8 @@ Omega = parameters.Omega
 
 # interpolate initial conditions
 # Initial/current conditions
-u0 = state.fields.u
-D0 = state.fields.D
+u0 = state.fields("u")
+D0 = state.fields("D")
 x = SpatialCoordinate(mesh)
 R = Constant(R)
 V = FunctionSpace(mesh, "CG", 2)
