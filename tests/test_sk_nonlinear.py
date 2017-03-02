@@ -30,15 +30,9 @@ def setup_sk(dirname):
                   diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
-<<<<<<< HEAD
-    u0 = state.fields.u
-    rho0 = state.fields.rho
-    theta0 = state.fields.theta
-=======
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
->>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
 
     # spaces
     Vu = u0.function_space()

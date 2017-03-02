@@ -129,17 +129,6 @@ b0.interpolate(b_b + b_pert)
 # hydrostatic initialisation
 incompressible_hydrostatic_balance(state, b0, p0)
 
-<<<<<<< HEAD
-# interpolate velocity to vector valued function space
-uinit = Function(W_VectorCG1).interpolate(as_vector([0.0,0.0,0.0]))
-# project to the function space we actually want to use
-# this step is purely because it is not yet possible to interpolate to the
-# vector function spaces we require for the compatible finite element
-# methods that we use
-u0.project(uinit)
-
-=======
->>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
 # pass these initial conditions to the state.initialise method
 state.initialise({'b': b0})
 # set the background buoyancy
@@ -159,13 +148,8 @@ else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
 advection_dict = {}
-<<<<<<< HEAD
-advection_dict["u"] = EulerPoincareForm(state, state.V[0])
-advection_dict["b"] = EmbeddedDGAdvection(state, state.V[2], Vdg=Vtdg, continuity=False)
-=======
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["b"] = SSPRK3(state, b0, beqn)
->>>>>>> cfd9333b5eae74f3533e6ace562d607277358eb1
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
