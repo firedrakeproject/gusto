@@ -114,8 +114,6 @@ class NoAdvection(Advection):
     """
     An non-advection scheme that does nothing.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
 
     def lhs(self):
         pass
