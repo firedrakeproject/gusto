@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Expression, \
-    SpatialCoordinate, Constant
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
+    Expression, Constant
 import json
 
 
@@ -122,13 +122,13 @@ def setup_tracer(dirname):
 
 
 def run_tracer(dirname):
-    
+
     stepper, tmax = setup_tracer(dirname)
     stepper.run(t=0, tmax=tmax)
 
-    
+
 def test_tracer_setup(tmpdir):
-    
+
     dirname = str(tmpdir)
     run_tracer(dirname)
     with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
