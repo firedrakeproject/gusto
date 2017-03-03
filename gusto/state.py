@@ -191,11 +191,6 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
-        for field_pair in self.output.difference_fields:
-            f = Difference(field_pair[0], field_pair[1])
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
         # add diagnostic fields to field dictionary and ensure they are dumped
         for diagnostic in self.diagnostic_fields:
             f = diagnostic(self)
