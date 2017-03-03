@@ -137,4 +137,4 @@ def test_tracer_setup(tmpdir):
 
     diffl2 = data["theta_minus_tracer"]["l2"][-1] / data["theta"]["l2"][0]
 
-    assert abs(diffl2) < 1e-5
+    assert diffl2 < 1e-5
