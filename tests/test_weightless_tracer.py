@@ -21,8 +21,7 @@ def setup_tracer(dirname):
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq=1,
                               dumplist=['u'],
-                              perturbation_fields=['theta', 'rho'],
-                              difference_fields=[['theta', 'tracer']])
+                              perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -30,7 +29,8 @@ def setup_tracer(dirname):
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist)
+                  fieldlist=fieldlist,
+                  diagnostic_fields=[Difference('theta','tracer')])
 
     # declare initial fields
     u0 = state.fields("u")
