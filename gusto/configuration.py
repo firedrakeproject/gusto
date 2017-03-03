@@ -46,8 +46,6 @@ class OutputParameters(Configuration):
     steady_state_error_fields = []
     #: List of fields for computing perturbations
     perturbation_fields = []
-    #: list of fields for computing differences
-    difference_fields = []
 
 
 class CompressibleParameters(Configuration):
