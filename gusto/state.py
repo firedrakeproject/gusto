@@ -5,7 +5,7 @@ from collections import defaultdict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
-    SteadyStateError, Difference
+    SteadyStateError
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
