@@ -1,5 +1,5 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant
+    TestFunction, Constant, op2, Expression
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -19,6 +19,35 @@ class Diagnostics(object):
     @staticmethod
     def l2(f):
         return sqrt(assemble(dot(f, f)*dx))
+
+    @staticmethod
+    def max(f):
+        fmax = op2.Global(1, [-1000], dtype=float)
+        op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
+        {
+        a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+        }""", "maxify"),
+                     f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+        return fmax.data[0]
+
+    @staticmethod
+    def min(f):
+        fmin = op2.Global(1, [1000], dtype=float)
+        op2.par_loop(op2.Kernel("""void minify(double *a, double *b)                                 {                                                                                            a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];                                                }""", "minify"),
+                     f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+        return fmin.data[0]
+
+    @staticmethod
+    def rms(f):
+        V = FunctionSpace(f.function_space().mesh(), "DG", 1)
+        c = Function(V)
+        c.assign(1)
+        rms = sqrt(assemble((dot(f,f))*dx)/assemble(c*dx))
+        return rms
+
+    @staticmethod
+    def assem(f):
+        return assemble(f*dx)
 
 
 class DiagnosticField(object):
@@ -90,6 +119,55 @@ class HorizontalVelocity(DiagnosticField):
         u = state.fields("u")
         uh = u[0]
         return self.field(state.mesh).interpolate(uh)
+
+
+class EadyPotentialEnergy(DiagnosticField):
+    name = "EadyPotentialEnergy"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        Vp = state.spaces("DG")
+        b = state.fields("b")
+        bbar = state.fields("bbar")
+        H = state.parameters.H
+        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
+        potential = -eady_exp*(b-bbar)
+        return self.field(state.mesh).interpolate(potential)
+
+
+class KineticEnergy(DiagnosticField):
+    name = "KineticEnergy"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        kinetic = 0.5*dot(u,u)
+        return self.field(state.mesh).interpolate(kinetic)
+
+
+class KineticEnergyV(DiagnosticField):
+    name = "KineticEnergyV"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        kineticv = 0.5*u[1]*u[1]
+        return self.field(state.mesh).interpolate(kineticv)
 
 
 class Sum(DiagnosticField):

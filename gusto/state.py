@@ -240,6 +240,11 @@ class State(object):
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             print "DBG dumping", t
+            print "RMSV =", self.diagnostic_data["VerticalVelocity"]["rms"]
+            print "Vmax =", self.diagnostic_data["VerticalVelocity"]["max"]
+            print "Potential =", self.diagnostic_data["EadyPotentialEnergy"]["assem"]
+            print "Kinetic =", self.diagnostic_data["KineticEnergy"]["assem"]
+            print "KineticV =", self.diagnostic_data["KineticEnergyV"]["assem"]
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:
@@ -254,8 +259,22 @@ class State(object):
 
             # compute diagnostics
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(self.field_dict[name])
-                self.diagnostic_data[name]["l2"].append(data)
+                if name is "EadyPotentialEnergy":
+                    data_assem = self.diagnostics.assem(self.field_dict[name])
+                    self.diagnostic_data[name]["assem"].append(data_assem)
+                elif name is "KineticEnergy":
+                    data_assem = self.diagnostics.assem(self.field_dict[name])
+                    self.diagnostic_data[name]["assem"].append(data_assem)
+                elif name is "KineticEnergyV":
+                    data_assem = self.diagnostics.assem(self.field_dict[name])
+                    self.diagnostic_data[name]["assem"].append(data_assem)
+                else:
+                    data = self.diagnostics.l2(self.field_dict[name])
+                    self.diagnostic_data[name]["l2"].append(data)
+                    data_max = self.diagnostics.max(self.field_dict[name])
+                    self.diagnostic_data[name]["max"].append(data_max)
+                    data_rms = self.diagnostics.rms(self.field_dict[name])
+                    self.diagnostic_data[name]["rms"].append(data_rms)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]

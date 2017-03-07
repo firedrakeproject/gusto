@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 30.
+dt = 40.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=40*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=5*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -69,7 +69,7 @@ parameters = EadyParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), VerticalVelocity(), EadyPotentialEnergy(), KineticEnergy(), KineticEnergyV()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
