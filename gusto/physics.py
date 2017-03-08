@@ -52,22 +52,43 @@ class Condensation(Physics):
         self.theta = getattr(state.fields, 'theta')
         self.water_v = getattr(state.fields, 'water_v')
         self.water_c = getattr(state.fields, 'water_c')
-        self.rho = getattr(state.fields, 'rho')
+        rho = getattr(state.fields, 'rho')
 
         # declare function space
         V = self.theta.function_space()
 
         # make useful fields
-        Pi = (R_d * rho * theta / p_0) ** (kappa / (1.0 - kappa))
-        T = Pi * theta * R_d / (R_d + water_v * R_v)
+        Pi = (R_d * rho * self.theta / p_0) ** (kappa / (1.0 - kappa))
+        T = Pi * self.theta * R_d / (R_d + self.water_v * R_v)
         p = p_0 * Pi ** (1.0 / kappa)
         L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-        R_m = R_d + R_v * water_v
-        c_pml = cp + c_pv * water_v + c_pl * water_c
-        c_vml = cv + c_vv * water_v + c_pl * water_c
+        R_m = R_d + R_v * self.water_v
+        c_pml = cp + c_pv * self.water_v + c_pl * water_c
+        c_vml = cv + c_vv * self.water_v + c_pl * water_c
+        water_t = self.water_v + self.water_c
 
-        # use Teten's formula to calculate 
+        # use Teten's formula to calculate w_sat
+        w_sat = (w_sat1 /
+                 (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
 
+        # make appropriate condensation rate
+        cond_rate = ((self.water_v - w_sat) /
+                     (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
+                                   cp * R_v * T ** 2.0))))
+
+        # make functions for fields at next time step
+        self.water_v_new = Function(V)
+        self.water_c_new = Function(V)
+        self.theta_new = Function(V)
+
+        # assign values for fields at next time step
+        self.water_v_new.assign(self.water_v - dt * cond_rate)
+        self.water_c_new.assign(self.water_c + dt * cond_rate)
+        self.theta_new.assign(self.theta *
+                              (1.0 - dt * cond_rate *
+                               (cv * L_v / (c_vml * cp * T) -
+                                R_v * cv * c_pml / (R_m * cp * c_vml))))
+                            
         
 
     def apply(self):
