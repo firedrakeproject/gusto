@@ -143,6 +143,10 @@ class Timestepper(BaseTimestepper):
                     field = getattr(state.fields, name)
                     diffusion.apply(field, field)
 
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
+
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
