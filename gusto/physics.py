@@ -1,3 +1,5 @@
+from abc import ABCMeta, abstractmethod
+
 class Physics(object):
     """
     Base class for physics processes for Gusto.
