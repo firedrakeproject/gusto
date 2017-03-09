@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Function, project
+from firedrake import exp, Function, project, conditional
 
 class Physics(object):
     """
@@ -87,6 +87,9 @@ class Condensation(Physics):
         # use Teten's formula to calculate w_sat
         w_sat = (w_sat1 /
                  (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+
+        # correct w_sat to be positive
+        w_sat = conditional(w_sat > 0, w_sat, 999.0)
 
         # make appropriate condensation rate
         cond_rate = ((self.water_v - w_sat) /
