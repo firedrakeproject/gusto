@@ -97,7 +97,7 @@ class Condensation(Physics):
         self.water_v_new.assign(self.water_v - dt * cond_rate)
         self.water_c_new.assign(self.water_c + dt * cond_rate)
         self.theta_new.assign(self.theta *
-                              (1.0 - dt * cond_rate *
+                              (1.0 + dt * cond_rate *
                                (cv * L_v / (c_vml * cp * T) -
                                 R_v * cv * c_pml / (R_m * cp * c_vml))))
         
