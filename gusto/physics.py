@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Function, project, conditional
+from firedrake import exp, Function, project, conditional, interpolate
 
 class Physics(object):
     """
@@ -38,6 +38,7 @@ class Condensation(Physics):
         self.water_v = getattr(state.fields, 'water_v')
         self.water_c = getattr(state.fields, 'water_c')
         self.rho = getattr(state.fields, 'rho')
+        self.diagnostic = getattr(state.fields, 'diagnostic')
 
         # declare function space
         V = self.theta.function_space()
@@ -89,12 +90,22 @@ class Condensation(Physics):
                  (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
 
         # correct w_sat to be positive
-        w_sat = conditional(w_sat > 0, w_sat, 999.0)
+        w_sat = interpolate(conditional(w_sat > 0, w_sat, 999.0), V)
 
         # make appropriate condensation rate
         cond_rate = ((self.water_v - w_sat) /
                      (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
                                    cp * R_v * T ** 2.0))))
+
+        # adjust cond rate so negative concentrations don't occur
+        cond_rate = interpolate(conditional(cond_rate < 0,
+                                conditional(-cond_rate > self.water_c / dt,
+                                            -self.water_c / dt,
+                                            cond_rate),
+                                conditional(cond_rate > self.water_v / dt,
+                                            self.water_v / dt,
+                                            cond_rate)), V)
+
         
         # assign values for fields at next time step
         self.water_v_new.assign(self.water_v - dt * cond_rate)
@@ -103,7 +114,7 @@ class Condensation(Physics):
                               (1.0 + dt * cond_rate *
                                (cv * L_v / (c_vml * cp * T) -
                                 R_v * cv * c_pml / (R_m * cp * c_vml))))
-        
+        self.diagnostic.assign(cond_rate)
         
     def apply(self):
         self.update_fields()
