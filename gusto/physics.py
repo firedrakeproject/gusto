@@ -115,6 +115,22 @@ class Condensation(Physics):
                                (cv * L_v / (c_vml * cp * T) -
                                 R_v * cv * c_pml / (R_m * cp * c_vml))))
         self.diagnostic.assign(cond_rate)
+
+        # adjust to prevent negative values for tracers
+        self.water_v_new = interpolate(
+            conditional(self.water_c_new < 0,
+                        self.water_v_new + self.water_c_new,
+                        self.water_v_new), V)
+        self.water_c_new = interpolate(
+            conditional(self.water_c_new < 0,
+                        0.0, self.water_c_new), V)
+        self.water_c_new = interpolate(
+            conditional(self.water_v_new < 0,
+                        self.water_c_new + self.water_v_new,
+                        self.water_c_new), V)
+        self.water_v_new = interpolate(
+            conditional(self.water_v_new < 0,
+                        0.0, self.water_v_new), V)
         
     def apply(self):
         self.update_fields()
