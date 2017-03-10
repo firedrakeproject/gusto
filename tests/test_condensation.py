@@ -76,7 +76,7 @@ def setup_condens(dirname):
     u0.project(u_expr)
     theta0.interpolate(theta_b)
     rho0.interpolate(rho_b)
-    water_v0.interpolate(theta0)
+    water_v0.interpolate(w_expr)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
                       'water_v': water_v0, 'water_c':water_c0})
