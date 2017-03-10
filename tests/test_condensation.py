@@ -16,6 +16,7 @@ def setup_condens(dirname):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
+    x = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
