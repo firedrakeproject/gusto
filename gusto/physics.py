@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import exp, Function, project, conditional, interpolate
 
+
 class Physics(object):
     """
     Base class for physics processes for Gusto.
@@ -20,6 +21,7 @@ class Physics(object):
         """
         pass
 
+    
 class Condensation(Physics):
     """
     The process of condensation of water vapour
@@ -47,7 +49,6 @@ class Condensation(Physics):
         self.water_c_new = Function(V)
         self.theta_new = Function(V)
 
-                                    
     def update_fields(self):
 
         param = self.state.parameters
@@ -82,7 +83,6 @@ class Condensation(Physics):
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * self.water_c
         c_vml = cv + c_vv * self.water_v + c_pl * self.water_c
-        water_t = self.water_v + self.water_c
 
         # use Teten's formula to calculate w_sat
         w_sat = (w_sat1 /
@@ -105,7 +105,6 @@ class Condensation(Physics):
                                             self.water_v / dt,
                                             cond_rate)), V)
 
-        
         # assign values for fields at next time step
         self.water_v_new.assign(self.water_v - dt * cond_rate)
         self.water_c_new.assign(self.water_c + dt * cond_rate)
@@ -114,9 +113,8 @@ class Condensation(Physics):
                                (cv * L_v / (c_vml * cp * T) -
                                 R_v * cv * c_pml / (R_m * cp * c_vml))))
 
-        
     def apply(self):
         self.update_fields()
         self.water_v.assign(self.water_v_new)
         self.water_c.assign(self.water_c_new)
-        self.theta.assign(self.theta_new) 
+        self.theta.assign(self.theta_new)

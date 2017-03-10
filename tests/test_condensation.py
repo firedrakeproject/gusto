@@ -10,8 +10,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
+    nlayers = int(H / 50.)
+    ncolumns = int(L / 50.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -131,7 +131,7 @@ def setup_condens(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing, physics_list=physics_list)
 
-    return stepper, 100.0
+    return stepper, 1500.0
 
 
 def run_condens(dirname):

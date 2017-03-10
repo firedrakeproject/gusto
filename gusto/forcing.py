@@ -395,6 +395,7 @@ class ShallowWaterForcing(Forcing):
         x_out.assign(x_in)
         uF += self.uF
 
+        
 class NoForcing(Forcing):
 
     def _build_forcing_solver(self):
