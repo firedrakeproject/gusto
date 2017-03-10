@@ -38,7 +38,6 @@ class Condensation(Physics):
         self.water_v = getattr(state.fields, 'water_v')
         self.water_c = getattr(state.fields, 'water_c')
         self.rho = getattr(state.fields, 'rho')
-        self.diagnostic = getattr(state.fields, 'diagnostic')
 
         # declare function space
         V = self.theta.function_space()
@@ -114,7 +113,6 @@ class Condensation(Physics):
                               (1.0 + dt * cond_rate *
                                (cv * L_v / (c_vml * cp * T) -
                                 R_v * cv * c_pml / (R_m * cp * c_vml))))
-        self.diagnostic.assign(cond_rate)
 
         
     def apply(self):
