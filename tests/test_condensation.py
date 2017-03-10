@@ -94,7 +94,7 @@ def setup_condens(dirname):
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
     advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
     advection_dict["water_v"] = SSPRK3(state, water_v0, thetaeqn)
-    advection_dict["water_c"] = SPPRK3(state, water_c0, thetaeqn)
+    advection_dict["water_c"] = SSPRK3(state, water_c0, thetaeqn)
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
