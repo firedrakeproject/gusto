@@ -10,8 +10,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
+    nlayers = int(H / 10.)
+    ncolumns = int(L / 10.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -20,7 +20,7 @@ def setup_condens(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+"/condens",
+    output = OutputParameters(dirname=dirname+"/condens_highres",
                               dumpfreq=1,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'])
@@ -72,6 +72,8 @@ def setup_condens(dirname):
                         cos(pi * x[1] / H),
                         - 2 * u_max * cos(2 * pi * x[0] / L) *
                         sin(pi * x[1] / H)])
+
+    #u_expr = as_vector([Constant(0.0), Constant(0.0)])
     
     u0.project(u_expr)
     theta0.interpolate(theta_b)

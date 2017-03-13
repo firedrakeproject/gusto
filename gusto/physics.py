@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Function, project, conditional, interpolate
+from firedrake import exp, Function, project, conditional, interpolate, Expression
 
 
 class Physics(object):
