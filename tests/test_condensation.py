@@ -10,8 +10,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 10.)
-    ncolumns = int(L / 10.)
+    nlayers = int(H / 100.)
+    ncolumns = int(L / 100.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -20,7 +20,7 @@ def setup_condens(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+"/condens_highres",
+    output = OutputParameters(dirname=dirname+"/condens",
                               dumpfreq=1,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'])
@@ -73,7 +73,7 @@ def setup_condens(dirname):
                         - 2 * u_max * cos(2 * pi * x[0] / L) *
                         sin(pi * x[1] / H)])
 
-    #u_expr = as_vector([Constant(0.0), Constant(0.0)])
+    u_expr = as_vector([Constant(0.0), Constant(0.0)])
     
     u0.project(u_expr)
     theta0.interpolate(theta_b)
@@ -153,4 +153,4 @@ def test_condens_setup(tmpdir):
     water_t_0 = data["water_v_plus_water_c"]["total"][0]
     water_t_T = data["water_v_plus_water_c"]["total"][-1]
 
-    assert water_t_0 == water_t_T
+    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-08 
