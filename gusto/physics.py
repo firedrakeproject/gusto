@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Function, project, conditional, interpolate, Expression
+from firedrake import exp, Function, project, conditional, interpolate
 
 
 class Physics(object):
@@ -21,7 +21,7 @@ class Physics(object):
         """
         pass
 
-    
+
 class Condensation(Physics):
     """
     The process of condensation of water vapour
