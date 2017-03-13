@@ -10,8 +10,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 50.)
-    ncolumns = int(L / 50.)
+    nlayers = int(H / 100.)
+    ncolumns = int(L / 100.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -131,7 +131,7 @@ def setup_condens(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing, physics_list=physics_list)
 
-    return stepper, 1500.0
+    return stepper, 5.0
 
 
 def run_condens(dirname):
@@ -148,7 +148,7 @@ def test_condens_setup(tmpdir):
         data = json.load(f)
     print data.keys()
 
-    water_t_l20 = data["water_v_plus_water_c"]["l2"][0]
-    water_t_l2T = data["water_v_plus_water_c"]["l2"][-1]
+    water_t_0 = data["water_v_plus_water_c"]["total"][0]
+    water_t_T = data["water_v_plus_water_c"]["total"][-1]
 
-    assert water_t_l20 == water_t_l2T
+    assert water_t_0 == water_t_T
