@@ -20,6 +20,10 @@ class Diagnostics(object):
     def l2(f):
         return sqrt(assemble(dot(f, f)*dx))
 
+    @staticmethod
+    def total(f):
+        return assemble(f * dx)
+
 
 class DiagnosticField(object):
 
