@@ -5,6 +5,7 @@ from firedrake import as_vector, Constant, sin, cos, \
 import json
 from math import pi
 
+
 def setup_condens(dirname):
 
     # declare grid shape, with length L and height H
@@ -40,7 +41,6 @@ def setup_condens(dirname):
     theta0 = state.fields("theta")
 
     # spaces
-    Vu = u0.function_space()
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
@@ -67,14 +67,14 @@ def setup_condens(dirname):
                    xc=500., zc=350., rc=250.))
 
     # set up velocity field
-    u_max = Constant(1.0) 
+    u_max = Constant(1.0)
     u_expr = as_vector([u_max * sin(2 * pi * x[0] / L) *
                         cos(pi * x[1] / H),
                         - 2 * u_max * cos(2 * pi * x[0] / L) *
                         sin(pi * x[1] / H)])
 
     u_expr = as_vector([Constant(0.0), Constant(0.0)])
-    
+
     u0.project(u_expr)
     theta0.interpolate(theta_b)
     rho0.interpolate(rho_b)
@@ -153,4 +153,4 @@ def test_condens_setup(tmpdir):
     water_t_0 = data["water_v_plus_water_c"]["total"][0]
     water_t_T = data["water_v_plus_water_c"]["total"][-1]
 
-    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-08 
+    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-08
