@@ -11,8 +11,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
+    nlayers = int(H / 10.)
+    ncolumns = int(L / 10.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -41,8 +41,12 @@ def setup_condens(dirname):
     theta0 = state.fields("theta")
 
     # spaces
+    Vpsi = FunctionSpace(mesh, "CG", 1)
     Vt = theta0.function_space()
     Vr = rho0.function_space()
+
+    # make a gradperp
+    gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
 
     # declare tracer field and a background field
     water_v0 = state.fields("water_v", Vt)
@@ -68,14 +72,13 @@ def setup_condens(dirname):
 
     # set up velocity field
     u_max = Constant(1.0)
-    u_expr = as_vector([u_max * sin(2 * pi * x[0] / L) *
-                        cos(pi * x[1] / H),
-                        - 2 * u_max * cos(2 * pi * x[0] / L) *
-                        sin(pi * x[1] / H)])
 
-    u_expr = as_vector([Constant(0.0), Constant(0.0)])
+    psi_expr = ((u_max * L / pi) *
+                sin(2 * pi * x[0] / L) *
+                sin(pi * x[1] / L))
 
-    u0.project(u_expr)
+    psi0 = Function(Vpsi).interpolate(psi_expr)
+    u0.project(gradperp(psi0))
     theta0.interpolate(theta_b)
     rho0.interpolate(rho_b)
     water_v0.interpolate(w_expr)
@@ -133,7 +136,7 @@ def setup_condens(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing, physics_list=physics_list)
 
-    return stepper, 5.0
+    return stepper, 10.0
 
 
 def run_condens(dirname):
