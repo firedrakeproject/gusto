@@ -157,6 +157,11 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionTimestepper(BaseTimestepper):
 
+    def __init__(self, state, advection_dict, physics_list=[]):
+        self.physics_list = physics_list
+        self.state = state
+        self.advection_dict = advection_dict
+
     def run(self, t, tmax, x_end=None):
         state = self.state
 
@@ -178,6 +183,9 @@ class AdvectionTimestepper(BaseTimestepper):
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects field
                 advection.apply(field, field)
+
+            for physics in self.physics_list:
+                physics.apply()
 
             state.dump()
 

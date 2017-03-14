@@ -11,8 +11,8 @@ def setup_condens(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
-    nlayers = int(H / 10.)
-    ncolumns = int(L / 10.)
+    nlayers = int(H / 100.)
+    ncolumns = int(L / 100.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -41,7 +41,7 @@ def setup_condens(dirname):
     theta0 = state.fields("theta")
 
     # spaces
-    Vpsi = FunctionSpace(mesh, "CG", 1)
+    Vpsi = FunctionSpace(mesh, "CG", 2)
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
@@ -71,9 +71,9 @@ def setup_condens(dirname):
                    xc=500., zc=350., rc=250.))
 
     # set up velocity field
-    u_max = Constant(1.0)
+    u_max = Constant(10.0)
 
-    psi_expr = ((u_max * L / pi) *
+    psi_expr = ((-u_max * L / pi) *
                 sin(2 * pi * x[0] / L) *
                 sin(pi * x[1] / L))
 
@@ -101,40 +101,10 @@ def setup_condens(dirname):
     advection_dict["water_v"] = SSPRK3(state, water_v0, thetaeqn)
     advection_dict["water_c"] = SSPRK3(state, water_c0, thetaeqn)
 
-    # Set up linear solver
-    schur_params = {'pc_type': 'fieldsplit',
-                    'pc_fieldsplit_type': 'schur',
-                    'ksp_type': 'gmres',
-                    'ksp_monitor_true_residual': True,
-                    'ksp_max_it': 100,
-                    'ksp_gmres_restart': 50,
-                    'pc_fieldsplit_schur_fact_type': 'FULL',
-                    'pc_fieldsplit_schur_precondition': 'selfp',
-                    'fieldsplit_0_ksp_type': 'richardson',
-                    'fieldsplit_0_ksp_max_it': 5,
-                    'fieldsplit_0_pc_type': 'bjacobi',
-                    'fieldsplit_0_sub_pc_type': 'ilu',
-                    'fieldsplit_1_ksp_type': 'richardson',
-                    'fieldsplit_1_ksp_max_it': 5,
-                    'fieldsplit_1_ksp_monitor_true_residual': True,
-                    'fieldsplit_1_pc_type': 'gamg',
-                    'fieldsplit_1_pc_gamg_sym_graph': True,
-                    'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                    'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                    'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                    'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-
-    linear_solver = CompressibleSolver(state, params=schur_params)
-
-    compressible_forcing = NoForcing(state)
-
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
-                          compressible_forcing, physics_list=physics_list)
+    stepper = AdvectionTimestepper(state, advection_dict, physics_list=physics_list)
 
     return stepper, 10.0
 
@@ -156,4 +126,4 @@ def test_condens_setup(tmpdir):
     water_t_0 = data["water_v_plus_water_c"]["total"][0]
     water_t_T = data["water_v_plus_water_c"]["total"][-1]
 
-    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-08
+    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12
