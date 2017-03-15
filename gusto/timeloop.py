@@ -159,7 +159,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
     def __init__(self, state, advection_dict, physics_list=[]):
 
-        super(AdvectionTimeStepper, self).__init__(state, advection_dict)
+        super(AdvectionTimestepper, self).__init__(state, advection_dict)
         self.physics_list = physics_list
 
     def run(self, t, tmax, x_end=None):
