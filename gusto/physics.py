@@ -36,10 +36,10 @@ class Condensation(Physics):
         super(Condensation, self).__init__(state)
 
         # obtain our fields
-        self.theta = getattr(state.fields, 'theta')
-        self.water_v = getattr(state.fields, 'water_v')
-        self.water_c = getattr(state.fields, 'water_c')
-        self.rho = getattr(state.fields, 'rho')
+        self.theta = state.fields('theta')
+        self.water_v = state.fields('water_v')
+        self.water_c = state.fields('water_c')
+        self.rho = state.fields('rho')
 
         # declare function space
         V = self.theta.function_space()
