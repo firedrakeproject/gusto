@@ -1,7 +1,6 @@
 from gusto import *
-from firedrake import as_vector, Constant, sin, cos, \
-    PeriodicIntervalMesh, ExtrudedMesh, Expression, \
-    SpatialCoordinate
+from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
+    Spatial, ExtrudedMesh, Expression, \
 import json
 from math import pi
 
@@ -106,7 +105,7 @@ def setup_condens(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict, physics_list=physics_list)
 
-    return stepper, 10.0
+    return stepper, 5.0
 
 
 def run_condens(dirname):
