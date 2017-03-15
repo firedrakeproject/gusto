@@ -55,7 +55,7 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=[]):
+    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -63,7 +63,10 @@ class Timestepper(BaseTimestepper):
         self.diffusion_dict = {}
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
-        self.physics_list = physics_list
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
         if(isinstance(self.linear_solver, IncompressibleSolver)):
             self.incompressible = True
@@ -157,10 +160,13 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advection_dict, physics_list=[]):
+    def __init__(self, state, advection_dict, physics_list=None):
 
         super(AdvectionTimestepper, self).__init__(state, advection_dict)
-        self.physics_list = physics_list
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
     def run(self, t, tmax, x_end=None):
         state = self.state
