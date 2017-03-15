@@ -1,12 +1,13 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression \
+    SpatialCoordinate, ExtrudedMesh, Expression
 import json
 from math import pi
 
 # This setup creates a bubble of water vapour that is advected
 # by a prescribed velocity. The test passes if the integral
 # of the water mixing ratio is conserved.
+
 
 def setup_condens(dirname):
 
