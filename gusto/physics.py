@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Function, project, conditional, interpolate
+from firedrake import exp, Interpolator, conditional, interpolate
 
 
 class Physics(object):
@@ -44,13 +44,6 @@ class Condensation(Physics):
         # declare function space
         V = self.theta.function_space()
 
-        # make functions for fields at next time step
-        self.water_v_new = Function(V)
-        self.water_c_new = Function(V)
-        self.theta_new = Function(V)
-
-    def update_fields(self):
-
         param = self.state.parameters
 
         # define some parameters as attributes
@@ -71,11 +64,8 @@ class Condensation(Physics):
         w_sat3 = param.w_sat3
         w_sat4 = param.w_sat4
 
-        # declare function space
-        V = self.theta.function_space()
-
         # make useful fields
-        Pi = ((R_d * project(self.rho, V) * self.theta / p_0)
+        Pi = ((R_d * interpolate(self.rho, V) * self.theta / p_0)
               ** (kappa / (1.0 - kappa)))
         T = Pi * self.theta * R_d / (R_d + self.water_v * R_v)
         p = p_0 * Pi ** (1.0 / kappa)
@@ -105,16 +95,14 @@ class Condensation(Physics):
                                             self.water_v / dt,
                                             cond_rate)), V)
 
-        # assign values for fields at next time step
-        self.water_v_new.assign(self.water_v - dt * cond_rate)
-        self.water_c_new.assign(self.water_c + dt * cond_rate)
-        self.theta_new.assign(self.theta *
-                              (1.0 + dt * cond_rate *
-                               (cv * L_v / (c_vml * cp * T) -
-                                R_v * cv * c_pml / (R_m * cp * c_vml))))
+        self.water_v_new = Interpolator(self.water_v - dt * cond_rate, V)
+        self.water_c_new = Interpolator(self.water_c + dt * cond_rate, V)
+        self.theta_new = Interpolator(self.theta *
+                                      (1.0 + dt * cond_rate *
+                                       (cv * L_v / (c_vml * cp * T) -
+                                        R_v * cv * c_pml / (R_m * cp * c_vml))), V)
 
     def apply(self):
-        self.update_fields()
-        self.water_v.assign(self.water_v_new)
-        self.water_c.assign(self.water_c_new)
-        self.theta.assign(self.theta_new)
+        self.water_v.assign(self.water_v_new.interpolate())
+        self.water_c.assign(self.water_c_new.interpolate())
+        self.theta.assign(self.theta_new.interpolate())
