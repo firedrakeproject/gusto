@@ -39,7 +39,7 @@ class Condensation(Physics):
         self.theta = state.fields('theta')
         self.water_v = state.fields('water_v')
         self.water_c = state.fields('water_c')
-        self.rho = state.fields('rho')
+        rho = state.fields('rho')
 
         # declare function space
         V = self.theta.function_space()
@@ -65,7 +65,7 @@ class Condensation(Physics):
         w_sat4 = param.w_sat4
 
         # make useful fields
-        Pi = ((R_d * interpolate(self.rho, V) * self.theta / p_0)
+        Pi = ((R_d * rho * self.theta / p_0)
               ** (kappa / (1.0 - kappa)))
         T = Pi * self.theta * R_d / (R_d + self.water_v * R_v)
         p = p_0 * Pi ** (1.0 / kappa)
