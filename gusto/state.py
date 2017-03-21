@@ -256,6 +256,9 @@ class State(object):
             for name in self.diagnostics.fields:
                 data = self.diagnostics.l2(self.field_dict[name])
                 self.diagnostic_data[name]["l2"].append(data)
+                if len(self.field_dict[name].ufl_shape) is 0:
+                    data = self.diagnostics.total(self.field_dict[name])
+                    self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
