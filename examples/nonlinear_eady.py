@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=5*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -101,6 +101,7 @@ Vb = b0.function_space()
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
 bref = (z-H/2)*Nsq
+dbdy = parameters.dbdy
 # interpolate the expression to the function
 b_b = Function(Vb).project(bref)
 
@@ -124,10 +125,12 @@ b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu
 b_pert = Function(Vb).interpolate(b_exp)
 
 # interpolate the expression to the function
-b0.interpolate(b_b + b_pert)
+b0.project(b_b + b_pert)
 
 # hydrostatic initialisation
 incompressible_hydrostatic_balance(state, b0, p0)
+uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
+u0.project(uexpr)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'b': b0})
