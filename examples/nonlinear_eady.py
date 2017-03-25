@@ -167,8 +167,7 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
-                      forcing)
+stepper = EadyTimestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
 # Run!
