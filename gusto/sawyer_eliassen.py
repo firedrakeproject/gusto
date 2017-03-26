@@ -29,37 +29,27 @@ class SawyerEliassenSolver(object):
 
         self.dumpdir = path.join("results", state.output.dirname)
 
-        # get vgrad
-        self.vgrad = Function(V1)
-        self.file_vgrad = File("%s/vgrad.pvd" % self.dumpdir)
-        g = TrialFunction(V1)
-        wg = TestFunction(V1)
-        a = inner(wg,g)*dx
-        L = -div(wg)*oldv*dx + inner(wg,n)*oldv*ds_tb
-        vgradproblem = LinearVariationalProblem(a, L, self.vgrad)
-        self.vgradsolver = LinearVariationalSolver(vgradproblem,
-                                                   solver_parameters={'ksp_type': 'cg'})
-
-        # project b to V2
-        self.oldb = Function(V2)
-        btest = TestFunction(V2)
-        btri = TrialFunction(V2)
+        # project b to V0
+        self.oldb_v0 = Function(V0)
+        self.file_b_v0 = File("%s/b_v0.pvd" % self.dumpdir)
+        btest = TestFunction(V0)
+        btri = TrialFunction(V0)
         a = inner(btest, btri) * dx
         L = inner(btest, b) * dx
-        projectbproblem = LinearVariationalProblem(a, L, self.oldb)
+        projectbproblem = LinearVariationalProblem(a, L, self.oldb_v0)
         self.projectbsolver = LinearVariationalSolver(projectbproblem,
                                                       solver_parameters={'ksp_type': 'cg'})
 
-        # get bgrad
-        self.bgrad = Function(V1)
-        self.file_bgrad = File("%s/bgrad.pvd" % self.dumpdir)
-        g = TrialFunction(V1)
-        wg = TestFunction(V1)
-        a = inner(wg,g)*dx
-        L = -div(wg)*self.oldb*dx + inner(wg,n)*self.oldb*ds_tb
-        bgradproblem = LinearVariationalProblem(a, L, self.bgrad)
-        self.bgradsolver = LinearVariationalSolver(bgradproblem,
-                                                   solver_parameters={'ksp_type': 'cg'})
+        # project v to V0
+        self.oldv_v0 = Function(V0)
+        self.file_v_v0 = File("%s/v_v0.pvd" % self.dumpdir)
+        vtest = TestFunction(V0)
+        vtri = TrialFunction(V0)
+        a = inner(vtest, vtri) * dx
+        L = inner(vtest, oldv) * dx
+        projectvproblem = LinearVariationalProblem(a, L, self.oldv_v0)
+        self.projectvsolver = LinearVariationalSolver(projectvproblem,
+                                                      solver_parameters={'ksp_type': 'cg'})
 
         # psi is a stream function
         self.stm = Function(V0)
@@ -78,14 +68,13 @@ class SawyerEliassenSolver(object):
 
         Equ = (
             xsi.dx(0)*Nsq*psi.dx(0) + xsi.dx(0)*b.dx(2)*psi.dx(0)
-            + xsi.dx(2)*f**2*psi.dx(2) + xsi.dx(2)*f*self.vgrad[0]*psi.dx(2)
-            - xsi.dx(2)*f*self.vgrad[2]*psi.dx(0) - xsi.dx(0)*self.bgrad[0]*psi.dx(2)
+            + xsi.dx(2)*f**2*psi.dx(2) + xsi.dx(2)*f*self.oldv_v0.dx(0)*psi.dx(2)
+            - xsi.dx(2)*f*self.oldv_v0.dx(2)*psi.dx(0) - xsi.dx(0)*self.oldb_v0.dx(0)*psi.dx(2)
             + dbdy*xsi.dx(0)*oldv - dbdy*xsi.dx(2)*f*eady_exp
         )*dx
 
         Au = lhs(Equ)
         Lu = rhs(Equ)
-        stm = Function(V0)
         stmproblem = LinearVariationalProblem(Au, Lu, self.stm, bcs=bc1)
         self.stmsolver = LinearVariationalSolver(stmproblem,
                                                  solver_parameters={'ksp_type': 'cg'})
@@ -96,20 +85,21 @@ class SawyerEliassenSolver(object):
         utrial = TrialFunction(V1)
         w = TestFunction(V1)
         a = inner(w,utrial)*dx
-        L = (w[0]*(-stm.dx(2))+w[2]*(stm.dx(0)))*dx
+        L = (w[0]*(-self.stm.dx(2))+w[2]*(self.stm.dx(0)))*dx
         ugproblem = LinearVariationalProblem(a, L, self.ug)
         self.ugsolver = LinearVariationalSolver(ugproblem,
                                                 solver_parameters={'ksp_type': 'cg'})
 
+
     def solve(self):
-        self.vgradsolver.solve()
         self.projectbsolver.solve()
-        self.bgradsolver.solve()
+        self.projectvsolver.solve()
         self.stmsolver.solve()
         self.ugsolver.solve()
 
+
     def dump(self):
-        self.file_ug.write(self.ug)
+        self.file_v_v0.write(self.oldv_v0)
+        self.file_b_v0.write(self.oldb_v0)
         self.file_stm.write(self.stm)
-        self.file_vgrad.write(self.vgrad)
-        self.file_bgrad.write(self.bgrad)
+        self.file_ug.write(self.ug)
