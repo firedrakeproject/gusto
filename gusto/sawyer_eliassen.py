@@ -3,7 +3,7 @@ from os import path
 from firedrake import Function, TrialFunction, TestFunction, \
     FunctionSpace, FacetNormal, inner, dx, div, grad, dot, ds_tb, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    Constant, Expression, as_vector, as_matrix, File
+    Constant, Expression, as_vector, as_matrix, lhs, rhs, File
 
 
 class SawyerEliassenSolver(object):
@@ -77,13 +77,39 @@ class SawyerEliassenSolver(object):
                for x in ["top", "bottom"]]
 
         Equ = (
-            xsi.dx(0)*Nsq*psi.dx(0) + xsi.dx(0)*b.dx(2)*psi.dx(0) 
+            xsi.dx(0)*Nsq*psi.dx(0) + xsi.dx(0)*b.dx(2)*psi.dx(0)
             + xsi.dx(2)*f**2*psi.dx(2) + xsi.dx(2)*f*self.vgrad[0]*psi.dx(2)
-            - xsi.dx(2)*f*self.vgrad[2]*psi.dx(0) - xsi.dx(0)*self.bgrad[0]*psi.dx(2) 
+            - xsi.dx(2)*f*self.vgrad[2]*psi.dx(0) - xsi.dx(0)*self.bgrad[0]*psi.dx(2)
             + dbdy*xsi.dx(0)*oldv - dbdy*xsi.dx(2)*f*eady_exp
         )*dx
+
+        Au = lhs(Equ)
+        Lu = rhs(Equ)
+        stm = Function(V0)
+        stmproblem = LinearVariationalProblem(Au, Lu, self.stm, bcs=bc1)
+        self.stmsolver = LinearVariationalSolver(stmproblem,
+                                                 solver_parameters={'ksp_type': 'cg'})
+
+        # get ug
+        self.ug = Function(V1)
+        self.file_ug = File("%s/ug.pvd" % self.dumpdir)
+        utrial = TrialFunction(V1)
+        w = TestFunction(V1)
+        a = inner(w,utrial)*dx
+        L = (w[0]*(-stm.dx(2))+w[2]*(stm.dx(0)))*dx
+        ugproblem = LinearVariationalProblem(a, L, self.ug)
+        self.ugsolver = LinearVariationalSolver(ugproblem,
+                                                solver_parameters={'ksp_type': 'cg'})
 
     def solve(self):
         self.vgradsolver.solve()
         self.projectbsolver.solve()
         self.bgradsolver.solve()
+        self.stmsolver.solve()
+        self.ugsolver.solve()
+
+    def dump(self):
+        self.file_ug.write(self.ug)
+        self.file_stm.write(self.stm)
+        self.file_vgrad.write(self.vgrad)
+        self.file_bgrad.write(self.bgrad)

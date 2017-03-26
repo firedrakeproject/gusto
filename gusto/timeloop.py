@@ -212,8 +212,9 @@ class EadyTimestepper(Timestepper):
             state.setup_dump(pickup)
             t = state.dump(t, pickup)
 
-        self.sawyer_eliassen_solver = SawyerEliassenSolver(state)
-        self.sawyer_eliassen_solver.solve()
+            self.sawyer_eliassen_solver = SawyerEliassenSolver(state)
+            self.sawyer_eliassen_solver.solve()
+            self.sawyer_eliassen_solver.dump()
 
         while t < tmax + 0.5*dt:
             if state.output.Verbose:
@@ -268,6 +269,8 @@ class EadyTimestepper(Timestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
+                self.sawyer_eliassen_solver.solve()
+                self.sawyer_eliassen_solver.dump()
 
         state.diagnostic_dump()
         print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)

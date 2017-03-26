@@ -133,7 +133,7 @@ uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
 u0.project(uexpr)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'b': b0})
+state.initialise({'b':b0, 'u':u0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
 
