@@ -240,11 +240,6 @@ class State(object):
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             print "DBG dumping", t
-            print "RMSV =", self.diagnostic_data["VerticalVelocity"]["rms"]
-            print "Vmax =", self.diagnostic_data["VerticalVelocity"]["max"]
-            print "Potential =", self.diagnostic_data["EadyPotentialEnergy"]["assem"]
-            print "Kinetic =", self.diagnostic_data["KineticEnergy"]["assem"]
-            print "KineticV =", self.diagnostic_data["KineticEnergyV"]["assem"]
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:

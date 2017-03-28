@@ -211,7 +211,6 @@ class EadyTimestepper(Timestepper):
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
             t = state.dump(t, pickup)
-
             self.sawyer_eliassen_solver = SawyerEliassenSolver(state)
             self.sawyer_eliassen_solver.solve()
             self.sawyer_eliassen_solver.dump()
@@ -269,8 +268,14 @@ class EadyTimestepper(Timestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
-                self.sawyer_eliassen_solver.solve()
-                self.sawyer_eliassen_solver.dump()
+                if (t % (state.output.dumpfreq*state.timestepping.dt)) == 0.:
+                    self.sawyer_eliassen_solver.solve()
+                    self.sawyer_eliassen_solver.dump()
+                    print "RMSV =", state.diagnostic_data["VerticalVelocity"]["rms"]
+                    print "Vmax =", state.diagnostic_data["VerticalVelocity"]["max"]
+                    print "Potential =", state.diagnostic_data["EadyPotentialEnergy"]["assem"]
+                    print "Kinetic =", state.diagnostic_data["KineticEnergy"]["assem"]
+                    print "KineticV =", state.diagnostic_data["KineticEnergyV"]["assem"]
 
         state.diagnostic_dump()
         print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
