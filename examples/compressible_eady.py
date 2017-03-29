@@ -103,7 +103,6 @@ Vr = rho0.function_space()
 # from the parameters class.
 x, y, z = SpatialCoordinate(mesh)
 g = parameters.g
-N = parameters.N
 p_0 = parameters.p_0
 c_p = parameters.cp
 R_d = parameters.R_d
@@ -112,11 +111,11 @@ Nsq = parameters.Nsq
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
-thetab = Tsurf*exp(Nsq*(z-H/2)/g)
-theta_b = Function(Vt).interpolate(thetab)
+thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
+theta_b = Function(Vt).interpolate(thetaref)
 rho_b = Function(Vr)
 
-# Calculate hydrostatic Pi
+# hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 rho0.assign(rho_b)
 theta0.interpolate(theta_b)
@@ -175,7 +174,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleEadyForcing(state, euler_poincare=False)
 
 ##############################################################################
 # build time stepper
