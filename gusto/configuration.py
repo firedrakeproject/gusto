@@ -85,9 +85,35 @@ class ShallowWaterParameters(Configuration):
 class EadyParameters(Configuration):
 
     """
-    Physical parameters for nonlinear eady
+    Physical parameters for Incompressible Eady
     """
     Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
     H = None
-    geopotential = False  # use geopotential for gravity term
+
+
+class CompressibleEadyParameters(Configuration):
+
+    """
+    Physical parameters for Compressible Eady
+    """
+    g = 9.810616
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
+    R_d = 287.  # Gas constant for dry air (J/kg/K)
+    kappa = 2.0/7.0  # R_d/c_p
+    p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
+    cv = 717.  # SHC of dry air at const. volume (J/kg/K)
+    c_pl = 4186.  # SHC of liq. wat. at const. pressure (J/kg/K)
+    c_pv = 1885.  # SHC of wat. vap. at const. pressure (J/kg/K)
+    c_vv = 1424.  # SHC of wat. vap. at const. pressure (J/kg/K)
+    R_v = 461.  # gas constant of water vapour
+    L_v0 = 2.5e6  # ref. value for latent heat of vap. (J/kg)
+    T_0 = 273.15  # ref. temperature
+    w_sat1 = 380.3  # first const. in Teten's formula (Pa)
+    w_sat2 = -17.27  # second const. in Teten's formula (no units)
+    w_sat3 = 35.86  # third const. in Teten's formula (K)
+    w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
+    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
+    dbdy = -1.0e-07
+    H = None
