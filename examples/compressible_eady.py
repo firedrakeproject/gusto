@@ -1,6 +1,7 @@
 from gusto import *
 from firedrake import as_vector, SpatialCoordinate,\
-    PeriodicRectangleMesh, ExtrudedMesh, exp, sin
+    PeriodicRectangleMesh, ExtrudedMesh, \
+    exp, cos, sin, cosh, sinh, tanh, pi
 import numpy as np
 import sys
 
@@ -108,6 +109,7 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 Nsq = parameters.Nsq
+dbdy = parameters.dbdy
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
@@ -115,17 +117,37 @@ thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
 theta_b = Function(Vt).interpolate(thetaref)
 rho_b = Function(Vr)
 
+# setup constants
+def coth(x):
+    return cosh(x)/sinh(x)
+
+
+def Z(z):
+    return Bu*((z/H)-0.5)
+
+
+def n():
+    return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
+
+
+a = -7.5
+Bu = 0.5
+theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+theta_pert = Function(Vt).interpolate(theta_exp)
+
+# set theta0
+theta0.interpolate(theta_b + theta_pert)
+
 # hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
-rho0.assign(rho_b)
-theta0.interpolate(theta_b)
+compressible_hydrostatic_balance(state, theta0, rho0)
 
-#theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
-#theta0.interpolate(theta_b + theta_pert)
-#u0.project(as_vector([20.0, 0.0, 0.0]))
+# balanced u
+exner_pi = exner(theta0, rho0, state)
+uexpr = as_vector([c_p*30.*dbdy/f*exner_pi, 0.0, 0.0])
+u0.project(uexpr)
 
-#state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.initialise({'rho': rho0, 'theta': theta0})
+state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 ##############################################################################
