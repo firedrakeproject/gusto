@@ -387,6 +387,7 @@ class CompressibleEadyForcing(Forcing):
         L = self.scaling*(
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
+            + cp*30.*dbdy*pi*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
         )
 
         if state.geopotential_form:
@@ -415,6 +416,23 @@ class CompressibleEadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
+# theta_forcing
+
+        Vt = state.spaces("HDiv_v")
+
+        F = TrialFunction(Vt)
+        gamma = TestFunction(Vt)
+        self.thetaF = Function(Vt)
+
+        a = gamma*F*dx
+        L = -gamma*self.scaling*(30.*dbdy*inner(u0,as_vector([0.,1.,0.])))*dx
+
+        theta_forcing_problem = LinearVariationalProblem(
+            a,L,self.thetaF
+        )
+
+        self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)
+
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         self.x0.assign(x_nl)
@@ -422,11 +440,13 @@ class CompressibleEadyForcing(Forcing):
         if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
             self.mu_scaling.assign(kwargs['mu_alpha'])
         self.u_forcing_solver.solve()  # places forcing in self.uF
+        self.theta_forcing_solver.solve()  # places forcing in self.thetaF
 
-        u_out, _, _ = x_out.split()
+        u_out, _, theta_out = x_out.split()
 
         x_out.assign(x_in)
         u_out += self.uF
+        theta_out += self.thetaF
 
 
 class ShallowWaterForcing(Forcing):

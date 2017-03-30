@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 30.
+dt = 40.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=40*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36, dumplist=['u','p'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -101,11 +101,12 @@ Vb = b0.function_space()
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
 bref = (z-H/2)*Nsq
-# interpolate the expression to the function
+dbdy = parameters.dbdy
+# reference buoyancy
 b_b = Function(Vb).project(bref)
 
 
-# setup constants
+# b perturbation
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -123,14 +124,19 @@ Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
-# interpolate the expression to the function
-b0.interpolate(b_b + b_pert)
+# set initial b
+b0.project(b_b + b_pert)
 
-# hydrostatic initialisation
+# calculate hydrostatic p
 incompressible_hydrostatic_balance(state, b0, p0)
 
+# set initial u
+uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
+u0.project(uexpr)
+
 # pass these initial conditions to the state.initialise method
-state.initialise({'b': b0})
+state.initialise({'b':b0, 'u':u0, 'p':p0})
+
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
 
@@ -164,8 +170,7 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
-                      forcing)
+stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
 # Run!
