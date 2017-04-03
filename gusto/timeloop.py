@@ -56,7 +56,7 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -64,6 +64,10 @@ class Timestepper(BaseTimestepper):
         self.diffusion_dict = {}
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
         if(isinstance(self.linear_solver, IncompressibleSolver)):
             self.incompressible = True
@@ -144,6 +148,10 @@ class Timestepper(BaseTimestepper):
                     field = getattr(state.fields, name)
                     diffusion.apply(field, field)
 
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
+
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
@@ -152,6 +160,14 @@ class Timestepper(BaseTimestepper):
 
 
 class AdvectionTimestepper(BaseTimestepper):
+
+    def __init__(self, state, advection_dict, physics_list=None):
+
+        super(AdvectionTimestepper, self).__init__(state, advection_dict)
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
     def run(self, t, tmax, x_end=None):
         state = self.state
@@ -174,6 +190,9 @@ class AdvectionTimestepper(BaseTimestepper):
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects field
                 advection.apply(field, field)
+
+            for physics in self.physics_list:
+                physics.apply()
 
             state.dump()
 
@@ -273,9 +292,9 @@ class EadyTimestepper(Timestepper):
                     self.sawyer_eliassen_solver.dump()
                     print "RMSV =", state.diagnostic_data["VerticalVelocity"]["rms"]
                     print "Vmax =", state.diagnostic_data["VerticalVelocity"]["max"]
-                    print "Potential =", state.diagnostic_data["EadyPotentialEnergy"]["assem"]
-                    print "Kinetic =", state.diagnostic_data["KineticEnergy"]["assem"]
-                    print "KineticV =", state.diagnostic_data["KineticEnergyV"]["assem"]
+                    print "Potential =", state.diagnostic_data["EadyPotentialEnergy"]["total"]
+                    print "Kinetic =", state.diagnostic_data["KineticEnergy"]["total"]
+                    print "KineticV =", state.diagnostic_data["KineticEnergyV"]["total"]
 
         state.diagnostic_dump()
         print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)

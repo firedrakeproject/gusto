@@ -46,8 +46,8 @@ class Diagnostics(object):
         return rms
 
     @staticmethod
-    def assem(f):
-        return assemble(f*dx)
+    def total(f):
+        return assemble(f * dx)
 
 
 class DiagnosticField(object):

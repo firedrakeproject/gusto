@@ -255,21 +255,20 @@ class State(object):
             # compute diagnostics
             for name in self.diagnostics.fields:
                 if name is "EadyPotentialEnergy":
-                    data_assem = self.diagnostics.assem(self.field_dict[name])
-                    self.diagnostic_data[name]["assem"].append(data_assem)
+                    data = self.diagnostics.total(self.field_dict[name])
+                    self.diagnostic_data[name]["total"].append(data)
                 elif name is "KineticEnergy":
-                    data_assem = self.diagnostics.assem(self.field_dict[name])
-                    self.diagnostic_data[name]["assem"].append(data_assem)
+                    data = self.diagnostics.total(self.field_dict[name])
+                    self.diagnostic_data[name]["total"].append(data)
                 elif name is "KineticEnergyV":
-                    data_assem = self.diagnostics.assem(self.field_dict[name])
-                    self.diagnostic_data[name]["assem"].append(data_assem)
+                    data = self.diagnostics.total(self.field_dict[name])
+                    self.diagnostic_data[name]["total"].append(data)
                 else:
                     data = self.diagnostics.l2(self.field_dict[name])
                     self.diagnostic_data[name]["l2"].append(data)
-                    data_max = self.diagnostics.max(self.field_dict[name])
-                    self.diagnostic_data[name]["max"].append(data_max)
-                    data_rms = self.diagnostics.rms(self.field_dict[name])
-                    self.diagnostic_data[name]["rms"].append(data_rms)
+                    if len(self.field_dict[name].ufl_shape) is 0:
+                        data = self.diagnostics.total(self.field_dict[name])
+                        self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
