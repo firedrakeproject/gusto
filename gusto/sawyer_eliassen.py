@@ -18,7 +18,7 @@ class SawyerEliassenSolver(object):
     def _setup_solver(self):
         state = self.state
 
-        V0 = FunctionSpace(state.mesh, "CG", 1)
+        V0 = FunctionSpace(state.mesh, "CG", 2)
         V1 = state.spaces("HDiv")
         V2 = state.spaces("DG")
         n = FacetNormal(state.mesh)
