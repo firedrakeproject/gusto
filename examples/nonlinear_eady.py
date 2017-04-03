@@ -105,8 +105,7 @@ dbdy = parameters.dbdy
 # interpolate the expression to the function
 b_b = Function(Vb).project(bref)
 
-
-# setup constants
+# setup b perturbation
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -124,16 +123,16 @@ Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
-# interpolate the expression to the function
+# setup total b 
 b0.project(b_b + b_pert)
-
-# hydrostatic initialisation
+# calculate hydrostatic p
 incompressible_hydrostatic_balance(state, b0, p0)
+# setup initial u
 uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
 u0.project(uexpr)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'b':b0, 'u':u0})
+state.initialise({'b':b0, 'u':u0, 'p':p0})
 # set the background buoyancy
 state.set_reference_profiles({'b':b_b})
 
