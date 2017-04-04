@@ -104,6 +104,6 @@ class CompressibleEadyParameters(Configuration):
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
     cv = 717.  # SHC of dry air at const. volume (J/kg/K)
     T_0 = 273.15  # ref. temperature
-    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-    dbdy = -1.0e-07
+    Nsq = None  # squared Brunt-Vaisala frequency (1/s)
+    dbdy = None
     H = None

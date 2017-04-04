@@ -56,7 +56,8 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36, dumplist=['u','p'], 
+                          perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -94,19 +95,16 @@ p0 = state.fields("p")
 Vu = u0.function_space()
 Vb = b0.function_space()
 
-# first setup the background buoyancy profile
-# z.grad(bref) = N**2
-# the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class.
+# parameters
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
-bref = (z-H/2)*Nsq
 dbdy = parameters.dbdy
-# reference buoyancy
+
+# background buoyancy
+bref = (z-H/2)*Nsq
 b_b = Function(Vb).project(bref)
 
-
-# b perturbation
+# buoyancy perturbation
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -124,10 +122,10 @@ Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
-# set initial b
+# set total buoyancy
 b0.project(b_b + b_pert)
 
-# calculate hydrostatic p
+# calculate hydrostatic total pressure
 incompressible_hydrostatic_balance(state, b0, p0)
 
 # set initial u

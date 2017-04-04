@@ -17,8 +17,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-#    tmax = 30*24*60*60.
-    tmax = 30*60.
+    tmax = 30*24*60*60.
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -41,6 +40,8 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0.,0.,f*0.5])
+Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
+dbdy = -1.0e-07
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -58,13 +59,14 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='compressible_eady', dumpfreq=1, dumplist=['u','rho','theta'], 
+output = OutputParameters(dirname='compressible_eady', dumpfreq=240, 
+                          dumplist=['u','rho','theta'], 
                           perturbation_fields=['rho', 'theta'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleEadyParameters(H=H)
+parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -108,8 +110,6 @@ p_0 = parameters.p_0
 c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
-Nsq = parameters.Nsq
-dbdy = parameters.dbdy
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
@@ -170,7 +170,7 @@ advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 schur_params = {'pc_type': 'fieldsplit',
                 'pc_fieldsplit_type': 'schur',
                 'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': True,
+                'ksp_monitor_true_residual': False,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 50,
                 'pc_fieldsplit_schur_fact_type': 'FULL',
@@ -181,7 +181,7 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_0_sub_pc_type': 'ilu',
                 'fieldsplit_1_ksp_type': 'richardson',
                 'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": True,
+                "fieldsplit_1_ksp_monitor_true_residual": False,
                 'fieldsplit_1_pc_type': 'gamg',
                 'fieldsplit_1_pc_gamg_sym_graph': True,
                 'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
