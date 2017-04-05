@@ -8,18 +8,8 @@ import sys
 dt = 30.
 if '--running-tests' in sys.argv:
     tmax = dt
-    # avoid using mumps on Travis
-    linear_solver_params = {'ksp_type':'gmres',
-                            'pc_type':'fieldsplit',
-                            'pc_fieldsplit_type':'additive',
-                            'fieldsplit_0_pc_type':'lu',
-                            'fieldsplit_1_pc_type':'lu',
-                            'fieldsplit_0_ksp_type':'preonly',
-                            'fieldsplit_1_ksp_type':'preonly'}
 else:
     tmax = 30*24*60*60.
-    # use default linear solver parameters (i.e. mumps)
-    linear_solver_params = None
 
 ##############################################################################
 # set up mesh
