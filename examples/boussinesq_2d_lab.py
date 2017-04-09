@@ -6,7 +6,7 @@ import sympy as sp
 from sympy.stats import Normal
 import sys
 
-dt = 0.1
+dt = 1./20
 
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -27,12 +27,12 @@ else:
 # set up mesh
 ##############################################################################
 # Construct 1d periodic base mesh for idealised lab experiment of Park et al. (1994)
-columns = 35  # number of columns
+columns = 20  # number of columns
 L = 0.2
 m = PeriodicIntervalMesh(columns, L)
 
 # build 2D mesh by extruding the base mesh
-nlayers = 80  # horizontal layers
+nlayers = 45  # horizontal layers
 H = 0.45  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
@@ -57,12 +57,13 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=50, dumplist=['u', 'p', 'b'], perturbation_fields=['b'])
+output = OutputParameters(dirname='boussinesq_2d_lab', dumpfreq=200, dumplist=['u','b'], perturbation_fields=['b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
 rho_0 = Constant(1090.95075)
+#N=1.957 (run 18), N=1.1576 (run 16), N=0.5916 (run 14), N=0.2
 parameters = CompressibleParameters(N=1.957, p_0=106141.3045)
 
 # Physical parameters adjusted for idealised lab experiment of Park et al. (1994):
