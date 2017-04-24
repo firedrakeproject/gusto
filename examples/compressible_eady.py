@@ -64,7 +64,7 @@ parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), ExnerPi()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -134,7 +134,8 @@ compressible_hydrostatic_balance(state, theta0, rho0)
 
 # balanced u
 exner_pi = exner(theta0, rho0, state)
-uexpr = as_vector([c_p*30.*dbdy/f*exner_pi, 0.0, 0.0])
+pidiff = Constant(0.834)
+uexpr = as_vector([c_p*30.*dbdy/f*(exner_pi-pidiff), 0.0, 0.0])
 u0.project(uexpr)
 
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})

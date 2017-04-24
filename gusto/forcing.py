@@ -382,12 +382,13 @@ class CompressibleEadyForcing(Forcing):
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
+        pidiff = Constant(0.834)
 
         a = inner(w,F)*dx
         L = self.scaling*(
             + cp*div(theta0*w)*pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(pi)*dS_v  # pressure gradient [surface]
-            + cp*30.*dbdy*pi*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
+            + cp*30.*dbdy*(pi-pidiff)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
         )
 
         if state.geopotential_form:
