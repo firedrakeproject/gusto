@@ -1,6 +1,7 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, Constant
 from abc import ABCMeta, abstractmethod, abstractproperty
+from gusto.forcing import exner
 
 
 class Diagnostics(object):
@@ -64,6 +65,23 @@ class CourantNumber(DiagnosticField):
         u = state.fields("u")
         dt = Constant(state.timestepping.dt)
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
+
+
+class ExnerPi(DiagnosticField):
+    name = "ExnerPi"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        rho = state.fields("rho")
+        theta = state.fields("theta")
+        pi = exner(theta, rho, state)
+        return self.field(state.mesh).interpolate(pi)
 
 
 class VerticalVelocity(DiagnosticField):
