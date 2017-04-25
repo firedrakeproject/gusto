@@ -96,7 +96,7 @@ class Timestepper(BaseTimestepper):
             state.setup_dump(pickup)
             t = state.dump(t, pickup)
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
