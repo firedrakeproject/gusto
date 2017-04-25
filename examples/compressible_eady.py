@@ -158,31 +158,29 @@ advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 # Set up linear solver for the timestepping scheme
 ##############################################################################
 # Set up linear solver
-schur_params = {'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': False,
-                'ksp_max_it': 100,
-                'ksp_gmres_restart': 50,
-                'pc_fieldsplit_schur_fact_type': 'FULL',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
-                'fieldsplit_0_pc_type': 'bjacobi',
-                'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": False,
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_pc_gamg_sym_graph': True,
-                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+linear_solver_params = {'pc_type': 'fieldsplit',
+                        'pc_fieldsplit_type': 'schur',
+                        'ksp_type': 'gmres',
+                        'ksp_max_it': 100,
+                        'ksp_gmres_restart': 50,
+                        'ksp_monitor_true_residual': True,
+                        'pc_fieldsplit_schur_fact_type': 'FULL',
+                        'pc_fieldsplit_schur_precondition': 'selfp',
+                        'fieldsplit_0_ksp_type': 'preonly',
+                        'fieldsplit_0_pc_type': 'bjacobi',
+                        'fieldsplit_0_sub_pc_type': 'ilu',
+                        'fieldsplit_1_ksp_type': 'preonly',
+                        'fieldsplit_1_pc_type': 'gamg',
+                        'fieldsplit_1_pc_gamg_sym_graph': True,
+                        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                        'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, params=schur_params)
+
+linear_solver = CompressibleSolver(state, params=linear_solver_params)
 
 ##############################################################################
 # Set up forcing
