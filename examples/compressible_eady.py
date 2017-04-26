@@ -129,7 +129,7 @@ compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
 # balanced u
-compressible_eady_initial_u(state, theta0, rho0, u0)
+pi0 = compressible_eady_initial_u(state, theta_b, rho_b, u0)
 
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
@@ -178,7 +178,8 @@ linear_solver = CompressibleSolver(state, params=linear_solver_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-compressible_forcing = CompressibleEadyForcing(state, euler_poincare=False)
+compressible_forcing = CompressibleEadyForcing(state, pi0=pi0,
+                                               euler_poincare=False)
 
 ##############################################################################
 # build time stepper

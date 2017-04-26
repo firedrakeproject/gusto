@@ -74,7 +74,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     p0.project(pprime)
 
 
-def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
+def compressible_hydrostatic_balance(state, theta0, rho0,
                                      top=False, pi_boundary=Constant(1.0),
                                      solve_for_rho=False,
                                      params=None):
@@ -154,8 +154,6 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     PiSolver.solve()
     v, Pi = w.split()
-    if pi0 is not None:
-        pi0.assign(Pi)
 
     kappa = state.parameters.kappa
     R_d = state.parameters.R_d
@@ -195,19 +193,20 @@ def remove_initial_w(u, Vv):
     u.assign(uin)
 
 
-def compressible_eady_initial_u(state, theta0, rho0, u0):
+def compressible_eady_initial_u(state, theta, rho, u):
     cp = state.parameters.cp
     dbdy = state.parameters.dbdy
     f = state.parameters.f
 
-    pi = exner(theta0, rho0, state)
-    exner_pi = Function(rho0.function_space())
-    exner_pi.project(pi)
+    pi = exner(theta, rho, state)
+    exner_pi = Function(rho.function_space())
+    exner_pi.interpolate(pi)
 
     pi_max = Diagnostics.max(exner_pi)
     pi_min = Diagnostics.min(exner_pi)
-    pi_avg = (pi_max + pi_min) * 0.5
-    pi0 = Constant(pi_avg)
+    pi0 = (pi_max + pi_min) * 0.5
 
     uexpr = as_vector([cp*30.*dbdy/f*(pi-pi0), 0.0, 0.0])
-    u0.project(uexpr)
+    u.project(uexpr)
+
+    return pi0
