@@ -1,5 +1,5 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant
+    TestFunction, Constant, op2
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 
@@ -16,6 +16,34 @@ class Diagnostics(object):
         for f in fields:
             if f not in fset:
                 self.fields.append(f)
+
+    @staticmethod
+    def min(f):
+        fmin = op2.Global(1, [1000], dtype=float)
+        op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
+        {
+        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+        }""", "minify"),
+                     f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+        return fmin.data[0]
+
+    @staticmethod
+    def max(f):
+        fmax = op2.Global(1, [-1000], dtype=float)
+        op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
+        {
+        a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+        }""", "maxify"),
+                     f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+        return fmax.data[0]
+
+    @staticmethod
+    def rms(f):
+        V = FunctionSpace(f.function_space().mesh(), "DG", 1)
+        c = Function(V)
+        c.assign(1)
+        rms = sqrt(assemble((dot(f,f))*dx)/assemble(c*dx))
+        return rms
 
     @staticmethod
     def l2(f):
@@ -77,7 +105,6 @@ class ExnerPi(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        u = state.fields("u")
         rho = state.fields("rho")
         theta = state.fields("theta")
         pi = exner(theta, rho, state)

@@ -7,9 +7,11 @@ from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Expression, Function, Constant, \
+    Expression, Function, Constant, as_vector, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
+from gusto.forcing import exner
+from gusto.diagnostics import Diagnostics
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -191,3 +193,21 @@ def remove_initial_w(u, Vv):
     ustar = Function(u.function_space()).project(uv)
     uin = Function(u.function_space()).assign(u - ustar)
     u.assign(uin)
+
+
+def compressible_eady_initial_u(state, theta0, rho0, u0):
+    cp = state.parameters.cp
+    dbdy = state.parameters.dbdy
+    f = state.parameters.f
+
+    pi = exner(theta0, rho0, state)
+    exner_pi = Function(rho0.function_space())
+    exner_pi.project(pi)
+
+    pi_max = Diagnostics.max(exner_pi)
+    pi_min = Diagnostics.min(exner_pi)
+    pi_avg = (pi_max + pi_min) * 0.5
+    pi0 = Constant(pi_avg)
+
+    uexpr = as_vector([cp*30.*dbdy/f*(pi-pi0), 0.0, 0.0])
+    u0.project(uexpr)

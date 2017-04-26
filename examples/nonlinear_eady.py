@@ -56,7 +56,8 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36, dumplist=['u','p'], 
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36,
+                          dumplist=['u','p'],
                           perturbation_fields=['b'])
 
 # class containing physical parameters
@@ -103,6 +104,7 @@ dbdy = parameters.dbdy
 # background buoyancy
 bref = (z-H/2)*Nsq
 b_b = Function(Vb).project(bref)
+
 
 # buoyancy perturbation
 def coth(x):

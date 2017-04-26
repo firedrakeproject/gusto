@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import as_vector, SpatialCoordinate,\
     PeriodicRectangleMesh, ExtrudedMesh, \
     exp, cos, sin, cosh, sinh, tanh, pi
-import numpy as np
 import sys
 
 dt = 30.
@@ -49,14 +48,14 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='compressible_eady', dumpfreq=240, 
-                          dumplist=['u','rho','theta'], 
+output = OutputParameters(dirname='compressible_eady', dumpfreq=240,
+                          dumplist=['u','rho','theta'],
                           perturbation_fields=['rho', 'theta'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy)
+parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy, f=f)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -96,16 +95,13 @@ Vr = rho0.function_space()
 # from the parameters class.
 x, y, z = SpatialCoordinate(mesh)
 g = parameters.g
-p_0 = parameters.p_0
-c_p = parameters.cp
-R_d = parameters.R_d
-kappa = parameters.kappa
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
 thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
 theta_b = Function(Vt).interpolate(thetaref)
 rho_b = Function(Vr)
+
 
 # setup constants
 def coth(x):
@@ -133,10 +129,7 @@ compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
 # balanced u
-exner_pi = exner(theta0, rho0, state)
-pidiff = Constant(0.834)
-uexpr = as_vector([c_p*30.*dbdy/f*(exner_pi-pidiff), 0.0, 0.0])
-u0.project(uexpr)
+compressible_eady_initial_u(state, theta0, rho0, u0)
 
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
@@ -161,9 +154,9 @@ advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 linear_solver_params = {'pc_type': 'fieldsplit',
                         'pc_fieldsplit_type': 'schur',
                         'ksp_type': 'gmres',
+                        'ksp_monitor_true_residual': False,
                         'ksp_max_it': 100,
                         'ksp_gmres_restart': 50,
-                        'ksp_monitor_true_residual': True,
                         'pc_fieldsplit_schur_fact_type': 'FULL',
                         'pc_fieldsplit_schur_precondition': 'selfp',
                         'fieldsplit_0_ksp_type': 'preonly',

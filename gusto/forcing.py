@@ -358,12 +358,7 @@ class CompressibleEadyForcing(Forcing):
         state = self.state
         self.scaling = Constant(1.)
         Vu = state.spaces("HDiv")
-        Vp = state.spaces("DG")
         W = state.W
-
-        dbdy = state.parameters.dbdy
-        H = state.parameters.H
-        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
         self.x0 = Function(W)   # copy x to here
 
@@ -378,6 +373,7 @@ class CompressibleEadyForcing(Forcing):
         Omega = state.Omega
         cp = state.parameters.cp
         mu = state.mu
+        dbdy = state.parameters.dbdy
 
         n = FacetNormal(state.mesh)
 
