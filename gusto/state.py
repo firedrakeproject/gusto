@@ -253,9 +253,12 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
+            diagnostic_fns = ['min', 'max', 'l2']
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(self.field_dict[name])
-                self.diagnostic_data[name]["l2"].append(data)
+                for fn in diagnostic_fns:
+                    d = getattr(self.diagnostics, fn)
+                    data = d(self.field_dict[name])
+                    self.diagnostic_data[name][fn].append(data)
                 if len(self.field_dict[name].ufl_shape) is 0:
                     data = self.diagnostics.total(self.field_dict[name])
                     self.diagnostic_data[name]["total"].append(data)
