@@ -141,6 +141,55 @@ class HorizontalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(uh)
 
 
+class KineticEnergy(DiagnosticField):
+    name = "KineticEnergy"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        kinetic = 0.5*dot(u,u)
+        return self.field(state.mesh).interpolate(kinetic)
+
+
+class KineticEnergyV(DiagnosticField):
+    name = "KineticEnergyV"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        kineticv = 0.5*u[1]*u[1]
+        return self.field(state.mesh).interpolate(kineticv)
+
+
+class IncompressibleEadyPotentialEnergy(DiagnosticField):
+    name = "IncompressibleEadyPotentialEnergy"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        Vp = state.spaces("DG")
+        b = state.fields("b")
+        bbar = state.fields("bbar")
+        H = state.parameters.H
+        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
+        potential = -eady_exp*(b-bbar)
+        return self.field(state.mesh).interpolate(potential)
+
+
 class Sum(DiagnosticField):
 
     def __init__(self, fieldname1, fieldname2):

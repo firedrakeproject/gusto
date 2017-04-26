@@ -253,7 +253,7 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
-            diagnostic_fns = ['min', 'max', 'l2']
+            diagnostic_fns = ['min', 'max', 'rms', 'l2']
             for name in self.diagnostics.fields:
                 for fn in diagnostic_fns:
                     d = getattr(self.diagnostics, fn)
