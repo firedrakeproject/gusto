@@ -350,7 +350,7 @@ class CompressibleEadyForcing(Forcing):
     Forcing class for compressible Euler equations.
     """
 
-    def __init__(self, state, pi0=None, euler_poincare=True, linear=False):
+    def __init__(self, state, pi0=0.0, euler_poincare=True, linear=False):
         self.pi0 = pi0
         super(CompressibleEadyForcing, self).__init__(state, euler_poincare, linear)
 

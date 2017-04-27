@@ -63,7 +63,7 @@ parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy, f=f)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), ExnerPi(), VerticalVelocity(), 
+diagnostic_fields = [CourantNumber(), ExnerPi(), VerticalVelocity(),
                      KineticEnergy(), KineticEnergyV()]
 
 # setup state, passing in the mesh, information on the required finite element
