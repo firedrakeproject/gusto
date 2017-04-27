@@ -186,7 +186,7 @@ compressible_forcing = CompressibleEadyForcing(state, pi0=pi0,
 # build time stepper
 ##############################################################################
 stepper = Timestepper(state, advection_dict, linear_solver,
-                      compressible_forcing)
+                      compressible_forcing, diagnostic_everydump=True)
 
 ##############################################################################
 # Run!
