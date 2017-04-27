@@ -68,7 +68,7 @@ parameters = CompressibleParameters(N=1.957, p_0=106141.3045)
 
 # Physical parameters adjusted for idealised lab experiment of Park et al. (1994):
 # The value of the background buoyancy frequency N is that for their run number 18, which has clear stair-step features.
-# p_0 was set by assuming an initially hydrostatic fluid and a reference density rho_0=1090.95075 kg m^(-3).
+# p_0 was found by assuming an initially hydrostatic fluid and a reference density rho_0=1090.95075 kg m^(-3).
 # The reference density was found by estimating drho/dz from Fig. 7a of Park et al. (1994), converting to SI units,
 # and then using the N^2 value above.
 # p_0=106141.3045
@@ -176,18 +176,21 @@ forcing = IncompressibleForcing(state)
 #Set up diffusion scheme
 ##############################################################################
 # mu is a numerical parameter
-# kappa is the diffusion constant
-#Vu = u0.function_space()
-#Vb = b0.function_space()
-#delta = ?
+# kappa is the diffusion constant for each variable
+# Note that molecular diffusion coefficients were taken from Lautrup, 2005:
+# Kinematic viscosity = 1.*10**(-6)
+# Heat diffusivity = 1.4*10**(-7)
+Vu = u0.function_space()
+Vb = b0.function_space()
+delta = L/columns 		#Grid resolution (same in both directions).
 
-#bcs = [DirichletBC(Vu, 0.0, "bottom"), DirichletBC(Vu, 0.0, "top")]
 
-#diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.),
-#                                           mu=Constant(10./delta), bcs=bcs),
-#                      "b": InteriorPenalty(state, Vb, kappa=Constant(75.),
-#                                               mu=Constant(10./delta))}
+bcs = [DirichletBC(Vu, 0.0, "bottom"), DirichletBC(Vu, 0.0, "top")]
 
+diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(1.*10**(-6)),
+                                           mu=Constant(10./delta), bcs=bcs),
+                      "b": InteriorPenalty(state, Vb, kappa=Constant(1.4*10**(-7)),
+                                               mu=Constant(10./delta))}
 
 
 ##############################################################################
