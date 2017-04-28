@@ -85,8 +85,14 @@ class Timestepper(BaseTimestepper):
         # list of fields that are advected as part of the nonlinear iteration
         fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
-        Advection = AdvectionManager(xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping)
+        if self.timestepping.move_mesh:
+            Advection = MovingMeshAdvectionManager(
+                xn, xnp1, xstar_fields, xp_fields,
+                advection_dict, timestepping)
+        else:
+            Advection = AdvectionManager(
+                xn, xnp1, xstar_fields, xp_fields,
+                advection_dict, timestepping)
         
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -103,8 +109,16 @@ class Timestepper(BaseTimestepper):
             if state.output.Verbose:
                 print "STEP", t, dt
 
+            if state.timestepping.move_mesh:
+                state.mesh_old.coordinates.assign(mesh_new.coordinates)
+                something here to compute the new mesh
+                
             t += dt
             with timed_stage("Apply forcing terms"):
+
+            if state.timestepping.move_mesh:
+                state.mesh.coordinates.assign(mesh_old.coordinates)
+                
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
                 state.xnp1.assign(state.xn)
@@ -115,6 +129,9 @@ class Timestepper(BaseTimestepper):
                     Advection.apply()
 
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+
+                if state.timestepping.move_mesh:
+                    state.mesh.coordinates.assign(mesh_new.coordinates)
 
                 for i in range(state.timestepping.maxi):
 
