@@ -213,6 +213,9 @@ class AdvectionManager(object):
         for field in fieldlist:
             advection = self.advection_dict[field]
             # first computes ubar from state.xn and state.xnp1
-            advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+            un = self.xn.split()[0]
+            unp1 = self.xnp1.split()[0]
+            alpha = self.timestepping.alpha
+            advection.update_ubar(un + alpha*(unp1-un))
             # advects a field from xstar and puts result in xp
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
