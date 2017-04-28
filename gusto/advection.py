@@ -86,10 +86,8 @@ class Advection(object):
     def rhs(self):
         return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
 
-    def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
+    def update_ubar(self, ubar_in):
+        self.ubar.assign(ubar_in)
 
     @cached_property
     def solver(self):
