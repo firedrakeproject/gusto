@@ -201,13 +201,14 @@ class AdvectionTimestepper(BaseTimestepper):
 
 class AdvectionManager(object):
     def __init__(self, xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping):
+                 advection_dict, timestepping, state):
         self.xn = xn
         self.xnp1 = xnp1
         self.xstar_fields = xstar_fields
         self.xp_fields = xp_fields
         self.advection_dict = advection_dict
         self.timestepping = timestepping
+        self.state = state
 
     def apply(self):
         for field in fieldlist:
@@ -218,4 +219,31 @@ class AdvectionManager(object):
             alpha = self.timestepping.alpha
             advection.update_ubar(un + alpha*(unp1-un))
             # advects a field from xstar and puts result in xp
+            advection.apply(self.xstar_fields[field], self.xp_fields[field])
+
+class MovingMeshAdvectionManager(AdvectionManager):
+    def __init__(self, xn, xnp1, xstar_fields, xp_fields,
+                 advection_dict, timestepping, state):
+        super(MovingMeshAdvectionManager, self).__init__(
+            self, xn, xnp1, xstar_fields, xp_fields,
+            advection_dict, timestepping, state)
+        
+    def apply(self):
+        for field in fieldlist:
+            advection = self.advection_dict[field]
+            # first computes ubar from state.xn and state.xnp1
+            un = self.xn.split()[0]
+            unp1 = self.xnp1.split()[0]
+            alpha = self.timestepping.alpha
+            advection.update_ubar((1-alpha)*un)
+            # advects a field from xstar and puts result in xp
+            self.state.mesh.coordinates.assign(
+                self.state.mesh_old.coordinates)
+            advection.apply(self.xstar_fields[field], self.xp_fields[field])
+            self.xstar_fields[field].assign(self.xp_fields[field])
+            self.state.mesh.coordinates.assign(
+                self.state.mesh_new.coordinates)
+            do the projection here
+
+            advection.update_ubar(alpha*unp1)
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
