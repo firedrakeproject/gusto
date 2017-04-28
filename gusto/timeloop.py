@@ -85,6 +85,9 @@ class Timestepper(BaseTimestepper):
         # list of fields that are advected as part of the nonlinear iteration
         fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
+        Advection = AdvectionManager(xn, xnp1, xstar_fields, xp_fields,
+                 advection_dict, timestepping)
+        
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
         if state.mu is not None:
@@ -109,12 +112,8 @@ class Timestepper(BaseTimestepper):
             for k in range(state.timestepping.maxk):
 
                 with timed_stage("Advection"):
-                    for field in fieldlist:
-                        advection = self.advection_dict[field]
-                        # first computes ubar from state.xn and state.xnp1
-                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                        # advects a field from xstar and puts result in xp
-                        advection.apply(xstar_fields[field], xp_fields[field])
+                    Advection.apply()
+
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
                 for i in range(state.timestepping.maxi):
@@ -199,3 +198,21 @@ class AdvectionTimestepper(BaseTimestepper):
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
+
+class AdvectionManager(object):
+    def __init__(self, xn, xnp1, xstar_fields, xp_fields,
+                 advection_dict, timestepping):
+        self.xn = xn
+        self.xnp1 = xnp1
+        self.xstar_fields = xstar_fields
+        self.xp_fields = xp_fields
+        self.advection_dict = advection_dict
+        self.timestepping = timestepping
+
+    def apply(self):
+        for field in fieldlist:
+            advection = self.advection_dict[field]
+            # first computes ubar from state.xn and state.xnp1
+            advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+            # advects a field from xstar and puts result in xp
+            advection.apply(self.xstar_fields[field], self.xp_fields[field])
