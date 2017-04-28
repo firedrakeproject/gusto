@@ -118,6 +118,12 @@ class State(object):
         # The mesh
         self.mesh = mesh
 
+        if self.timestepping.move_mesh:
+            xold = mesh.coordinates.copy()
+            xnew = mesh.coordinates.copy()
+            self.mesh_old = Mesh(xold)
+            self.mesh_new = Mesh(xnew)
+        
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
