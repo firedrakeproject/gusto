@@ -1,5 +1,5 @@
 from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant, op2, Expression
+    TestFunction, Constant, op2
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 
@@ -95,37 +95,6 @@ class CourantNumber(DiagnosticField):
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
 
 
-class ExnerPi(DiagnosticField):
-    name = "ExnerPi"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
-
-    def compute(self, state):
-        rho = state.fields("rho")
-        theta = state.fields("theta")
-        pi = exner(theta, rho, state)
-        return self.field(state.mesh).interpolate(pi)
-
-
-class VerticalVelocity(DiagnosticField):
-    name = "VerticalVelocity"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
-
-    def compute(self, state):
-        u = state.fields("u")
-        w = u[1]
-        return self.field(state.mesh).interpolate(w)
-
-
 class HorizontalVelocity(DiagnosticField):
     name = "HorizontalVelocity"
 
@@ -139,6 +108,40 @@ class HorizontalVelocity(DiagnosticField):
         u = state.fields("u")
         uh = u[0]
         return self.field(state.mesh).interpolate(uh)
+
+
+class VerticalVelocity(DiagnosticField):
+    name = "VerticalVelocity"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        if(state.mesh.geometric_dimension() == 2):
+            w = u[1]
+        elif(state.mesh.geometric_dimension() == 3):
+            w = u[2]
+
+        return self.field(state.mesh).interpolate(w)
+
+
+class MeridionalVelocity(DiagnosticField):
+    name = "MeridionalVelocity"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        u = state.fields("u")
+        v = u[1]
+        return self.field(state.mesh).interpolate(v)
 
 
 class KineticEnergy(DiagnosticField):
@@ -156,23 +159,8 @@ class KineticEnergy(DiagnosticField):
         return self.field(state.mesh).interpolate(kinetic)
 
 
-class KineticEnergyV(DiagnosticField):
-    name = "KineticEnergyV"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
-
-    def compute(self, state):
-        u = state.fields("u")
-        kineticv = 0.5*u[1]*u[1]
-        return self.field(state.mesh).interpolate(kineticv)
-
-
-class IncompressibleEadyPotentialEnergy(DiagnosticField):
-    name = "IncompressibleEadyPotentialEnergy"
+class CompressibleKineticEnergy(DiagnosticField):
+    name = "CompressibleKineticEnergy"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -181,13 +169,27 @@ class IncompressibleEadyPotentialEnergy(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        Vp = state.spaces("DG")
-        b = state.fields("b")
-        bbar = state.fields("bbar")
-        H = state.parameters.H
-        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
-        potential = -eady_exp*(b-bbar)
-        return self.field(state.mesh).interpolate(potential)
+        u = state.fields("u")
+        rho = state.fields("rho")
+        rhobar = state.fields("rhobar")
+        kinetic = 0.5*(rho-rhobar)*dot(u,u)
+        return self.field(state.mesh).interpolate(kinetic)
+
+
+class ExnerPi(DiagnosticField):
+    name = "ExnerPi"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        rho = state.fields("rho")
+        theta = state.fields("theta")
+        pi = exner(theta, rho, state)
+        return self.field(state.mesh).interpolate(pi)
 
 
 class Sum(DiagnosticField):

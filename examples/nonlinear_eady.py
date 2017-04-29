@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=30*36,
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=180,
                           dumplist=['u','p'],
                           perturbation_fields=['b'])
 
@@ -71,7 +71,11 @@ parameters = EadyParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
+                     KineticEnergy(),
+                     KineticEnergyV(),
+                     EadyPotentialEnergy(),
+                     EadyTotalEnergy()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -119,9 +123,10 @@ def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 
 
-a = -7.5
+a = -35.
 Bu = 0.5
-b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
+                     - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
 # set total buoyancy
@@ -170,7 +175,8 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+stepper = Timestepper(state, advection_dict, linear_solver, forcing,
+                      diagnostic_everydump=True)
 
 ##############################################################################
 # Run!
