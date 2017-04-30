@@ -1,4 +1,4 @@
-from firedrake import FunctionSpace, Function, Expression, \
+from firedrake import FunctionSpace, Function, \
     SpatialCoordinate
 from gusto.diagnostics import DiagnosticField, KineticEnergy, \
     CompressibleKineticEnergy

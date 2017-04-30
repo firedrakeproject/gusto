@@ -5,13 +5,12 @@ as balanced initial conditions.
 
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, \
+    TestFunction, TrialFunction, FunctionSpace, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Expression, Function, Constant, as_vector, \
+    Expression, Function, Constant, as_vector, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
 from gusto.forcing import exner
-from gusto.diagnostics import Diagnostics
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -201,14 +200,13 @@ def compressible_eady_initial_u(state, theta, rho, u):
     f = state.parameters.f
 
     pi = exner(theta, rho, state)
-    exner_pi = Function(rho.function_space())
-    exner_pi.interpolate(pi)
+    exner_pi = Function(rho.function_space()).interpolate(pi)
 
-    pi_max = Diagnostics.max(exner_pi)
-    pi_min = Diagnostics.min(exner_pi)
-    pi_avg = (pi_max + pi_min) * 0.5
+    V = FunctionSpace(state.mesh, "DG", 0)
+    c = Function(V).assign(1.)
+    pi_avg = assemble(exner_pi*dx)/assemble(c*dx)
 
     uexpr = as_vector([cp*30.*dbdy/f*(pi-pi_avg), 0.0, 0.0])
     u.project(uexpr)
 
-    return pi_avg
+    state.parameters.pi0 = pi_avg

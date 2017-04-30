@@ -63,8 +63,10 @@ parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy, f=f)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), ExnerPi(), VerticalVelocity(),
-                     KineticEnergy(), KineticEnergyV()]
+diagnostic_fields = [CourantNumber(), ExnerPi(), MeridionalVelocity(),
+                     CompressibleKineticEnergy(), CompressibleKineticEnergyV(),
+                     CompressibleEadyPotentialEnergy(),
+                     CompressibleEadyTotalEnergy()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -117,9 +119,10 @@ def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 
 
-a = -7.5
+a = -35.
 Bu = 0.5
-theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
+                             - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 theta_pert = Function(Vt).interpolate(theta_exp)
 
 # set theta0
@@ -130,7 +133,7 @@ compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
 # balanced u
-pi0 = compressible_eady_initial_u(state, theta_b, rho_b, u0)
+compressible_eady_initial_u(state, theta0, rho0, u0)
 
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
@@ -179,8 +182,7 @@ linear_solver = CompressibleSolver(state, params=linear_solver_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-compressible_forcing = CompressibleEadyForcing(state, pi0=pi0,
-                                               euler_poincare=False)
+compressible_forcing = CompressibleEadyForcing(state, euler_poincare=False)
 
 ##############################################################################
 # build time stepper

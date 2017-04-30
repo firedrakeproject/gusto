@@ -350,10 +350,6 @@ class CompressibleEadyForcing(Forcing):
     Forcing class for compressible Euler equations.
     """
 
-    def __init__(self, state, pi0=0.0, euler_poincare=True, linear=False):
-        self.pi0 = pi0
-        super(CompressibleEadyForcing, self).__init__(state, euler_poincare, linear)
-
     def _build_forcing_solver(self):
         """
         Only put forcing terms into the u equation.
@@ -378,11 +374,12 @@ class CompressibleEadyForcing(Forcing):
         cp = state.parameters.cp
         mu = state.mu
         dbdy = state.parameters.dbdy
+        pi0 = state.parameters.pi0
 
         n = FacetNormal(state.mesh)
 
         pi = exner(theta0, rho0, state)
-        pidiff = Constant(self.pi0)
+        pidiff = Constant(pi0)
 
         a = inner(w,F)*dx
         L = self.scaling*(
