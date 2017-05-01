@@ -182,15 +182,14 @@ linear_solver = CompressibleSolver(state, params=linear_solver_params)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-compressible_forcing = CompressibleEadyForcing(state, euler_poincare=False)
+forcing = CompressibleEadyForcing(state, euler_poincare=False)
 
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
-                      compressible_forcing, diagnostic_everydump=True)
+stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)

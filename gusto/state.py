@@ -220,7 +220,7 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-    def dump(self, t=0, pickup=False):
+    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
@@ -273,6 +273,9 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/","time",t)
 
+            if diagnostic_everydump:
+                self.diagnostic_dump()
+
         return t
 
     def diagnostic_dump(self):
@@ -282,6 +285,7 @@ class State(object):
 
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
+
 
     def initialise(self, initial_conditions):
         """
