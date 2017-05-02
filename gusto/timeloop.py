@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC, Expression
-
+from mesh_movement import spherical_logarithm
 
 class BaseTimestepper(object):
     """
@@ -240,13 +240,19 @@ class AdvectionManager(object):
 
 class MovingMeshAdvectionManager(AdvectionManager):
     def __init__(self, xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping, state, X0, X1, v):
+                 advection_dict, timestepping, state, X0, X1, dt):
         super(MovingMeshAdvectionManager, self).__init__(
             self, xn, xnp1, xstar_fields, xp_fields,
             advection_dict, timestepping, state)
-        
-        #Build the solvers for the remapping
 
+        self.dt = dt
+        
+        self.v = X0.copy().assign(0.)
+        self.v_V1 = Function(state.VHDiv)
+        
+        Build the solvers for the remapping
+        
+        
     def apply(self):
         for field in fieldlist:
             advection = self.advection_dict[field]
@@ -254,8 +260,21 @@ class MovingMeshAdvectionManager(AdvectionManager):
             un = self.xn.split()[0]
             unp1 = self.xnp1.split()[0]
             alpha = self.timestepping.alpha
-            advection.update_ubar((1-alpha)*un)
-            should have a v here
+
+            X0 = self.X0
+            X1 = self.X1
+            dt = self.dt
+            v = self.v
+            v_V1 = self.v_V1
+            
+            if self.state.on_sphere:
+                spherical_logarithm(X0,X1,v)
+                v /= dt
+            else:
+                self.v.assign((X1-X0)/dt)
+            v_V1.project(v)
+                
+            advection.update_ubar((1-alpha)*(un-v_V1))
             # advects a field from xstar and puts result in xp
             self.state.mesh.coordinates.assign(
                 self.state.mesh_old.coordinates)
@@ -264,7 +283,12 @@ class MovingMeshAdvectionManager(AdvectionManager):
             self.state.mesh.coordinates.assign(
                 self.state.mesh_new.coordinates)
 
-            
+            if self.state.on_sphere:
+                spherical_logarithm(X1,X0,v)
+                v /= -dt
+            else:
+                self.v.assign((X0-X1)/dt)
+            v_V1.project(v)
 
-            advection.update_ubar(alpha*unp1)
+            advection.update_ubar(alpha*(unp1-v_V1))
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
