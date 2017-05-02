@@ -338,7 +338,7 @@ class State(object):
             V0 = self.spaces("HDiv", mesh, V2_elt)
             V1 = self.spaces("DG", mesh, V3_elt)
             V2 = self.spaces("HDiv_v", mesh, V2t_elt)
-
+            self.VHDiv = V0
             self.Vv = self.spaces("Vv", mesh, V2v_elt)
 
             self.W = MixedFunctionSpace((V0, V1, V2))
@@ -349,7 +349,7 @@ class State(object):
 
             V0 = self.spaces("HDiv", mesh, V1_elt)
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
-
+            self.VHDiv = V0
             self.W = MixedFunctionSpace((V0, V1))
 
     def _allocate_state(self):
