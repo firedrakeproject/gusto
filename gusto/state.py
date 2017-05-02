@@ -126,7 +126,8 @@ class State(object):
             xnew = mesh.coordinates.copy()
             self.mesh_old = Mesh(xold)
             self.mesh_new = Mesh(xnew)
-        
+            self.mesh_velocity = Function(xold.function_space())
+
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
