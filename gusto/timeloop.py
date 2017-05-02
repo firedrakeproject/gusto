@@ -263,7 +263,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
                 LHS = inner(p,q)*dx
                 RHS = inner(self.xstar_fields[field], p)*dx[domain=self.state.mesh_old]
                 prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
-                self.projections.append(LinearVariationalSolver(prob)
+                self.projections.append(LinearVariationalSolver(prob))
             else:
                 self.projections.append(None)
 
@@ -275,20 +275,17 @@ class MovingMeshAdvectionManager(AdvectionManager):
         v = self.v
         v_V1 = self.v_V1
                                         
-        #Compute v
+        #Compute v (the mesh velocity) and v1 (the inverse of the mesh velocity)
         if self.state.on_sphere:
             spherical_logarithm(X0,X1,v)
             v /= dt
-        else:
-            self.v.assign((X1-X0)/dt)
-        v_V1.project(v1)
-
-        if self.state.on_sphere:
             spherical_logarithm(X1,X0,v1)
             v1 /= -dt
         else:
+            self.v.assign((X1-X0)/dt)
             self.v1.assign((X0-X1)/dt)
-            v1_V1.project(v1)
+        v_V1.project(v)
+        v1_V1.project(v1)
 
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
@@ -309,5 +306,5 @@ class MovingMeshAdvectionManager(AdvectionManager):
             if advection.equation.continuity:
                 self.projections[i].solve()
 
-            advection.update_ubar(alpha*(unp1-v_V1))
+            advection.update_ubar(alpha*(unp1-v1_V1))
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
