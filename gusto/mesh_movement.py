@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 from firedrake import FunctionSpace
 
-def spherical_logarithm(X0,X1,v,dt)
+def spherical_logarithm(X0,X1,v)
     """
-    Find vector function v such that X1 = exp(dt*v)X0 on
+    Find vector function v such that X1 = exp(v)X0 on
     a sphere of radius R, centre the origin.
     """
     
