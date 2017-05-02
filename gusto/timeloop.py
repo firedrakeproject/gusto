@@ -240,11 +240,13 @@ class AdvectionManager(object):
 
 class MovingMeshAdvectionManager(AdvectionManager):
     def __init__(self, xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping, state):
+                 advection_dict, timestepping, state, X0, X1, v):
         super(MovingMeshAdvectionManager, self).__init__(
             self, xn, xnp1, xstar_fields, xp_fields,
             advection_dict, timestepping, state)
         
+        #Build the solvers for the remapping
+
     def apply(self):
         for field in fieldlist:
             advection = self.advection_dict[field]
@@ -253,14 +255,16 @@ class MovingMeshAdvectionManager(AdvectionManager):
             unp1 = self.xnp1.split()[0]
             alpha = self.timestepping.alpha
             advection.update_ubar((1-alpha)*un)
+            should have a v here
             # advects a field from xstar and puts result in xp
             self.state.mesh.coordinates.assign(
                 self.state.mesh_old.coordinates)
-            advection.apply(self.xstar_fields[field], self.xp_fields[field])
-            self.xstar_fields[field].assign(self.xp_fields[field])
+            advection.apply(self.xstar_fields[field], self.xstar_fields[field])
+
             self.state.mesh.coordinates.assign(
                 self.state.mesh_new.coordinates)
-            do the projection here
+
+            
 
             advection.update_ubar(alpha*unp1)
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
