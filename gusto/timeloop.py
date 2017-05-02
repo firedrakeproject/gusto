@@ -250,11 +250,23 @@ class MovingMeshAdvectionManager(AdvectionManager):
         self.v = X0.copy().assign(0.)
         self.v_V1 = Function(state.VHDiv)
         
-        Build the solvers for the remapping
-        
+        self.projections = []
+        for field in fieldlist:
+            advection = self.advection_dict[field]
+            if advection.equation.continuity:
+                V = advection.field.function_space()
+                p = TestFunction(V)
+                q = TrialFunction(V)
+
+                LHS = inner(p,q)*dx
+                RHS = inner(self.xstar_fields[field], p)*dx[domain=self.state.mesh_old]
+                prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
+                self.projections.append(LinearVariationalSolver(prob)
+            else:
+                self.projections.append(None)
         
     def apply(self):
-        for field in fieldlist:
+        for i, field in enumerate(fieldlist):
             advection = self.advection_dict[field]
             # first computes ubar from state.xn and state.xnp1
             un = self.xn.split()[0]
@@ -283,6 +295,9 @@ class MovingMeshAdvectionManager(AdvectionManager):
             self.state.mesh.coordinates.assign(
                 self.state.mesh_new.coordinates)
 
+            if advection.equation.continuity:
+                self.projections[i].solve()
+                                        
             if self.state.on_sphere:
                 spherical_logarithm(X1,X0,v)
                 v /= -dt
