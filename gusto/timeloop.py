@@ -244,11 +244,13 @@ class MovingMeshAdvectionManager(AdvectionManager):
         super(MovingMeshAdvectionManager, self).__init__(
             self, xn, xnp1, xstar_fields, xp_fields,
             advection_dict, timestepping, state)
-
+        
         self.dt = dt
         
         self.v = X0.copy().assign(0.)
         self.v_V1 = Function(state.VHDiv)
+        self.v1 = X0.copy().assign(0.)
+        self.v1_V1 = Function(state.VHDiv) 
         
         self.projections = []
         for field in fieldlist:
@@ -264,46 +266,48 @@ class MovingMeshAdvectionManager(AdvectionManager):
                 self.projections.append(LinearVariationalSolver(prob)
             else:
                 self.projections.append(None)
-        
+
+
     def apply(self):
+        X0 = self.X0
+        X1 = self.X1
+        dt = self.dt
+        v = self.v
+        v_V1 = self.v_V1
+                                        
+        #Compute v
+        if self.state.on_sphere:
+            spherical_logarithm(X0,X1,v)
+            v /= dt
+        else:
+            self.v.assign((X1-X0)/dt)
+        v_V1.project(v1)
+
+        if self.state.on_sphere:
+            spherical_logarithm(X1,X0,v1)
+            v1 /= -dt
+        else:
+            self.v1.assign((X0-X1)/dt)
+            v1_V1.project(v1)
+
+        un = self.xn.split()[0]
+        unp1 = self.xnp1.split()[0]
+        alpha = self.timestepping.alpha
+                                        
         for i, field in enumerate(fieldlist):
             advection = self.advection_dict[field]
-            # first computes ubar from state.xn and state.xnp1
-            un = self.xn.split()[0]
-            unp1 = self.xnp1.split()[0]
-            alpha = self.timestepping.alpha
-
-            X0 = self.X0
-            X1 = self.X1
-            dt = self.dt
-            v = self.v
-            v_V1 = self.v_V1
-            
-            if self.state.on_sphere:
-                spherical_logarithm(X0,X1,v)
-                v /= dt
-            else:
-                self.v.assign((X1-X0)/dt)
-            v_V1.project(v)
-                
             advection.update_ubar((1-alpha)*(un-v_V1))
             # advects a field from xstar and puts result in xp
             self.state.mesh.coordinates.assign(
                 self.state.mesh_old.coordinates)
             advection.apply(self.xstar_fields[field], self.xstar_fields[field])
 
+            # put mesh_new into mesh so it gets into LHS of projections
             self.state.mesh.coordinates.assign(
                 self.state.mesh_new.coordinates)
 
             if advection.equation.continuity:
                 self.projections[i].solve()
-                                        
-            if self.state.on_sphere:
-                spherical_logarithm(X1,X0,v)
-                v /= -dt
-            else:
-                self.v.assign((X0-X1)/dt)
-            v_V1.project(v)
 
             advection.update_ubar(alpha*(unp1-v_V1))
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
