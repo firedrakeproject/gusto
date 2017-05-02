@@ -87,6 +87,7 @@ class State(object):
                  Coriolis=None, sponge_function=None,
                  geopotential_form=False,
                  timestepping=None,
+                 mesh_movement=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
@@ -97,6 +98,8 @@ class State(object):
         self.mu = sponge_function
         self.geopotential_form = geopotential_form
         self.timestepping = timestepping
+        self.mesh_movement = mesh_movement
+
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
