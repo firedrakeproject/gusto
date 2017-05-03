@@ -126,7 +126,6 @@ class State(object):
             xnew = mesh.coordinates.copy()
             self.mesh_old = Mesh(xold)
             self.mesh_new = Mesh(xnew)
-            self.mesh_velocity = Function(xold.function_space())
 
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
@@ -213,7 +212,7 @@ class State(object):
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
-            mesh_ll = get_latlon_mesh(self.mesh)
+            self.mesh_ll = get_latlon_mesh(self.mesh)
             outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
             self.dumpfile_ll = File(outfile_ll,
                                     project_output=self.output.project_fields,
@@ -227,7 +226,7 @@ class State(object):
         fields_ll = {}
         for name in self.output.dumplist_latlon:
             f = self.field_dict[name]
-            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), self.mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
     def dump(self, t=0, pickup=False):
@@ -260,6 +259,9 @@ class State(object):
 
             # dump fields on latlon mesh
             if len(self.output.dumplist_latlon) > 0:
+                if self.timestepping.move_mesh:
+                    new_mesh_ll = get_latlon_mesh(self.mesh)
+                    self.mesh_ll.coordinates.dat.data[:] = new_mesh_ll.coordinates.dat.data[:]
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
