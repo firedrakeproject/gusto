@@ -119,7 +119,7 @@ class NoAdvection(Advection):
     def rhs(self):
         pass
 
-    def update_ubar(self, xn, xnp1, alpha):
+    def update_ubar(self, u_in):
         pass
 
     def apply(self, x_in, x_out):
