@@ -61,8 +61,11 @@ class TransportEquation(object):
                                   'pc_type':'bjacobi',
                                   'sub_pc_type': 'ilu'}
 
-    def mass_term(self, q):
-        return inner(self.test, q)*dx
+    def mass_term(self, q, domain=None):
+        if domain is None:
+            return inner(self.test, q)*dx
+        else
+            return inner(self.test, q)*dx(domain=domain)
 
     @abstractmethod
     def advection_term(self):

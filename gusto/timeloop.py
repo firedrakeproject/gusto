@@ -257,12 +257,8 @@ class MovingMeshAdvectionManager(AdvectionManager):
             advection = self.advection_dict[field]
             eqn = advection.equation
             if eqn.continuity or isinstance(eqn, EulerPoincare):
-                V = advection.field.function_space()
-                p = TestFunction(V)
-                q = TrialFunction(V)
-
-                LHS = inner(p,q)*dx
-                RHS = inner(self.xstar_fields[field], p)*dx[domain=self.state.mesh_old]
+                LHS = eqn.mass_term(eqn.trial)
+                RHS = eqn.mass_term(self.xstar_fields[field], domain=self.state.mesh_old)
                 prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
                 self.projections.append(LinearVariationalSolver(prob))
             else:
