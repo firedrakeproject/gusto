@@ -2,8 +2,10 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC, Expression
+from gusto.transport_equation import EulerPoincare
+from firedrake import DirichletBC, Expression, Function, LinearVariationalProblem, LinearVariationalSolver
 from mesh_movement import spherical_logarithm
+
 
 class BaseTimestepper(object):
     """
@@ -82,18 +84,16 @@ class Timestepper(BaseTimestepper):
                      zip(state.fieldlist, state.xp.split())}
         # list of fields that are passively advected (and possibly diffused)
         passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
-        # list of fields that are advected as part of the nonlinear iteration
-        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
-        if self.timestepping.move_mesh:
+        if state.timestepping.move_mesh:
             Advection = MovingMeshAdvectionManager(
-                xn, xnp1, xstar_fields, xp_fields,
-                advection_dict, timestepping)
+                state.xn, state.xnp1, xstar_fields, xp_fields,
+                self.advection_dict, state.timestepping)
         else:
             Advection = AdvectionManager(
-                xn, xnp1, xstar_fields, xp_fields,
-                advection_dict, timestepping)
-        
+                state.xn, state.xnp1, xstar_fields, xp_fields,
+                self.advection_dict, state.timestepping)
+
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
         if state.mu is not None:
@@ -111,14 +111,14 @@ class Timestepper(BaseTimestepper):
 
             if state.timestepping.move_mesh:
                 state.mesh_old.coordinates.assign(mesh_new.coordinates)
-                something here to compute the new mesh
-                
+                # something here to compute the new mesh
+
             t += dt
-            with timed_stage("Apply forcing terms"):
 
             if state.timestepping.move_mesh:
                 state.mesh.coordinates.assign(mesh_old.coordinates)
-                
+
+            with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
                 state.xnp1.assign(state.xn)
@@ -216,9 +216,12 @@ class AdvectionTimestepper(BaseTimestepper):
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
 
+
 class AdvectionManager(object):
     def __init__(self, xn, xnp1, xstar_fields, xp_fields,
                  advection_dict, timestepping, state):
+        # list of fields that are advected as part of the nonlinear iteration
+        self.fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
         self.xn = xn
         self.xnp1 = xnp1
         self.xstar_fields = xstar_fields
@@ -228,7 +231,7 @@ class AdvectionManager(object):
         self.state = state
 
     def apply(self):
-        for field in fieldlist:
+        for field in self.fieldlist:
             advection = self.advection_dict[field]
             # first computes ubar from state.xn and state.xnp1
             un = self.xn.split()[0]
@@ -238,22 +241,23 @@ class AdvectionManager(object):
             # advects a field from xstar and puts result in xp
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
 
+
 class MovingMeshAdvectionManager(AdvectionManager):
     def __init__(self, xn, xnp1, xstar_fields, xp_fields,
                  advection_dict, timestepping, state, X0, X1, dt):
         super(MovingMeshAdvectionManager, self).__init__(
             self, xn, xnp1, xstar_fields, xp_fields,
             advection_dict, timestepping, state)
-        
+
         self.dt = dt
-        
+
         self.v = X0.copy().assign(0.)
         self.v_V1 = Function(state.spaces("HDiv"))
         self.v1 = X0.copy().assign(0.)
-        self.v1_V1 = Function(state.spaces("HDiv")) 
-        
+        self.v1_V1 = Function(state.spaces("HDiv"))
+
         self.projections = {}
-        for field in fieldlist:
+        for field in self.fieldlist:
             advection = self.advection_dict[field]
             eqn = advection.equation
             if eqn.continuity or isinstance(eqn, EulerPoincare):
@@ -262,31 +266,28 @@ class MovingMeshAdvectionManager(AdvectionManager):
                 prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
                 self.projections['field'] = (LinearVariationalSolver(prob))
 
-
     def apply(self):
-        X0 = self.X0
-        X1 = self.X1
         dt = self.dt
-        v = self.v
         v_V1 = self.v_V1
-                                        
-        #Compute v (the mesh velocity) and v1 (the inverse of the mesh velocity)
+        v1_V1 = self.v1_V1
+
+        # Compute v (the mesh velocity) and v1 (the inverse of the mesh velocity)
         if self.state.on_sphere:
-            spherical_logarithm(X0,X1,v)
-            v /= dt
-            spherical_logarithm(X1,X0,v1)
-            v1 /= -dt
+            spherical_logarithm(self.X0, self.X1, self.v)
+            self.v /= dt
+            spherical_logarithm(self.X1, self.X0, self.v1)
+            self.v1 /= -dt
         else:
-            self.v.assign((X1-X0)/dt)
-            self.v1.assign((X0-X1)/dt)
-        v_V1.project(v)
-        v1_V1.project(v1)
+            self.v.assign((self.X1-self.X0)/dt)
+            self.v1.assign((self.X0-self.X1)/dt)
+        v_V1.project(self.v)
+        v1_V1.project(self.v1)
 
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
         alpha = self.timestepping.alpha
-                                        
-        for field in fieldlist:
+
+        for field in self.fieldlist:
             advection = self.advection_dict[field]
             advection.update_ubar((1-alpha)*(un-v_V1))
             # advects a field from xstar and puts result in xp

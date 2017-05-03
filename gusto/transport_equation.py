@@ -64,7 +64,7 @@ class TransportEquation(object):
     def mass_term(self, q, domain=None):
         if domain is None:
             return inner(self.test, q)*dx
-        else
+        else:
             return inner(self.test, q)*dx(domain=domain)
 
     @abstractmethod
