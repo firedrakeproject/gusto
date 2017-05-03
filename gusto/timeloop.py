@@ -252,7 +252,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
         self.v1 = X0.copy().assign(0.)
         self.v1_V1 = Function(state.spaces("HDiv")) 
         
-        self.projections = []
+        self.projections = {}
         for field in fieldlist:
             advection = self.advection_dict[field]
             eqn = advection.equation
@@ -260,9 +260,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
                 LHS = eqn.mass_term(eqn.trial)
                 RHS = eqn.mass_term(self.xstar_fields[field], domain=self.state.mesh_old)
                 prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
-                self.projections.append(LinearVariationalSolver(prob))
-            else:
-                self.projections.append(None)
+                self.projections['field'] = (LinearVariationalSolver(prob))
 
 
     def apply(self):
@@ -288,7 +286,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
         unp1 = self.xnp1.split()[0]
         alpha = self.timestepping.alpha
                                         
-        for i, field in enumerate(fieldlist):
+        for field in fieldlist:
             advection = self.advection_dict[field]
             advection.update_ubar((1-alpha)*(un-v_V1))
             # advects a field from xstar and puts result in xp
@@ -300,8 +298,8 @@ class MovingMeshAdvectionManager(AdvectionManager):
             self.state.mesh.coordinates.assign(
                 self.state.mesh_new.coordinates)
 
-            if advection.equation.continuity:
-                self.projections[i].solve()
+            if field in self.projections.keys():
+                self.projections[field].solve()
 
             advection.update_ubar(alpha*(unp1-v1_V1))
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
