@@ -255,7 +255,8 @@ class MovingMeshAdvectionManager(AdvectionManager):
         self.projections = []
         for field in fieldlist:
             advection = self.advection_dict[field]
-            if advection.equation.continuity:
+            eqn = advection.equation
+            if eqn.continuity or isinstance(eqn, EulerPoincare):
                 V = advection.field.function_space()
                 p = TestFunction(V)
                 q = TrialFunction(V)
