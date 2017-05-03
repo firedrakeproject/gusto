@@ -248,9 +248,9 @@ class MovingMeshAdvectionManager(AdvectionManager):
         self.dt = dt
         
         self.v = X0.copy().assign(0.)
-        self.v_V1 = Function(state.VHDiv)
+        self.v_V1 = Function(state.spaces("HDiv"))
         self.v1 = X0.copy().assign(0.)
-        self.v1_V1 = Function(state.VHDiv) 
+        self.v1_V1 = Function(state.spaces("HDiv")) 
         
         self.projections = []
         for field in fieldlist:
