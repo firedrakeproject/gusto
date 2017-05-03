@@ -27,7 +27,7 @@ class TimesteppingParameters(Configuration):
     maxk = 4
     maxi = 1
     move_mesh = False
-    
+
 
 class OutputParameters(Configuration):
 

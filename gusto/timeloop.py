@@ -3,8 +3,8 @@ from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
+from gusto.mesh_movement import spherical_logarithm
 from firedrake import DirichletBC, Expression, Function, LinearVariationalProblem, LinearVariationalSolver
-from mesh_movement import spherical_logarithm
 
 
 class BaseTimestepper(object):
@@ -85,17 +85,24 @@ class Timestepper(BaseTimestepper):
         # list of fields that are passively advected (and possibly diffused)
         passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
 
-        if state.timestepping.move_mesh:
-            Advection = MovingMeshAdvectionManager(
-                state.xn, state.xnp1, xstar_fields, xp_fields,
-                self.advection_dict, state.timestepping)
-        else:
-            Advection = AdvectionManager(
-                state.xn, state.xnp1, xstar_fields, xp_fields,
-                self.advection_dict, state.timestepping)
-
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
+        # list of fields that are advected as part of the nonlinear iteration
+        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
+
+        X0 = state.mesh_old.coordinates
+        X1 = state.mesh_new.coordinates
+        if state.timestepping.move_mesh:
+            Advection = MovingMeshAdvectionManager(
+                fieldlist,
+                state.xn, state.xnp1, xstar_fields, xp_fields,
+                self.advection_dict, alpha, state, X0, X1, dt)
+        else:
+            Advection = AdvectionManager(
+                fieldlist,
+                state.xn, state.xnp1, xstar_fields, xp_fields,
+                self.advection_dict, alpha)
+
         if state.mu is not None:
             mu_alpha = [0., dt]
         else:
@@ -110,13 +117,13 @@ class Timestepper(BaseTimestepper):
                 print "STEP", t, dt
 
             if state.timestepping.move_mesh:
-                state.mesh_old.coordinates.assign(mesh_new.coordinates)
-                # something here to compute the new mesh
+                X0.assign(X1)
+                X1.interpolate(state.xexpr)
 
             t += dt
 
             if state.timestepping.move_mesh:
-                state.mesh.coordinates.assign(mesh_old.coordinates)
+                state.mesh.coordinates.assign(X0)
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
@@ -131,7 +138,7 @@ class Timestepper(BaseTimestepper):
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
                 if state.timestepping.move_mesh:
-                    state.mesh.coordinates.assign(mesh_new.coordinates)
+                    state.mesh.coordinates.assign(X1)
 
                 for i in range(state.timestepping.maxi):
 
@@ -218,38 +225,36 @@ class AdvectionTimestepper(BaseTimestepper):
 
 
 class AdvectionManager(object):
-    def __init__(self, xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping, state):
-        # list of fields that are advected as part of the nonlinear iteration
-        self.fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
+    def __init__(self, fieldlist, xn, xnp1, xstar_fields, xp_fields,
+                 advection_dict, alpha):
+        self.fieldlist = fieldlist
         self.xn = xn
         self.xnp1 = xnp1
         self.xstar_fields = xstar_fields
         self.xp_fields = xp_fields
         self.advection_dict = advection_dict
-        self.timestepping = timestepping
-        self.state = state
+        self.alpha = alpha
 
     def apply(self):
         for field in self.fieldlist:
             advection = self.advection_dict[field]
-            # first computes ubar from state.xn and state.xnp1
+            # first computes ubar from xn and xnp1
             un = self.xn.split()[0]
             unp1 = self.xnp1.split()[0]
-            alpha = self.timestepping.alpha
-            advection.update_ubar(un + alpha*(unp1-un))
+            advection.update_ubar(un + self.alpha*(unp1-un))
             # advects a field from xstar and puts result in xp
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
 
 
 class MovingMeshAdvectionManager(AdvectionManager):
-    def __init__(self, xn, xnp1, xstar_fields, xp_fields,
-                 advection_dict, timestepping, state, X0, X1, dt):
+    def __init__(self, fieldlist, xn, xnp1, xstar_fields, xp_fields,
+                 advection_dict, alpha, state, X0, X1, dt):
         super(MovingMeshAdvectionManager, self).__init__(
-            self, xn, xnp1, xstar_fields, xp_fields,
-            advection_dict, timestepping, state)
+            self, fieldlist, xn, xnp1, xstar_fields, xp_fields,
+            advection_dict, alpha)
 
         self.dt = dt
+        self.state = state
 
         self.v = X0.copy().assign(0.)
         self.v_V1 = Function(state.spaces("HDiv"))
@@ -262,7 +267,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
             eqn = advection.equation
             if eqn.continuity or isinstance(eqn, EulerPoincare):
                 LHS = eqn.mass_term(eqn.trial)
-                RHS = eqn.mass_term(self.xstar_fields[field], domain=self.state.mesh_old)
+                RHS = eqn.mass_term(self.xstar_fields[field], domain=state.mesh_old)
                 prob = LinearVariationalProblem(LHS,RHS,self.xstar_fields[field])
                 self.projections['field'] = (LinearVariationalSolver(prob))
 
@@ -273,9 +278,9 @@ class MovingMeshAdvectionManager(AdvectionManager):
 
         # Compute v (the mesh velocity) and v1 (the inverse of the mesh velocity)
         if self.state.on_sphere:
-            spherical_logarithm(self.X0, self.X1, self.v)
+            spherical_logarithm(self.X0, self.X1, self.v, dt)
             self.v /= dt
-            spherical_logarithm(self.X1, self.X0, self.v1)
+            spherical_logarithm(self.X1, self.X0, self.v1, dt)
             self.v1 /= -dt
         else:
             self.v.assign((self.X1-self.X0)/dt)
@@ -285,22 +290,19 @@ class MovingMeshAdvectionManager(AdvectionManager):
 
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
-        alpha = self.timestepping.alpha
 
         for field in self.fieldlist:
             advection = self.advection_dict[field]
-            advection.update_ubar((1-alpha)*(un-v_V1))
+            advection.update_ubar((1-self.alpha)*(un-v_V1))
             # advects a field from xstar and puts result in xp
-            self.state.mesh.coordinates.assign(
-                self.state.mesh_old.coordinates)
+            self.state.mesh.coordinates.assign(self.X0)
             advection.apply(self.xstar_fields[field], self.xstar_fields[field])
 
             # put mesh_new into mesh so it gets into LHS of projections
-            self.state.mesh.coordinates.assign(
-                self.state.mesh_new.coordinates)
+            self.state.mesh.coordinates.assign(self.X1)
 
             if field in self.projections.keys():
                 self.projections[field].solve()
 
-            advection.update_ubar(alpha*(unp1-v1_V1))
+            advection.update_ubar(self.alpha*(unp1-v1_V1))
             advection.apply(self.xstar_fields[field], self.xp_fields[field])
