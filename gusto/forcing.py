@@ -99,7 +99,7 @@ class CompressibleForcing(Forcing):
             else:
                 w_h = w
 
-            L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
+            L -= self.scaling*0.5*div(w_h)*inner(u0, u0)*dx
 
         if Omega is not None:
             L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
