@@ -171,8 +171,7 @@ class CompressibleKineticEnergy(DiagnosticField):
     def compute(self, state):
         u = state.fields("u")
         rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        kinetic = 0.5*(rho-rhobar)*dot(u,u)
+        kinetic = 0.5*rho*dot(u,u)
         return self.field(state.mesh).interpolate(kinetic)
 
 
@@ -190,6 +189,25 @@ class ExnerPi(DiagnosticField):
         theta = state.fields("theta")
         pi = exner(theta, rho, state)
         return self.field(state.mesh).interpolate(pi)
+
+
+class ExnerPi_perturbation(DiagnosticField):
+    name = "ExnerPi_perturbation"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        rho = state.fields("rho")
+        rhobar = state.fields("rhobar")
+        theta = state.fields("theta")
+        thetabar = state.fields("thetabar")
+        pi = exner(theta, rho, state)
+        pibar = exner(thetabar, rhobar, state)
+        return self.field(state.mesh).interpolate(pi-pibar)
 
 
 class Sum(DiagnosticField):

@@ -32,8 +32,7 @@ class CompressibleKineticEnergyV(DiagnosticField):
     def compute(self, state):
         u = state.fields("u")
         rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        kineticv = 0.5*(rho-rhobar)*u[1]*u[1]
+        kineticv = 0.5*rho*u[1]*u[1]
         return self.field(state.mesh).interpolate(kineticv)
 
 
@@ -72,19 +71,15 @@ class CompressibleEadyPotentialEnergy(DiagnosticField):
         pi0 = state.parameters.pi0
 
         rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        rho_p = rho-rhobar
 
         theta = state.fields("theta")
         thetabar = state.fields("thetabar")
         theta_p = theta-thetabar
 
         pi = exner(theta, rho, state)
-        pibar = exner(thetabar, rhobar, state)
-        pi_p = pi-pibar
 
-        potential = rho_p*(- g*z + cv*pi_p*theta_p
-                           - cp*pi0*theta_p)
+        potential = rho*(- g*z + cv*pi*theta_p
+                         - cp*pi0*theta_p)
         return self.field(state.mesh).interpolate(potential)
 
 
