@@ -74,8 +74,7 @@ class CompressibleEadyPotentialEnergy(DiagnosticField):
         theta = state.fields("theta")
         pi = exner(theta, rho, state)
 
-        potential = rho*(- g*z + cv*pi*theta
-                         - cp*pi0*theta)
+        potential = rho*(g*z + cv*pi*theta - cp*pi0*theta)
         return self.field(state.mesh).interpolate(potential)
 
 
