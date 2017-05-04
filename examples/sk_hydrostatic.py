@@ -28,8 +28,13 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
+z = Function(W_CG1).interpolate(Expression("x[2]"))
+k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
+Omega = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.e-4")))
+
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
+              z=z, k=k, Omega=Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -113,7 +118,9 @@ schur_params = {'pc_type': 'fieldsplit',
 linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+# [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
+balanced_pg = as_vector((0.,2.0e-4*20,0))
+compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
