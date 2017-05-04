@@ -19,14 +19,14 @@ class Forcing(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, euler_poincare=True, linear=False):
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
         self.state = state
         if linear:
             self.euler_poincare = False
             warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
-
+        self.extra_terms = extra_terms
         self._build_forcing_solver()
 
     @abstractmethod
@@ -105,6 +105,9 @@ class CompressibleForcing(Forcing):
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
 
+        if self.extra_terms != None:
+            L += inner(w, self.extra_terms)*dx
+        
         u_forcing_problem = LinearVariationalProblem(
             a,L,self.uF, bcs=bcs
         )
