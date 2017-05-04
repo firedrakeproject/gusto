@@ -154,9 +154,15 @@ class CompressibleSolver(TimesteppingSolver):
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
-
+        
+        a =inner(w, (u - u_in))*dx
+        '''
+        #Projection for hydrostatic case
+        if state.h is True:
+            a -= (inner(state.k, w)*inner(state.k ,u))*dx
+        '''
         eqn = (
-            inner(w, (u - u_in))*dx
+            a
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.

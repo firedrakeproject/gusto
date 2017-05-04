@@ -93,6 +93,12 @@ class CompressibleForcing(Forcing):
             L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
 
         if self.euler_poincare:
+            #Project test function for hydrostatic case
+            if state.h is True:
+                w_h = w - state.k*inner(w, state.k)
+            else:
+                w_h = w
+
             L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
 
         if Omega is not None:

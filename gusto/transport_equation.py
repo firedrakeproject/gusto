@@ -305,6 +305,12 @@ class VectorInvariant(TransportEquation):
         else:
             raise RuntimeError("topological mesh dimension must be 2 or 3")
 
+        #Project test function for hydrostatic case
+        if self.state.h is True:
+            self.test_h = self.test - self.state.k*inner(self.test, self.state.k)
+        else:
+            self.test_h = self.test
+
     def advection_term(self, q):
 
         if self.state.mesh.topological_dimension() == 3:
@@ -316,17 +322,17 @@ class VectorInvariant(TransportEquation):
             both = lambda u: 2*avg(u)
 
             L = (
-                inner(q, curl(cross(self.ubar, self.test)))*dx
+                inner(q, curl(cross(self.ubar, self.test_h)))*dx
                 - inner(both(self.Upwind*q),
-                        both(cross(self.n, cross(self.ubar, self.test))))*self.dS
+                        both(cross(self.n, cross(self.ubar, self.test_h))))*self.dS
             )
 
         else:
 
             if self.ibp == "once":
                 L = (
-                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
-                    - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
+                    -inner(self.gradperp(inner(self.test_h, self.perp(self.ubar))), q)*dx
+                    - inner(jump(inner(self.test_h, self.perp(self.ubar)), self.n),
                             self.perp_u_upwind(q))*self.dS
                 )
             else:
@@ -338,7 +344,7 @@ class VectorInvariant(TransportEquation):
                                  self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                 )
 
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+        L -= 0.5*div(self.test_h)*inner(q, self.ubar)*dx
 
         return L
 
@@ -355,5 +361,5 @@ class EulerPoincare(VectorInvariant):
 
     def advection_term(self, q):
         L = super(EulerPoincare, self).advection_term(q)
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+        L -= 0.5*div(self.test_h)*inner(q, self.ubar)*dx
         return L

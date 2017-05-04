@@ -85,6 +85,7 @@ class State(object):
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
                  Coriolis=None, sponge_function=None,
+                 hydrostatic=None,
                  geopotential_form=False,
                  timestepping=None,
                  output=None,
@@ -95,6 +96,7 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
+        self.h = hydrostatic
         self.geopotential_form = geopotential_form
         self.timestepping = timestepping
         if output is None:
