@@ -233,8 +233,7 @@ class AdvectionManager(object):
         self.alpha = alpha
 
     def apply(self, x_in, x_out):
-        for field in self.fieldlist:
-            advection = self.advection_dict[field]
+        for field, advection in self.advection_dict.iteritems():
             # first computes ubar from xn and xnp1
             un = self.xn.split()[0]
             unp1 = self.xnp1.split()[0]
@@ -250,6 +249,9 @@ class MovingMeshAdvectionManager(AdvectionManager):
             fieldlist, xn, xnp1, advection_dict, alpha)
 
         self.state = state
+        x1 = state.xstar.copy()
+        self.x1 = {name: func for (name, func) in
+                   zip(state.fieldlist, x1.split())}
         self.X0 = X0
         self.X1 = X1
 
@@ -269,7 +271,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
                     LHS = eqn.mass_term(eqn.trial)
                     RHS = eqn.mass_term(x_in[field], domain=self.state.mesh_old)
                     prob = LinearVariationalProblem(LHS, RHS, x_in[field])
-                    self._projections[field] = (LinearVariationalSolver(prob))
+                    self._projections[field] = LinearVariationalSolver(prob)
         return self._projections
 
     def apply(self, x_in, x_out):
@@ -279,7 +281,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
         X0 = self.X0
         X1 = self.X1
 
-        # Compute v (mesh velocity) and v1 (inverse of the mesh velocity)
+        # Compute v (mesh velocity) and v1 (mesh velocity)
         # if self.state.on_sphere:
         if False:
             spherical_logarithm(X0, X1, self.v)
@@ -298,13 +300,13 @@ class MovingMeshAdvectionManager(AdvectionManager):
             advection.update_ubar((1-self.alpha)*(un-v_V1))
             self.state.mesh.coordinates.assign(X0)
             # advects field
-            advection.apply(x_in[field], x_in[field])
+            advection.apply(x_in[field], self.x1[field])
 
             # put mesh_new into mesh so it gets into LHS of projections
             self.state.mesh.coordinates.assign(X1)
 
-            if field in self.projections(x_in).keys():
-                self.projections(x_in)[field].solve()
+            if field in self.projections(self.x1).keys():
+                self.projections(self.x1)[field].solve()
 
             advection.update_ubar(self.alpha*(unp1-v1_V1))
-            advection.apply(x_in[field], x_out[field])
+            advection.apply(self.x1[field], x_out[field])
