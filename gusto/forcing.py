@@ -106,14 +106,14 @@ class CompressibleForcing(Forcing):
                DirichletBC(Vu, 0.0, "top")]
 
         if self.extra_terms != None:
-            L += inner(w, self.extra_terms)*dx
+            L += self.scaling*inner(w, self.extra_terms)*dx
         
         u_forcing_problem = LinearVariationalProblem(
             a,L,self.uF, bcs=bcs
         )
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
-
+        
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         self.x0.assign(x_nl)
