@@ -206,6 +206,7 @@ class AdvectionTimestepper(BaseTimestepper):
                 print "STEP", t, dt
 
             t += dt
+            state.xnp1.assign(state.xn)
 
             if state.timestepping.move_mesh:
                 self.X0.assign(self.X1)
