@@ -303,8 +303,8 @@ class MovingMeshAdvectionManager(AdvectionManager):
             # put mesh_new into mesh so it gets into LHS of projections
             self.state.mesh.coordinates.assign(X1)
 
-            for f, proj in self.projections(x_in).iteritems():
-                proj.solve()
+            if field in self.projections(x_in).keys():
+                self.projections(x_in)[field].solve()
 
             advection.update_ubar(self.alpha*(unp1-v1_V1))
             advection.apply(x_in[field], x_out[field])
