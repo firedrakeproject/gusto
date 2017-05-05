@@ -28,13 +28,11 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-z = Function(W_CG1).interpolate(Expression("x[2]"))
-k = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.")))
-Omega = Function(W_VectorCG1).interpolate(Expression(("0.","0.","1.e-4")))
+Omega = as_vector((0.,0.,1e-4))
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
-              z=z, k=k, Omega=Omega,
+              Coriolis=Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,

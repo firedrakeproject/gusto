@@ -19,7 +19,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='rb', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
