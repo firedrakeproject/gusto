@@ -39,6 +39,7 @@ class Advection(object):
 
     def __init__(self, state, field, equation=None, solver_params=None):
 
+        self.constant_jacobian = state.constant_jacobian
         if equation is not None:
 
             self.state = state
@@ -92,7 +93,7 @@ class Advection(object):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
+        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq, constant_jacobian=self.constant_jacobian)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
         return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 

@@ -122,10 +122,13 @@ class State(object):
         self.mesh = mesh
 
         if self.timestepping.move_mesh:
+            self.constant_jacobian = False
             xold = mesh.coordinates.copy()
             xnew = mesh.coordinates.copy()
             self.mesh_old = Mesh(xold)
             self.mesh_new = Mesh(xnew)
+        else:
+            self.constant_jacobian = True
 
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)

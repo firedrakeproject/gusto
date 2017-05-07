@@ -391,7 +391,7 @@ class ShallowWaterSolver(TimesteppingSolver):
 
         # Solver for u, D
         uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
+            aeqn, Leqn, self.state.dy, constant_jacobian=state.constant_jacobian)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.params,

@@ -379,7 +379,7 @@ class ShallowWaterForcing(Forcing):
             L -= 0.5*div(w)*inner(u0, u0)*dx
 
         u_forcing_problem = LinearVariationalProblem(
-            a, L, self.uF)
+            a, L, self.uF, constant_jacobian=state.constant_jacobian)
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
