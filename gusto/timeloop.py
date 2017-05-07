@@ -271,7 +271,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
                     eqn = advection.equation
                     LHS = eqn.mass_term(eqn.trial)
                     RHS = eqn.mass_term(x_in[field], domain=self.state.mesh_old)
-                    prob = LinearVariationalProblem(LHS, RHS, x_in[field])
+                    prob = LinearVariationalProblem(LHS, RHS, x_in[field], constant_jacobian=False)
                     self._projections[field] = LinearVariationalSolver(prob)
         return self._projections
 
