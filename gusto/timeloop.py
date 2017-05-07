@@ -96,7 +96,7 @@ class Timestepper(BaseTimestepper):
             state.setup_dump(pickup)
             t = state.dump(t, pickup)
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -155,7 +155,7 @@ class Timestepper(BaseTimestepper):
                 state.dump(t, pickup=False)
 
         state.diagnostic_dump()
-        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
+        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
 
 
 class AdvectionTimestepper(BaseTimestepper):
@@ -177,7 +177,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.setup_dump()
         state.dump()
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
