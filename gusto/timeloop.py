@@ -266,7 +266,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
             self._projections = {}
             for field, advection in self.advection_dict.iteritems():
                 if isinstance(advection, NoAdvection):
-                    self._projections[field] = Projector(self.state.uexpr, x_in[field]).solver
+                    self._projections[field] = Projector(self.state.uexpr, x_in[field], constant_jacobian=not self.state.timestepping.move_mesh).solver
                 elif (hasattr(advection.equation, "continuity") and advection.equation.continuity) or isinstance(advection.equation, EulerPoincare):
                     eqn = advection.equation
                     LHS = eqn.mass_term(eqn.trial)

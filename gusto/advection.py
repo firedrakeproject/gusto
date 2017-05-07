@@ -69,7 +69,8 @@ class Advection(object):
                           'pc_type':'bjacobi',
                           'sub_pc_type':'ilu'}
             self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=parameters)
+                                       solver_parameters=parameters,
+                                       constant_jacobian=not state.timestepping.move_mesh)
             self.xdg_in = Function(fs)
         else:
             self.embedded_dg = False
