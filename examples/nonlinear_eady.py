@@ -98,6 +98,7 @@ p0 = state.fields("p")
 # spaces
 Vu = u0.function_space()
 Vb = b0.function_space()
+Vp = p0.function_space()
 
 # parameters
 x, y, z = SpatialCoordinate(mesh)
@@ -128,11 +129,17 @@ b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
                      - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
+
 # set total buoyancy
 b0.project(b_b + b_pert)
 
 # calculate hydrostatic total pressure
-incompressible_hydrostatic_balance(state, b0, p0)
+p_b = Function(Vp)
+p_pert = Function(Vp)
+incompressible_hydrostatic_balance(state, b_b, p_b)
+incompressible_hydrostatic_balance(state, b_pert, p_pert)
+pressure_boundary_condition(state, b_pert, p_pert)
+p0.project(p_b + p_pert)
 
 # set initial u
 uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
