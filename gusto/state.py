@@ -286,7 +286,6 @@ class State(object):
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
 
-
     def initialise(self, initial_conditions):
         """
         Initialise state variables

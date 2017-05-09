@@ -219,7 +219,7 @@ def pressure_boundary_correction(state, b0, p0, params=None):
     Vp = p0.function_space()
     WT = (Vb)*(Vp)
 
-    #get phat
+    # get phat
     ptrial,q = TrialFunctions(WT)
     gamma,phi = TestFunctions(WT)
 
@@ -231,19 +231,19 @@ def pressure_boundary_correction(state, b0, p0, params=None):
     F = Function(WT)
 
     if(params is None):
-        params={'ksp_type':'gmres',
-                'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'pc_fieldsplit_schur_fact_type': 'full',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_1_ksp_type': 'preonly',
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 4,
-                'ksp_atol': 1.e-08,
-                'ksp_rtol': 1.e-08}
+        params = {'ksp_type':'gmres',
+                  'pc_type': 'fieldsplit',
+                  'pc_fieldsplit_type': 'schur',
+                  'pc_fieldsplit_schur_fact_type': 'full',
+                  'pc_fieldsplit_schur_precondition': 'selfp',
+                  'fieldsplit_1_ksp_type': 'preonly',
+                  'fieldsplit_1_pc_type': 'gamg',
+                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
+                  'fieldsplit_0_ksp_type': 'richardson',
+                  'fieldsplit_0_ksp_max_it': 4,
+                  'ksp_atol': 1.e-08,
+                  'ksp_rtol': 1.e-08}
 
     solve(a == L, F, bcs=bcs, solver_parameters=params)
 
@@ -259,9 +259,7 @@ def pressure_boundary_correction(state, b0, p0, params=None):
 
     bcs = [DirichletBC(WV[0], Expression(("0.","0.","0.")), "bottom")]
 
-    a = (
-        inner(w,v) + div(w)*pbar + div(v)*phi
-        )*dx
+    a = (inner(w,v) + div(w)*pbar + div(v)*phi)*dx
     L = w[2]*phat*ds_t
     w1 = Function(WV)
 
