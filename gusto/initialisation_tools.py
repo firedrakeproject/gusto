@@ -212,7 +212,7 @@ def compressible_eady_initial_u(state, theta, rho, u):
     state.parameters.pi0 = pi_avg
 
 
-def pressure_boundary_condition(state, b0, p0, params=None):
+def pressure_boundary_correction(state, b0, p0, params=None):
 
     # define mixed function space
     Vb = b0.function_space()

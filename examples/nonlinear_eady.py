@@ -138,7 +138,7 @@ p_b = Function(Vp)
 p_pert = Function(Vp)
 incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b_pert, p_pert)
-pressure_boundary_condition(state, b_pert, p_pert)
+pressure_boundary_correction(state, b_pert, p_pert)
 p0.project(p_b + p_pert)
 
 # set initial u
