@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 40.
+dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
@@ -26,7 +26,7 @@ else:
 # Construct 1d periodic base mesh
 columns = 30  # number of columns
 L = 1000000.
-m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e4, quadrilateral=True)
+m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
 # build 2D mesh by extruding the base mesh
 nlayers = 30  # horizontal layers
@@ -56,7 +56,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=180,
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
                           dumplist=['u','p'],
                           perturbation_fields=['b'])
 
