@@ -28,7 +28,7 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-Omega = as_vector((0.,0.,1e-4))
+Omega = as_vector((0.,0.,0.5e-4))
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
@@ -68,13 +68,12 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 rho_b = Function(Vr)
 
-# Calculate hydrostatic Pi
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-
 a = 1.0e5
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
+# Calculate hydrostatic Pi
+compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
@@ -117,7 +116,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
 # [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
-balanced_pg = as_vector((0.,2.0e-4*20,0))
+balanced_pg = as_vector((0.,1.0e-4*20,0))
 compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
 
 # build time stepper
