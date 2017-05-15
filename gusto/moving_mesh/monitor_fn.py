@@ -3,7 +3,7 @@ import numpy as np
 from mpi4py import MPI
 from firedrake import FunctionSpace, VectorFunctionSpace, TensorFunctionSpace, \
     Function, Constant, dx, dS, assemble, TrialFunction, TestFunction, sqrt, \
-    dot, inner, FacetNormal, abs, jump, grad, div, as_vector, \
+    dot, inner, FacetNormal, jump, grad, div, as_vector, \
     LinearVariationalProblem, LinearVariationalSolver, LinearSolver, par_loop, \
     RW, READ
 
