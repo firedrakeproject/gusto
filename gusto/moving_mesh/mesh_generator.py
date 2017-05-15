@@ -1,12 +1,12 @@
 from __future__ import absolute_import
+from six import with_metaclass
 from abc import ABCMeta, abstractmethod
 
 
-class MeshGenerator(object):
+class MeshGenerator(with_metaclass(ABCMeta)):
     """
     Base class for a mesh generator for a moving mesh method.
     """
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def get_new_mesh(self):

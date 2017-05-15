@@ -37,12 +37,10 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         quads = (cellname == "quadrilateral")
 
         # Sniff radius of passed-in mesh
-        if hasattr(mesh_in, '_icosahedral_sphere_radius'):
-            self.R = mesh_in._icoshedral_sphere_radius
-        elif hasattr(mesh_in, '_cubed_sphere_radius'):
-            self.R = mesh_in._cubed_sphere_radius
+        if hasattr(mesh_in, '_radius'):
+            self.R = mesh_in._radius
         else:
-            raise RuntimeError("Mesh doesn't seem to be an IcosahedralSphereMesh or a CubedSphereMesh.  Please make sure you are on the Firedrake branch 'save-cubed-sphere-radius'.")
+            raise RuntimeError("Mesh doesn't seem to be an IcosahedralSphereMesh or a CubedSphereMesh")
 
         # Set up internal 'computational' mesh for own calculations
         new_coords = Function(VectorFunctionSpace(mesh_in, "Q" if quads else "P", 2))
