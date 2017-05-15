@@ -130,7 +130,7 @@ class Timestepper(BaseTimestepper):
             if state.timestepping.move_mesh:
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
-                self.X1.interpolate(state.xexpr)
+                self.X1.assign(self.mesh_generator.get_new_mesh())
 
             t += dt
 
@@ -217,7 +217,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
             if state.timestepping.move_mesh:
                 self.X0.assign(self.X1)
-                self.X1.interpolate(state.xexpr)
+                self.X1.assign(self.mesh_generator.get_new_mesh())
 
             self.Advection.apply(xn_fields, xn_fields)
 

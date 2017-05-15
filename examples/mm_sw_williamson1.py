@@ -60,16 +60,27 @@ for ref_level, dt in ref_dt.iteritems():
     eqn_form = "continuity"
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
 
-    vscale = Constant(10.0)
+    vscale = 10.0
     dt = state.timestepping.dt
-    state.xexpr = as_vector([x[0], x[1]+vscale*dt*x[2]/R, x[2]-vscale*dt*x[1]/R])
     state.uexpr = uexpr
 
     advection_dict = {}
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
     advection_dict["u"] = NoAdvection(state, u0)
 
+    class MeshRotator(MeshGenerator):
+        def __init__(self, mesh, R, vscale, dt):
+            self.coord_function = Function(mesh.coordinates)
+            x = SpatialCoordinate(mesh)
+            self.rotation_expr = as_vector([x[0], x[1] + Constant(vscale)*Constant(dt)*x[2]/Constant(R), x[2] - Constant(vscale)*Constant(dt)*x[1]/Constant(R)])
+
+        def get_new_mesh(self):
+            self.coord_function.interpolate(self.rotation_expr)
+            return self.coord_function
+
+    mesh_rotator = MeshRotator(mesh, R, vscale, dt)
+
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict)
+    stepper = AdvectionTimestepper(state, advection_dict, mesh_generator=mesh_rotator)
 
     stepper.run(t=0, tmax=12*day)
