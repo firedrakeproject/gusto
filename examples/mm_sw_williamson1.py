@@ -1,8 +1,9 @@
+from math import pi
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector, parameters
+
 parameters["pyop2_options"]["lazy_evaluation"] = False
-from math import pi
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
 ref_dt = {3:1000.}
