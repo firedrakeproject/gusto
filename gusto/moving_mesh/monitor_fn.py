@@ -12,7 +12,7 @@ class MonitorFunction(object):
     """
     Base class for monitor function generation
 
-    :arg f: a Function of the same type as will be used as a monitor function
+    :arg f: the Function that will be used to generate a monitor function
     :arg adapt_to: property of the field to adapt to; must be
     "function" [default], "gradient" or "hessian"
     :arg avg_weight: parameter for monitor function regularisation. The raw
@@ -31,7 +31,7 @@ class MonitorFunction(object):
 
         assert f.ufl_shape == ()  # can lift this restriction later
 
-        self.f = Function(f)
+        self.f = f  # don't make own copy
         self.adapt_to = adapt_to
         self.avg_weight = avg_weight
         self.max_min_cap = max_min_cap
@@ -43,22 +43,24 @@ class MonitorFunction(object):
         assert dim in (2, 3)
 
         quads = (cellname == "quadrilateral")
-        mesh = f.function_space().mesh()
 
-        P1 = FunctionSpace(mesh, "Q" if quads else "P", 1)  # for representing m
-        P0 = FunctionSpace(mesh, "DQ" if quads else "DP", 0)  # slope limiter centroids
-        DP1 = FunctionSpace(mesh, "DQ" if quads else "DP", 1)  # for advection
+        # Use the mesh of the function f; possibly dangerous?
+        self.mesh = f.function_space().mesh()
+
+        P1 = FunctionSpace(self.mesh, "Q" if quads else "P", 1)  # for representing m
+        P0 = FunctionSpace(self.mesh, "DQ" if quads else "DP", 0)  # slope limiter centroids
+        DP1 = FunctionSpace(self.mesh, "DQ" if quads else "DP", 1)  # for advection
 
         if self.adapt_to in ("gradient", "hessian"):
-            VectorP1 = VectorFunctionSpace(mesh, "Q" if quads else "P", 1)
+            VectorP1 = VectorFunctionSpace(self.mesh, "Q" if quads else "P", 1)
             self.gradf = Function(VectorP1)
             self.gradf_lhs = Function(VectorP1)
             if self.adapt_to == "hessian":
-                TensorP1 = TensorFunctionSpace(mesh, "Q" if quads else "P", 1)
+                TensorP1 = TensorFunctionSpace(self.mesh, "Q" if quads else "P", 1)
                 self.hessf = Function(TensorP1)
                 self.hessf_lhs = Function(TensorP1)
 
-        self.mesh_adv_vel = Function(mesh.coordinates)
+        self.mesh_adv_vel = Function(self.mesh.coordinates)
 
         # monitor function and related quantities
         self.m = Function(P1)
@@ -108,7 +110,7 @@ class MonitorFunction(object):
         # Define mesh 'backwards advection'
         u_dg = TrialFunction(DP1)
         v_dg = TestFunction(DP1)
-        n = FacetNormal(mesh)
+        n = FacetNormal(self.mesh)
 
         self.a_dg = v_dg*u_dg*dx
         vn = 0.5*(dot(self.mesh_adv_vel, n) + abs(dot(self.mesh_adv_vel, n)))
@@ -133,9 +135,7 @@ class MonitorFunction(object):
         prob_m_p1_proj = LinearVariationalProblem(a_p1, L_p1, self.m, constant_jacobian=False)
         self.solv_m_p1_proj = LinearVariationalSolver(prob_m_p1_proj, solver_parameters={'ksp_type': 'cg'})
 
-    def update_monitor(self, f_in):
-        self.f.assign(f_in)
-
+    def update_monitor(self):
         if self.adapt_to in ("gradient", "hessian"):
             # Form mass-lumped gradient
             assemble(self.L_vp1, tensor=self.gradf)
@@ -187,7 +187,7 @@ class MonitorFunction(object):
         # debugging
         # print max(m.dat.data)/min(m.dat.data)
 
-        # return the monitorfunction, or do nothing?
+        # return the monitor function, or do nothing?
         # return self.m
 
     def get_monitor_on_new_mesh(self, m, x_old, x_new):

@@ -5,7 +5,8 @@ from firedrake import Function, VectorFunctionSpace, SpatialCoordinate, Mesh, \
     TrialFunctions, TestFunctions, sqrt, dot, grad, cos, sin, Identity, outer, \
     inner, div, det, TrialFunction, TestFunction, LinearVariationalProblem, \
     LinearVariationalSolver, solve, NonlinearVariationalProblem, \
-    NonlinearVariationalSolver, VectorSpaceBasis, MixedVectorSpaceBasis
+    NonlinearVariationalSolver, VectorSpaceBasis, MixedVectorSpaceBasis, \
+    replace, par_loop, READ, WRITE, as_vector
 from gusto.moving_mesh.mesh_generator import MeshGenerator
 
 
@@ -39,6 +40,7 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         # Sniff radius of passed-in mesh
         if hasattr(mesh_in, '_radius'):
             self.R = mesh_in._radius
+            self.Rc = Constant(self.R)
         else:
             raise RuntimeError("Mesh doesn't seem to be an IcosahedralSphereMesh or a CubedSphereMesh")
 
@@ -50,7 +52,10 @@ class MongeAmpereMeshGenerator(MeshGenerator):
 
         # Set up copy of passed-in mesh coordinate field for returning to
         # external functions
-        self.mesh_coordinates = Function(mesh_in.coordinates)
+        self.output_coordinates = Function(mesh_in.coordinates)
+
+        # And a version that lives on the internal mesh
+        self.own_output_coords = Function(VectorFunctionSpace(self.mesh, "Q" if quads else "P", mesh_in.coordinates.ufl_element().degree()))
 
         # Set up function spaces
         P2 = FunctionSpace(self.mesh, "Q" if quads else "P", 2)
@@ -65,7 +70,7 @@ class MongeAmpereMeshGenerator(MeshGenerator):
             dxdeg = dx
 
         # get mesh area
-        self.total_area = assemble(Constant(1.0)*dxdeg(domain=mesh))
+        self.total_area = assemble(Constant(1.0)*dxdeg(domain=self.mesh))
 
         # Set up functions
         self.phisigma = Function(MixedSpace)
@@ -74,10 +79,13 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         self.phi_temp, self.sigma_temp = split(self.phisigma_temp)
 
         # mesh coordinates
-        self.x = Function(mesh.coordinates)  # for 'physical' coords
-        self.x_old = Function(mesh.coordinates)
-        self.xi = Function(mesh.coordinates)  # for 'computational' coords
+        self.x = Function(self.mesh.coordinates)  # for 'physical' coords
+        self.xi = Function(self.mesh.coordinates)  # for 'computational' coords
 
+        self.x_old = Function(self.own_output_coords)
+        self.x_new = Function(self.own_output_coords)
+
+        self.m = Function(P1)
         self.theta = Constant(0.0)
 
         # Define mesh equations
@@ -85,14 +93,13 @@ class MongeAmpereMeshGenerator(MeshGenerator):
 
         # sphere
         modgphi = sqrt(dot(grad(self.phi), grad(self.phi)) + 1e-8)
-        expxi = xi*cos(modgphi) + grad(self.phi)*sin(modgphi)/modgphi
-        projxi = Identity(3) - outer(self.xi, self.xi)
+        expxi = self.xi*cos(modgphi/self.Rc) + self.Rc*grad(self.phi)*sin(modgphi/self.Rc)/modgphi
+        projxi = Identity(3) - outer(self.xi, self.xi)/(self.Rc*self.Rc)
 
-        modgphi_temp = sqrt(dot(grad(self.phi_temp), grad(self.phi_temp)) + 1e-8)
-        expxi_temp = self.xi*cos(modgphi_temp) + grad(self.phi_temp)*sin(modgphi_temp)/modgphi_temp
+        expxi_temp = replace(expxi, {self.phi: self.phi_temp})
 
-        F_mesh = inner(self.sigma, tau)*dxdeg + dot(div(tau), expxi)*dxdeg - (self.m*det(outer(expxi, self.xi) + dot(self.sigma, projxi)) - self.theta)*v*dxdeg
-        self.thetaform = self.m*det(outer(expxi_temp, self.xi) + dot(self.sigma_temp, projxi))*dxdeg
+        F_mesh = inner(self.sigma, tau)*dxdeg + dot(div(tau), expxi)*dxdeg - (self.m*det(outer(expxi, self.xi)/(self.Rc*self.Rc) + dot(self.sigma, projxi)) - self.theta)*v*dxdeg
+        self.thetaform = self.m*det(outer(expxi_temp, self.xi)/(self.Rc*self.Rc) + dot(self.sigma_temp, projxi))*dxdeg
 
         # Define a solver for obtaining grad(phi) by L^2 projection
         # TODO: lump this?
@@ -107,25 +114,18 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         probgradphi = LinearVariationalProblem(a_cts, L_gradphi, self.gradphi_cts)
         self.solvgradphi = LinearVariationalSolver(probgradphi, solver_parameters={'ksp_type': 'cg'})
 
-        if False:
-            # plane
-            gradphi_dg = Function(mesh.coordinates).assign(0)
-        if True:
-            # sphere
-            gradphi_cts2 = Function(W_cts)  # extra, as gradphi_cts not necessarily tangential
+        # TODO: change for plane
+        self.gradphi_cts2 = Function(W_cts)  # extra, as gradphi_cts not necessarily tangential
 
-        # Set up initial sigma on sphere
+        # Set up initial sigma
         sigma_ = TrialFunction(TensorP2)
         tau_ = TestFunction(TensorP2)
         sigma_ini = Function(TensorP2)
 
         asigmainit = inner(sigma_, tau_)*dxdeg
-        if False:
-            # plane
-            Lsigmainit = -dot(div(tau_), grad(phi))*dx
-        else:
-            # sphere
-            Lsigmainit = -dot(div(tau_), expxi)*dxdeg
+
+        # TODO: change for plane
+        Lsigmainit = -dot(div(tau_), expxi)*dxdeg
 
         solve(asigmainit == Lsigmainit, sigma_ini, solver_parameters={'ksp_type': 'cg'})
 
@@ -138,7 +138,7 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         # Custom preconditioning matrix
         Jp = inner(sigma__, tau__)*dx + phi__*v__*dx + dot(grad(phi__), grad(v__))*dx
 
-        mesh_prob = NonlinearVariationalProblem(F_mesh, phisigma, Jp=Jp)
+        mesh_prob = NonlinearVariationalProblem(F_mesh, self.phisigma, Jp=Jp)
         V1_nullspace = VectorSpaceBasis(constant=True)
         nullspace = MixedVectorSpaceBasis(MixedSpace, [V1_nullspace, MixedSpace.sub(1)])
 
@@ -169,71 +169,36 @@ class MongeAmpereMeshGenerator(MeshGenerator):
                                                     pre_function_callback=self.update_mxtheta,
                                                     solver_parameters=params)
 
-        self.mesh_solv.snes.setMonitor(fakemonitor)
-
-    def firstrun(self, foo):
-        """
-        This function adapts the mesh to the initial state.
-
-        :arg ???: ???
-        :arg ???: ???
-        """
-        assert not self.initial_mesh
-        self.mesh_solv.solve()
-        self.initial_mesh = False
-        self.mesh.coordinates.assign(x)  # ???
-
-    def generate_mesh(self, foo):
-        # Back up the current mesh
-        self.x_old.assign(x)
-
-        # Obtain monitor function on old mesh
-        self.get_m_from_q(q)
-        self.m_old.assign(m)
-
-        # Generate new mesh, coords go into x
-        mesh_solv.solve()
+        self.mesh_solv.snes.setMonitor(self.fakemonitor)
 
     def update_mxtheta(self, cursol):
         with self.phisigma_temp.dat.vec as v:
             cursol.copy(v)
 
         # Obtain continous version of grad phi.
-        self.mesh.coordinates.assign(xi)
+        self.mesh.coordinates.assign(self.xi)
         self.solvgradphi.solve()
 
-        # Generate coordinates from this.
-        if False:
-            # On plane, simply copy into the discontinous coordinate field
-            par_loop("""
-for (int i=0; i<cg.dofs; i++) {
-    for (int j=0; j<2; j++) {
-        dg[i][j] = cg[i][j];
-    }
-}
-""", dx, {'cg': (gradphi_cts, READ),
-          'dg': (gradphi_dg, WRITE)})
-
-            x.assign(xi + gradphi_dg)  # x = xi + grad(phi)
-        else:
-            # On sphere, firstly "fix grad(phi)" by ensuring that
-            # grad(phi).x = 0, assuming |x| = 1
-            par_loop("""
+        # Generate coordinates from this. TODO: change for plane
+        # On sphere, firstly "fix grad(phi)" by ensuring that
+        # grad(phi).x = 0, assuming |x| = 1
+        par_loop("""
 for (int i=0; i<vnew.dofs; i++) {
     double dot = 0.0;
     for (int j=0; j<3; j++) {
-        dot += x[i][j]*v[i][j];
+        dot += x[i][j]*vold[i][j];
     }
     for (int j=0; j<3; j++) {
-        vnew[i][j] = v[i][j] - dot*x[i][j];
+        vnew[i][j] = vold[i][j] - dot*x[i][j]/(R*R);
     }
 }
-""", dx, {'x': (mesh.coordinates, READ),
-          'v': (gradphi_cts, READ),
-          'vnew': (gradphi_cts2, WRITE)})
+""", dx, {'x': (self.mesh.coordinates, READ),
+          'R': (self.Rc, READ),
+          'vold': (self.gradphi_cts, READ),
+          'vnew': (self.gradphi_cts2, WRITE)})
 
-            # Then use exponential map to obtain x
-            par_loop("""
+        # Then use exponential map to obtain x
+        par_loop("""
 for (int i=0; i<xi.dofs; i++) {
     double norm = 0.0;
     for (int j=0; j<3; j++) {
@@ -242,55 +207,89 @@ for (int i=0; i<xi.dofs; i++) {
     norm = sqrt(norm) + 1e-8;
 
     for (int j=0; j<3; j++) {
-        x[i][j] = xi[i][j]*cos(norm) + (u[i][j]/norm)*sin(norm);
+        xout[i][j] = xi[i][j]*cos(norm/R) + R*(u[i][j]/norm)*sin(norm/R);
     }
 }
-""", dx, {'xi': (xi, READ),
-          'u': (gradphi_cts2, READ),
-          'x': (x, WRITE)})
+""", dx, {'xi': (self.xi, READ),
+          'R': (self.Rc, READ),
+          'u': (self.gradphi_cts2, READ),
+          'xout': (self.x, WRITE)})
 
         if self.initial_mesh:
-            # q obtained by interpolation on successive meshes,
-            # and m is obtained directly from that
+            # Make coords suitable for the input mesh, self.mesh_in
+            self.mesh.coordinates.assign(self.x)
+            x, y, z = SpatialCoordinate(self.mesh)
+            self.own_output_coords.interpolate(as_vector((x, y, z)))
+            self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
-            self.mesh.coordinates.assign(x)
-            assert False
-            q.interpolate(q_expr)
-            get_m_from_q(q)
-            if uniform:
-                m.assign(1.0)
+            # Set them (note: this modifies the user-mesh!)
+            self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data[:]
+            self.mesh_in.coordinates.assign(self.output_coordinates)
+
+            # Call user function to set initial data
+            self.initialise_fn()
+
+            # Make monitor function on user's mesh
+            self.monitor.update_monitor()
+
+            # Copy this to internal mesh
+            self.m.dat.data[:] = self.monitor.m.dat.data[:]
+
         else:
-            # We have the function m on old mesh: m_old. We want to represent
-            # this on the trial mesh. Do this by using the same values
-            # (equivalent to advection by +v), then do an advection step of -v.
+            # "Copy" self.x over to self.x_new
+            self.mesh.coordinates.assign(self.x)
+            x, y, z = SpatialCoordinate(self.mesh)
+            self.own_output_coords.interpolate(as_vector((x, y, z)))
+            self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+            self.x_new.dat.data[:] = self.own_output_coords.dat.data[:]
 
-            mesh.coordinates.assign(x)
-            mesh_adv_vel.assign(x_old - x)
+            # Update representation of monitor function
+            self.monitor.get_monitor_on_new_mesh(self.monitor.m, self.x_old, self.x_new)
 
-            # Make discontinuous m
-            par_loop("""
-for (int i=0; i<dg.dofs; i++) {
-    dg[i][0] = cg[i][0];
-}
-""", dx, {'dg': (m_dg, WRITE),
-          'cg': (m_old, READ)})
+            # Copy into own representation of monitor function
+            self.m.dat.data[:] = self.monitor.m.dat.data[:]
 
-            # Advect this by -v
-            steps = 5
-            for ii in range(steps):
-                solv_madv.solve()
-                m_dg.assign(m_dg + Constant(1.0/steps)*dm)
-                project(m_dg, mbar)  # get centroids for slope limiter
-                limit_slope(m_dg, mbar, m_max, m_min)
+        # Set mesh coordinates to use "computational mesh"
+        self.mesh.coordinates.assign(self.xi)
 
-            project(m_dg, m)  # project discontinuous m back into CG
-            mmax_post = max(m.dat.data)/min(m.dat.data)
-
-        mesh.coordinates.assign(xi)
-        theta_new = assemble(thetaform)/total_area
-        theta.assign(theta_new)
-
+        # Calculate theta
+        self.theta.assign(assemble(self.thetaform)/self.total_area)
 
     def fakemonitor(self, snes, it, rnorm):
         cursol = snes.getSolution()
         self.update_mxtheta(cursol)  # updates m, x, and theta
+
+    def get_first_mesh(self, initialise_fn):
+        """
+        This function is used to generate a mesh adapted to the initial state.
+
+        :arg initialise_fn: a user-specified Python function that sets the
+        initial condition
+        """
+        self.initial_mesh = True
+        self.initialise_fn = initialise_fn
+        self.mesh_solv.solve()
+
+    def get_new_mesh(self, foo):
+        self.initial_mesh = False
+
+        # Back up the current mesh
+        self.x_old.assign(self.mesh_in.coordinates)
+
+        # Make monitor function on user's mesh
+        self.monitor.update_monitor()
+
+        # Back this up
+        self.monitor.m_old.assign(self.monitor.m)
+
+        # Generate new mesh, coords put in self.x
+        self.mesh_solv.solve()
+
+        # Move data from internal mesh to output mesh.
+        self.mesh.coordinates.assign(self.x)
+        x, y, z = SpatialCoordinate(self.mesh)
+        self.own_output_coords.interpolate(as_vector((x, y, z)))
+        self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+
+        self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data[:]
+        return self.output_coordinates
