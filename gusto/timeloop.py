@@ -4,7 +4,7 @@ from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
 from gusto.advection import NoAdvection
-from gusto.mesh_movement import spherical_logarithm
+from gusto.moving_mesh.utility_functions import spherical_logarithm
 from firedrake import DirichletBC, Expression, Function, LinearVariationalProblem, LinearVariationalSolver, SpatialCoordinate, Projector
 
 
