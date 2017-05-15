@@ -19,10 +19,17 @@ class BaseTimestepper(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, advection_dict):
+    def __init__(self, state, advection_dict, mesh_generator=None):
+        # TODO: decide on consistent way of doing this. Ideally just
+        # use mesh_generator, but seems tricky in other places.
+        if state.timestepping.move_mesh:
+            assert mesh_generator is not None
+        if mesh_generator is not None:
+            assert state.timestepping.move_mesh
 
         self.state = state
         self.advection_dict = advection_dict
+        self.mesh_generator = mesh_generator
         self.dt = state.timestepping.dt
 
         # list of fields that are advected as part of the nonlinear iteration
@@ -76,9 +83,9 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None, mesh_generator=None):
 
-        super(Timestepper, self).__init__(state, advection_dict)
+        super(Timestepper, self).__init__(state, advection_dict, mesh_generator)
         self.linear_solver = linear_solver
         self.forcing = forcing
         self.diffusion_dict = {}
@@ -184,9 +191,9 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advection_dict, physics_list=None):
+    def __init__(self, state, advection_dict, physics_list=None, mesh_generator=None):
 
-        super(AdvectionTimestepper, self).__init__(state, advection_dict)
+        super(AdvectionTimestepper, self).__init__(state, advection_dict, mesh_generator)
         if physics_list is not None:
             self.physics_list = physics_list
         else:
