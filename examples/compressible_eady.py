@@ -16,7 +16,7 @@ else:
 # Construct 1d periodic base mesh
 columns = 30  # number of columns
 L = 1000000.
-m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e4, quadrilateral=True)
+m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
 # build 2D mesh by extruding the base mesh
 nlayers = 30  # horizontal layers
@@ -104,7 +104,6 @@ g = parameters.g
 Tsurf = 300.
 thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
 theta_b = Function(Vt).interpolate(thetaref)
-rho_b = Function(Vr)
 
 
 # setup constants
@@ -129,14 +128,18 @@ theta_pert = Function(Vt).interpolate(theta_exp)
 # set theta0
 theta0.interpolate(theta_b + theta_pert)
 
-# hydrostatic Pi
+# calculate hydrostatic Pi
+rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
-# balanced u
+# set initial u
 compressible_eady_initial_u(state, theta0, rho0, u0)
 
+# pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
+
+# set the background profiles
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 ##############################################################################

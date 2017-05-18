@@ -56,9 +56,9 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
-                          dumplist=['u','p'],
-                          perturbation_fields=['b'])
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=180,
+                          dumplist=['u', 'p'],
+                          perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -133,23 +133,20 @@ b_pert = Function(Vb).interpolate(b_exp)
 # set total buoyancy
 b0.project(b_b + b_pert)
 
-# calculate hydrostatic total pressure
+# calculate hydrostatic pressure
 p_b = Function(Vp)
-p_pert = Function(Vp)
 incompressible_hydrostatic_balance(state, b_b, p_b)
-incompressible_hydrostatic_balance(state, b_pert, p_pert)
-pressure_boundary_correction(state, b_pert, p_pert)
-p0.project(p_b + p_pert)
+incompressible_hydrostatic_balance(state, b0, p0)
 
 # set initial u
-uexpr = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
-u0.project(uexpr)
+u_exp = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
+u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'b':b0, 'u':u0, 'p':p0})
+state.initialise({'u':u0, 'p':p0, 'b':b0})
 
-# set the background buoyancy
-state.set_reference_profiles({'b':b_b})
+# set the background profiles
+state.set_reference_profiles({'p':p_b, 'b':b_b})
 
 ##############################################################################
 # Set up advection schemes
