@@ -60,8 +60,6 @@ for ref_level, dt in ref_dt.iteritems():
     eqn_form = "continuity"
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
 
-    vscale = 10.0
-    dt = state.timestepping.dt
     state.uexpr = uexpr
 
     advection_dict = {}
