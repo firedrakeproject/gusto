@@ -151,7 +151,7 @@ class MonitorFunction(object):
         # obtain m (pre-regularisation) by lumped projection
         assemble(self.L_monitor, tensor=self.L_monitor_rhs)
         assemble(self.a_p1_lumped, tensor=self.L_monitor_lhs)
-        self.m_prereg.dat.data[:] = self.L_monitor_rhs.dat.data[:] / self.L_monitor_lhs.dat.data[:]
+        self.m_prereg.dat.data[:] = self.L_monitor_rhs.dat.data_ro[:] / self.L_monitor_lhs.dat.data_ro[:]
 
         # regularise
 
@@ -162,7 +162,7 @@ class MonitorFunction(object):
         # if no Beckett/Mackenzie, just cap
         elif self.avg_weight == 0.0:
             m_prereg_min = self.m_prereg.comm.allreduce(self.m_prereg.dat.data_ro.min(), op=MPI.MIN)
-            self.m.dat.data[:] = np.fmin(self.m_prereg.dat.data[:], self.max_min_cap*m_prereg_min)
+            self.m.dat.data[:] = np.fmin(self.m_prereg.dat.data_ro[:], self.max_min_cap*m_prereg_min)
 
         # if no max/min cap, just Beckett/Mackenzie
         elif self.max_min_cap == 0.0:
@@ -182,10 +182,10 @@ class MonitorFunction(object):
             self.m.assign(Constant(self.avg_weight)*Constant(m_avg) + Constant(1.0 - self.avg_weight)*self.m_prereg)
 
         # safety check for now
-        assert (self.m.dat.data >= 0.0).all()
+        assert (self.m.dat.data_ro >= 0.0).all()
 
         # debugging
-        # print max(m.dat.data)/min(m.dat.data)
+        # print max(m.dat.data_ro)/min(m.dat.data_ro)
 
         # return the monitor function, or do nothing?
         # return self.m
@@ -237,7 +237,7 @@ class MonitorFunction(object):
         self.solv_m_p1_proj.solve()
 
         # safety check for now
-        assert (self.m.dat.data >= 0.0).all()
+        assert (self.m.dat.data_ro >= 0.0).all()
 
     def _limit_slope(self, field, centroids, max_field, min_field):
         max_field.assign(-1e300)  # small number

@@ -223,7 +223,7 @@ for (int i=0; i<xi.dofs; i++) {
             self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
             # Set them (note: this modifies the user-mesh!)
-            self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data[:]
+            self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.mesh_in.coordinates.assign(self.output_coordinates)
 
             # Call user function to set initial data
@@ -233,7 +233,7 @@ for (int i=0; i<xi.dofs; i++) {
             self.monitor.update_monitor()
 
             # Copy this to internal mesh
-            self.m.dat.data[:] = self.monitor.m.dat.data[:]
+            self.m.dat.data[:] = self.monitor.m.dat.data_ro[:]
 
         else:
             # "Copy" self.x over to self.x_new
@@ -241,13 +241,13 @@ for (int i=0; i<xi.dofs; i++) {
             x, y, z = SpatialCoordinate(self.mesh)
             self.own_output_coords.interpolate(as_vector((x, y, z)))
             self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
-            self.x_new.dat.data[:] = self.own_output_coords.dat.data[:]
+            self.x_new.dat.data[:] = self.own_output_coords.dat.data_ro[:]
 
             # Update representation of monitor function
             self.monitor.get_monitor_on_new_mesh(self.monitor.m, self.x_old, self.x_new)
 
             # Copy into own representation of monitor function
-            self.m.dat.data[:] = self.monitor.m.dat.data[:]
+            self.m.dat.data[:] = self.monitor.m.dat.data_ro[:]
 
         # Set mesh coordinates to use "computational mesh"
         self.mesh.coordinates.assign(self.xi)
@@ -291,5 +291,5 @@ for (int i=0; i<xi.dofs; i++) {
         self.own_output_coords.interpolate(as_vector((x, y, z)))
         self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
-        self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data[:]
+        self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
         return self.output_coordinates
