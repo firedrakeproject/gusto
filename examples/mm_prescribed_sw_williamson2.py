@@ -25,7 +25,7 @@ diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "mm_sw_W2_ref%s_dt%s" % (ref_level, dt)
+    dirname = "mm_presc_sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))

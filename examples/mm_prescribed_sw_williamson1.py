@@ -21,7 +21,7 @@ diagnostic_fields = [CourantNumber()]
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "mm_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
+    dirname = "mm_presc_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
