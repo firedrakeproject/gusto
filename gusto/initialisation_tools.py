@@ -199,14 +199,14 @@ def compressible_eady_initial_u(state, theta, rho, u):
     dbdy = state.parameters.dbdy
     f = state.parameters.f
 
-    pi = exner(theta, rho, state)
-    exner_pi = Function(rho.function_space()).interpolate(pi)
+    Pi_exp = exner(theta, rho, state)
+    Pi = Function(rho.function_space()).interpolate(Pi_exp)
 
     V = FunctionSpace(state.mesh, "DG", 0)
     c = Function(V).assign(1.)
-    pi_avg = assemble(exner_pi*dx)/assemble(c*dx)
+    Pi0 = assemble(Pi*dx)/assemble(c*dx)
 
-    uexpr = as_vector([cp*30.*dbdy/f*(pi-pi_avg), 0.0, 0.0])
-    u.project(uexpr)
+    u_exp = as_vector([cp*30.*dbdy/f*(Pi_exp-Pi0), 0.0, 0.0])
+    u.project(u_exp)
 
-    state.parameters.pi0 = pi_avg
+    state.parameters.Pi0 = Pi0

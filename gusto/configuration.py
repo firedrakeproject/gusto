@@ -108,4 +108,4 @@ class CompressibleEadyParameters(Configuration):
     dbdy = None
     H = None
     f = None
-    pi0 = 0.0
+    Pi0 = 0.0

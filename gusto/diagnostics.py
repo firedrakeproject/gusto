@@ -187,8 +187,8 @@ class ExnerPi(DiagnosticField):
     def compute(self, state):
         rho = state.fields("rho")
         theta = state.fields("theta")
-        pi = exner(theta, rho, state)
-        return self.field(state.mesh).interpolate(pi)
+        Pi = exner(theta, rho, state)
+        return self.field(state.mesh).interpolate(Pi)
 
 
 class ExnerPi_perturbation(DiagnosticField):
@@ -205,9 +205,9 @@ class ExnerPi_perturbation(DiagnosticField):
         rhobar = state.fields("rhobar")
         theta = state.fields("theta")
         thetabar = state.fields("thetabar")
-        pi = exner(theta, rho, state)
-        pibar = exner(thetabar, rhobar, state)
-        return self.field(state.mesh).interpolate(pi-pibar)
+        Pi = exner(theta, rho, state)
+        Pibar = exner(thetabar, rhobar, state)
+        return self.field(state.mesh).interpolate(Pi-Pibar)
 
 
 class Sum(DiagnosticField):
