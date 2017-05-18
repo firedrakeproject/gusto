@@ -138,36 +138,36 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         # Custom preconditioning matrix
         Jp = inner(sigma__, tau__)*dx + phi__*v__*dx + dot(grad(phi__), grad(v__))*dx
 
-        mesh_prob = NonlinearVariationalProblem(F_mesh, self.phisigma, Jp=Jp)
+        self.mesh_prob = NonlinearVariationalProblem(F_mesh, self.phisigma, Jp=Jp)
         V1_nullspace = VectorSpaceBasis(constant=True)
-        nullspace = MixedVectorSpaceBasis(MixedSpace, [V1_nullspace, MixedSpace.sub(1)])
+        self.nullspace = MixedVectorSpaceBasis(MixedSpace, [V1_nullspace, MixedSpace.sub(1)])
 
-        params = {"ksp_type": "gmres",
-                  "pc_type": "fieldsplit",
-                  "pc_fieldsplit_type": "multiplicative",
-                  "pc_fieldsplit_off_diag_use_amat": True,
-                  "fieldsplit_0_pc_type": "gamg",
-                  "fieldsplit_0_ksp_type": "preonly",
-                  "fieldsplit_0_mg_levels_ksp_max_it": 5,
-                  "fieldsplit_0_mg_levels_pc_type": "ilu",
-                  "fieldsplit_1_pc_type": "ilu",
-                  "fieldsplit_1_ksp_type": "preonly",
-                  "ksp_max_it": 200,
-                  "snes_max_it": 50,
-                  "ksp_gmres_restart": 200,
-                  "snes_rtol": initial_tol,
-                  "snes_linesearch_type": "bt",
-                  # "ksp_monitor": True,
-                  # "snes_monitor": True,
-                  # "snes_linesearch_monitor": True,
-                  "snes_lag_preconditioner": -1}
+        self.params = {"ksp_type": "gmres",
+                       "pc_type": "fieldsplit",
+                       "pc_fieldsplit_type": "multiplicative",
+                       "pc_fieldsplit_off_diag_use_amat": True,
+                       "fieldsplit_0_pc_type": "gamg",
+                       "fieldsplit_0_ksp_type": "preonly",
+                       "fieldsplit_0_mg_levels_ksp_max_it": 5,
+                       "fieldsplit_0_mg_levels_pc_type": "ilu",
+                       "fieldsplit_1_pc_type": "ilu",
+                       "fieldsplit_1_ksp_type": "preonly",
+                       "ksp_max_it": 200,
+                       "snes_max_it": 50,
+                       "ksp_gmres_restart": 200,
+                       "snes_rtol": initial_tol,
+                       "snes_linesearch_type": "bt",
+                       # "ksp_monitor": True,
+                       # "snes_monitor": True,
+                       # "snes_linesearch_monitor": True,
+                       "snes_lag_preconditioner": -1}
 
-        self.mesh_solv = NonlinearVariationalSolver(mesh_prob,
-                                                    nullspace=nullspace,
-                                                    transpose_nullspace=nullspace,
+        self.mesh_solv = NonlinearVariationalSolver(self.mesh_prob,
+                                                    nullspace=self.nullspace,
+                                                    transpose_nullspace=self.nullspace,
                                                     pre_jacobian_callback=self.update_mxtheta,
                                                     pre_function_callback=self.update_mxtheta,
-                                                    solver_parameters=params)
+                                                    solver_parameters=self.params)
 
         self.mesh_solv.snes.setMonitor(self.fakemonitor)
 
@@ -270,9 +270,20 @@ for (int i=0; i<xi.dofs; i++) {
         self.initialise_fn = initialise_fn
         self.mesh_solv.solve()
 
-    def get_new_mesh(self):
+        # remake mesh solver with new tolerance
+        self.params["snes_rtol"] = self.tol
+
+        self.mesh_solv = NonlinearVariationalSolver(self.mesh_prob,
+                                                    nullspace=self.nullspace,
+                                                    transpose_nullspace=self.nullspace,
+                                                    pre_jacobian_callback=self.update_mxtheta,
+                                                    pre_function_callback=self.update_mxtheta,
+                                                    solver_parameters=self.params)
+
+        self.mesh_solv.snes.setMonitor(self.fakemonitor)
         self.initial_mesh = False
 
+    def get_new_mesh(self):
         # Back up the current mesh
         self.x_old.assign(self.mesh_in.coordinates)
 

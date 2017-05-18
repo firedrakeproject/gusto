@@ -191,9 +191,7 @@ class MonitorFunction(object):
         # return self.m
 
     def get_monitor_on_new_mesh(self, m, x_old, x_new):
-        self.m_old.assign(m)
-
-        # We have the function m on old mesh: m_old. We want to represent
+        # We have the function m on old mesh: self.m_old. We want to represent
         # this on the new mesh. Do this by using the same values
         # (equivalent to advection by +v), then do an advection step of -v.
 
