@@ -151,7 +151,7 @@ class MonitorFunction(object):
         # obtain m (pre-regularisation) by lumped projection
         assemble(self.L_monitor, tensor=self.L_monitor_rhs)
         assemble(self.a_p1_lumped, tensor=self.L_monitor_lhs)
-        self.m_prereg.dat = self.L_monitor_rhs.dat / self.L_monitor_lhs.dat
+        self.m_prereg.dat.data[:] = self.L_monitor_rhs.dat.data[:] / self.L_monitor_lhs.dat.data[:]
 
         # regularise
 
