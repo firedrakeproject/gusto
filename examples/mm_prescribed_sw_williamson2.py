@@ -70,7 +70,7 @@ for ref_level, dt in ref_dt.iteritems():
     state.uexpr = uexpr
 
     advection_dict = {}
-    #advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+    # advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["u"] = NoAdvection(state, u0)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
