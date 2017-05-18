@@ -76,7 +76,7 @@ class MonitorFunction(object):
 
         if avg_weight > 0.0:
             self.m_integral = self.m_prereg*dx
-            self.total_area = assemble(Constant(1.0)*dx)
+            self.total_area = assemble(Constant(1.0)*dx(self.mesh))
 
         # Set up monitor generation equations
         # TODO: generalise to vector-valued f

@@ -96,7 +96,7 @@ class MongeAmpereMeshGenerator(MeshGenerator):
         expxi = self.xi*cos(modgphi/self.Rc) + self.Rc*grad(self.phi)*sin(modgphi/self.Rc)/modgphi
         projxi = Identity(3) - outer(self.xi, self.xi)/(self.Rc*self.Rc)
 
-        expxi_temp = replace(expxi, {self.phi: self.phi_temp})
+        expxi_temp = replace(expxi, {self.phisigma: self.phisigma_temp})
 
         F_mesh = inner(self.sigma, tau)*dxdeg + dot(div(tau), expxi)*dxdeg - (self.m*det(outer(expxi, self.xi)/(self.Rc*self.Rc) + dot(self.sigma, projxi)) - self.theta)*v*dxdeg
         self.thetaform = self.m*det(outer(expxi_temp, self.xi)/(self.Rc*self.Rc) + dot(self.sigma_temp, projxi))*dxdeg
@@ -189,7 +189,7 @@ for (int i=0; i<vnew.dofs; i++) {
         dot += x[i][j]*vold[i][j];
     }
     for (int j=0; j<3; j++) {
-        vnew[i][j] = vold[i][j] - dot*x[i][j]/(R*R);
+        vnew[i][j] = vold[i][j] - dot*x[i][j]/(R[0]*R[0]);
     }
 }
 """, dx, {'x': (self.mesh.coordinates, READ),
@@ -207,7 +207,7 @@ for (int i=0; i<xi.dofs; i++) {
     norm = sqrt(norm) + 1e-8;
 
     for (int j=0; j<3; j++) {
-        xout[i][j] = xi[i][j]*cos(norm/R) + R*(u[i][j]/norm)*sin(norm/R);
+        xout[i][j] = xi[i][j]*cos(norm/R[0]) + R[0]*(u[i][j]/norm)*sin(norm/R[0]);
     }
 }
 """, dx, {'xi': (self.xi, READ),
@@ -270,7 +270,7 @@ for (int i=0; i<xi.dofs; i++) {
         self.initialise_fn = initialise_fn
         self.mesh_solv.solve()
 
-    def get_new_mesh(self, foo):
+    def get_new_mesh(self):
         self.initial_mesh = False
 
         # Back up the current mesh

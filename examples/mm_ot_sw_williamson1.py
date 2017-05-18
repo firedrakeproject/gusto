@@ -21,7 +21,7 @@ diagnostic_fields = [CourantNumber()]
 
 for ref_level, dt in ref_dt.iteritems():
 
-    dirname = "mm_presc_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
+    dirname = "mm_ot_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
@@ -68,19 +68,16 @@ for ref_level, dt in ref_dt.iteritems():
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
     advection_dict["u"] = NoAdvection(state, u0)
 
-    class MeshRotator(MeshGenerator):
-        def __init__(self, mesh, R, vscale, dt):
-            self.coord_function = Function(mesh.coordinates)
-            x = SpatialCoordinate(mesh)
-            self.rotation_expr = as_vector([x[0], x[1] + Constant(vscale)*Constant(dt)*x[2]/Constant(R), x[2] - Constant(vscale)*Constant(dt)*x[1]/Constant(R)])
+    def initialise_fn():
+        state.fields("u").project(uexpr)
+        state.fields("D").interpolate(Dexpr)
 
-        def get_new_mesh(self):
-            self.coord_function.interpolate(self.rotation_expr)
-            return self.coord_function
+    monitor = MonitorFunction(state.fields("D"))
+    mesh_generator = MongeAmpereMeshGenerator(mesh, monitor)
 
-    mesh_rotator = MeshRotator(mesh, R, vscale, dt)
+    mesh_generator.get_first_mesh(initialise_fn)
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict, mesh_generator=mesh_rotator)
+    stepper = AdvectionTimestepper(state, advection_dict, mesh_generator=mesh_generator)
 
     stepper.run(t=0, tmax=12*day)
