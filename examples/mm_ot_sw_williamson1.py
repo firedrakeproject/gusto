@@ -73,7 +73,7 @@ for ref_level, dt in ref_dt.iteritems():
         state.fields("D").interpolate(Dexpr)
 
     monitor = MonitorFunction(state.fields("D"))
-    mesh_generator = MongeAmpereMeshGenerator(mesh, monitor)
+    mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 
     mesh_generator.get_first_mesh(initialise_fn)
 

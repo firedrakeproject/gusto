@@ -10,7 +10,7 @@ from firedrake import Function, VectorFunctionSpace, SpatialCoordinate, Mesh, \
 from gusto.moving_mesh.mesh_generator import MeshGenerator
 
 
-class MongeAmpereMeshGenerator(MeshGenerator):
+class OptimalTransportMeshGenerator(MeshGenerator):
     """
     Class for an optimal-transport-based mesh generator
 
