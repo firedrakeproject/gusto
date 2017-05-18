@@ -82,8 +82,8 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         self.x = Function(self.mesh.coordinates)  # for 'physical' coords
         self.xi = Function(self.mesh.coordinates)  # for 'computational' coords
 
-        self.x_old = Function(self.own_output_coords)
-        self.x_new = Function(self.own_output_coords)
+        self.x_old = Function(mesh_in.coordinates)
+        self.x_new = Function(mesh_in.coordinates)
 
         self.m = Function(P1)
         self.theta = Constant(0.0)
