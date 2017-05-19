@@ -114,23 +114,7 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-ip_params = {'pc_type': 'fieldsplit',
-             'pc_fieldsplit_type': 'additive',
-             'ksp_type': 'gmres',
-             'ksp_monitor_true_residual': True,
-             'ksp_max_it': 100,
-             'ksp_gmres_restart': 50,
-             'fieldsplit_0_ksp_type': 'preonly',
-             'fieldsplit_0_pc_type': 'bjacobi',
-             'fieldsplit_0_sub_pc_type': 'ilu',
-             'fieldsplit_1_ksp_type': 'preonly',
-             'fieldsplit_1_pc_type': 'lu'}
-
-#linear_solver = CompressibleSolver(state, params=schur_params)
-linear_solver = CompressibleSolver(state, params=ip_params,
-                                   block_pc=True,
-                                   h_horiz=L/columns,
-                                   h_vert=H/nlayers)
+linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
