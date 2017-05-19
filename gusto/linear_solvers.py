@@ -228,6 +228,182 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta_solver.solve()
         theta.assign(self.theta)
 
+class HybridisedCompressibleSolver(TimesteppingSolver):
+    """
+    Timestepping linear solver object for the compressible equations
+    in theta-pi formulation with prognostic variables u,rho,theta.
+
+    This solver follows the following strategy:
+    (1) Analytically eliminate theta (introduces error near topography)
+    (2a) Solve resulting system for (u[broken],rho,lambda) using hybridised
+    solver
+    (2b) reconstruct unbroken u
+    (3) Reconstruct theta
+
+    :arg state: a :class:`.State` object containing everything else.
+    :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
+    quadrature degree in the horizontal direction and q_v is that in
+    the vertical direction
+    :arg params (optional): solver parameters
+    """
+
+    def __init__(self, state, quadrature_degree=None, params=None):
+
+        self.state = state
+
+        if quadrature_degree is not None:
+            self.quadrature_degree = quadrature_degree
+        else:
+            dgspace = state.spaces("DG")
+            if any(deg > 2 for deg in dgspace.ufl_element().degree()):
+                warning("default quadrature degree most likely not sufficient for this degree element")
+            self.quadrature_degree = (5, 5)
+
+        if params is None:
+            self.params = {'pc_type': 'fieldsplit',
+                           'pc_fieldsplit_type': 'schur',
+                           'ksp_type': 'gmres',
+                           'ksp_max_it': 100,
+                           'ksp_gmres_restart': 50,
+                           'pc_fieldsplit_schur_fact_type': 'FULL',
+                           'pc_fieldsplit_schur_precondition': 'selfp',
+                           'fieldsplit_0_ksp_type': 'preonly',
+                           'fieldsplit_0_pc_type': 'bjacobi',
+                           'fieldsplit_0_sub_pc_type': 'ilu',
+                           'fieldsplit_1_ksp_type': 'preonly',
+                           'fieldsplit_1_pc_type': 'gamg',
+                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
+                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        else:
+            self.params = params
+
+        # setup the solver
+        self._setup_solver()
+
+    def _setup_solver(self):
+        state = self.state      # just cutting down line length a bit
+        dt = state.timestepping.dt
+        beta = dt*state.timestepping.alpha
+        cp = state.parameters.cp
+        mu = state.mu
+        Vu = state.spaces("HDiv")
+        Vu_broken = FunctionSpace(BrokenElement(Vu.ufl_element()))
+        Vtheta = state.spaces("HDiv_v")
+        Vrho = state.spaces("DG")
+        HOW DO WE GET THE TRACE SPACE IN THE EXTRUDED CASE?
+        Vtrace = FunctionSpace(mesh, "HDiv Trace", tdegree)
+
+        # Split up the rhs vector (symbolically)
+        u_in, rho_in, theta_in = split(state.xrhs)
+
+        # Build the reduced function space for u,rho
+        M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
+        w, phi, dl = TestFunctions(M)
+        u, rho, l0 = TrialFunctions(M)
+
+        n = FacetNormal(state.mesh)
+
+        # Get background fields
+        thetabar = state.fields("thetabar")
+        rhobar = state.fields("rhobar")
+        pibar = exner(thetabar, rhobar, state)
+        pibar_rho = exner_rho(thetabar, rhobar, state)
+        pibar_theta = exner_theta(thetabar, rhobar, state)
+
+        # Analytical (approximate) elimination of theta
+        k = state.k             # Upward pointing unit vector
+        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
+
+        # Only include theta' (rather than pi') in the vertical
+        # component of the gradient
+
+        # the pi prime term (here, bars are for mean and no bars are
+        # for linear perturbations)
+
+        pi = pibar_theta*theta + pibar_rho*rho
+
+        # vertical projection
+        def V(u):
+            return k*inner(u,k)
+
+        # specify degree for some terms as estimated degree is too large
+        dxp = dx(degree=(self.quadrature_degree))
+        dS_vp = dS_v(degree=(self.quadrature_degree))
+        dS_hp = dS_v(degree=(self.quadrature_degree))
+
+        eqn = (
+            inner(w, (u - u_in))*dx
+            - beta*cp*div(theta*V(w))*pibar*dxp
+            # following does nothing but is preserved in the comments
+            # to remind us why (because V(w) is purely vertical.
+            # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+            - beta*cp*div(thetabar*w)*pi*dxp
+            + beta*cp*jump(thetabar*w,n)*l0*(dS_vp + dS_hp)
+            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+            + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
+            + dl*jump(u,n0)*(dS_vp + dS_hp)
+        )
+
+        if mu is not None:
+            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put result of u rho solver
+        self.urho = Function(M)
+
+        # Boundary conditions (assumes extruded mesh)
+        dim = M.sub(0).ufl_element().value_shape()[0]
+        bc = ("0.0",)*dim
+        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
+               DirichletBC(M.sub(0), Expression(bc), "top")]
+
+        # Solver for u, rho
+        NEED TO BUILD THIS INTO A LAMBDA SOLVER
+
+        urho_problem = LinearVariationalProblem(
+            aeqn, Leqn, self.urho, bcs=bcs)
+
+        self.urho_solver = LinearVariationalSolver(urho_problem,
+                                                   solver_parameters=self.params,
+                                                   options_prefix='ImplicitSolver')
+
+        NEED TO PUT IN A U, RHO RECONSTRUCTION AND RECONSTRUCT H(DIV) U
+        
+        # Reconstruction of theta
+        theta = TrialFunction(Vtheta)
+        gamma = TestFunction(Vtheta)
+
+        u, rho = self.urho.split()
+        self.theta = Function(Vtheta)
+
+        theta_eqn = gamma*(theta - theta_in +
+                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+
+        theta_problem = LinearVariationalProblem(lhs(theta_eqn),
+                                                 rhs(theta_eqn),
+                                                 self.theta)
+        self.theta_solver = LinearVariationalSolver(theta_problem,
+                                                    options_prefix='thetabacksubstitution')
+
+    def solve(self):
+        """
+        Apply the solver with rhs state.xrhs and result state.dy.
+        """
+
+        self.urho_solver.solve()
+
+        u1, rho1 = self.urho.split()
+        u, rho, theta = self.state.dy.split()
+        u.assign(u1)
+        rho.assign(rho1)
+
+        self.theta_solver.solve()
+        theta.assign(self.theta)
 
 class IncompressibleSolver(TimesteppingSolver):
     """Timestepping linear solver object for the incompressible
