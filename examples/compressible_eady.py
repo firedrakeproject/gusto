@@ -6,8 +6,10 @@ import sys
 
 dt = 30.
 if '--running-tests' in sys.argv:
+    tmax_breed = 0.
     tmax = dt
 else:
+    tmax_breed = 0.
     tmax = 30*24*60*60.
 
 ##############################################################################
@@ -194,6 +196,11 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
+# breeding
+############################################################################## 
+stepper.run(t=0, tmax=tmax_breed)
+
+##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True, pickup=True)

@@ -6,6 +6,7 @@ from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
+from gusto.initialisation_tools import compressible_eady_initial_u
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
@@ -220,7 +221,7 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
+    def dump(self, t=0, diagnostic_everydump=False, pickup=False, forcedump=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
@@ -237,7 +238,9 @@ class State(object):
                 t = chk.read_attribute("/","time")
                 next(self.dumpcount)
 
-        elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
+            self.initialise_pickup(t, diagnostic_everydump)
+
+        elif (next(self.dumpcount) % self.output.dumpfreq) == 0 or forcedump:
 
             print "DBG dumping", t
 
@@ -282,7 +285,6 @@ class State(object):
         """
         Dump diagnostics dictionary
         """
-
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
 
@@ -303,6 +305,23 @@ class State(object):
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
+
+    def initialise_pickup(self, t, diagnostic_everydump):
+        """
+        Initialise at the time of pickup
+        """
+        u = self.fields("u")
+        rho = self.fields("rho")
+        theta = self.fields("theta")
+
+        # re-initialise rho and theta
+
+
+        # set balanced u
+        compressible_eady_initial_u(self, theta, rho, u)
+
+        print "Breeding completed. Restart the model from t =", t
+        self.dump(t, diagnostic_everydump, pickup=False, forcedump=True)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
