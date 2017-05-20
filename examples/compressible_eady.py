@@ -6,8 +6,10 @@ import sys
 
 dt = 30.
 if '--running-tests' in sys.argv:
+    tmax_breed = 0.
     tmax = dt
 else:
+    tmax_breed = 3*24*60*60.
     tmax = 30*24*60*60.
 
 ##############################################################################
@@ -124,10 +126,7 @@ Bu = 0.5
 theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
                              - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 theta_pert = Function(Vt).interpolate(theta_exp)
-
-# set theta_amp
 theta_amp = sqrt(assemble(dot(theta_pert, theta_pert)*dx))
-state.parameters.theta_amp = theta_amp
 
 # set theta0
 theta0.interpolate(theta_b + theta_pert)
@@ -198,6 +197,27 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
+# breeding
+##############################################################################
+stepper.run(t=0, tmax=tmax_breed, diagnostic_everydump=True)
+
+# re-initialise rho and theta
+rdiff = Function(Vr).interpolate(rho0-rho_b)
+tdiff = Function(Vt).interpolate(theta0-theta_b)
+
+theta_amp_breed = sqrt(assemble(dot(tdiff, tdiff)*dx))
+coeff = theta_amp/theta_amp_breed
+
+theta0.assign(theta_b+tdiff*coeff)
+rho0.assign(rho_b+rdiff*coeff)
+
+# re-initialise u
+Pi0 = compressible_eady_initial_u(state, theta0, rho0, u0)
+state.parameters.Pi0 = Pi0
+
+print "Breeding complete. Restart the model."
+
+##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True, breeding=True)

@@ -109,4 +109,3 @@ class CompressibleEadyParameters(Configuration):
     H = None
     f = None
     Pi0 = 0.0
-    theta_amp = 0.0
