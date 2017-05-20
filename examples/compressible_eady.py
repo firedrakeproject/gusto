@@ -6,10 +6,8 @@ import sys
 
 dt = 30.
 if '--running-tests' in sys.argv:
-    tmax_breed = 0.
     tmax = dt
 else:
-    tmax_breed = 0.
     tmax = 30*24*60*60.
 
 ##############################################################################
@@ -108,7 +106,7 @@ thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
 theta_b = Function(Vt).interpolate(thetaref)
 
 
-# setup constants
+# set theta_pert
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -127,6 +125,10 @@ theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L
                              - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 theta_pert = Function(Vt).interpolate(theta_exp)
 
+# set theta_amp
+theta_amp = sqrt(assemble(dot(theta_pert, theta_pert)*dx))
+state.parameters.theta_amp = theta_amp
+
 # set theta0
 theta0.interpolate(theta_b + theta_pert)
 
@@ -135,8 +137,9 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
-# set initial u
-compressible_eady_initial_u(state, theta0, rho0, u0)
+# set initial u and Pi0
+Pi0 = compressible_eady_initial_u(state, theta0, rho0, u0)
+state.parameters.Pi0 = Pi0
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
@@ -182,7 +185,6 @@ linear_solver_params = {'pc_type': 'fieldsplit',
                         'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                         'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-
 linear_solver = CompressibleSolver(state, params=linear_solver_params)
 
 ##############################################################################
@@ -196,11 +198,6 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
-# breeding
-############################################################################## 
-stepper.run(t=0, tmax=tmax_breed)
-
-##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True, pickup=True)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)

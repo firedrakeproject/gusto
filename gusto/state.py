@@ -6,7 +6,6 @@ from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
-from gusto.initialisation_tools import compressible_eady_initial_u
 from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
@@ -161,14 +160,15 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
-    def setup_dump(self, pickup=False):
+    def setup_dump(self, pickup=False, breeding=False):
 
         # setup dump files
         # check for existence of directory so as not to overwrite
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir) and not pickup:
+        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
+           and path.exists(self.dumpdir) and not pickup and not breeding:
             exit("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -221,7 +221,7 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-    def dump(self, t=0, diagnostic_everydump=False, pickup=False, forcedump=False):
+    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
@@ -238,9 +238,7 @@ class State(object):
                 t = chk.read_attribute("/","time")
                 next(self.dumpcount)
 
-            self.initialise_pickup(t, diagnostic_everydump)
-
-        elif (next(self.dumpcount) % self.output.dumpfreq) == 0 or forcedump:
+        elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
             print "DBG dumping", t
 
@@ -305,23 +303,6 @@ class State(object):
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
-
-    def initialise_pickup(self, t, diagnostic_everydump):
-        """
-        Initialise at the time of pickup
-        """
-        u = self.fields("u")
-        rho = self.fields("rho")
-        theta = self.fields("theta")
-
-        # re-initialise rho and theta
-
-
-        # set balanced u
-        compressible_eady_initial_u(self, theta, rho, u)
-
-        print "Breeding completed. Restart the model from t =", t
-        self.dump(t, diagnostic_everydump, pickup=False, forcedump=True)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """

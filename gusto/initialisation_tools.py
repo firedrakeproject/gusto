@@ -209,4 +209,4 @@ def compressible_eady_initial_u(state, theta, rho, u):
     u_exp = as_vector([cp*30.*dbdy/f*(Pi_exp-Pi0), 0.0, 0.0])
     u.project(u_exp)
 
-    state.parameters.Pi0 = Pi0
+    return Pi0
