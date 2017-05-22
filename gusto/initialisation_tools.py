@@ -5,8 +5,8 @@ as balanced initial conditions.
 
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, FunctionSpace, \
-    FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
+    TestFunction, TrialFunction, FunctionSpace, SpatialCoordinate, \
+    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
     Expression, Function, Constant, as_vector, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
@@ -194,19 +194,79 @@ def remove_initial_w(u, Vv):
     u.assign(uin)
 
 
-def compressible_eady_initial_u(state, theta, rho, u):
+def eady_initial_u(state, p0, u0):
+    f = state.parameters.f
+    dbdy = state.parameters.dbdy
+    H = state.parameters.H
+    x, y, z = SpatialCoordinate(state.mesh)
+
+    # get pressure gradient
+    Vu = u0.function_space()
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg,g)*dx
+    L = -div(wg)*p0*dx + inner(wg,n)*p0*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    Vp = p0.function_space()
+    phi = TestFunction(Vp)
+    m = TrialFunction(Vp)
+
+    a = f*phi*m*dx
+    L = phi*pgrad[0]*dx
+    v = Function(Vp)
+    solve(a == L, v)
+
+    # set initial u
+    a = inner(wg,g)*dx
+    L = inner(wg,as_vector([-dbdy/f*(z-H/2), v, 0.0]))*dx
+    solve(a == L, u0)
+
+
+def compressible_eady_initial_u(state, theta0, rho0, u0):
+    f = state.parameters.f
     cp = state.parameters.cp
     dbdy = state.parameters.dbdy
-    f = state.parameters.f
 
-    Pi_exp = exner(theta, rho, state)
-    Pi = Function(rho.function_space()).interpolate(Pi_exp)
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
 
+    # get Pi gradient
+    Vu = u0.function_space()
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg,g)*dx
+    L = -div(wg)*Pi*dx + inner(wg,n)*Pi*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    m = TrialFunction(Vr)
+    phi = TestFunction(Vr)
+
+    a = phi*f*m*dx
+    L = phi*cp*theta0*pgrad[0]*dx
+    v = Function(Vr)
+    solve(a == L, v)
+
+    # calculate Pi0
     V = FunctionSpace(state.mesh, "DG", 0)
     c = Function(V).assign(1.)
     Pi0 = assemble(Pi*dx)/assemble(c*dx)
 
-    u_exp = as_vector([cp*30.*dbdy/f*(Pi_exp-Pi0), 0.0, 0.0])
-    u.project(u_exp)
+    # set initial u
+    a = inner(wg,g)*dx
+    L = inner(wg,as_vector([cp*30.*dbdy/f*(Pi_exp-Pi0), v, 0.0]))*dx
+    solve(a == L, u0)
 
     return Pi0

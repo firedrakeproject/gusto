@@ -6,7 +6,6 @@ import sys
 
 dt = 100.
 if '--running-tests' in sys.argv:
-    tmax_breed = 0.
     tmax = dt
     # avoid using mumps on Travis
     linear_solver_params = {'ksp_type':'gmres',
@@ -17,7 +16,6 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax_breed = 3*24*60*60.
     tmax = 30*24*60*60.
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
@@ -65,7 +63,7 @@ output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = EadyParameters(H=H)
+parameters = EadyParameters(H=H, f=f)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -141,8 +139,7 @@ incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b0, p0)
 
 # set initial u
-u_exp = as_vector([-dbdy/f*(z-H/2), 0.0, 0.0])
-u0.project(u_exp)
+eady_initial_u(state, p0, u0)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'p':p0, 'b':b0})
@@ -183,26 +180,6 @@ forcing = EadyForcing(state, euler_poincare=False)
 stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
-# breeding
-##############################################################################
-stepper.run(t=0, tmax=tmax_breed, diagnostic_everydump=True)
-
-# re-initialise p and b
-pdiff = Function(Vp).interpolate(p0-p_b)
-bdiff = Function(Vb).interpolate(b0-b_b)
-
-b_amp_breed = sqrt(assemble(dot(bdiff, bdiff)*dx))
-coeff = b_amp/b_amp_breed
-
-b0.assign(b_b+bdiff*coeff)
-p0.assign(p_b+pdiff*coeff)
-
-# re-initialise u
-u0.project(u_exp)
-
-print "Breeding complete. Restart the model."
-
-##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True, breeding=True)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)

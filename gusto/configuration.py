@@ -90,6 +90,7 @@ class EadyParameters(Configuration):
     Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
     H = None
+    f = None
 
 
 class CompressibleEadyParameters(Configuration):

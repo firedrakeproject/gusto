@@ -1,14 +1,26 @@
 from gusto import *
-from firedrake import as_vector, SpatialCoordinate,\
+from firedrake import as_vector, SpatialCoordinate, \
     PeriodicRectangleMesh, ExtrudedMesh, \
-    exp, cos, sin, cosh, sinh, tanh, pi
+    cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 30.
+dt = 100.
 if '--running-tests' in sys.argv:
+    tmax_breed = 0.
     tmax = dt
+    # avoid using mumps on Travis
+    linear_solver_params = {'ksp_type':'gmres',
+                            'pc_type':'fieldsplit',
+                            'pc_fieldsplit_type':'additive',
+                            'fieldsplit_0_pc_type':'lu',
+                            'fieldsplit_1_pc_type':'lu',
+                            'fieldsplit_0_ksp_type':'preonly',
+                            'fieldsplit_1_ksp_type':'preonly'}
 else:
+    tmax_breed = 3*24*60*60.
     tmax = 30*24*60*60.
+    # use default linear solver parameters (i.e. mumps)
+    linear_solver_params = None
 
 ##############################################################################
 # set up mesh
@@ -29,8 +41,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0.,0.,f*0.5])
-Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-dbdy = -1.0e-07
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -38,7 +48,7 @@ dbdy = -1.0e-07
 # u is the 3D velocity
 # p is the pressure
 # b is the buoyancy
-fieldlist = ['u', 'rho', 'theta']
+fieldlist = ['u', 'p', 'b']
 
 # class containing timestepping parameters
 # all values not explicitly set here use the default values provided
@@ -48,14 +58,14 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='compressible_eady', dumpfreq=240,
-                          dumplist=['u','rho','theta'],
-                          perturbation_fields=['rho', 'theta'])
+output = OutputParameters(dirname='nonlinear_eady_breeding', dumpfreq=72,
+                          dumplist=['u', 'p'],
+                          perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy, f=f)
+parameters = EadyParameters(H=H, f=f)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -64,10 +74,9 @@ diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
-                     ExnerPi(), ExnerPi_perturbation(),
-                     CompressibleKineticEnergy(), CompressibleKineticEnergyV(),
-                     CompressibleEadyPotentialEnergy(),
-                     CompressibleEadyTotalEnergy()]
+                     KineticEnergy(), KineticEnergyV(),
+                     EadyPotentialEnergy(),
+                     EadyTotalEnergy()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -85,28 +94,25 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 # Initial conditions
 ##############################################################################
 u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
+b0 = state.fields("b")
+p0 = state.fields("p")
 
 # spaces
 Vu = u0.function_space()
-Vt = theta0.function_space()
-Vr = rho0.function_space()
+Vb = b0.function_space()
+Vp = p0.function_space()
 
-# first setup the background buoyancy profile
-# z.grad(bref) = N**2
-# the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class.
+# parameters
 x, y, z = SpatialCoordinate(mesh)
-g = parameters.g
+Nsq = parameters.Nsq
+dbdy = parameters.dbdy
 
-# N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-Tsurf = 300.
-thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
-theta_b = Function(Vt).interpolate(thetaref)
+# background buoyancy
+bref = (z-H/2)*Nsq
+b_b = Function(Vb).project(bref)
 
 
-# set theta_pert
+# buoyancy perturbation
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -121,73 +127,54 @@ def n():
 
 a = -35.
 Bu = 0.5
-theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
-                             - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
-theta_pert = Function(Vt).interpolate(theta_exp)
-theta_amp = sqrt(assemble(dot(theta_pert, theta_pert)*dx))
+b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
+                     - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+b_pert = Function(Vb).interpolate(b_exp)
+b_amp = sqrt(assemble(dot(b_pert, b_pert)*dx))
 
-# set theta0
-theta0.interpolate(theta_b + theta_pert)
+# set total buoyancy
+b0.project(b_b + b_pert)
 
-# calculate hydrostatic Pi
-rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-compressible_hydrostatic_balance(state, theta0, rho0)
+# calculate hydrostatic pressure
+p_b = Function(Vp)
+incompressible_hydrostatic_balance(state, b_b, p_b)
+incompressible_hydrostatic_balance(state, b0, p0)
 
-# set initial u and Pi0
-Pi0 = compressible_eady_initial_u(state, theta0, rho0, u0)
-state.parameters.Pi0 = Pi0
+# set initial u
+eady_initial_u(state, p0, u0)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
+state.initialise({'u':u0, 'p':p0, 'b':b0})
 
 # set the background profiles
-state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.set_reference_profiles({'p':p_b, 'b':b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
-
+supg = False
+if supg:
+    beqn = SUPGAdvection(state, Vb,
+                         supg_params={"dg_direction":"horizontal"},
+                         equation_form="advective")
+else:
+    beqn = EmbeddedDGAdvection(state, Vb,
+                               equation_form="advective")
 advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+advection_dict["u"] = SSPRK3(state, u0, ueqn)
+advection_dict["b"] = SSPRK3(state, b0, beqn)
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-# Set up linear solver
-linear_solver_params = {'pc_type': 'fieldsplit',
-                        'pc_fieldsplit_type': 'schur',
-                        'ksp_type': 'gmres',
-                        'ksp_monitor_true_residual': False,
-                        'ksp_max_it': 100,
-                        'ksp_gmres_restart': 50,
-                        'pc_fieldsplit_schur_fact_type': 'FULL',
-                        'pc_fieldsplit_schur_precondition': 'selfp',
-                        'fieldsplit_0_ksp_type': 'preonly',
-                        'fieldsplit_0_pc_type': 'bjacobi',
-                        'fieldsplit_0_sub_pc_type': 'ilu',
-                        'fieldsplit_1_ksp_type': 'preonly',
-                        'fieldsplit_1_pc_type': 'gamg',
-                        'fieldsplit_1_pc_gamg_sym_graph': True,
-                        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                        'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-
-linear_solver = CompressibleSolver(state, params=linear_solver_params)
+linear_solver = IncompressibleSolver(state, 2.*L, params=linear_solver_params)
 
 ##############################################################################
 # Set up forcing
 ##############################################################################
-forcing = CompressibleEadyForcing(state, euler_poincare=False)
+forcing = EadyForcing(state, euler_poincare=False)
 
 ##############################################################################
 # build time stepper
@@ -195,6 +182,26 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
+# breeding
+##############################################################################
+stepper.run(t=0, tmax=tmax_breed, diagnostic_everydump=True)
+
+# re-initialise p and b
+pdiff = Function(Vp).interpolate(p0-p_b)
+bdiff = Function(Vb).interpolate(b0-b_b)
+
+b_amp_breed = sqrt(assemble(dot(bdiff, bdiff)*dx))
+coeff = b_amp/b_amp_breed
+
+b0.assign(b_b+bdiff*coeff)
+p0.assign(p_b+pdiff*coeff)
+
+# re-initialise u
+u0.assign(u0*coeff)
+
+print "Breeding complete. Restart the model."
+
+##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True, breeding=True)
