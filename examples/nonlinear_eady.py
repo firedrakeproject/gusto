@@ -57,7 +57,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
 output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
-                          dumplist=['u', 'p'],
+                          dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
@@ -123,12 +123,11 @@ def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 
 
-a = -35.
+a = -4.5
 Bu = 0.5
 b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
                      - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
-b_amp = sqrt(assemble(dot(b_pert, b_pert)*dx))
 
 # set total buoyancy
 b0.project(b_b + b_pert)

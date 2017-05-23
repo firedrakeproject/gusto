@@ -119,12 +119,11 @@ def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 
 
-a = -35.
+a = -4.5
 Bu = 0.5
 theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
                              - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 theta_pert = Function(Vt).interpolate(theta_exp)
-theta_amp = sqrt(assemble(dot(theta_pert, theta_pert)*dx))
 
 # set theta0
 theta0.interpolate(theta_b + theta_pert)
