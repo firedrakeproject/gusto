@@ -160,7 +160,7 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
-    def setup_dump(self, pickup=False, breeding=False):
+    def setup_dump(self, pickup=False):
 
         # setup dump files
         # check for existence of directory so as not to overwrite
@@ -168,7 +168,7 @@ class State(object):
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
-           and path.exists(self.dumpdir) and not pickup and not breeding:
+           and path.exists(self.dumpdir) and not pickup:
             exit("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)

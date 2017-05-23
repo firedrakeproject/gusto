@@ -74,7 +74,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax, diagnostic_everydump=False, pickup=False, breeding=False):
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -94,7 +94,7 @@ class Timestepper(BaseTimestepper):
             mu_alpha = [None, None]
 
         with timed_stage("Dump output"):
-            state.setup_dump(pickup, breeding)
+            state.setup_dump(pickup)
             t = state.dump(t, diagnostic_everydump, pickup)
 
         while t < tmax - 0.5*dt:
