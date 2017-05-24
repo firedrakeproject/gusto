@@ -184,6 +184,10 @@ class MonitorFunction(object):
         # safety check for now
         assert (self.m.dat.data_ro >= 0.0).all()
 
+        # make m O(1)
+        m_min = self.m.comm.allreduce(self.m.dat.data_ro.min(), op=MPI.MIN)
+        self.m.dat.data[:] /= m_min
+
         # debugging
         # print max(m.dat.data_ro)/min(m.dat.data_ro)
 
