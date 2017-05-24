@@ -347,7 +347,7 @@ class EadyForcing(Forcing):
 
 class CompressibleEadyForcing(Forcing):
     """
-    Forcing class for compressible Euler equations.
+    Forcing class for compressible Eady equations.
     """
 
     def _build_forcing_solver(self):
@@ -373,7 +373,7 @@ class CompressibleEadyForcing(Forcing):
         Omega = state.Omega
         cp = state.parameters.cp
         mu = state.mu
-        dbdy = state.parameters.dbdy
+        dthetady = state.parameters.dthetady
         Pi0 = state.parameters.Pi0
 
         n = FacetNormal(state.mesh)
@@ -385,7 +385,7 @@ class CompressibleEadyForcing(Forcing):
         L = self.scaling*(
             + cp*div(theta0*w)*Pi*dx  # pressure gradient [volume]
             - cp*jump(w*theta0,n)*avg(Pi)*dS_v  # pressure gradient [surface]
-            + cp*30.*dbdy*(Pi-Pi_0)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
+            + cp*dthetady*(Pi-Pi_0)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
         )
 
         if state.geopotential_form:
@@ -423,7 +423,7 @@ class CompressibleEadyForcing(Forcing):
         self.thetaF = Function(Vt)
 
         a = gamma*F*dx
-        L = -gamma*self.scaling*(30.*dbdy*inner(u0,as_vector([0.,1.,0.])))*dx
+        L = -gamma*self.scaling*(dthetady*inner(u0,as_vector([0.,1.,0.])))*dx
 
         theta_forcing_problem = LinearVariationalProblem(
             a,L,self.thetaF

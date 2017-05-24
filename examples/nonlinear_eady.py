@@ -103,7 +103,6 @@ Vp = p0.function_space()
 # parameters
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
-dbdy = parameters.dbdy
 
 # background buoyancy
 bref = (z-H/2)*Nsq

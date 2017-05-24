@@ -29,8 +29,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0.,0.,f*0.5])
-Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-dbdy = -1.0e-07
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -55,7 +53,7 @@ output = OutputParameters(dirname='compressible_eady', dumpfreq=240,
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = CompressibleEadyParameters(H=H, Nsq=Nsq, dbdy=dbdy, f=f)
+parameters = CompressibleEadyParameters(H=H, f=f)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -99,11 +97,12 @@ Vr = rho0.function_space()
 # from the parameters class.
 x, y, z = SpatialCoordinate(mesh)
 g = parameters.g
+Nsq = parameters.Nsq
+theta_surf = parameters.theta_surf
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-Tsurf = 300.
-thetaref = Tsurf*exp(Nsq*(z-H/2)/g)
-theta_b = Function(Vt).interpolate(thetaref)
+theta_ref = theta_surf*exp(Nsq*(z-H/2)/g)
+theta_b = Function(Vt).interpolate(theta_ref)
 
 
 # set theta_pert
@@ -121,8 +120,8 @@ def n():
 
 a = -4.5
 Bu = 0.5
-theta_exp = 30.*a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
-                             - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+theta_exp = a*theta_surf/g*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
+                                      - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 theta_pert = Function(Vt).interpolate(theta_exp)
 
 # set theta0

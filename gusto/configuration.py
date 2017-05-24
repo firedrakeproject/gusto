@@ -2,6 +2,8 @@
 Some simple tools for making model configuration nicer.
 """
 
+from firedrake import sqrt
+
 
 class Configuration(object):
 
@@ -93,20 +95,19 @@ class EadyParameters(Configuration):
     f = None
 
 
-class CompressibleEadyParameters(Configuration):
+class CompressibleEadyParameters(CompressibleParameters):
 
     """
     Physical parameters for Compressible Eady
     """
+    eady_parameters = EadyParameters()
+    Nsq = eady_parameters.Nsq
+    dbdy = eady_parameters.dbdy
+    H = eady_parameters.H
+    f = eady_parameters.f
+
     g = 10.
-    cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
-    R_d = 287.  # Gas constant for dry air (J/kg/K)
-    kappa = 2.0/7.0  # R_d/c_p
-    p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    cv = 717.  # SHC of dry air at const. volume (J/kg/K)
-    T_0 = 273.15  # ref. temperature
-    Nsq = None  # squared Brunt-Vaisala frequency (1/s)
-    dbdy = None
-    H = None
-    f = None
+    N = sqrt(Nsq)
+    theta_surf = 300.
+    dthetady = theta_surf/g*dbdy
     Pi0 = 0.0
