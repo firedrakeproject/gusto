@@ -45,9 +45,11 @@ class OptimalTransportMeshGenerator(MeshGenerator):
             raise RuntimeError("Mesh doesn't seem to be an IcosahedralSphereMesh or a CubedSphereMesh")
 
         # Set up internal 'computational' mesh for own calculations
+        # This will be a unit sphere; make sure to scale appropriately
+        # when bringing coords in and out.
         new_coords = Function(VectorFunctionSpace(mesh_in, "Q" if quads else "P", 2))
         new_coords.interpolate(SpatialCoordinate(mesh_in))
-        new_coords.dat.data[:] *= (self.R / np.linalg.norm(new_coords.dat.data, axis=1)).reshape(-1, 1)
+        new_coords.dat.data[:] /= np.linalg.norm(new_coords.dat.data, axis=1).reshape(-1, 1)
         self.mesh = Mesh(new_coords)
 
         # Set up copy of passed-in mesh coordinate field for returning to
@@ -93,13 +95,13 @@ class OptimalTransportMeshGenerator(MeshGenerator):
 
         # sphere
         modgphi = sqrt(dot(grad(self.phi), grad(self.phi)) + 1e-8)
-        expxi = self.xi*cos(modgphi/self.Rc) + self.Rc*grad(self.phi)*sin(modgphi/self.Rc)/modgphi
-        projxi = Identity(3) - outer(self.xi, self.xi)/(self.Rc*self.Rc)
+        expxi = self.xi*cos(modgphi) + grad(self.phi)*sin(modgphi)/modgphi
+        projxi = Identity(3) - outer(self.xi, self.xi)
 
         expxi_temp = replace(expxi, {self.phisigma: self.phisigma_temp})
 
-        F_mesh = inner(self.sigma, tau)*dxdeg + dot(div(tau), expxi)*dxdeg - (self.m*det(outer(expxi, self.xi)/(self.Rc*self.Rc) + dot(self.sigma, projxi)) - self.theta)*v*dxdeg
-        self.thetaform = self.m*det(outer(expxi_temp, self.xi)/(self.Rc*self.Rc) + dot(self.sigma_temp, projxi))*dxdeg
+        F_mesh = inner(self.sigma, tau)*dxdeg + dot(div(tau), expxi)*dxdeg - (self.m*det(outer(expxi, self.xi) + dot(self.sigma, projxi)) - self.theta)*v*dxdeg
+        self.thetaform = self.m*det(outer(expxi_temp, self.xi) + dot(self.sigma_temp, projxi))*dxdeg
 
         # Define a solver for obtaining grad(phi) by L^2 projection
         # TODO: lump this?
@@ -189,11 +191,10 @@ for (int i=0; i<vnew.dofs; i++) {
         dot += x[i][j]*vold[i][j];
     }
     for (int j=0; j<3; j++) {
-        vnew[i][j] = vold[i][j] - dot*x[i][j]/(R[0]*R[0]);
+        vnew[i][j] = vold[i][j] - dot*x[i][j];
     }
 }
 """, dx, {'x': (self.mesh.coordinates, READ),
-          'R': (self.Rc, READ),
           'vold': (self.gradphi_cts, READ),
           'vnew': (self.gradphi_cts2, WRITE)})
 
@@ -207,11 +208,10 @@ for (int i=0; i<xi.dofs; i++) {
     norm = sqrt(norm) + 1e-8;
 
     for (int j=0; j<3; j++) {
-        xout[i][j] = xi[i][j]*cos(norm/R[0]) + R[0]*(u[i][j]/norm)*sin(norm/R[0]);
+        xout[i][j] = xi[i][j]*cos(norm) + (u[i][j]/norm)*sin(norm);
     }
 }
 """, dx, {'xi': (self.xi, READ),
-          'R': (self.Rc, READ),
           'u': (self.gradphi_cts2, READ),
           'xout': (self.x, WRITE)})
 
