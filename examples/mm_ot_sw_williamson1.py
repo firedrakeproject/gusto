@@ -6,7 +6,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
 parameters["pyop2_options"]["lazy_evaluation"] = False
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {3:1000.}
+ref_dt = {3:3000.}
 
 # setup shallow water parameters
 R = 6371220.
