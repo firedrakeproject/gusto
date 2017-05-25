@@ -59,6 +59,10 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         # And a version that lives on the internal mesh
         self.own_output_coords = Function(VectorFunctionSpace(self.mesh, "Q" if quads else "P", mesh_in.coordinates.ufl_element().degree()))
 
+        # If user is using a P2/Q2 mesh, we can assign instead of interpolate
+        # later on
+        self.samecoorddegree = (mesh_in.coordinates.ufl_element().degree() == 2)
+
         # Set up function spaces
         P2 = FunctionSpace(self.mesh, "Q" if quads else "P", 2)
         TensorP2 = TensorFunctionSpace(self.mesh, "Q" if quads else "P", 2)
@@ -217,10 +221,13 @@ for (int i=0; i<xi.dofs; i++) {
 
         if self.initial_mesh:
             # Make coords suitable for the input mesh, self.mesh_in
-            self.mesh.coordinates.assign(self.x)
-            x, y, z = SpatialCoordinate(self.mesh)
-            self.own_output_coords.interpolate(as_vector((x, y, z)))
-            self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+            if self.samecoorddegree:
+                self.own_output_coords.assign(Constant(self.R)*self.x)
+            else:
+                self.mesh.coordinates.assign(self.x)
+                x, y, z = SpatialCoordinate(self.mesh)
+                self.own_output_coords.interpolate(as_vector((x, y, z)))
+                self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
             # Set them (note: this modifies the user-mesh!)
             self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
@@ -237,10 +244,14 @@ for (int i=0; i<xi.dofs; i++) {
 
         else:
             # "Copy" self.x over to self.x_new
-            self.mesh.coordinates.assign(self.x)
-            x, y, z = SpatialCoordinate(self.mesh)
-            self.own_output_coords.interpolate(as_vector((x, y, z)))
-            self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+            if self.samecoorddegree:
+                self.own_output_coords.assign(Constant(self.R)*self.x)
+            else:
+                self.mesh.coordinates.assign(self.x)
+                x, y, z = SpatialCoordinate(self.mesh)
+                self.own_output_coords.interpolate(as_vector((x, y, z)))
+                self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+
             self.x_new.dat.data[:] = self.own_output_coords.dat.data_ro[:]
 
             # Update representation of monitor function
@@ -297,10 +308,13 @@ for (int i=0; i<xi.dofs; i++) {
         self.mesh_solv.solve()
 
         # Move data from internal mesh to output mesh.
-        self.mesh.coordinates.assign(self.x)
-        x, y, z = SpatialCoordinate(self.mesh)
-        self.own_output_coords.interpolate(as_vector((x, y, z)))
-        self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
+        if self.samecoorddegree:
+            self.own_output_coords.assign(Constant(self.R)*self.x)
+        else:
+            self.mesh.coordinates.assign(self.x)
+            x, y, z = SpatialCoordinate(self.mesh)
+            self.own_output_coords.interpolate(as_vector((x, y, z)))
+            self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
         self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
         return self.output_coordinates
