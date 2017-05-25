@@ -2,6 +2,7 @@ from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, Constant, op2
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
+import numpy as np
 
 
 class Diagnostics(object):
@@ -19,7 +20,7 @@ class Diagnostics(object):
 
     @staticmethod
     def min(f):
-        fmin = op2.Global(1, [1000], dtype=float)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float)
         op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
         {
         a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
@@ -29,7 +30,7 @@ class Diagnostics(object):
 
     @staticmethod
     def max(f):
-        fmax = op2.Global(1, [-1000], dtype=float)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float)
         op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
         {
         a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
@@ -122,7 +123,6 @@ class VerticalVelocity(DiagnosticField):
     def compute(self, state):
         u = state.fields("u")
         w = u[u.geometric_dimension() - 1]
-
         return self.field(state.mesh).interpolate(w)
 
 
