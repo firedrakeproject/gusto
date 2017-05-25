@@ -4,6 +4,7 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
+day = 24.*60.*60.
 dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -16,7 +17,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = 30*24*60*60.
+    tmax = 30*day
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -150,7 +151,7 @@ state.set_reference_profiles({'p':p_b, 'b':b_b})
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
-supg = False
+supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},

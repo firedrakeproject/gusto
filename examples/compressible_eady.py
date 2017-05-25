@@ -4,11 +4,12 @@ from firedrake import as_vector, SpatialCoordinate,\
     exp, cos, sin, cosh, sinh, tanh, pi
 import sys
 
+day = 24.*60.*60.
 dt = 30.
 if '--running-tests' in sys.argv:
     tmax = dt
 else:
-    tmax = 30*24*60*60.
+    tmax = 30*day
 
 ##############################################################################
 # set up mesh
@@ -152,7 +153,7 @@ rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
 
 advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+advection_dict["u"] = SSPRK3(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
 advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
