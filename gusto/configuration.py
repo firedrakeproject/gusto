@@ -95,19 +95,13 @@ class EadyParameters(Configuration):
     f = None
 
 
-class CompressibleEadyParameters(CompressibleParameters):
+class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
 
     """
     Physical parameters for Compressible Eady
     """
-    eady_parameters = EadyParameters()
-    Nsq = eady_parameters.Nsq
-    dbdy = eady_parameters.dbdy
-    H = eady_parameters.H
-    f = eady_parameters.f
-
     g = 10.
-    N = sqrt(Nsq)
+    N = sqrt(EadyParameters.Nsq)
     theta_surf = 300.
-    dthetady = theta_surf/g*dbdy
+    dthetady = theta_surf/g*EadyParameters.dbdy
     Pi0 = 0.0
