@@ -206,7 +206,7 @@ class AdvectionTimestepper(BaseTimestepper):
         xn_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xn.split())}
         state.setup_dump()
-        state.dump()
+        state.dump(t)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -224,7 +224,7 @@ class AdvectionTimestepper(BaseTimestepper):
             for physics in self.physics_list:
                 physics.apply()
 
-            state.dump()
+            state.dump(t)
 
         state.diagnostic_dump()
 
