@@ -232,6 +232,7 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
     f = state.parameters.f
     cp = state.parameters.cp
     dthetady = state.parameters.dthetady
+    Pi0 = state.parameters.Pi0
 
     # exner function
     Vr = rho0.function_space()
@@ -259,15 +260,21 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
     v = Function(Vr)
     solve(a == L, v)
 
-    # calculate Pi0
-    V = FunctionSpace(state.mesh, "DG", 0)
-    c = Function(V).assign(1.)
-    Pi0 = assemble(Pi*dx)/assemble(c*dx)
-
     # set initial u
     u = cp*dthetady/f*(Pi_exp-Pi0)
     a = inner(wg,g)*dx
     L = inner(wg,as_vector([u, v, 0.0]))*dx
     solve(a == L, u0)
+
+
+def calculate_Pi0(state, theta0, rho0):
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
+
+    V = FunctionSpace(state.mesh, "DG", 0)
+    c = Function(V).assign(1.)
+    Pi0 = assemble(Pi*dx)/assemble(c*dx)
 
     return Pi0

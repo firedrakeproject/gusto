@@ -133,9 +133,9 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
-# set initial u and Pi0
-Pi0 = compressible_eady_initial_u(state, theta0, rho0, u0)
-state.parameters.Pi0 = Pi0
+# set Pi0 and initial u
+state.parameters.Pi0 = calculate_Pi0(state, theta0, rho0)
+compressible_eady_initial_u(state, theta0, rho0, u0)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
