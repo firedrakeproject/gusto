@@ -64,9 +64,11 @@ advection_dict = {}
 advection_dict["D"] = SSPRK3(state, D0, Deqn)
 advection_dict["u"] = NoAdvection(state, u0)
 
+
 def initialise_fn():
     state.fields("u").project(uexpr)
     state.fields("D").interpolate(Dexpr)
+
 
 monitor = MonitorFunction(state.fields("D"))
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)

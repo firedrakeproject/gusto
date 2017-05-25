@@ -5,7 +5,7 @@ from firedrake import FunctionSpace, VectorFunctionSpace, TensorFunctionSpace, \
     Function, Constant, dx, dS, assemble, TrialFunction, TestFunction, sqrt, \
     dot, inner, FacetNormal, jump, grad, div, as_vector, \
     LinearVariationalProblem, LinearVariationalSolver, LinearSolver, par_loop, \
-    RW, READ
+    RW, READ, Mesh
 
 
 class MonitorFunction(object):
@@ -31,7 +31,6 @@ class MonitorFunction(object):
 
         assert f.ufl_shape == ()  # can lift this restriction later
 
-        self.f = f  # don't make own copy
         self.adapt_to = adapt_to
         self.avg_weight = avg_weight
         self.max_min_cap = max_min_cap
@@ -44,8 +43,12 @@ class MonitorFunction(object):
 
         quads = (cellname == "quadrilateral")
 
-        # Use the mesh of the function f; possibly dangerous?
-        self.mesh = f.function_space().mesh()
+        # Set up internal mesh for monitor function calculations
+        new_coords = Function(f.function_space().mesh().coordinates)
+        self.mesh = Mesh(new_coords)
+
+        self.user_f = f  # store 'pointer' to original function
+        self.f = Function(FunctionSpace(self.mesh, f.ufl_element()))  # make "own copy" of f on internal mesh
 
         P1 = FunctionSpace(self.mesh, "Q" if quads else "P", 1)  # for representing m
         P0 = FunctionSpace(self.mesh, "DQ" if quads else "DP", 0)  # slope limiter centroids
@@ -136,6 +139,8 @@ class MonitorFunction(object):
         self.solv_m_p1_proj = LinearVariationalSolver(prob_m_p1_proj, solver_parameters={'ksp_type': 'cg'})
 
     def update_monitor(self):
+        self.f.dat.data[:] = self.user_f.dat.data[:]
+
         if self.adapt_to in ("gradient", "hessian"):
             # Form mass-lumped gradient
             assemble(self.L_vp1, tensor=self.gradf)

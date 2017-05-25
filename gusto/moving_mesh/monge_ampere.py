@@ -6,7 +6,7 @@ from firedrake import Function, VectorFunctionSpace, SpatialCoordinate, Mesh, \
     inner, div, det, TrialFunction, TestFunction, LinearVariationalProblem, \
     LinearVariationalSolver, solve, NonlinearVariationalProblem, \
     NonlinearVariationalSolver, VectorSpaceBasis, MixedVectorSpaceBasis, \
-    replace, par_loop, READ, WRITE, as_vector
+    replace, par_loop, READ, WRITE
 from gusto.moving_mesh.mesh_generator import MeshGenerator
 
 
@@ -54,7 +54,7 @@ class OptimalTransportMeshGenerator(MeshGenerator):
 
         # Set up copy of passed-in mesh coordinate field for returning to
         # external functions
-        self.output_coordinates = Function(mesh_in.coordinates)
+        self.output_coords = Function(mesh_in.coordinates)
 
         # And a version that lives on the internal mesh
         self.own_output_coords = Function(VectorFunctionSpace(self.mesh, "Q" if quads else "P", mesh_in.coordinates.ufl_element().degree()))
@@ -88,8 +88,9 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         self.x = Function(self.mesh.coordinates)  # for 'physical' coords
         self.xi = Function(self.mesh.coordinates)  # for 'computational' coords
 
-        self.x_old = Function(mesh_in.coordinates)
-        self.x_new = Function(mesh_in.coordinates)
+        # monitor function mesh coords
+        self.x_old = Function(monitor.mesh.coordinates)
+        self.x_new = Function(monitor.mesh.coordinates)
 
         self.m = Function(P1)
         self.theta = Constant(0.0)
@@ -185,7 +186,7 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         self.mesh.coordinates.assign(self.xi)
         self.solvgradphi.solve()
 
-        # Generate coordinates from this. TODO: change for plane
+        # Generate coords from this. TODO: change for plane
         # On sphere, firstly "fix grad(phi)" by ensuring that
         # grad(phi).x = 0, assuming |x| = 1
         par_loop("""
@@ -225,18 +226,18 @@ for (int i=0; i<xi.dofs; i++) {
                 self.own_output_coords.assign(Constant(self.R)*self.x)
             else:
                 self.mesh.coordinates.assign(self.x)
-                x, y, z = SpatialCoordinate(self.mesh)
-                self.own_output_coords.interpolate(as_vector((x, y, z)))
+                self.own_output_coords.interpolate(SpatialCoordinate(self.mesh))
                 self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
             # Set them (note: this modifies the user-mesh!)
-            self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
-            self.mesh_in.coordinates.assign(self.output_coordinates)
+            self.output_coords.dat.data[:] = self.own_output_coords.dat.data_ro[:]
+            self.mesh_in.coordinates.assign(self.output_coords)
 
             # Call user function to set initial data
             self.initialise_fn()
 
             # Make monitor function on user's mesh
+            self.monitor.mesh.coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.monitor.update_monitor()
 
             # Copy this to internal mesh
@@ -248,8 +249,7 @@ for (int i=0; i<xi.dofs; i++) {
                 self.own_output_coords.assign(Constant(self.R)*self.x)
             else:
                 self.mesh.coordinates.assign(self.x)
-                x, y, z = SpatialCoordinate(self.mesh)
-                self.own_output_coords.interpolate(as_vector((x, y, z)))
+                self.own_output_coords.interpolate(SpatialCoordinate(self.mesh))
                 self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
             self.x_new.dat.data[:] = self.own_output_coords.dat.data_ro[:]
@@ -296,9 +296,11 @@ for (int i=0; i<xi.dofs; i++) {
 
     def get_new_mesh(self):
         # Back up the current mesh
-        self.x_old.assign(self.mesh_in.coordinates)
+        self.x_old.dat.data[:] = self.mesh_in.coordinates.dat.data_ro[:]
 
-        # Make monitor function on user's mesh
+        # Make monitor function
+        # TODO: should I just pass in the 'coords to use' to update_monitor?
+        self.monitor.mesh.coordinates.dat.data[:] = self.mesh_in.coordinates.dat.data_ro[:]
         self.monitor.update_monitor()
 
         # Back this up
@@ -312,9 +314,8 @@ for (int i=0; i<xi.dofs; i++) {
             self.own_output_coords.assign(Constant(self.R)*self.x)
         else:
             self.mesh.coordinates.assign(self.x)
-            x, y, z = SpatialCoordinate(self.mesh)
-            self.own_output_coords.interpolate(as_vector((x, y, z)))
+            self.own_output_coords.interpolate(SpatialCoordinate(self.mesh))
             self.own_output_coords.dat.data[:] *= (self.R / np.linalg.norm(self.own_output_coords.dat.data, axis=1)).reshape(-1, 1)
 
-        self.output_coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
-        return self.output_coordinates
+        self.output_coords.dat.data[:] = self.own_output_coords.dat.data_ro[:]
+        return self.output_coords
