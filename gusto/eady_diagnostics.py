@@ -8,6 +8,9 @@ class KineticEnergyV(Energy):
     name = "KineticEnergyV"
 
     def compute(self, state):
+        """
+        Computes the kinetic energy of the y component
+        """
         u = state.fields("u")
         energy = self.kinetic(u[1])
         return self.field(state.mesh).interpolate(energy)
@@ -17,6 +20,9 @@ class CompressibleKineticEnergyV(Energy):
     name = "CompressibleKineticEnergyV"
 
     def compute(self, state):
+        """
+        Computes the kinetic energy of the y component
+        """
         u = state.fields("u")
         rho = state.fields("rho")
         energy = self.kinetic(u[1], rho)

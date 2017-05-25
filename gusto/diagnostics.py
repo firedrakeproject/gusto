@@ -121,10 +121,7 @@ class VerticalVelocity(DiagnosticField):
 
     def compute(self, state):
         u = state.fields("u")
-        if(state.mesh.geometric_dimension() == 2):
-            w = u[1]
-        elif(state.mesh.geometric_dimension() == 3):
-            w = u[2]
+        w = u[u.geometric_dimension() - 1]
 
         return self.field(state.mesh).interpolate(w)
 
@@ -153,6 +150,9 @@ class Energy(DiagnosticField):
         return self._field
 
     def kinetic(self, u, rho=None):
+        """
+        Computes 0.5*dot(u, u) with an option to multiply rho
+        """
         if rho is not None:
             energy = 0.5*rho*dot(u,u)
         else:
