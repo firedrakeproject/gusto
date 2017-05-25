@@ -177,7 +177,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.xnp1.assign(state.xn)
 
         state.setup_dump()
-        state.dump()
+        state.dump(t)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -195,7 +195,7 @@ class AdvectionTimestepper(BaseTimestepper):
             for physics in self.physics_list:
                 physics.apply()
 
-            state.dump()
+            state.dump(t)
 
         state.diagnostic_dump()
 
