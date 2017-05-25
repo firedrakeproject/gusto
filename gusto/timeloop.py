@@ -176,8 +176,9 @@ class AdvectionTimestepper(BaseTimestepper):
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
 
-        state.setup_dump()
-        state.dump(t)
+        with timed_stage("Dump output"):
+            state.setup_dump()
+            state.dump(t)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -185,17 +186,20 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            for name, advection in self.advection_dict.iteritems():
-                field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects field
-                advection.apply(field, field)
+            with timed_stage("Advection"):
+                for name, advection in self.advection_dict.iteritems():
+                    field = getattr(state.fields, name)
+                    # first computes ubar from state.xn and state.xnp1
+                    advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                    # advects field
+                    advection.apply(field, field)
 
-            for physics in self.physics_list:
-                physics.apply()
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
 
-            state.dump(t)
+            with timed_stage("Dump output"):
+                state.dump(t)
 
         state.diagnostic_dump()
 
