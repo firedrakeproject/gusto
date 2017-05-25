@@ -144,35 +144,39 @@ class MeridionalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(v)
 
 
-class KineticEnergy(DiagnosticField):
-    name = "KineticEnergy"
+class Energy(DiagnosticField):
 
     def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
         self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
         return self._field
+
+    def kinetic(self, u, rho=None):
+        if rho is not None:
+            energy = 0.5*rho*dot(u,u)
+        else:
+            energy = 0.5*dot(u,u)
+        return energy
+
+
+class KineticEnergy(Energy):
+    name = "KineticEnergy"
 
     def compute(self, state):
         u = state.fields("u")
-        kinetic = 0.5*dot(u,u)
-        return self.field(state.mesh).interpolate(kinetic)
+        energy = self.kinetic(u)
+        return self.field(state.mesh).interpolate(energy)
 
 
-class CompressibleKineticEnergy(DiagnosticField):
+class CompressibleKineticEnergy(Energy):
     name = "CompressibleKineticEnergy"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         u = state.fields("u")
         rho = state.fields("rho")
-        kinetic = 0.5*rho*dot(u,u)
-        return self.field(state.mesh).interpolate(kinetic)
+        energy = self.kinetic(u, rho)
+        return self.field(state.mesh).interpolate(energy)
 
 
 class ExnerPi(DiagnosticField):
@@ -191,14 +195,8 @@ class ExnerPi(DiagnosticField):
         return self.field(state.mesh).interpolate(Pi)
 
 
-class ExnerPi_perturbation(DiagnosticField):
+class ExnerPi_perturbation(ExnerPi):
     name = "ExnerPi_perturbation"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
 
     def compute(self, state):
         rho = state.fields("rho")

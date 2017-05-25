@@ -1,49 +1,30 @@
-from firedrake import FunctionSpace, Function, \
-    SpatialCoordinate
-from gusto.diagnostics import DiagnosticField, KineticEnergy, \
-    CompressibleKineticEnergy
+from firedrake import SpatialCoordinate
+from gusto.diagnostics import Energy, \
+    KineticEnergy, CompressibleKineticEnergy
 from gusto.forcing import exner
 
 
-class KineticEnergyV(DiagnosticField):
+class KineticEnergyV(Energy):
     name = "KineticEnergyV"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         u = state.fields("u")
-        kineticv = 0.5*u[1]*u[1]
-        return self.field(state.mesh).interpolate(kineticv)
+        energy = self.kinetic(u[1])
+        return self.field(state.mesh).interpolate(energy)
 
 
-class CompressibleKineticEnergyV(DiagnosticField):
+class CompressibleKineticEnergyV(Energy):
     name = "CompressibleKineticEnergyV"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         u = state.fields("u")
         rho = state.fields("rho")
-        kineticv = 0.5*rho*u[1]*u[1]
-        return self.field(state.mesh).interpolate(kineticv)
+        energy = self.kinetic(u[1], rho)
+        return self.field(state.mesh).interpolate(energy)
 
 
-class EadyPotentialEnergy(DiagnosticField):
+class EadyPotentialEnergy(Energy):
     name = "EadyPotentialEnergy"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         x, y, z = SpatialCoordinate(state.mesh)
@@ -54,14 +35,8 @@ class EadyPotentialEnergy(DiagnosticField):
         return self.field(state.mesh).interpolate(potential)
 
 
-class CompressibleEadyPotentialEnergy(DiagnosticField):
+class CompressibleEadyPotentialEnergy(Energy):
     name = "CompressibleEadyPotentialEnergy"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         x, y, z = SpatialCoordinate(state.mesh)
@@ -78,14 +53,8 @@ class CompressibleEadyPotentialEnergy(DiagnosticField):
         return self.field(state.mesh).interpolate(potential)
 
 
-class EadyTotalEnergy(DiagnosticField):
+class EadyTotalEnergy(Energy):
     name = "EadyTotalEnergy"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         kinetic = KineticEnergy()
@@ -94,14 +63,8 @@ class EadyTotalEnergy(DiagnosticField):
         return self.field(state.mesh).interpolate(total)
 
 
-class CompressibleEadyTotalEnergy(DiagnosticField):
+class CompressibleEadyTotalEnergy(Energy):
     name = "CompressibleEadyTotalEnergy"
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def compute(self, state):
         kinetic = CompressibleKineticEnergy()

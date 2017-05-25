@@ -63,7 +63,8 @@ diagnostics = Diagnostics(*fieldlist)
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
                      ExnerPi(), ExnerPi_perturbation(),
-                     CompressibleKineticEnergy(), CompressibleKineticEnergyV(),
+                     CompressibleKineticEnergy(),
+                     CompressibleKineticEnergyV(),
                      CompressibleEadyPotentialEnergy(),
                      CompressibleEadyTotalEnergy()]
 
