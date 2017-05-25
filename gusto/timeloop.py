@@ -130,7 +130,8 @@ class Timestepper(BaseTimestepper):
             if state.timestepping.move_mesh:
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
-                self.X1.assign(self.mesh_generator.get_new_mesh())
+                with timed_stage("Mesh generation"):
+                    self.X1.assign(self.mesh_generator.get_new_mesh())
 
             t += dt
 
@@ -205,8 +206,10 @@ class AdvectionTimestepper(BaseTimestepper):
         dt = self.dt
         xn_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xn.split())}
-        state.setup_dump()
-        state.dump(t)
+
+        with timed_stage("Dump output"):
+            state.setup_dump()
+            state.dump(t)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -217,14 +220,18 @@ class AdvectionTimestepper(BaseTimestepper):
 
             if state.timestepping.move_mesh:
                 self.X0.assign(self.X1)
-                self.X1.assign(self.mesh_generator.get_new_mesh())
+                with timed_stage("Mesh generation"):
+                    self.X1.assign(self.mesh_generator.get_new_mesh())
 
-            self.Advection.apply(xn_fields, xn_fields)
+            with timed_stage("Advection"):
+                self.Advection.apply(xn_fields, xn_fields)
 
-            for physics in self.physics_list:
-                physics.apply()
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
 
-            state.dump(t)
+            with timed_stage("Dump output"):
+                state.dump(t)
 
         state.diagnostic_dump()
 
