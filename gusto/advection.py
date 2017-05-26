@@ -54,7 +54,7 @@ class Advection(object):
             else:
                 self.solver_parameters = solver_params
 
-        # check to see if we are using an embedded DG method - is we are then
+        # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
         # equation class and we can get the correct function space from
         # the output function.
