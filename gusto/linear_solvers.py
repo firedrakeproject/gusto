@@ -278,7 +278,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         h_deg = state.horizontal_degree
         v_deg = state.vertical_degree
-        Vtrace = FunctionSpace(mesh, "HDiv Trace", degree=(h_deg, v_deg))
+        Vtrace = FunctionSpace(state.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
