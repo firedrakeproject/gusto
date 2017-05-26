@@ -259,27 +259,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        if params is None:
-            self.params = {'pc_type': 'fieldsplit',
-                           'pc_fieldsplit_type': 'schur',
-                           'ksp_type': 'gmres',
-                           'ksp_max_it': 100,
-                           'ksp_gmres_restart': 50,
-                           'pc_fieldsplit_schur_fact_type': 'FULL',
-                           'pc_fieldsplit_schur_precondition': 'selfp',
-                           'fieldsplit_0_ksp_type': 'preonly',
-                           'fieldsplit_0_pc_type': 'bjacobi',
-                           'fieldsplit_0_sub_pc_type': 'ilu',
-                           'fieldsplit_1_ksp_type': 'preonly',
-                           'fieldsplit_1_pc_type': 'gamg',
-                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
-                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-        else:
-            self.params = params
+        self.params = params
 
         # setup the solver
         self._setup_solver()
@@ -294,17 +274,22 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         Vu_broken = FunctionSpace(BrokenElement(Vu.ufl_element()))
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
-        HOW DO WE GET THE TRACE SPACE IN THE EXTRUDED CASE?
-        Vtrace = FunctionSpace(mesh, "HDiv Trace", tdegree)
+
+        h_deg = state.horizontal_degree
+        v_deg = state.vertical_degree
+        Vtrace = FunctionSpace(mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
         # Build the reduced function space for u,rho
-        M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
-        w, phi, dl = TestFunctions(M)
-        u, rho, l0 = TrialFunctions(M)
+        M = MixedFunctionSpace((Vu_broken, Vrho))
+        w, phi = TestFunctions(M)
+        u, rho = TrialFunctions(M)
 
+        l0 = TrialFunction(Vtrace)
+        dl = TestFunction(Vtrace)
+        
         n = FacetNormal(state.mesh)
 
         # Get background fields
@@ -333,25 +318,36 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
-        dS_hp = dS_v(degree=(self.quadrature_degree))
+        dS_hp = dS_h(degree=(self.quadrature_degree))
+        ds_vp = ds_v(degree=(self.quadrature_degree))
+        ds_hp = ds_h(degree=(self.quadrature_degree))
 
-        eqn = (
+        rhobar_tr = Function(Vtrace)
+        rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_hp)
+        rhobar_prob = LinearVariationalProblem(lhs(rbareqn),rhs(rbareqn),rhobar_tr)
+        self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
+                                                solver_parameters={'ksp_type':'preonly',
+                                                                'pc_type':'bjacobi',
+                                                                   'pc_sub_type':'lu'})
+
+        Aeqn = (
             inner(w, (u - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
-            # following does nothing but is preserved in the comments
-            # to remind us why (because V(w) is purely vertical.
-            # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w,n)*l0*(dS_vp + dS_hp)
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-            + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
-            + dl*jump(u,n0)*(dS_vp + dS_hp)
+            + beta*inner(phi*u, n)*rhobar_tr*(dS_v + dS_h)
         )
-
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+            Aeqn += dt*mu*inner(w,k)*inner(u,k)*dx
+        Aop = Tensor(lhs(Aeqn))
+        Arhs = rhs(Aeqn)
+
+        #  (A K)(U) = (U_r)
+        #  (L 0)(l)   (0  )
+        
+        K = Tensor(beta*cp*inner(thetabar*w,n)*l0*(dS_vp + dS_hp)
+                   + beta*cp*inner(thetabar*w,n)*l0*(ds_vp + ds_hp))
+        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp) + dl*inner(u,n)*(ds_vp + ds_hp)            
 
         # Place to put result of u rho solver
         self.urho = Function(M)
@@ -395,6 +391,8 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
+        self.rhobar_solver.solve()
+        
         self.urho_solver.solve()
 
         u1, rho1 = self.urho.split()
