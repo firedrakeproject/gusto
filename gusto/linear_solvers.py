@@ -410,11 +410,11 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
 
         # Assemble the RHS for lambda into self.R
-        self.R.assemble(self.Rexp)
+        assemble(self.Rexp, tensor=self.R)
         # Solve for lambda
         self.lSolver.solve(self.lambdar, self.R)
         # Assemble the RHS for uhat, rho reconstruction
-        self.Rurho.assemble(self.Rurhoexp)
+        assemble(self.Rurhoexp, tensor=self.Rurho)
         # Solve for uhat, rho
         self.ASolver.solve(self.urho, self.Rurho)
         # Project uhat as self.u_hdiv in H(div)
