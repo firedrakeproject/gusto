@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Interpolator, conditional, interpolate
+from firedrake import exp, Interpolator, conditional, interpolate, Function
 
 
 __all__ = ["Condensation"]
@@ -44,7 +44,7 @@ class Condensation(Physics):
         rho = state.fields('rho')
 
         # declare function space
-        V = self.theta.function_space()
+        Vt = self.theta.function_space()
 
         param = self.state.parameters
 
@@ -80,31 +80,32 @@ class Condensation(Physics):
         w_sat = (w_sat1 /
                  (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
 
-        # correct w_sat to be positive
-        w_sat = interpolate(conditional(w_sat > 0, w_sat, 999.0), V)
+        # check w_sat is positive
+        #assert w_sat > 
 
         # make appropriate condensation rate
-        cond_rate = ((self.water_v - w_sat) /
+        dot_r_cond = ((self.water_v - w_sat) /
                      (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
-                                   cp * R_v * T ** 2.0))))
+                                   (cp * R_v * T ** 2.0)))))
 
         # adjust cond rate so negative concentrations don't occur
-        cond_rate = interpolate(conditional(cond_rate < 0,
-                                conditional(-cond_rate > self.water_c / dt,
+        self.cond_rate = Interpolator(conditional(dot_r_cond < 0,
+                                conditional(-dot_r_cond > self.water_c / dt,
                                             -self.water_c / dt,
-                                            cond_rate),
-                                conditional(cond_rate > self.water_v / dt,
+                                            dot_r_cond),
+                                conditional(dot_r_cond > self.water_v / dt,
                                             self.water_v / dt,
-                                            cond_rate)), V)
+                                            dot_r_cond)), Vt)
 
-        self.water_v_new = Interpolator(self.water_v - dt * cond_rate, V)
-        self.water_c_new = Interpolator(self.water_c + dt * cond_rate, V)
+        self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
+        self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
         self.theta_new = Interpolator(self.theta *
-                                      (1.0 + dt * cond_rate *
+                                      (1.0 + dt * self.cond_rate *
                                        (cv * L_v / (c_vml * cp * T) -
-                                        R_v * cv * c_pml / (R_m * cp * c_vml))), V)
+                                        R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        self.cond_rate.interpolate()
         self.water_v.assign(self.water_v_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
         self.theta.assign(self.theta_new.interpolate())
