@@ -272,7 +272,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         cp = state.parameters.cp
         mu = state.mu
         Vu = state.spaces("HDiv")
-        Vu_broken = FunctionSpace(BrokenElement(Vu.ufl_element()))
+        Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
 
