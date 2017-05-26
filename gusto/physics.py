@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Interpolator, conditional, interpolate, Function
+from firedrake import exp, Interpolator, conditional, interpolate, Function, Constant
 
 
 __all__ = ["Condensation"]
@@ -79,9 +79,6 @@ class Condensation(Physics):
         # use Teten's formula to calculate w_sat
         w_sat = (w_sat1 /
                  (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
-
-        # check w_sat is positive
-        #assert w_sat > 
 
         # make appropriate condensation rate
         dot_r_cond = ((self.water_v - w_sat) /
