@@ -4,7 +4,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning, \
-    FunctionSpace, BrokenElement, mesh, ds_v, ds_h, Tensor, assemble, \
+    FunctionSpace, BrokenElement, mesh, ds_v, ds_tb, Tensor, assemble, \
     LinearSolver, Projector
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -314,10 +314,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         dS_vp = dS_v(degree=(self.quadrature_degree))
         dS_hp = dS_h(degree=(self.quadrature_degree))
         ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_hp = ds_h(degree=(self.quadrature_degree))
+        ds_tbp = ds_tb(degree=(self.quadrature_degree))
 
         rhobar_tr = Function(Vtrace)
-        rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_hp)
+        rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_tbp)
         rhobar_prob = LinearVariationalProblem(lhs(rbareqn),rhs(rbareqn),rhobar_tr)
         self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
                                                      solver_parameters={'ksp_type':'preonly',
@@ -344,7 +344,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         K = Tensor(beta*cp*inner(thetabar*w,n)*l0*(dS_vp + dS_hp)
                    + beta*cp*inner(thetabar*w,n)*l0*(ds_vp + ds_hp))
-        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp) + dl*inner(u,n)*(ds_vp + ds_hp))
+        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp) + dl*inner(u,n)*(ds_vp + ds_tbp))
 
         #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l, so (LA^{-1}K)l = LU
         # reduced eqns for l0
