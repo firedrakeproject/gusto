@@ -380,7 +380,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                                                        'pc_sub_type':'lu'},
                                     options_prefix='urhoreconstruction')
         # Rhs for broken u and rho reconstruction
-        self.Rurhoexp = -K*self.lambdar + Arhs
+        self.Rurhoexp = -K*self.lambdar + Tensor(Arhs)
         self.Rurho = Function(M)
         u, rho = self.urho.split()
 
