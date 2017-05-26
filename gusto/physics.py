@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Interpolator, conditional, interpolate, Function, Constant
+from firedrake import exp, Interpolator, conditional, Function
 
 
 __all__ = ["Condensation"]
@@ -82,8 +82,8 @@ class Condensation(Physics):
 
         # make appropriate condensation rate
         dot_r_cond = ((self.water_v - w_sat) /
-                     (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
-                                   (cp * R_v * T ** 2.0)))))
+                      (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
+                                    (cp * R_v * T ** 2.0)))))
 
         # adjust cond rate so negative concentrations don't occur
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
@@ -93,7 +93,7 @@ class Condensation(Physics):
                                                       conditional(dot_r_cond > self.water_v / dt,
                                                                   self.water_v / dt,
                                                                   dot_r_cond)), Vt)
-        
+
         self.cond_rate = Function(Vt)
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
         self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
