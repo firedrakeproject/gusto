@@ -324,7 +324,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
         rhobar_tr = Function(Vtrace)
-        rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_tbp)
+        rbareqn = (l0('+') - avg(rhobar))*dl('+')*(dS_vp + dS_hp) + \
+                  (l0 - rhobar)*dl*ds_vp + \
+                  (l0 - rhobar)*dl*ds_tbp
         rhobar_prob = LinearVariationalProblem(lhs(rbareqn),rhs(rbareqn),rhobar_tr)
         self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
                                                      solver_parameters={'ksp_type':'preonly',
@@ -350,8 +352,11 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         l0 = l0('+')
 
         K = Tensor(beta*cp*inner(thetabar*w,n)*l0*(dS_vp + dS_hp)
-                   + beta*cp*inner(thetabar*w,n)*l0*(ds_vp + ds_hp))
-        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp) + dl*inner(u,n)*(ds_vp + ds_tbp))
+                   + beta*cp*inner(thetabar*w,n)*l0*ds_vp \
+                   + beta*cp*inner(thetabar*w,n)*l0*ds_tbp)
+        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp)\
+                   + dl*inner(u,n)*ds_vp \
+                   + dl*inner(u,n)*ds_tbp)
 
         #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l, so (LA^{-1}K)l = LU
         # reduced eqns for l0
