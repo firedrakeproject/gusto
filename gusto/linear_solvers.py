@@ -4,7 +4,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning, \
-    FunctionSpace, BrokenElement, mesh, ds_v, ds_tb, Tensor, assemble, \
+    FunctionSpace, BrokenElement, ds_v, ds_tb, Tensor, assemble, \
     LinearSolver, Projector
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
