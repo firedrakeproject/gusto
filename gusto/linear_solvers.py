@@ -4,7 +4,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning, \
-    FunctionSpace, BrokenElement, ds_v, ds_tb, Tensor, assemble, \
+    FunctionSpace, BrokenElement, ds_v, ds_t, ds_b, Tensor, assemble, \
     LinearSolver, Projector
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -314,7 +314,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         dS_vp = dS_v(degree=(self.quadrature_degree))
         dS_hp = dS_h(degree=(self.quadrature_degree))
         ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_tbp = ds_tb(degree=(self.quadrature_degree))
+        ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
         rhobar_tr = Function(Vtrace)
         rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_tbp)
