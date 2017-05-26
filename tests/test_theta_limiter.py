@@ -12,9 +12,9 @@ def setup_theta_limiter(dirname):
 
     # declare grid shape, with length L and height H
     L = 1000.
-    H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
+    H = 400.
+    nlayers = int(H / 20.)
+    ncolumns = int(L / 20.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -61,19 +61,18 @@ def setup_theta_limiter(dirname):
                                      solve_for_rho=True)
 
     # set up bubble
-    xc = 500.
-    zc = 100.
+    xc = 200.
+    zc = 200.
     rc = 100.
-    theta_pert = Function(Vt).interpolate(conditional(sqrt((x - xc) ** 2.0 + (z - zc) ** 2.0) < rc,
-                                                      Constant(2.0),
-                                                      Constant(0.0)))
+    theta_pert = Function(Vt).interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
+                                                      conditional(sqrt((z - zc) ** 2.0) < rc,
+                                                                  Constant(2.0),
+                                                                  Constant(0.0)), Constant(0.0)))
 
     # set up velocity field
-    u_max = Constant(10.0)
+    u_max = Constant(1.0)
 
-    psi_expr = ((-u_max * L / pi) *
-                sin(2 * pi * x / L) *
-                sin(pi * z / L))
+    psi_expr = - u_max * z
 
     psi0 = Function(Vpsi).interpolate(psi_expr)
     u0.project(gradperp(psi0))
@@ -98,7 +97,7 @@ def setup_theta_limiter(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
 
-    return stepper, 5.0
+    return stepper, 50.0
 
 
 def run_theta_limiter(dirname):
