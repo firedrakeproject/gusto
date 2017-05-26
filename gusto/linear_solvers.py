@@ -358,10 +358,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                    + dl*inner(u,n)*ds_vp \
                    + dl*inner(u,n)*ds_tbp)
 
-        #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l, so (LA^{-1}K)l = LU
+        #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
         # reduced eqns for l0
         S = assemble(L * Aop.inv * K)
-        self.Rexp = L * Aop.inv * Arhs
+        self.Rexp = L * Aop.inv * Tensor(Arhs)
         # place to put the RHS (self.Rexp gets assembled in here)
         self.R = Function(M)
 
