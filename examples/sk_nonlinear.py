@@ -113,8 +113,11 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_ksp_max_it': 5,
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+hybrid_params = {'ksp_type':'gmres',
+                 'pc_type':'lu'}
 
-linear_solver = CompressibleSolver(state, params=schur_params)
+#linear_solver = CompressibleSolver(state, params=schur_params)
+linear_solver = HybridisedCompressibleSolver(state, params=hybrid_params)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
