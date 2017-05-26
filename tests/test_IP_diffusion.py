@@ -66,7 +66,7 @@ def run(dirname, vector, DG):
 
     fp1 = Function(f.function_space())
 
-    while t < tmax + 0.5*dt:
+    while t < tmax - 0.5*dt:
         t += dt
         f_diffusion.apply(f, fp1)
         f.assign(fp1)
