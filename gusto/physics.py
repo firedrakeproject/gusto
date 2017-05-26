@@ -87,14 +87,15 @@ class Condensation(Physics):
                                    (cp * R_v * T ** 2.0)))))
 
         # adjust cond rate so negative concentrations don't occur
-        self.cond_rate = Interpolator(conditional(dot_r_cond < 0,
-                                conditional(-dot_r_cond > self.water_c / dt,
-                                            -self.water_c / dt,
-                                            dot_r_cond),
-                                conditional(dot_r_cond > self.water_v / dt,
-                                            self.water_v / dt,
-                                            dot_r_cond)), Vt)
-
+        self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
+                                                      conditional(-dot_r_cond > self.water_c / dt,
+                                                                  -self.water_c / dt,
+                                                                  dot_r_cond),
+                                                      conditional(dot_r_cond > self.water_v / dt,
+                                                                  self.water_v / dt,
+                                                                  dot_r_cond)), Vt)
+        
+        self.cond_rate = Function(Vt)
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
         self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
         self.theta_new = Interpolator(self.theta *
@@ -103,7 +104,7 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
-        self.cond_rate.interpolate()
+        self.cond_rate.assign(self.lim_cond_rate.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
         self.theta.assign(self.theta_new.interpolate())
