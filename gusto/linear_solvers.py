@@ -321,7 +321,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         dS_vp = dS_v(degree=(self.quadrature_degree))
         dS_hp = dS_h(degree=(self.quadrature_degree))
         ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_tbp = ds_tb(degree=(self.quadrature_degree))
+        ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
         rhobar_tr = Function(Vtrace)
         rbareqn = (l0 - avg(rhobar))*dl*(dS_vp + ds_vp + dS_hp + ds_tbp)
