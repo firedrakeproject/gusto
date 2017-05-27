@@ -56,7 +56,8 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing,
+                 diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -74,7 +75,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -95,7 +96,7 @@ class Timestepper(BaseTimestepper):
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, pickup)
+            t = state.dump(t, diagnostic_everydump, pickup)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -153,7 +154,7 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t, diagnostic_everydump, pickup=False)
 
         state.diagnostic_dump()
         print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
@@ -234,7 +235,7 @@ class EadyTimestepper(Timestepper):
             self.sawyer_eliassen_solver.solve()
             self.sawyer_eliassen_solver.dump()
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -290,11 +291,11 @@ class EadyTimestepper(Timestepper):
                 if (t % (state.output.dumpfreq*state.timestepping.dt)) == 0.:
                     self.sawyer_eliassen_solver.solve()
                     self.sawyer_eliassen_solver.dump()
-                    print "RMSV =", state.diagnostic_data["VerticalVelocity"]["rms"]
-                    print "Vmax =", state.diagnostic_data["VerticalVelocity"]["max"]
+                    print "RMSV =", state.diagnostic_data["MeridionalVelocity"]["rms"]
+                    print "Vmax =", state.diagnostic_data["MeridionalVelocity"]["max"]
                     print "Potential =", state.diagnostic_data["EadyPotentialEnergy"]["total"]
                     print "Kinetic =", state.diagnostic_data["KineticEnergy"]["total"]
                     print "KineticV =", state.diagnostic_data["KineticEnergyV"]["total"]
 
         state.diagnostic_dump()
-        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
+        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)

@@ -85,9 +85,9 @@ class ShallowWaterParameters(Configuration):
 class EadyParameters(Configuration):
 
     """
-    Physical parameters for nonlinear eady
+    Physical parameters for Incompressible Eady
     """
     Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
     H = None
-    geopotential = False  # use geopotential for gravity term
+    f = None

@@ -167,7 +167,8 @@ class State(object):
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir) and not pickup:
+        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
+           and path.exists(self.dumpdir) and not pickup:
             exit("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
@@ -220,7 +221,7 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-    def dump(self, t=0, pickup=False):
+    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
@@ -253,27 +254,15 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
+            diagnostic_fns = ['min', 'max', 'rms', 'l2']
             for name in self.diagnostics.fields:
-                if name is "EadyPotentialEnergy":
+                for fn in diagnostic_fns:
+                    d = getattr(self.diagnostics, fn)
+                    data = d(self.field_dict[name])
+                    self.diagnostic_data[name][fn].append(data)
+                if len(self.field_dict[name].ufl_shape) is 0:
                     data = self.diagnostics.total(self.field_dict[name])
                     self.diagnostic_data[name]["total"].append(data)
-                elif name is "KineticEnergy":
-                    data = self.diagnostics.total(self.field_dict[name])
-                    self.diagnostic_data[name]["total"].append(data)
-                elif name is "KineticEnergyV":
-                    data = self.diagnostics.total(self.field_dict[name])
-                    self.diagnostic_data[name]["total"].append(data)
-                elif name is "VerticalVelocity":
-                    data_max = self.diagnostics.max(self.field_dict[name])
-                    self.diagnostic_data[name]["max"].append(data_max)
-                    data_rms = self.diagnostics.rms(self.field_dict[name])
-                    self.diagnostic_data[name]["rms"].append(data_rms)
-                else:
-                    data = self.diagnostics.l2(self.field_dict[name])
-                    self.diagnostic_data[name]["l2"].append(data)
-                    if len(self.field_dict[name].ufl_shape) is 0:
-                        data = self.diagnostics.total(self.field_dict[name])
-                        self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
@@ -285,13 +274,15 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/","time",t)
 
+            if diagnostic_everydump:
+                self.diagnostic_dump()
+
         return t
 
     def diagnostic_dump(self):
         """
         Dump diagnostics dictionary
         """
-
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
 
