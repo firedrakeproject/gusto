@@ -2,13 +2,13 @@
 
   .. sidebar:: Current development information.
   
-     Gusto is continually tested using the `Travis
-     continuous integration system <https://travis-ci.org>`__.
+     Gusto is continually tested using the `Jenkins
+     continuous integration system <https://jenkins.io>`__.
 
      Latest Gusto status: |gustobuild|
 
-     .. |gustobuild| image:: https://travis-ci.org/firedrakeproject/gusto.png?branch=master
-                                 :target: https://travis-ci.org/firedrakeproject/gusto
+     .. |gustobuild| image:: https://jenkins.ese.ic.ac.uk:1080/job/firedrakeproject/job/gusto/job/master/badge/icon
+                                 :target: https://jenkins.ese.ic.ac.uk:1080/blue/organizations/jenkins/firedrakeproject%2Fgusto/branches/
 
 
   Getting started

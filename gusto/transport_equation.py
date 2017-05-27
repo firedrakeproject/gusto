@@ -39,10 +39,14 @@ class TransportEquation(object):
         entity_dofs = V.finat_element.entity_dofs()
         # If there are as many dofs on vertices as there are vertices,
         # assume a continuous space.
-        try:
+        if 0 in entity_dofs:
+            # non-extruded
             self.is_cg = sum(map(len, entity_dofs[0].values())) == nvertex
-        except KeyError:
+        elif (0, 0) in entity_dofs:
+            # extruded
             self.is_cg = sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+        else:
+            raise RuntimeError("Cannot determine continuity from %s" % entity_dofs)
 
         # DG, embedded DG and hybrid SUPG methods need surface measures,
         # n and un
