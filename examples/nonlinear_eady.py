@@ -75,7 +75,8 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
                      KineticEnergy(), KineticEnergyV(),
                      EadyPotentialEnergy(),
-                     Sum(KineticEnergy(), EadyPotentialEnergy())]
+                     Sum(KineticEnergy(), EadyPotentialEnergy()),
+                     Difference(KineticEnergy(), KineticEnergyV())]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
