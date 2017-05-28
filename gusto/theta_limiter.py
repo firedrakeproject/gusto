@@ -4,7 +4,8 @@ from firedrake.function import Function
 from firedrake.functionspace import FunctionSpace
 from firedrake.parloops import par_loop, READ, RW
 from firedrake.ufl_expr import TrialFunction, TestFunction
-from firedrake.slope_limiter.limiter import Limiter, VertexBasedLimiter
+from firedrake.slope_limiter.limiter import Limiter
+from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 __all__ = ("ThetaLimiter",)
 
 
@@ -84,6 +85,16 @@ else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
     def remap_to_embedded_space(self, field):
         """
         Not entirely sure yet. Remap to embedded space?
+        """
+        
+    def compute_bounds(self, field):
+        """
+        Blank
+        """
+
+    def apply_limiter(self, field):
+        """
+        Blank
         """
 
     def apply(self, field):
