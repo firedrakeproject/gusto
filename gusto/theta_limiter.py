@@ -30,17 +30,47 @@ class ThetaLimiter(Limiter):
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
         self.theta_hat = Function(self.Q1DG) # theta function with only vertex DOF
 
+        self._copy_to_vertex_space_loop = """
+theta_hat[0][0] = theta[0][0];
+theta_hat[1][0] = theta[1][0];
+theta_hat[2][0] = theta[3][0];
+theta_hat[3][0] = theta[4][0];
+"""
+        self._copy_from_vertex_space_loop = """
+theta[0][0] = theta_hat[0][0];
+theta[1][0] = theta_hat[1][0];
+theta[3][0] = theta_hat[2][0];
+theta[4][0] = theta_hat[3][0];
+"""
+
+        self._check_midpoint_values_loop = """
+if (theta[2][0] > fmax(theta[0][0], theta[1][0]))
+    theta[2][0] = 0.5 * (theta[0][0] + theta[1][0]);
+else if (theta[2][0] < fmin(theta[0][0], theta[1][0]))
+    theta[2][0] = 0.5 * (theta[0][0] + theta[1][0]);
+if (theta[5][0] > fmax(theta[3][0], theta[4][0]))
+    theta[5][0] = 0.5 * (theta[3][0] + theta[4][0]);
+else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
+    theta[5][0] = 0.5 * (theta[3][0] + theta[4][0]);
+"""
+
     def copy_vertex_values(self, field):
         """
         Copies the vertex values from temperature space to
         Q1DG space which only has vertices.
         """
+        par_loop(self._copy_to_vertex_space_loop, dx,
+                 {"theta": (field, READ),
+                  "theta_hat": (self.theta_hat, RW)})
 
     def copy_vertex_values_back(self, field):
         """
         Copies the vertex values back from the Q1DG space to
         the original temperature space.
         """
+        par_loop(self._copy_from_vertex_space_loop, dx,
+                 {"theta": (field, RW),
+                  "theta_hat": (self.theta_hat, RW)})
 
     def check_midpoint_values(self, field):
         """
@@ -48,6 +78,8 @@ class ThetaLimiter(Limiter):
         and more than the minimum values. Amends them to the average
         if they are not.
         """
+        par_loop(self._check_midpoint_values_loop, dx,
+                 {"theta": (field, RW)})
 
     def remap_to_embedded_space(self, field):
         """
