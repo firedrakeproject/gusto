@@ -188,6 +188,8 @@ class SSPRK3(Advection):
     @embedded_dg
     def apply(self, x_in, x_out):
 
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
         self.q1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
