@@ -98,7 +98,7 @@ def setup_theta_limiter(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
 
-    return stepper, 5.0
+    return stepper, 100.0
 
 
 def run_theta_limiter(dirname):
