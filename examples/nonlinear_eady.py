@@ -24,23 +24,28 @@ else:
 ##############################################################################
 # set up mesh
 ##############################################################################
-# Construct 1d periodic base mesh
-columns = 30  # number of columns
+# parameters
+columns = 30
+nlayers = 30
+H = 10000.
 L = 1000000.
+f = 1.e-04
+Omega = as_vector([0.,0.,f*0.5])
+
+# rescaling
+beta = 1.0  
+f = f/beta
+L = beta*L
+
+# Construct 2D periodic base mesh
 m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
-# build 2D mesh by extruding the base mesh
-nlayers = 30  # horizontal layers
-H = 10000.  # Height position of the model top
+# build 3D mesh by extruding the base mesh
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
-# Coriolis expression
-f = 1.e-04
-Omega = as_vector([0.,0.,f*0.5])
-
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
 # state.field_dict so that we can access fields by name
