@@ -37,7 +37,7 @@ class Advection(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, field, equation=None, solver_params=None):
+    def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
 
         if equation is not None:
 
@@ -53,6 +53,9 @@ class Advection(object):
                 self.solver_parameters = equation.solver_parameters
             else:
                 self.solver_parameters = solver_params
+
+            if limiter is not None:
+                self.limiter = limiter
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
