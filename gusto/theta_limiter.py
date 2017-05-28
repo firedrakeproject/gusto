@@ -27,86 +27,31 @@ class ThetaLimiter(Limiter):
 
         self.Vt = space
         self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1) # space with only vertex DOF
-        self.vertex_limiter = VertexBasedLimiter(Q1DG)
-
-        # Storage containers for cell means, max and mins
-        self.centroids = Function(self.P0)
-        self.centroids_rhs = Function(self.P0)
-        self.max_field = Function(self.P1CG)
-        self.min_field = Function(self.P1CG)
-
-        self.centroid_solver = self._construct_centroid_solver()
-
-        # Update min and max loop
-        self._min_max_loop = """
-for(int i = 0; i < maxq.dofs; i++) {
-    maxq[i][0] = fmax(maxq[i][0],q[0][0]);
-    minq[i][0] = fmin(minq[i][0],q[0][0]);
-}
-                             """
-        # Perform limiting loop
-        self._limit_kernel = """
-double alpha = 1.0;
-double qavg = qbar[0][0];
-for (int i=0; i < q.dofs; i++) {
-    if (q[i][0] > qavg)
-        alpha = fmin(alpha, fmin(1, (qmax[i][0] - qavg)/(q[i][0] - qavg)));
-    else if (q[i][0] < qavg)
-        alpha = fmin(alpha, fmin(1, (qavg - qmin[i][0])/(qavg - q[i][0])));
-}
-for (int i=0; i<q.dofs; i++) {
-    q[i][0] = qavg + alpha*(q[i][0] - qavg);
-}
-                             """
-
-    def _construct_centroid_solver(self):
-        """
-        Constructs a linear problem for computing the centroids
-
-        :return: LinearSolver instance
-        """
-        u = TrialFunction(self.P0)
-        v = TestFunction(self.P0)
-        a = assemble(u * v * dx)
-        return LinearSolver(a, solver_parameters={'ksp_type': 'preonly',
-                                                  'pc_type': 'bjacobi',
-                                                  'sub_pc_type': 'ilu'})
-
-    def _update_centroids(self, field):
-        """
-        Update centroid values
-        """
-        assemble(TestFunction(self.P0) * field * dx, tensor=self.centroids_rhs)
-        self.centroid_solver.solve(self.centroids, self.centroids_rhs)
-
-    def compute_bounds(self, field):
-        """
-        Only computes min and max bounds of neighbouring cells
-        """
-        self._update_centroids(field)
-        self.max_field.assign(-1.0e10)  # small number
-        self.min_field.assign(1.0e10)  # big number
-
-        par_loop(self._min_max_loop,
-                 dx,
-                 {"maxq": (self.max_field, RW),
-                  "minq": (self.min_field, RW),
-                  "q": (self.centroids, READ)})
-
-    def apply_limiter(self, field):
-        """
-        Only applies limiting loop on the given field
-        """
-        par_loop(self._limit_kernel, dx,
-                 {"qbar": (self.centroids, READ),
-                  "q": (field, RW),
-                  "qmax": (self.max_field, READ),
-                  "qmin": (self.min_field, READ)})
+        self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
+        self.theta_hat = Function(self.Q1DG) # theta function with only vertex DOF
 
     def copy_vertex_values(self, field):
         """
         Copies the vertex values from temperature space to
         Q1DG space which only has vertices.
+        """
+
+    def copy_vertex_values_back(self, field):
+        """
+        Copies the vertex values back from the Q1DG space to
+        the original temperature space.
+        """
+
+    def check_midpoint_values(self, field):
+        """
+        Checks the midpoint field values are less than the maximum
+        and more than the minimum values. Amends them to the average
+        if they are not.
+        """
+
+    def remap_to_embedded_space(self, field):
+        """
+        Not entirely sure yet. Remap to embedded space?
         """
 
     def apply(self, field):
@@ -117,5 +62,7 @@ for (int i=0; i<q.dofs; i++) {
             'Given field does not belong to this objects function space'
 
         self.copy_vertex_values(field)
-        self.compute_bounds(field)
-        self.apply_limiter(field)
+        self.vertex_limiter.apply(self.Q1DG)
+        self.copy_vertex_values_back(field)
+        self.check_midpoint_values(field)
+        self.remap_to_embedded_space(field)
