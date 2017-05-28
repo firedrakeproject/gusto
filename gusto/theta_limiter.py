@@ -105,7 +105,7 @@ else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
             'Given field does not belong to this objects function space'
 
         self.copy_vertex_values(field)
-        self.vertex_limiter.apply(self.Q1DG)
+        self.vertex_limiter.apply(self.theta_hat)
         self.copy_vertex_values_back(field)
         self.check_midpoint_values(field)
         self.remap_to_embedded_space(field)
