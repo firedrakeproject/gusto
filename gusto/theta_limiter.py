@@ -97,11 +97,12 @@ for (int i=0; i<vrec.dofs; ++i) {
         Not entirely sure yet. Remap to embedded space?
         """
 
-        result = function.Function(self.space)
-        par_loop(weight_kernel, ufl.dx, {"weight": (field, INC)})
-        par_loop(average_kernel, ufl.dx, {"vrec": (result, INC),
-                                          "v_b": (v_b, READ),
-                                          "weight": (w, READ)})
+        w = Function(self.Vt)
+        result = Function(self.Vt)
+        par_loop(self._weight_kernel, dx, {"weight": (w, INC)})
+        par_loop(self._average_kernel, dx, {"vrec": (result, INC),
+                                            "v_b": (field, READ),
+                                            "weight": (w, READ)})
 
         return result
         
