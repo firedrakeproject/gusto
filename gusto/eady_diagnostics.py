@@ -1,6 +1,5 @@
 from firedrake import SpatialCoordinate
-from gusto.diagnostics import Energy, \
-    KineticEnergy, CompressibleKineticEnergy
+from gusto.diagnostics import Energy
 from gusto.forcing import exner
 
 
@@ -57,23 +56,3 @@ class CompressibleEadyPotentialEnergy(Energy):
 
         potential = rho*(g*z + cv*Pi*theta - cp*Pi0*theta)
         return self.field(state.mesh).interpolate(potential)
-
-
-class EadyTotalEnergy(Energy):
-    name = "EadyTotalEnergy"
-
-    def compute(self, state):
-        kinetic = KineticEnergy()
-        potential = EadyPotentialEnergy()
-        total = kinetic.compute(state) + potential.compute(state)
-        return self.field(state.mesh).interpolate(total)
-
-
-class CompressibleEadyTotalEnergy(Energy):
-    name = "CompressibleEadyTotalEnergy"
-
-    def compute(self, state):
-        kinetic = CompressibleKineticEnergy()
-        potential = CompressibleEadyPotentialEnergy()
-        total = kinetic.compute(state) + potential.compute(state)
-        return self.field(state.mesh).interpolate(total)
