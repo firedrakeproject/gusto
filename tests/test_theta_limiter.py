@@ -97,7 +97,7 @@ def setup_theta_limiter(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
 
-    return stepper, 50.0
+    return stepper, 5.0
 
 
 def run_theta_limiter(dirname):
@@ -106,15 +106,7 @@ def run_theta_limiter(dirname):
     stepper.run(t=0, tmax=tmax)
 
 
-def test_condens_setup(tmpdir):
+def test_theta_limiter_setup(tmpdir):
 
     dirname = str(tmpdir)
-    run_condens(dirname)
-    with open(path.join(dirname, "condens/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
-
-    water_t_0 = data["water_v_plus_water_c"]["total"][0]
-    water_t_T = data["water_v_plus_water_c"]["total"][-1]
-
-    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12
+    run_theta_limiter(dirname)
