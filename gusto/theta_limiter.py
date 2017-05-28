@@ -2,7 +2,7 @@ from __future__ import absolute_import, print_function, division
 from firedrake import dx, assemble, LinearSolver
 from firedrake.function import Function
 from firedrake.functionspace import FunctionSpace
-from firedrake.parloops import par_loop, READ, RW
+from firedrake.parloops import par_loop, READ, RW, INC
 from firedrake.ufl_expr import TrialFunction, TestFunction
 from firedrake.slope_limiter.limiter import Limiter
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
@@ -55,6 +55,16 @@ else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
     theta[5][0] = 0.5 * (theta[3][0] + theta[4][0]);
 """
 
+        self._weight_kernel = """
+for (int i=0; i<weight.dofs; ++i) {
+    weight[i][0] += 1.0;
+    }"""
+
+        self._average_kernel = """
+for (int i=0; i<vrec.dofs; ++i) {
+        vrec[i][0] += v_b[i][0]/weight[i][0];
+        }"""
+
     def copy_vertex_values(self, field):
         """
         Copies the vertex values from temperature space to
@@ -86,6 +96,14 @@ else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
         """
         Not entirely sure yet. Remap to embedded space?
         """
+
+        result = function.Function(self.space)
+        par_loop(weight_kernel, ufl.dx, {"weight": (field, INC)})
+        par_loop(average_kernel, ufl.dx, {"vrec": (result, INC),
+                                          "v_b": (v_b, READ),
+                                          "weight": (w, READ)})
+
+        return result
         
     def compute_bounds(self, field):
         """
@@ -108,4 +126,4 @@ else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
         self.vertex_limiter.apply(self.theta_hat)
         self.copy_vertex_values_back(field)
         self.check_midpoint_values(field)
-        self.remap_to_embedded_space(field)
+        field.assign(self.remap_to_embedded_space(field))
