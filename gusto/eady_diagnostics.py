@@ -1,7 +1,7 @@
 from firedrake import SpatialCoordinate, TrialFunction, \
-    TestFunction, Function, inner, div, as_vector, dx, \
-    DirichletBC, Expression, LinearVariationalProblem, \
-    LinearVariationalSolver, FunctionSpace
+    TestFunction, Function, DirichletBC, Expression, \
+    LinearVariationalProblem, LinearVariationalSolver, \
+    FunctionSpace, lhs, rhs, inner, div, as_vector, dx
 from gusto.diagnostics import DiagnosticField, \
     Energy, KineticEnergy, CompressibleKineticEnergy
 from gusto.forcing import exner
@@ -16,7 +16,7 @@ class GeostrophicImbalance(DiagnosticField):
         self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
         return self._field
 
-    def set_solver(self, state):
+    def _setup_solver(self, state):
         u = state.fields("u")
         b = state.fields("b")
         p = state.fields("p")
@@ -34,16 +34,105 @@ class GeostrophicImbalance(DiagnosticField):
 
         self.imbalance = Function(Vu)
         imbalanceproblem = LinearVariationalProblem(a, L, self.imbalance, bcs=bcs)
-        self.imbalance_solver = LinearVariationalSolver(imbalanceproblem,
-                                                       solver_parameters={'ksp_type': 'cg'})
+        self.imbalance_solver = LinearVariationalSolver(
+            imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        self.set_solver(state)
+        self._setup_solver(state)
 
         f = state.parameters.f
         self.imbalance_solver.solve()
         geostrophic_imbalance = self.imbalance[0]/f
         return self.field(state.mesh).interpolate(geostrophic_imbalance)
+
+
+class SawyerEliassenU(DiagnosticField):
+    name = "SawyerEliassenU"
+
+    def field(self, state):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(state.spaces("HDiv"), name=self.name)
+        return self._field
+
+    def _setup_solver(self, state):
+        u = state.fields("u")
+        b = state.fields("b")
+        v = inner(u,as_vector([0.,1.,0.]))
+
+        # spaces
+        V0 = FunctionSpace(state.mesh, "CG", 2)
+        Vu = u.function_space()
+
+        # project b to V0
+        self.b_v0 = Function(V0)
+        btri = TrialFunction(V0)
+        btes = TestFunction(V0)
+        a = inner(btes, btri) * dx
+        L = inner(btes, b) * dx
+        projectbproblem = LinearVariationalProblem(a, L, self.b_v0)
+        self.project_b_solver = LinearVariationalSolver(
+            projectbproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # project v to V0
+        self.v_v0 = Function(V0)
+        vtri = TrialFunction(V0)
+        vtes = TestFunction(V0)
+        a = inner(vtes, vtri) * dx
+        L = inner(vtes, v) * dx
+        projectvproblem = LinearVariationalProblem(a, L, self.v_v0)
+        self.project_v_solver = LinearVariationalSolver(
+            projectvproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # stm/psi is a stream function
+        self.stm = Function(V0)
+        psi = TrialFunction(V0)
+        xsi = TestFunction(V0)
+
+        f = state.parameters.f
+        H = state.parameters.H
+        Nsq = state.parameters.Nsq
+        dbdy = state.parameters.dbdy
+        x, y, z = SpatialCoordinate(state.mesh)
+
+        bcs = [DirichletBC(V0, Expression("0."), "bottom"),
+               DirichletBC(V0, Expression("0."), "top")]
+
+        Equ = (
+            xsi.dx(0)*Nsq*psi.dx(0)
+            + xsi.dx(0)*b.dx(2)*psi.dx(0)
+            + xsi.dx(2)*f**2*psi.dx(2)
+            + xsi.dx(2)*f*self.v_v0.dx(0)*psi.dx(2)
+            - xsi.dx(2)*f*self.v_v0.dx(2)*psi.dx(0)
+            - xsi.dx(0)*self.b_v0.dx(0)*psi.dx(2)
+            + dbdy*xsi.dx(0)*v - dbdy*xsi.dx(2)*f*(z-H/2)
+        )*dx
+
+        Au = lhs(Equ)
+        Lu = rhs(Equ)
+        stmproblem = LinearVariationalProblem(Au, Lu, self.stm, bcs=bcs)
+        self.stream_function_solver = LinearVariationalSolver(
+            stmproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # solve for sawyer_eliassen u
+        self.u = Function(Vu)
+        utrial = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        a = inner(w,utrial)*dx
+        L = (w[0]*(-self.stm.dx(2))+w[2]*(self.stm.dx(0)))*dx
+        ugproblem = LinearVariationalProblem(a, L, self.u)
+        self.sawyer_eliassen_u_solver = LinearVariationalSolver(
+            ugproblem, solver_parameters={'ksp_type': 'cg'})
+
+    def compute(self, state):
+        self._setup_solver(state)
+
+        self.project_b_solver.solve()
+        self.project_v_solver.solve()
+        self.stream_function_solver.solve()
+        self.sawyer_eliassen_u_solver.solve()
+        sawyer_eliassen_u = self.u
+        return self.field(state).project(sawyer_eliassen_u)
 
 
 class KineticEnergyV(Energy):
