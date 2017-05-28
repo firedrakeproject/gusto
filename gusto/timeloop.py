@@ -3,7 +3,6 @@ from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC, Expression
-from gusto.sawyer_eliassen import SawyerEliassenSolver
 
 
 class BaseTimestepper(object):
@@ -201,101 +200,3 @@ class AdvectionTimestepper(BaseTimestepper):
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
-
-
-class EadyTimestepper(Timestepper):
-
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None):
-
-        super(EadyTimestepper, self).__init__(state, advection_dict, linear_solver, forcing, diffusion_dict)
-
-    def run(self, t, tmax, pickup=False):
-        state = self.state
-
-        xstar_fields = {name: func for (name, func) in
-                        zip(state.fieldlist, state.xstar.split())}
-        xp_fields = {name: func for (name, func) in
-                     zip(state.fieldlist, state.xp.split())}
-        # list of fields that are passively advected (and possibly diffused)
-        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
-        # list of fields that are advected as part of the nonlinear iteration
-        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
-
-        dt = state.timestepping.dt
-        alpha = state.timestepping.alpha
-        if state.mu is not None:
-            mu_alpha = [0., dt]
-        else:
-            mu_alpha = [None, None]
-
-        with timed_stage("Dump output"):
-            state.setup_dump(pickup)
-            t = state.dump(t, pickup)
-            self.sawyer_eliassen_solver = SawyerEliassenSolver(state)
-            self.sawyer_eliassen_solver.solve()
-            self.sawyer_eliassen_solver.dump()
-
-        while t < tmax - 0.5*dt:
-            if state.output.Verbose:
-                print "STEP", t, dt
-
-            t += dt
-            with timed_stage("Apply forcing terms"):
-                self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, mu_alpha=mu_alpha[0])
-                state.xnp1.assign(state.xn)
-
-            for k in range(state.timestepping.maxk):
-
-                with timed_stage("Advection"):
-                    for field in fieldlist:
-                        advection = self.advection_dict[field]
-                        # first computes ubar from state.xn and state.xnp1
-                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                        # advects a field from xstar and puts result in xp
-                        advection.apply(xstar_fields[field], xp_fields[field])
-                state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
-
-                for i in range(state.timestepping.maxi):
-
-                    with timed_stage("Apply forcing terms"):
-                        self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha=mu_alpha[1],
-                                           incompressible=self.incompressible)
-
-                        state.xrhs -= state.xnp1
-                    with timed_stage("Implicit solve"):
-                        self.linear_solver.solve()  # solves linear system and places result in state.dy
-
-                    state.xnp1 += state.dy
-
-            self._apply_bcs()
-
-            for name in passive_fieldlist:
-                field = getattr(state.fields, name)
-                advection = self.advection_dict[name]
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects a field from xn and puts result in xnp1
-                advection.apply(field, field)
-
-            state.xn.assign(state.xnp1)
-
-            with timed_stage("Diffusion"):
-                for name, diffusion in self.diffusion_dict.iteritems():
-                    field = getattr(state.fields, name)
-                    diffusion.apply(field, field)
-
-            with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
-                if (t % (state.output.dumpfreq*state.timestepping.dt)) == 0.:
-                    self.sawyer_eliassen_solver.solve()
-                    self.sawyer_eliassen_solver.dump()
-                    print "RMSV =", state.diagnostic_data["MeridionalVelocity"]["rms"]
-                    print "Vmax =", state.diagnostic_data["MeridionalVelocity"]["max"]
-                    print "Potential =", state.diagnostic_data["EadyPotentialEnergy"]["total"]
-                    print "Kinetic =", state.diagnostic_data["KineticEnergy"]["total"]
-                    print "KineticV =", state.diagnostic_data["KineticEnergyV"]["total"]
-
-        state.diagnostic_dump()
-        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
