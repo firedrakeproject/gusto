@@ -54,8 +54,7 @@ class Advection(object):
             else:
                 self.solver_parameters = solver_params
 
-            if limiter is not None:
-                self.limiter = limiter
+            self.limiter = limiter
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
