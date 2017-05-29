@@ -30,7 +30,6 @@ nlayers = 30
 H = 10000.
 L = 1000000.
 f = 1.e-04
-Omega = as_vector([0.,0.,f*0.5])
 
 # rescaling
 beta = 1.0  
@@ -46,6 +45,9 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # set up all the other things that state requires
 ##############################################################################
+# Coriolis expression
+Omega = as_vector([0.,0.,f*0.5])
+
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
 # state.field_dict so that we can access fields by name
