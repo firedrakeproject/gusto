@@ -17,7 +17,8 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = 30*day
+    tmax = dt*5
+#    tmax = 30*day
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -64,14 +65,17 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=1,
                           dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = EadyParameters(H=H, f=f)
+parameters = EadyParameters(H=H, L=L, f=f,
+                            deltax=2.*L/float(columns),
+                            deltaz=H/float(nlayers),
+                            fourthorder=True)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed

@@ -224,7 +224,7 @@ def eady_initial_u(state, p0, u0):
 
     # set initial u
     a = inner(wg,g)*dx
-    L = inner(wg,as_vector([-dbdy/f*(z-H/2), v, 0.0]))*dx
+    L = inner(wg,as_vector([-dbdy/f*(z-H/2), v, 0.]))*dx
     solve(a == L, u0)
 
 
@@ -263,7 +263,7 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
     # set initial u
     u = cp*dthetady/f*(Pi_exp-Pi0)
     a = inner(wg,g)*dx
-    L = inner(wg,as_vector([u, v, 0.0]))*dx
+    L = inner(wg,as_vector([u, v, 0.]))*dx
     solve(a == L, u0)
 
 

@@ -2,7 +2,8 @@ from firedrake import SpatialCoordinate, TrialFunction, \
     TestFunction, Function, DirichletBC, Expression, \
     LinearVariationalProblem, LinearVariationalSolver, \
     FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
-    as_vector, as_matrix
+    as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
+    sqrt, jump, FacetNormal
 from gusto.diagnostics import DiagnosticField, \
     Energy, KineticEnergy, CompressibleKineticEnergy
 from gusto.forcing import exner
@@ -90,20 +91,57 @@ class SawyerEliassenU(DiagnosticField):
 
         f = state.parameters.f
         H = state.parameters.H
-        Nsq = state.parameters.Nsq
+        L = state.parameters.L
         dbdy = state.parameters.dbdy
         x, y, z = SpatialCoordinate(state.mesh)
 
         bcs = [DirichletBC(V0, Expression("0."), "bottom"),
                DirichletBC(V0, Expression("0."), "top")]
 
-        self.Mat = as_matrix([[b.dx(2), 0, -f*self.v_v0.dx(2)],
-                              [0, 0, 0],
-                              [-self.b_v0.dx(0), 0, f**2+f*self.v_v0.dx(0)]])
+        Mat = as_matrix([[b.dx(2), 0., -f*self.v_v0.dx(2)],
+                         [0., 0., 0.],
+                         [-self.b_v0.dx(0), 0., f**2+f*self.v_v0.dx(0)]])
 
-        Equ = (inner(grad(xsi), dot(self.Mat, grad(psi)))
-               - dbdy*inner(grad(xsi), as_vector([-v, 0, f*(z-H/2)]))
+        Equ = (
+            inner(grad(xsi), dot(Mat, grad(psi)))
+            - dbdy*inner(grad(xsi), as_vector([-v, 0., f*(z-H/2)]))
         )*dx
+
+        # fourth-order terms
+        if state.parameters.fourthorder:
+            eps = Constant(0.0001)
+            brennersigma = Constant(10.0)
+            n = FacetNormal(state.mesh)
+            deltax = Constant(state.parameters.deltax)
+            deltaz = Constant(state.parameters.deltaz)
+
+            nn = as_matrix([[sqrt(brennersigma/Constant(deltax)), 0., 0.],
+                            [0., 0., 0.],
+                            [0., 0., sqrt(brennersigma/Constant(deltaz))]])
+
+            mu = as_matrix([[1., 0., 0.],
+                            [0., 0., 0.],
+                            [0., 0., H/L]])
+
+            # anisotropic form
+            Equ += eps*(
+                div(dot(mu,grad(psi)))*div(dot(mu,grad(xsi)))*dx
+                - (
+                    avg(dot(dot(grad(grad(psi)), n),n))*jump(grad(xsi), n=n)
+                    + avg(dot(dot(grad(grad(xsi)), n), n))*jump(grad(psi), n=n)
+                    - jump(nn*grad(psi), n=n)*jump(nn*grad(xsi), n=n)
+                )*(dS_h + dS_v)
+            )
+
+            # # original form
+            # Equ += eps*(
+            #     inner(grad(grad(psi)), grad(grad(xsi)))*dx
+            #     - (
+            #         avg(dot(dot(grad(grad(psi)), n),n))*jump(grad(xsi), n=n)
+            #         + avg(dot(dot(grad(grad(xsi)), n), n))*jump(grad(psi), n=n)
+            #         - (brennersigma/Constant(1.0/deltax))*jump(grad(psi), n=n)*jump(grad(xsi), n=n)
+            #     )*(dS_h + dS_v)
+            # )
 
         Au = lhs(Equ)
         Lu = rhs(Equ)
