@@ -176,10 +176,14 @@ class SSPRK3(Advection):
         if stage == 0:
             self.solver.solve()
             self.q1.assign(self.dq)
+            if self.limiter is not None:
+                self.limiter.apply(self.q1)
 
         elif stage == 1:
             self.solver.solve()
             self.q1.assign(0.75*x_in + 0.25*self.dq)
+            if self.limiter is not None:
+                self.limiter.apply(self.q1)
 
         elif stage == 2:
             self.solver.solve()
@@ -193,6 +197,8 @@ class SSPRK3(Advection):
         for i in range(3):
             self.solve_stage(x_in, i)
         x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
+        if self.limiter is not None:
+            self.limiter.apply(x_out)
 
 
 class ThetaMethod(Advection):

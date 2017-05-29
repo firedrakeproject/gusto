@@ -25,7 +25,7 @@ def setup_theta_limiter(dirname):
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+"/theta_limiter",
-                              dumpfreq=1,
+                              dumpfreq=5,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
@@ -98,7 +98,7 @@ def setup_theta_limiter(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
 
-    return stepper, 100.0
+    return stepper, 500.0
 
 
 def run_theta_limiter(dirname):
