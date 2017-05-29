@@ -38,8 +38,6 @@ class GeostrophicImbalance(DiagnosticField):
             imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        self._setup_solver(state)
-
         f = state.parameters.f
         self.imbalance_solver.solve()
         geostrophic_imbalance = self.imbalance[0]/f
@@ -125,8 +123,6 @@ class SawyerEliassenU(DiagnosticField):
             ugproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        self._setup_solver(state)
-
         self.project_b_solver.solve()
         self.project_v_solver.solve()
         self.stream_function_solver.solve()

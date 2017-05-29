@@ -32,7 +32,7 @@ L = 1000000.
 f = 1.e-04
 
 # rescaling
-beta = 1.0  
+beta = 1.0
 f = f/beta
 L = beta*L
 

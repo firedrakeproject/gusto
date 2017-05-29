@@ -181,6 +181,10 @@ class State(object):
         for diagnostic in self.diagnostic_fields:
             self.diagnostics.register(diagnostic.name)
 
+        # setup solvers for diagnostics
+        for diagnostic in self.diagnostic_fields:
+            diagnostic._setup_solver(self)
+
         # add special case diagnostic fields
         for name in self.output.perturbation_fields:
             f = Perturbation(self, name)

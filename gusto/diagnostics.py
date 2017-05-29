@@ -69,6 +69,10 @@ class DiagnosticField(object):
         """ Compute the diagnostic field from the current state"""
         pass
 
+    def _setup_solver(self, state):
+        """Setup solvers for calculating this diagnostic field"""
+        pass
+
     def __call__(self, state):
         return self.compute(state)
 
