@@ -1,7 +1,8 @@
 from firedrake import SpatialCoordinate, TrialFunction, \
     TestFunction, Function, DirichletBC, Expression, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    FunctionSpace, lhs, rhs, inner, div, as_vector, dx
+    FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
+    as_vector, as_matrix
 from gusto.diagnostics import DiagnosticField, \
     Energy, KineticEnergy, CompressibleKineticEnergy
 from gusto.forcing import exner
@@ -96,14 +97,12 @@ class SawyerEliassenU(DiagnosticField):
         bcs = [DirichletBC(V0, Expression("0."), "bottom"),
                DirichletBC(V0, Expression("0."), "top")]
 
-        Equ = (
-            xsi.dx(0)*Nsq*psi.dx(0)
-            + xsi.dx(0)*b.dx(2)*psi.dx(0)
-            + xsi.dx(2)*f**2*psi.dx(2)
-            + xsi.dx(2)*f*self.v_v0.dx(0)*psi.dx(2)
-            - xsi.dx(2)*f*self.v_v0.dx(2)*psi.dx(0)
-            - xsi.dx(0)*self.b_v0.dx(0)*psi.dx(2)
-            + dbdy*xsi.dx(0)*v - dbdy*xsi.dx(2)*f*(z-H/2)
+        self.Mat = as_matrix([[b.dx(2), 0, -f*self.v_v0.dx(2)],
+                              [0, 0, 0],
+                              [-self.b_v0.dx(0), 0, f**2+f*self.v_v0.dx(0)]])
+
+        Equ = (inner(grad(xsi), dot(self.Mat, grad(psi)))
+               - dbdy*inner(grad(xsi), as_vector([-v, 0, f*(z-H/2)]))
         )*dx
 
         Au = lhs(Equ)
