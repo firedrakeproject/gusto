@@ -214,13 +214,16 @@ class ExnerPi_perturbation(ExnerPi):
 
 class Sum(DiagnosticField):
 
-    def __init__(self, fieldname1, fieldname2):
-        self.fieldname1 = fieldname1
-        self.fieldname2 = fieldname2
+    def __init__(self, field1, field2):
+        self.field1 = field1
+        self.field2 = field2
 
     @property
     def name(self):
-        return self.fieldname1+"_plus_"+self.fieldname2
+        if isinstance(self.field1, DiagnosticField):
+            return self.field1.name+"_plus_"+self.field2.name
+        else:
+            return self.field1+"_plus_"+self.field2
 
     def field(self, field1):
         if hasattr(self, "_field"):
@@ -229,20 +232,27 @@ class Sum(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        field1 = state.fields(self.fieldname1)
-        field2 = state.fields(self.fieldname2)
+        if isinstance(self.field1, DiagnosticField):
+            field1 = self.field1.compute(state)
+            field2 = self.field2.compute(state)
+        else:
+            field1 = state.fields(self.field1)
+            field2 = state.fields(self.field2)
         return self.field(field1).assign(field1 + field2)
 
 
 class Difference(DiagnosticField):
 
-    def __init__(self, fieldname1, fieldname2):
-        self.fieldname1 = fieldname1
-        self.fieldname2 = fieldname2
+    def __init__(self, field1, field2):
+        self.field1 = field1
+        self.field2 = field2
 
     @property
     def name(self):
-        return self.fieldname1+"_minus_"+self.fieldname2
+        if isinstance(self.field1, DiagnosticField):
+            return self.field1.name+"_minus_"+self.field2.name
+        else:
+            return self.field1+"_minus_"+self.field2
 
     def field(self, field1):
         if hasattr(self, "_field"):
@@ -251,8 +261,12 @@ class Difference(DiagnosticField):
         return self._field
 
     def compute(self, state):
-        field1 = state.fields(self.fieldname1)
-        field2 = state.fields(self.fieldname2)
+        if isinstance(self.field1, DiagnosticField):
+            field1 = self.field1.compute(state)
+            field2 = self.field2.compute(state)
+        else:
+            field1 = state.fields(self.field1)
+            field2 = state.fields(self.field2)
         return self.field(field1).assign(field1 - field2)
 
 
@@ -273,9 +287,9 @@ class SteadyStateError(Difference):
 class Perturbation(Difference):
 
     def __init__(self, state, name):
-        self.fieldname1 = name
-        self.fieldname2 = name+'bar'
+        self.field1 = name
+        self.field2 = name+'bar'
 
     @property
     def name(self):
-        return self.fieldname1+"_perturbation"
+        return self.field1+"_perturbation"

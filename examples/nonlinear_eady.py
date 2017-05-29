@@ -86,7 +86,8 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
                      KineticEnergy(), KineticEnergyV(),
                      EadyPotentialEnergy(),
-                     EadyTotalEnergy(),
+                     Sum(KineticEnergy(), EadyPotentialEnergy()),
+                     Difference(KineticEnergy(), KineticEnergyV()),
                      GeostrophicImbalance(),
                      SawyerEliassenU()]
 
