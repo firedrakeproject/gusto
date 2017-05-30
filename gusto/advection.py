@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector
+    LinearVariationalSolver, Projector, dx
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, RW, INC
+from firedrake.parloops import par_loop, READ, INC
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.theta_limiter import ThetaLimiter
 
@@ -197,7 +197,7 @@ class SSPRK3(Advection):
         self.q1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
-            while i < 2:
+            if i < 2:
                 if self.limiter is not None:
                     self.limiter.apply(self.q1)
         x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
@@ -256,15 +256,15 @@ class Remapper(object):
         self.x_in = x_in
         self.x_out = x_out
         self.weight = Function(x_out.function_space())
-        par_loop(_weight_kernel, dx, {"weight": (self.w, INC)})
+        par_loop(_weight_kernel, dx, {"weight": (self.weight, INC)})
 
 
     def project(self):
         
         self.x_out.assign(0.)
         par_loop(_average_kernel, dx, {"vrec": (self.x_out, INC),
-                                            "v_b": (self.x_in, READ),
-                                            "weight": (self.weight, READ)})
+                                       "v_b": (self.x_in, READ),
+                                       "weight": (self.weight, READ)})
         
     
 

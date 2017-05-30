@@ -91,7 +91,7 @@ def setup_theta_limiter(dirname):
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(theta0.function_space()))
+    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))
 
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
