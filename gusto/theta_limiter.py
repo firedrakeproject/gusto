@@ -123,8 +123,8 @@ class ThetaLimiter(Limiter):
         assert field.function_space() == self.Vt, \
             'Given field does not belong to this objects function space'
 
-        #self.copy_vertex_values(field)
-        #self.vertex_limiter.apply(self.theta_hat)
-        #self.copy_vertex_values_back(field)
-        #self.check_midpoint_values(field)
+        self.copy_vertex_values(field)
+        self.vertex_limiter.apply(self.theta_hat)
+        self.copy_vertex_values_back(field)
+        self.check_midpoint_values(field)
         #self.remap_to_embedded_space(field)
