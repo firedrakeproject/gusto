@@ -363,6 +363,7 @@ class State(object):
         self.xp = Function(W)
         self.xnp1 = Function(W)
         self.xrhs = Function(W)
+        self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
 
 

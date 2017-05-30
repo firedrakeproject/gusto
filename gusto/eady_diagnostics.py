@@ -4,8 +4,7 @@ from firedrake import SpatialCoordinate, TrialFunction, \
     FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
     as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
     sqrt, jump, FacetNormal
-from gusto.diagnostics import DiagnosticField, \
-    Energy, KineticEnergy, CompressibleKineticEnergy
+from gusto.diagnostics import DiagnosticField, Energy
 from gusto.forcing import exner
 
 
@@ -99,6 +98,43 @@ class GeostrophicImbalance(DiagnosticField):
         self.imbalance_solver.solve()
         geostrophic_imbalance = self.imbalance[0]/f
         return self.field(state.mesh).interpolate(geostrophic_imbalance)
+
+
+class TrueResidualV(DiagnosticField):
+    name = "TrueResidualV"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
+        return self._field
+
+    def _setup_solver(self, state):
+        unew, pnew, bnew = state.xn.split()
+        uold, pold, bold = state.xb.split()
+        ubar = 0.5*(unew+uold)
+        H = state.parameters.H
+        f = state.parameters.f
+        dbdy = state.parameters.dbdy
+        dt = state.timestepping.dt
+        x, y, z = SpatialCoordinate(state.mesh)
+        V = FunctionSpace(state.mesh, "DG", 0)
+
+        wv = TestFunction(V)
+        v = TrialFunction(V)
+        vlhs = wv*v*dx
+        vrhs = wv*((unew[1]-uold[1])/dt + ubar[0]*ubar[1].dx(0)
+                   + ubar[2]*ubar[1].dx(2)
+                   + f*ubar[0] + dbdy*(z-H/2))*dx
+        self.vtres = Function(V)
+        vtresproblem = LinearVariationalProblem(vlhs, vrhs, self.vtres)
+        self.v_residual_solver = LinearVariationalSolver(
+            vtresproblem, solver_parameters={'ksp_type': 'cg'})
+
+    def compute(self, state):
+        self.v_residual_solver.solve()
+        v_residual = self.vtres
+        return self.field(state.mesh).interpolate(v_residual)
 
 
 class SawyerEliassenU(DiagnosticField):

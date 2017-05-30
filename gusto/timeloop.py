@@ -74,6 +74,8 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
+        state.xb.assign(state.xn)
+
     def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
@@ -141,6 +143,7 @@ class Timestepper(BaseTimestepper):
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
+            state.xb.assign(state.xn)
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):

@@ -17,8 +17,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = dt*5
-#    tmax = 30*day
+    tmax = 30*day
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -65,7 +64,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=1,
+output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
                           dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
@@ -88,7 +87,7 @@ diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
                      EadyPotentialEnergy(),
                      Sum(KineticEnergy(), EadyPotentialEnergy()),
                      Difference(KineticEnergy(), KineticEnergyV()),
-                     GeostrophicImbalance(),
+                     GeostrophicImbalance(), TrueResidualV(),
                      SawyerEliassenU()]
 
 # setup state, passing in the mesh, information on the required finite element
