@@ -85,9 +85,7 @@ def setup_theta_limiter(dirname):
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction":"horizontal"},
-                             equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
     advection_dict = {}
