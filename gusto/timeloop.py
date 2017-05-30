@@ -5,7 +5,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
 from gusto.advection import NoAdvection
 from gusto.moving_mesh.utility_functions import spherical_logarithm
-from firedrake import DirichletBC, Expression, Function, LinearVariationalProblem, LinearVariationalSolver, SpatialCoordinate, Projector
+from firedrake import DirichletBC, Expression, Function, LinearVariationalProblem, LinearVariationalSolver, Projector
 
 
 class BaseTimestepper(object):
@@ -36,9 +36,8 @@ class BaseTimestepper(object):
         fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
 
         if state.timestepping.move_mesh:
-            mesh = state.mesh
-            self.X0 = Function(mesh.coordinates.function_space()).interpolate(SpatialCoordinate(mesh))
-            self.X1 = Function(mesh.coordinates.function_space()).interpolate(SpatialCoordinate(mesh))
+            self.X0 = Function(state.mesh.coordinates)
+            self.X1 = Function(state.mesh.coordinates)
             self.Advection = MovingMeshAdvectionManager(
                 fieldlist,
                 state.xn, state.xnp1,
