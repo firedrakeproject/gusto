@@ -117,6 +117,7 @@ Vp = p0.function_space()
 # parameters
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
+dbdy = parameters.dbdy
 
 # background buoyancy
 bref = (z-H/2)*Nsq
@@ -150,8 +151,14 @@ p_b = Function(Vp)
 incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b0, p0)
 
-# set initial u
-eady_initial_u(state, p0, u0)
+# initialise v (to turn of comment out eady_initial_v)
+v = Function(Vp).assign(0.)
+eady_initial_v(state, p0, v)
+
+# set initial velocity
+u = -dbdy/f*(z-H/2)
+u_exp = as_vector([u, v, 0.0])
+u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'p':p0, 'b':b0})
