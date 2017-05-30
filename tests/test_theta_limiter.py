@@ -58,8 +58,8 @@ def setup_theta_limiter(dirname):
     rho_b = Function(Vr)
 
     # Calculate initial rho
-    compressible_hydrostatic_balance(state, theta_b, rho_b,
-                                     solve_for_rho=True)
+    # compressible_hydrostatic_balance(state, theta_b, rho_b,
+    #                                  solve_for_rho=True)
 
     # set up bubble
     xc = 200.

@@ -3,7 +3,9 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector
 from firedrake.utils import cached_property
+from firedrake.parloops import par_loop, RW, INC
 from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.theta_limiter import ThetaLimiter
 
 
 def embedded_dg(original_apply):
@@ -70,7 +72,7 @@ class Advection(object):
                           'pc_type':'bjacobi',
                           'sub_pc_type':'ilu'}
             if isinstance(limiter, ThetaLimiter):
-                self.Projector = Remapper(self.xdg_out, self.x_project)
+                self.Projector = Remapper(self.xdg_out, self.x_projected)
             else:
                 self.Projector = Projector(self.xdg_out, self.x_projected,
                                            solver_parameters=parameters)
