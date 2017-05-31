@@ -3,8 +3,8 @@ from gusto.diagnostics import Energy
 from gusto.forcing import exner
 
 
-class KineticEnergyV(Energy):
-    name = "KineticEnergyV"
+class KineticEnergyY(Energy):
+    name = "KineticEnergyY"
 
     def compute(self, state):
         """
@@ -15,8 +15,8 @@ class KineticEnergyV(Energy):
         return self.field(state.mesh).interpolate(energy)
 
 
-class CompressibleKineticEnergyV(Energy):
-    name = "CompressibleKineticEnergyV"
+class CompressibleKineticEnergyY(Energy):
+    name = "CompressibleKineticEnergyY"
 
     def compute(self, state):
         """

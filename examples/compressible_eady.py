@@ -62,15 +62,15 @@ parameters = CompressibleEadyParameters(H=H, f=f)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
+diagnostic_fields = [CourantNumber(), VelocityY(),
                      ExnerPi(), ExnerPi_perturbation(),
                      CompressibleKineticEnergy(),
-                     CompressibleKineticEnergyV(),
+                     CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
                      Sum(CompressibleKineticEnergy(),
                          CompressibleEadyPotentialEnergy()),
                      Difference(CompressibleKineticEnergy(),
-                                CompressibleKineticEnergyV())]
+                                CompressibleKineticEnergyY())]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above

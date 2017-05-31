@@ -96,8 +96,8 @@ class CourantNumber(DiagnosticField):
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
 
 
-class HorizontalVelocity(DiagnosticField):
-    name = "HorizontalVelocity"
+class VelocityX(DiagnosticField):
+    name = "VelocityX"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -111,8 +111,8 @@ class HorizontalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(uh)
 
 
-class VerticalVelocity(DiagnosticField):
-    name = "VerticalVelocity"
+class VelocityZ(DiagnosticField):
+    name = "VelocityZ"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -126,8 +126,8 @@ class VerticalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(w)
 
 
-class MeridionalVelocity(DiagnosticField):
-    name = "MeridionalVelocity"
+class VelocityY(DiagnosticField):
+    name = "VelocityY"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
