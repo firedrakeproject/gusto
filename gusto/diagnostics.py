@@ -269,15 +269,15 @@ class Difference(DiagnosticField):
 class SteadyStateError(Difference):
 
     def __init__(self, state, name):
-        self.fieldname1 = name
-        self.fieldname2 = name+'_init'
+        self.field1 = name
+        self.field2 = name+'_init'
         field1 = state.fields(name)
-        field2 = state.fields(self.fieldname2, field1.function_space())
+        field2 = state.fields(self.field2, field1.function_space())
         field2.assign(field1)
 
     @property
     def name(self):
-        return self.fieldname1+"_error"
+        return self.field1+"_error"
 
 
 class Perturbation(Difference):
