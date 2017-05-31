@@ -7,7 +7,7 @@ from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, FunctionSpace, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
-    Expression, Function, Constant, as_vector, assemble, \
+    Expression, Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
 from gusto.forcing import exner
@@ -225,7 +225,6 @@ def eady_initial_v(state, p0, v):
 def compressible_eady_initial_v(state, theta0, rho0, v):
     f = state.parameters.f
     cp = state.parameters.cp
-    Pi0 = state.parameters.Pi0
 
     # exner function
     Vr = rho0.function_space()
