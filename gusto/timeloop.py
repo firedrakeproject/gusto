@@ -296,6 +296,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
         X1 = self.X1
 
         # Compute v (mesh velocity) and v1 (mesh velocity)
+        # TODO: use Projectors below!
         if self.state.on_sphere:
             spherical_logarithm(X0, X1, self.v, self.state.mesh._radius)
             self.v /= dt
