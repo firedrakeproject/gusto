@@ -57,7 +57,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
+output = OutputParameters(dirname='incompressible_eady', dumpfreq=72,
                           dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
