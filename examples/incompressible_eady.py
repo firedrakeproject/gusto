@@ -142,8 +142,17 @@ p_b = Function(Vp)
 incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b0, p0)
 
+# set x component of velocity
+dbdy = parameters.dbdy
+u = -dbdy/f*(z-H/2)
+
+# set y component of velocity
+v = Function(Vp).assign(0.)
+eady_initial_v(state, p0, v)
+
 # set initial u
-eady_initial_u(state, p0, u0)
+u_exp = as_vector([u, v, 0.])
+u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'p':p0, 'b':b0})

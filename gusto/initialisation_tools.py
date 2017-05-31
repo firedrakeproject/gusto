@@ -194,14 +194,12 @@ def remove_initial_w(u, Vv):
     u.assign(uin)
 
 
-def eady_initial_u(state, p0, u0):
+def eady_initial_v(state, p0, v):
     f = state.parameters.f
-    dbdy = state.parameters.dbdy
-    H = state.parameters.H
     x, y, z = SpatialCoordinate(state.mesh)
 
     # get pressure gradient
-    Vu = u0.function_space()
+    Vu = state.spaces("HDiv")
     g = TrialFunction(Vu)
     wg = TestFunction(Vu)
 
@@ -219,19 +217,14 @@ def eady_initial_u(state, p0, u0):
 
     a = f*phi*m*dx
     L = phi*pgrad[0]*dx
-    v = Function(Vp)
     solve(a == L, v)
 
-    # set initial u
-    a = inner(wg,g)*dx
-    L = inner(wg,as_vector([-dbdy/f*(z-H/2), v, 0.0]))*dx
-    solve(a == L, u0)
+    return v
 
 
-def compressible_eady_initial_u(state, theta0, rho0, u0):
+def compressible_eady_initial_v(state, theta0, rho0, v):
     f = state.parameters.f
     cp = state.parameters.cp
-    dthetady = state.parameters.dthetady
     Pi0 = state.parameters.Pi0
 
     # exner function
@@ -240,7 +233,7 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
     Pi = Function(Vr).interpolate(Pi_exp)
 
     # get Pi gradient
-    Vu = u0.function_space()
+    Vu = state.spaces("HDiv")
     g = TrialFunction(Vu)
     wg = TestFunction(Vu)
 
@@ -257,14 +250,9 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
 
     a = phi*f*m*dx
     L = phi*cp*theta0*pgrad[0]*dx
-    v = Function(Vr)
     solve(a == L, v)
 
-    # set initial u
-    u = cp*dthetady/f*(Pi_exp-Pi0)
-    a = inner(wg,g)*dx
-    L = inner(wg,as_vector([u, v, 0.0]))*dx
-    solve(a == L, u0)
+    return v
 
 
 def calculate_Pi0(state, theta0, rho0):

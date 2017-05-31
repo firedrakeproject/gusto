@@ -141,9 +141,23 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
 
-# set Pi0 and initial u
-state.parameters.Pi0 = calculate_Pi0(state, theta0, rho0)
-compressible_eady_initial_u(state, theta0, rho0, u0)
+# set Pi0
+Pi0 = calculate_Pi0(state, theta0, rho0)
+state.parameters.Pi0 = Pi0
+
+# set x component of velocity
+cp = state.parameters.cp
+dthetady = state.parameters.dthetady
+Pi = exner(theta0, rho0, state)
+u = cp*dthetady/f*(Pi-Pi0)
+
+# set y component of velocity
+v = Function(Vr).assign(0.)
+compressible_eady_initial_v(state, theta0, rho0, v)
+
+# set initial u
+u_exp = as_vector([u, v, 0.])
+u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
 state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
