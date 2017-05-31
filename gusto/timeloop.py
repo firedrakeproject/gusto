@@ -214,6 +214,10 @@ class AdvectionTimestepper(BaseTimestepper):
             if state.output.Verbose:
                 print "STEP", t, dt
 
+            # for time dependent stuff, e.g. expressions for u
+            if hasattr(state, "t_const"):
+                state.t_const.assign(t + 0.5*dt)
+
             t += dt
             state.xnp1.assign(state.xn)
 
@@ -222,6 +226,8 @@ class AdvectionTimestepper(BaseTimestepper):
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
 
+            # At the moment, this is automagically moving the mesh (if
+            # appropriate), which is not ideal
             with timed_stage("Advection"):
                 self.Advection.apply(xn_fields, xn_fields)
 
@@ -279,7 +285,7 @@ class MovingMeshAdvectionManager(AdvectionManager):
             self._projections = {}
             for field, advection in self.advection_dict.iteritems():
                 if isinstance(advection, NoAdvection):
-                    self._projections[field] = Projector(self.state.uexpr, x_in[field], constant_jacobian=not self.state.timestepping.move_mesh).solver
+                    pass
                 elif (hasattr(advection.equation, "continuity") and advection.equation.continuity) or isinstance(advection.equation, EulerPoincare):
                     eqn = advection.equation
                     LHS = eqn.mass_term(eqn.trial)
@@ -295,7 +301,8 @@ class MovingMeshAdvectionManager(AdvectionManager):
         X0 = self.X0
         X1 = self.X1
 
-        # Compute v (mesh velocity) and v1 (mesh velocity)
+        # Compute v (mesh velocity w.r.t. initial mesh) and
+        # v1 (mesh velocity w.r.t. final mesh)
         # TODO: use Projectors below!
         if self.state.on_sphere:
             spherical_logarithm(X0, X1, self.v, self.state.mesh._radius)
@@ -305,22 +312,33 @@ class MovingMeshAdvectionManager(AdvectionManager):
             v_V1.project(self.v)
             v1_V1.project(self.v1)
         else:
-            self.v_V1.project((X1-X0)/dt)
-            self.v1_V1.project(-(X0-X1)/dt)
+            self.v_V1.project((X1 - X0)/dt)
+            self.v1_V1.project(-(X0 - X1)/dt)
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
 
         for field, advection in self.advection_dict.iteritems():
-            advection.update_ubar((1-self.alpha)*(un-v_V1))
-            self.state.mesh.coordinates.assign(X0)
-            # advects field
-            advection.apply(x_in[field], self.x1[field])
+            if not isinstance(advection, NoAdvection):
+                self.state.mesh.coordinates.assign(X0)
 
-            # put mesh_new into mesh so it gets into LHS of projections
-            self.state.mesh.coordinates.assign(X1)
+                if hasattr(self.state, "uexpr"):
+                    un.project(self.state.uexpr)
 
-            if field in self.projections(self.x1).keys():
-                self.projections(self.x1)[field].solve()
+                advection.update_ubar((1 - self.alpha)*(un - v_V1))
 
-            advection.update_ubar(self.alpha*(unp1-v1_V1))
-            advection.apply(self.x1[field], x_out[field])
+                # advects field on old mesh
+                advection.apply(x_in[field], self.x1[field])
+
+                # put mesh_new into mesh so it gets into LHS of projections
+                self.state.mesh.coordinates.assign(X1)
+
+                if field in self.projections(self.x1).keys():
+                    self.projections(self.x1)[field].solve()
+
+                if hasattr(self.state, "uexpr"):
+                    unp1.project(self.state.uexpr)
+
+                advection.update_ubar(self.alpha*(unp1 - v1_V1))
+
+                # advects field on new mesh
+                advection.apply(self.x1[field], x_out[field])
