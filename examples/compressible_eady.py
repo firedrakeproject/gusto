@@ -5,11 +5,14 @@ from firedrake import as_vector, SpatialCoordinate,\
 import sys
 
 day = 24.*60.*60.
+hour = 60.*60.
 dt = 30.
 if '--running-tests' in sys.argv:
     tmax = dt
+    tdump = dt
 else:
     tmax = 30*day
+    tdump = 2*hour
 
 ##############################################################################
 # set up mesh
@@ -47,7 +50,8 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='compressible_eady', dumpfreq=240,
+output = OutputParameters(dirname='compressible_eady',
+                          dumpfreq=int(tdump/dt),
                           dumplist=['u','rho','theta'],
                           perturbation_fields=['rho', 'theta'])
 

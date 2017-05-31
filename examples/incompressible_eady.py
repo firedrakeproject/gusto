@@ -5,9 +5,11 @@ from firedrake import as_vector, SpatialCoordinate, \
 import sys
 
 day = 24.*60.*60.
+hour = 60.*60.
 dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
+    tdump = dt
     # avoid using mumps on Travis
     linear_solver_params = {'ksp_type':'gmres',
                             'pc_type':'fieldsplit',
@@ -18,6 +20,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
     tmax = 30*day
+    tdump = 2*hour
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -57,7 +60,8 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='incompressible_eady', dumpfreq=72,
+output = OutputParameters(dirname='incompressible_eady',
+                          dumpfreq=int(tdump/dt),
                           dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
