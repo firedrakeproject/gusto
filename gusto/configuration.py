@@ -2,6 +2,8 @@
 Some simple tools for making model configuration nicer.
 """
 
+from firedrake import sqrt
+
 
 class Configuration(object):
 
@@ -95,3 +97,15 @@ class EadyParameters(Configuration):
     deltax = None
     deltaz = None
     fourthorder = False
+
+
+class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
+
+    """
+    Physical parameters for Compressible Eady
+    """
+    g = 10.
+    N = sqrt(EadyParameters.Nsq)
+    theta_surf = 300.
+    dthetady = theta_surf/g*EadyParameters.dbdy
+    Pi0 = 0.0

@@ -7,7 +7,7 @@ from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, FunctionSpace, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
-    Expression, Function, Constant, as_vector, assemble, \
+    Expression, Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
 from gusto.forcing import exner
@@ -222,11 +222,9 @@ def eady_initial_v(state, p0, v):
     return v
 
 
-def compressible_eady_initial_u(state, theta0, rho0, u0):
+def compressible_eady_initial_v(state, theta0, rho0, v):
     f = state.parameters.f
     cp = state.parameters.cp
-    dthetady = state.parameters.dthetady
-    Pi0 = state.parameters.Pi0
 
     # exner function
     Vr = rho0.function_space()
@@ -234,7 +232,7 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
     Pi = Function(Vr).interpolate(Pi_exp)
 
     # get Pi gradient
-    Vu = u0.function_space()
+    Vu = state.spaces("HDiv")
     g = TrialFunction(Vu)
     wg = TestFunction(Vu)
 
@@ -251,14 +249,9 @@ def compressible_eady_initial_u(state, theta0, rho0, u0):
 
     a = phi*f*m*dx
     L = phi*cp*theta0*pgrad[0]*dx
-    v = Function(Vr)
     solve(a == L, v)
 
-    # set initial u
-    u = cp*dthetady/f*(Pi_exp-Pi0)
-    a = inner(wg,g)*dx
-    L = inner(wg,as_vector([u, v, 0.]))*dx
-    solve(a == L, u0)
+    return v
 
 
 def calculate_Pi0(state, theta0, rho0):

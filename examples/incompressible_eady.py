@@ -5,9 +5,11 @@ from firedrake import as_vector, SpatialCoordinate, \
 import sys
 
 day = 24.*60.*60.
+hour = 60.*60.
 dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
+    tdump = dt
     # avoid using mumps on Travis
     linear_solver_params = {'ksp_type':'gmres',
                             'pc_type':'fieldsplit',
@@ -18,6 +20,7 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
     tmax = 30*day
+    tdump = 2*hour
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -64,7 +67,8 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=72,
+output = OutputParameters(dirname='incompressible_eady',
+                          dumpfreq=int(tdump/dt),
                           dumplist=['u', 'p', 'b'],
                           perturbation_fields=['p', 'b'])
 
@@ -82,11 +86,11 @@ parameters = EadyParameters(H=H, L=L, f=f,
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), MeridionalVelocity(),
-                     KineticEnergy(), KineticEnergyV(),
+diagnostic_fields = [CourantNumber(), VelocityY(),
+                     KineticEnergy(), KineticEnergyY(),
                      EadyPotentialEnergy(),
                      Sum(KineticEnergy(), EadyPotentialEnergy()),
-                     Difference(KineticEnergy(), KineticEnergyV()),
+                     Difference(KineticEnergy(), KineticEnergyY()),
                      GeostrophicImbalance(), TrueResidualV(),
                      SawyerEliassenU()]
 
@@ -117,7 +121,6 @@ Vp = p0.function_space()
 # parameters
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
-dbdy = parameters.dbdy
 
 # background buoyancy
 bref = (z-H/2)*Nsq
@@ -151,13 +154,16 @@ p_b = Function(Vp)
 incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b0, p0)
 
-# initialise v (to turn of comment out eady_initial_v)
+# set x component of velocity
+dbdy = parameters.dbdy
+u = -dbdy/f*(z-H/2)
+
+# set y component of velocity
 v = Function(Vp).assign(0.)
 eady_initial_v(state, p0, v)
 
-# set initial velocity
-u = -dbdy/f*(z-H/2)
-u_exp = as_vector([u, v, 0.0])
+# set initial u
+u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method

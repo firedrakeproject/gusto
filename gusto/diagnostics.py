@@ -100,8 +100,8 @@ class CourantNumber(DiagnosticField):
         return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
 
 
-class HorizontalVelocity(DiagnosticField):
-    name = "HorizontalVelocity"
+class VelocityX(DiagnosticField):
+    name = "VelocityX"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -115,8 +115,8 @@ class HorizontalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(uh)
 
 
-class VerticalVelocity(DiagnosticField):
-    name = "VerticalVelocity"
+class VelocityZ(DiagnosticField):
+    name = "VelocityZ"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -130,8 +130,8 @@ class VerticalVelocity(DiagnosticField):
         return self.field(state.mesh).interpolate(w)
 
 
-class MeridionalVelocity(DiagnosticField):
-    name = "MeridionalVelocity"
+class VelocityY(DiagnosticField):
+    name = "VelocityY"
 
     def field(self, mesh):
         if hasattr(self, "_field"):
@@ -273,15 +273,15 @@ class Difference(DiagnosticField):
 class SteadyStateError(Difference):
 
     def __init__(self, state, name):
-        self.fieldname1 = name
-        self.fieldname2 = name+'_init'
+        self.field1 = name
+        self.field2 = name+'_init'
         field1 = state.fields(name)
-        field2 = state.fields(self.fieldname2, field1.function_space())
+        field2 = state.fields(self.field2, field1.function_space())
         field2.assign(field1)
 
     @property
     def name(self):
-        return self.fieldname1+"_error"
+        return self.field1+"_error"
 
 
 class Perturbation(Difference):
