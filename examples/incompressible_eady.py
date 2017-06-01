@@ -91,8 +91,7 @@ diagnostic_fields = [CourantNumber(), VelocityY(),
                      EadyPotentialEnergy(),
                      Sum(KineticEnergy(), EadyPotentialEnergy()),
                      Difference(KineticEnergy(), KineticEnergyY()),
-                     GeostrophicImbalance(), TrueResidualV(),
-                     SawyerEliassenU()]
+                     GeostrophicImbalance(), TrueResidualV()]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
