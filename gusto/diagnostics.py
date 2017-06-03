@@ -1,5 +1,6 @@
-from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant, op2
+from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
+    TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
+    LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
@@ -289,3 +290,57 @@ class Perturbation(Difference):
     @property
     def name(self):
         return self.field1+"_perturbation"
+
+
+class PotentialVorticity(DiagnosticField):
+    """Diagnostic field for potential vorticity."""
+
+    @property
+    def name(self):
+        return "potential_vorticity"
+
+    def field(self, space):
+        """Returns the potential vorticity field.
+
+        :arg space: The continuous finite element space.
+        """
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(space, name=self.name)
+        return self._field
+
+    def solver(self, state, space):
+        """Solver for potential vorticity. Solves
+        a weighted mass system to generate the
+        potential vorticity from known velocity and
+        depth fields.
+
+        :arg state: The state containing model.
+        :arg space: The continuous finite element space.
+        """
+        if hasattr(self, "_solver"):
+            return self._solver
+
+        u = state.fields.u
+        D = state.fields.D
+        gamma = TestFunction(space)
+        q = TrialFunction(space)
+        f = state.fields("coriolis", space)
+
+        cell_normals = CellNormal(state.mesh)
+        gradperp = lambda psi: cross(cell_normals, grad(psi))
+
+        a = q*gamma*D*dx
+        L = (gamma*f - inner(gradperp(gamma), u))*dx
+        pv_problem = LinearVariationalProblem(a, L, self.field(space))
+        solver = LinearVariationalSolver(pv_problem)
+        self._solver = solver
+        return self._solver
+
+    def compute(self, state):
+        """Computes the potential vorticity by solving
+        the weighted mass system.
+        """
+        V = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+        self.solver(state, V).solve()
+        return self.field(V)
