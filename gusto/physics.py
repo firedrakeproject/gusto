@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Interpolator, conditional, Function
+from firedrake import exp, Interpolator, conditional, Function \
+    min_value, max_value
 
 
 class Physics(object):
@@ -85,12 +86,8 @@ class Condensation(Physics):
 
         # adjust cond rate so negative concentrations don't occur
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
-                                                      conditional(-dot_r_cond > self.water_c / dt,
-                                                                  -self.water_c / dt,
-                                                                  dot_r_cond),
-                                                      conditional(dot_r_cond > self.water_v / dt,
-                                                                  self.water_v / dt,
-                                                                  dot_r_cond)), Vt)
+                                                      max_value(dot_r_cond, - self.water_c / dt),
+                                                      min_value(dot_r_cond, self.water_v / dt)), Vt)
 
         self.cond_rate = Function(Vt)
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
