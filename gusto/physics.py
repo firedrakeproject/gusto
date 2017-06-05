@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import exp, Interpolator, conditional, Function \
+from firedrake import exp, Interpolator, conditional, Function, \
     min_value, max_value
 
 
