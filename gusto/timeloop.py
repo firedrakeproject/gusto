@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC, Expression
+from firedrake import DirichletBC
 
 
 class BaseTimestepper(object):
@@ -28,11 +28,9 @@ class BaseTimestepper(object):
         unp1 = self.state.xnp1.split()[0]
 
         if unp1.function_space().extruded:
-            dim = unp1.ufl_element().value_shape()[0]
-            bc = ("0.0",)*dim
             M = unp1.function_space()
-            bcs = [DirichletBC(M, Expression(bc), "bottom"),
-                   DirichletBC(M, Expression(bc), "top")]
+            bcs = [DirichletBC(M, 0.0, "bottom"),
+                   DirichletBC(M, 0.0, "top")]
 
             for bc in bcs:
                 bc.apply(unp1)

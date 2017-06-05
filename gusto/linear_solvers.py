@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -176,10 +176,8 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
@@ -305,10 +303,8 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # preconditioner equation
         L = self.L

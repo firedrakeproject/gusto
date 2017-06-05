@@ -7,9 +7,9 @@ from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Expression, Function, Constant, \
+    Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -19,15 +19,12 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v = TrialFunction(Vv)
     w = TestFunction(Vv)
 
-    unp1 = state.xnp1.split()[0]
-    bc = zero(unp1.ufl_shape)
-
     if top:
         bstring = "top"
     else:
         bstring = "bottom"
 
-    bcs = [DirichletBC(Vv, bc, bstring)]
+    bcs = [DirichletBC(Vv, 0.0, bstring)]
 
     a = inner(w, v)*dx
     L = inner(state.k, w)*b0*dx
@@ -43,7 +40,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], bc, bstring)]
+    bcs = [DirichletBC(WV[0], 0.0, bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
@@ -120,10 +117,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         g = state.parameters.g
         arhs -= g*inner(dv,state.k)*dx
 
-    if(state.mesh.geometric_dimension() == 2):
-        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
-    elif(state.mesh.geometric_dimension() == 3):
-        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.", "0.")), bstring)]
+    bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
+
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
@@ -185,7 +180,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
 
 def remove_initial_w(u, Vv):
-    bc = DirichletBC(u.function_space()[0], Constant((0,0)), "bottom")
+    bc = DirichletBC(u.function_space()[0], 0.0, "bottom")
     bc.apply(u)
     uv = Function(Vv).project(u)
     ustar = Function(u.function_space()).project(uv)
