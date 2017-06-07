@@ -11,20 +11,20 @@ if '--running-tests' in sys.argv:
     tmax = 4.
     deltax = 1000.
 else:
-    deltax = 100.
+    deltax = 1000.
     tmax = 1000.
 
 L = 20000.
 H = 10000.
 nlayers = int(H/deltax)
-ncolumns = 200
+ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_perturbation_T300_even_limiter_highres', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='dry_perturbation_T300', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
@@ -54,12 +54,7 @@ dxp = dx(degree=(quadrature_degree))
 # declare some parameters
 p_0 = params.p_0
 R_d = params.R_d
-R_v = params.R_v
 kappa = params.kappa
-w_sat1 = params.w_sat1
-w_sat2 = params.w_sat2
-w_sat3 = params.w_sat3
-w_sat4 = params.w_sat4
 T_0 = params.T_0
 g = params.g
 cp = params.cp
@@ -111,7 +106,7 @@ thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=None)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))
+advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=None)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
