@@ -24,7 +24,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_perturbation_T300', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='falling_bubble_T300', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
