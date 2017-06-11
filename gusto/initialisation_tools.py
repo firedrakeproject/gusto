@@ -5,7 +5,7 @@ as balanced initial conditions.
 
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, FunctionSpace, SpatialCoordinate, \
+    TestFunction, TrialFunction, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
@@ -254,9 +254,6 @@ def calculate_Pi0(state, theta0, rho0):
     Vr = rho0.function_space()
     Pi_exp = exner(theta0, rho0, state)
     Pi = Function(Vr).interpolate(Pi_exp)
-
-    V = FunctionSpace(state.mesh, "DG", 0)
-    c = Function(V).assign(1.)
-    Pi0 = assemble(Pi*dx)/assemble(c*dx)
+    Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
     return Pi0
