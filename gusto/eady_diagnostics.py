@@ -72,7 +72,7 @@ class GeostrophicImbalance(DiagnosticField):
         self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
         return self._field
 
-    def _setup_solver(self, state):
+    def setup_solver(self, state):
         u = state.fields("u")
         b = state.fields("b")
         p = state.fields("p")
@@ -94,10 +94,15 @@ class GeostrophicImbalance(DiagnosticField):
             imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        f = state.parameters.f
-        self.imbalance_solver.solve()
-        geostrophic_imbalance = self.imbalance[0]/f
-        return self.field(state.mesh).interpolate(geostrophic_imbalance)
+        try:
+            getattr(self, "imbalance_solver")
+        except AttributeError:
+            self.setup_solver(state)
+        finally:
+            f = state.parameters.f
+            self.imbalance_solver.solve()
+            geostrophic_imbalance = self.imbalance[0]/f
+            return self.field(state.mesh).interpolate(geostrophic_imbalance)
 
 
 class TrueResidualV(DiagnosticField):
@@ -109,7 +114,7 @@ class TrueResidualV(DiagnosticField):
         self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
         return self._field
 
-    def _setup_solver(self, state):
+    def setup_solver(self, state):
         unew, pnew, bnew = state.xn.split()
         uold, pold, bold = state.xb.split()
         ubar = 0.5*(unew+uold)
@@ -132,9 +137,14 @@ class TrueResidualV(DiagnosticField):
             vtresproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        self.v_residual_solver.solve()
-        v_residual = self.vtres
-        return self.field(state.mesh).interpolate(v_residual)
+        try:
+            getattr(self, "v_residual_solver")
+        except AttributeError:
+            self.setup_solver(state)
+        finally:
+            self.v_residual_solver.solve()
+            v_residual = self.vtres
+            return self.field(state.mesh).interpolate(v_residual)
 
 
 class SawyerEliassenU(DiagnosticField):
@@ -146,7 +156,7 @@ class SawyerEliassenU(DiagnosticField):
         self._field = Function(state.spaces("HDiv"), name=self.name)
         return self._field
 
-    def _setup_solver(self, state):
+    def setup_solver(self, state):
         u = state.fields("u")
         b = state.fields("b")
         v = inner(u,as_vector([0.,1.,0.]))
@@ -241,9 +251,14 @@ class SawyerEliassenU(DiagnosticField):
             ugproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        self.project_b_solver.solve()
-        self.project_v_solver.solve()
-        self.stream_function_solver.solve()
-        self.sawyer_eliassen_u_solver.solve()
-        sawyer_eliassen_u = self.u
-        return self.field(state).project(sawyer_eliassen_u)
+        try:
+            getattr(self, "sawyer_eliassen_u_solver")
+        except AttributeError:
+            self.setup_solver(state)
+        finally:
+            self.project_b_solver.solve()
+            self.project_v_solver.solve()
+            self.stream_function_solver.solve()
+            self.sawyer_eliassen_u_solver.solve()
+            sawyer_eliassen_u = self.u
+            return self.field(state).project(sawyer_eliassen_u)
