@@ -224,16 +224,6 @@ class SawyerEliassenU(DiagnosticField):
                 )*(dS_h + dS_v)
             )
 
-            # # original form
-            # Equ += eps*(
-            #     inner(grad(grad(psi)), grad(grad(xsi)))*dx
-            #     - (
-            #         avg(dot(dot(grad(grad(psi)), n),n))*jump(grad(xsi), n=n)
-            #         + avg(dot(dot(grad(grad(xsi)), n), n))*jump(grad(psi), n=n)
-            #         - (brennersigma/Constant(1.0/deltax))*jump(grad(psi), n=n)*jump(grad(xsi), n=n)
-            #     )*(dS_h + dS_v)
-            # )
-
         Au = lhs(Equ)
         Lu = rhs(Equ)
         stmproblem = LinearVariationalProblem(Au, Lu, self.stm, bcs=bcs)
