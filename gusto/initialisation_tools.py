@@ -5,11 +5,12 @@ as balanced initial conditions.
 
 from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, \
-    FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Function, Constant, \
+    TestFunction, TrialFunction, SpatialCoordinate, \
+    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
+    Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve
+from gusto.forcing import exner
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -186,3 +187,73 @@ def remove_initial_w(u, Vv):
     ustar = Function(u.function_space()).project(uv)
     uin = Function(u.function_space()).assign(u - ustar)
     u.assign(uin)
+
+
+def eady_initial_v(state, p0, v):
+    f = state.parameters.f
+    x, y, z = SpatialCoordinate(state.mesh)
+
+    # get pressure gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg,g)*dx
+    L = -div(wg)*p0*dx + inner(wg,n)*p0*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    Vp = p0.function_space()
+    phi = TestFunction(Vp)
+    m = TrialFunction(Vp)
+
+    a = f*phi*m*dx
+    L = phi*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v
+
+
+def compressible_eady_initial_v(state, theta0, rho0, v):
+    f = state.parameters.f
+    cp = state.parameters.cp
+
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
+
+    # get Pi gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg,g)*dx
+    L = -div(wg)*Pi*dx + inner(wg,n)*Pi*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    m = TrialFunction(Vr)
+    phi = TestFunction(Vr)
+
+    a = phi*f*m*dx
+    L = phi*cp*theta0*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v
+
+
+def calculate_Pi0(state, theta0, rho0):
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
+
+    return Pi0

@@ -4,9 +4,12 @@ from firedrake import as_vector, SpatialCoordinate, \
     cos, sin, cosh, sinh, tanh, pi
 import sys
 
-dt = 30.
+day = 24.*60.*60.
+hour = 60.*60.
+dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
+    tdump = dt
     # avoid using mumps on Travis
     linear_solver_params = {'ksp_type':'gmres',
                             'pc_type':'fieldsplit',
@@ -16,7 +19,8 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_0_ksp_type':'preonly',
                             'fieldsplit_1_ksp_type':'preonly'}
 else:
-    tmax = 30*24*60*60.
+    tmax = 30*day
+    tdump = 2*hour
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
 
@@ -26,7 +30,7 @@ else:
 # Construct 1d periodic base mesh
 columns = 30  # number of columns
 L = 1000000.
-m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e4, quadrilateral=True)
+m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
 # build 2D mesh by extruding the base mesh
 nlayers = 30  # horizontal layers
@@ -56,12 +60,15 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='nonlinear_eady', dumpfreq=40*36, dumplist=['u','p'], perturbation_fields=['b'])
+output = OutputParameters(dirname='incompressible_eady',
+                          dumpfreq=int(tdump/dt),
+                          dumplist=['u', 'p', 'b'],
+                          perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-parameters = EadyParameters(H=H)
+parameters = EadyParameters(H=H, f=f)
 
 # class for diagnostics
 # fields passed to this class will have basic diagnostics computed
@@ -69,7 +76,11 @@ parameters = EadyParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), VelocityY(),
+                     KineticEnergy(), KineticEnergyY(),
+                     EadyPotentialEnergy(),
+                     Sum(KineticEnergy(), EadyPotentialEnergy()),
+                     Difference(KineticEnergy(), KineticEnergyY())]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -93,19 +104,18 @@ p0 = state.fields("p")
 # spaces
 Vu = u0.function_space()
 Vb = b0.function_space()
+Vp = p0.function_space()
 
-# first setup the background buoyancy profile
-# z.grad(bref) = N**2
-# the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class.
+# parameters
 x, y, z = SpatialCoordinate(mesh)
 Nsq = parameters.Nsq
+
+# background buoyancy
 bref = (z-H/2)*Nsq
-# interpolate the expression to the function
 b_b = Function(Vb).project(bref)
 
 
-# setup constants
+# buoyancy perturbation
 def coth(x):
     return cosh(x)/sinh(x)
 
@@ -118,28 +128,44 @@ def n():
     return Bu**(-1)*sqrt((Bu*0.5-tanh(Bu*0.5))*(coth(Bu*0.5)-Bu*0.5))
 
 
-a = -7.5
+a = -4.5
 Bu = 0.5
-b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)-n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
+b_exp = a*sqrt(Nsq)*(-(1.-Bu*0.5*coth(Bu*0.5))*sinh(Z(z))*cos(pi*(x-L)/L)
+                     - n()*Bu*cosh(Z(z))*sin(pi*(x-L)/L))
 b_pert = Function(Vb).interpolate(b_exp)
 
-# interpolate the expression to the function
-b0.interpolate(b_b + b_pert)
+# set total buoyancy
+b0.project(b_b + b_pert)
 
-# hydrostatic initialisation
+# calculate hydrostatic pressure
+p_b = Function(Vp)
+incompressible_hydrostatic_balance(state, b_b, p_b)
 incompressible_hydrostatic_balance(state, b0, p0)
 
+# set x component of velocity
+dbdy = parameters.dbdy
+u = -dbdy/f*(z-H/2)
+
+# set y component of velocity
+v = Function(Vp).assign(0.)
+eady_initial_v(state, p0, v)
+
+# set initial u
+u_exp = as_vector([u, v, 0.])
+u0.project(u_exp)
+
 # pass these initial conditions to the state.initialise method
-state.initialise({'b': b0})
-# set the background buoyancy
-state.set_reference_profiles({'b':b_b})
+state.initialise({'u':u0, 'p':p0, 'b':b0})
+
+# set the background profiles
+state.set_reference_profiles({'p':p_b, 'b':b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
-supg = False
+supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
                          supg_params={"dg_direction":"horizontal"},
@@ -164,10 +190,9 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
-                      forcing)
+stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)

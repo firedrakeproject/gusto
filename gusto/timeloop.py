@@ -53,7 +53,8 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing,
+                 diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -71,7 +72,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -92,7 +93,7 @@ class Timestepper(BaseTimestepper):
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, pickup)
+            t = state.dump(t, diagnostic_everydump, pickup)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -150,7 +151,7 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t, diagnostic_everydump, pickup=False)
 
         state.diagnostic_dump()
         print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
