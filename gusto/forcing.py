@@ -258,7 +258,7 @@ class EadyForcing(Forcing):
 
         u0,p0,b0 = split(self.x0)
 
-# u_forcing
+        # u_forcing
 
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
@@ -293,7 +293,7 @@ class EadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-# b_forcing
+        # b_forcing
 
         Vb = state.spaces("HDiv_v")
 
@@ -310,7 +310,7 @@ class EadyForcing(Forcing):
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
 
-# divergence_free
+        # divergence_free
 
         Vp = state.spaces("DG")
         p = TrialFunction(Vp)
@@ -364,7 +364,7 @@ class CompressibleEadyForcing(Forcing):
 
         u0,rho0,theta0 = split(self.x0)
 
-# u_forcing
+        # u_forcing
 
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
@@ -414,7 +414,7 @@ class CompressibleEadyForcing(Forcing):
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
 
-# theta_forcing
+        # theta_forcing
 
         Vt = state.spaces("HDiv_v")
 
