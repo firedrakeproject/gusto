@@ -225,6 +225,8 @@ class State(object):
         """
         Dump output
         :arg t: the current model time (default is zero).
+        :arg diagnostic_everydump: dump diagnostics everytime dump()
+        is called.
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
