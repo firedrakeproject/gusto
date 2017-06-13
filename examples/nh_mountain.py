@@ -41,7 +41,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='nh_mountain_smootherz', dumpfreq=18, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber(), VerticalVelocity()]
+diagnostic_fields = [CourantNumber(), VelocityZ()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
