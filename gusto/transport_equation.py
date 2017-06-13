@@ -58,8 +58,8 @@ class TransportEquation(object):
 
         # default solver options
         self.solver_parameters = {'ksp_type':'preonly',
-                                  'pc_type':'bjacobi',
-                                  'sub_pc_type': 'ilu'}
+                                  'pc_type':'lu',
+                                  'pc_factor_mat_solver_package': 'mumps'}
 
     def mass_term(self, q):
         return inner(self.test, q)*dx
