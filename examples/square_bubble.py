@@ -24,7 +24,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_perturbation_T300_diffusion', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='square_bubble_T300_even', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
@@ -76,10 +76,10 @@ xc = 5000.
 zc = 2000.
 rc = 2000.
 tdash = 2.0
-theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0 + (x[1] - zc) ** 2.0) > rc,
-                                                  0.0, tdash *
-                                                  (cos(pi * sqrt(((x[0] - xc) / rc) ** 2.0 + ((x[1] - zc) / rc) ** 2.0) / 2.0))
-                                                  ** 2.0))
+theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0) < rc,
+                                                  conditional(sqrt((x[1] - zc) ** 2.0) < rc,
+                                                              tdash * (cos(pi * sqrt(((x[1] - zc) / rc) ** 2.0) / 2.0) ** 2.0),
+                                                              0.0), 0.0))
 
 # define initial theta
 theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
@@ -138,16 +138,8 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-bcs = [DirichletBC(Vu, 0.0, "bottom"),
-           DirichletBC(Vu, 0.0, "top")]
-
-diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.),
-                                           mu=Constant(10./deltax), bcs=bcs),
-                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.),
-                                               mu=Constant(10./deltax))}
-
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
-                      compressible_forcing, diffusion_dict=diffusion_dict)
+                      compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)

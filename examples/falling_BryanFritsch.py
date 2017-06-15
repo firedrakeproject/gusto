@@ -17,14 +17,14 @@ else:
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
-ncolumns = int(L/deltax)
+ncolumns = 51
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='falling_bubble_T300', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='falling_bubble_T300_odd', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
