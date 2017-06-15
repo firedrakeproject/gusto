@@ -345,8 +345,33 @@ class IncompressibleSolver(TimesteppingSolver):
 
 class ShallowWaterSolver(TimesteppingSolver):
 
-    def _setup_solver(self):
+    def __init__(self, state, params=None):
 
+        if params is None:
+            # Use hybridization parameters
+            params = {'ksp_type': 'preonly',
+                      'mat_type': 'matfree',
+                      'pc_type': 'python',
+                      'pc_python_type': 'firedrake.HybridizationPC',
+                      'hybridization': {'ksp_type': 'cg',
+                                        'pc_type': 'gamg',
+                                        'ksp_rtol': 1e-8,
+                                        'mg_levels': {'ksp_type': 'chebyshev',
+                                                      'ksp_max_it': 2,
+                                                      'pc_type': 'bjacobi',
+                                                      'sub_pc_type': 'ilu'},
+                                        # Broken residual construction
+                                        'hdiv_residual': {'ksp_type': 'cg',
+                                                          'pc_type': 'bjacobi',
+                                                          'sub_pc_type': 'ilu',
+                                                          'ksp_rtol': 1e-8},
+                                        # Projection step
+                                        'hdiv_projection': {'ksp_type': 'cg',
+                                                            'ksp_rtol': 1e-8}}}
+
+        super(ShallowWaterSolver, self).__init__(state, params)
+
+    def _setup_solver(self):
         state = self.state
         H = state.parameters.H
         g = state.parameters.g
