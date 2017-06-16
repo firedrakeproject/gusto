@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC, Expression
+from firedrake import DirichletBC
 
 
 class BaseTimestepper(object):
@@ -28,11 +28,9 @@ class BaseTimestepper(object):
         unp1 = self.state.xnp1.split()[0]
 
         if unp1.function_space().extruded:
-            dim = unp1.ufl_element().value_shape()[0]
-            bc = ("0.0",)*dim
             M = unp1.function_space()
-            bcs = [DirichletBC(M, Expression(bc), "bottom"),
-                   DirichletBC(M, Expression(bc), "top")]
+            bcs = [DirichletBC(M, 0.0, "bottom"),
+                   DirichletBC(M, 0.0, "top")]
 
             for bc in bcs:
                 bc.apply(unp1)
@@ -55,7 +53,8 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing,
+                 diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -63,13 +62,19 @@ class Timestepper(BaseTimestepper):
         self.diffusion_dict = {}
         if diffusion_dict is not None:
             self.diffusion_dict.update(diffusion_dict)
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
         if(isinstance(self.linear_solver, IncompressibleSolver)):
             self.incompressible = True
         else:
             self.incompressible = False
 
-    def run(self, t, tmax, pickup=False):
+        state.xb.assign(state.xn)
+
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -90,9 +95,9 @@ class Timestepper(BaseTimestepper):
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, pickup)
+            t = state.dump(t, diagnostic_everydump, pickup)
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -136,6 +141,7 @@ class Timestepper(BaseTimestepper):
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
+            state.xb.assign(state.xn)
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
@@ -143,14 +149,26 @@ class Timestepper(BaseTimestepper):
                     field = getattr(state.fields, name)
                     diffusion.apply(field, field)
 
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
+
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t, diagnostic_everydump, pickup=False)
 
         state.diagnostic_dump()
-        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
+        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
 
 
 class AdvectionTimestepper(BaseTimestepper):
+
+    def __init__(self, state, advection_dict, physics_list=None):
+
+        super(AdvectionTimestepper, self).__init__(state, advection_dict)
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
     def run(self, t, tmax, x_end=None):
         state = self.state
@@ -161,7 +179,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.setup_dump()
         state.dump()
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 
@@ -173,6 +191,9 @@ class AdvectionTimestepper(BaseTimestepper):
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects field
                 advection.apply(field, field)
+
+            for physics in self.physics_list:
+                physics.apply()
 
             state.dump()
 

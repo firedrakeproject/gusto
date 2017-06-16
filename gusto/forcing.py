@@ -19,7 +19,7 @@ class Forcing(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, state, euler_poincare=True, linear=False):
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
         self.state = state
         if linear:
             self.euler_poincare = False
@@ -41,6 +41,7 @@ class Forcing(object):
         self.scaling = Constant(1.)
         self.mu_scaling = Constant(1.)
         self.topography = hasattr(state.fields, "topography")
+        self.extra_terms = extra_terms
 
         self._build_forcing_solvers()
 
@@ -262,6 +263,51 @@ class EadyForcing(IncompressibleForcing):
         b_out += self.bF
 
 
+class CompressibleEadyForcing(CompressibleForcing):
+    """
+    Forcing class for compressible Eady equations.
+    """
+
+    def forcing_term(self):
+
+        L = super(EadyForcing, self).forcing_term()
+        dthetady = self.state.parameters.dthetady
+        Pi0 = self.state.parameters.Pi0
+        cp = self.state.parameters.cp
+
+        Pi = exner(theta0, rho0, state)
+        Pi_0 = Constant(Pi0)
+
+        L += cp*dthetady*(Pi-Pi_0)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
+        return L
+
+    def _build_forcing_solver(self):
+
+        super(CompressibleEadyForcing, self)._build_forcing_solver()
+        # theta_forcing
+        dthetady = self.state.parameters.dthetady
+        Vt = state.spaces("HDiv_v")
+        F = TrialFunction(Vt)
+        gamma = TestFunction(Vt)
+        self.thetaF = Function(Vt)
+
+        a = gamma*F*dx
+        L = -gamma*(dthetady*inner(u0,as_vector([0.,1.,0.])))*dx
+
+        theta_forcing_problem = LinearVariationalProblem(
+            a,L,self.thetaF
+        )
+
+        self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+
+        super(CompressibleEadyForcing).apply(scaling, x_in, x_nl, x_out, **kwargs):
+        self.theta_forcing_solver.solve()  # places forcing in self.thetaF
+        _, _, theta_out = x_out.split()
+        theta_out += self.thetaF
+
+
 class ShallowWaterForcing(Forcing):
 
     def coriolis_term(self):
@@ -292,3 +338,13 @@ class ShallowWaterForcing(Forcing):
 
         L = g*div(self.test)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
+
+
+class NoForcing(Forcing):
+
+    def _build_forcing_solver(self):
+        pass
+
+    def apply(self, scale, x_in, x_nl, x_out, **kwargs):
+
+        x_out.assign(x_in)

@@ -36,7 +36,7 @@ class TransportEquation(object):
 
         # find out if we are CG
         nvertex = V.ufl_domain().ufl_cell().num_vertices()
-        entity_dofs = V.fiat_element.entity_dofs()
+        entity_dofs = V.finat_element.entity_dofs()
         # If there are as many dofs on vertices as there are vertices,
         # assume a continuous space.
         try:
@@ -58,8 +58,8 @@ class TransportEquation(object):
 
         # default solver options
         self.solver_parameters = {'ksp_type':'preonly',
-                                  'pc_type':'bjacobi',
-                                  'sub_pc_type': 'ilu'}
+                                  'pc_type':'lu',
+                                  'pc_factor_mat_solver_package': 'mumps'}
 
     def mass_term(self, q):
         return inner(self.test, q)*dx

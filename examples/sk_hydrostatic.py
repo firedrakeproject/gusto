@@ -4,7 +4,7 @@ from firedrake import as_vector, SpatialCoordinate,\
 import numpy as np
 import sys
 
-dt = 6.
+dt = 25.
 if '--running-tests' in sys.argv:
     nlayers = 5  # horizontal layers
     columns = 50  # number of columns
@@ -12,9 +12,9 @@ if '--running-tests' in sys.argv:
 else:
     nlayers = 10  # horizontal layers
     columns = 150  # number of columns
-    tmax = 3600.
+    tmax = 60000.0
 
-L = 3.0e5
+L = 6.0e6
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
 # build volume mesh
@@ -23,13 +23,16 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear_3d', dumpfreq=1, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='sk_hydrostatic', dumpfreq=50, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
+Omega = as_vector((0.,0.,0.5e-4))
+
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
+              Coriolis=Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -65,13 +68,12 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 rho_b = Function(Vr)
 
-# Calculate hydrostatic Pi
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-
-a = 5.0e3
+a = 1.0e5
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
+# Calculate hydrostatic Pi
+compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
@@ -96,12 +98,10 @@ schur_params = {'pc_type': 'fieldsplit',
                 'ksp_gmres_restart': 50,
                 'pc_fieldsplit_schur_fact_type': 'FULL',
                 'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
+                'fieldsplit_0_ksp_type': 'preonly',
                 'fieldsplit_0_pc_type': 'bjacobi',
                 'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
+                'fieldsplit_1_ksp_type': 'preonly',
                 "fieldsplit_1_ksp_monitor_true_residual": True,
                 'fieldsplit_1_pc_type': 'gamg',
                 'fieldsplit_1_pc_gamg_sym_graph': True,
@@ -115,7 +115,9 @@ schur_params = {'pc_type': 'fieldsplit',
 linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+# [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
+balanced_pg = as_vector((0.,1.0e-4*20,0))
+compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
