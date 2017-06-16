@@ -41,7 +41,10 @@ class Forcing(object):
         self.scaling = Constant(1.)
         self.mu_scaling = Constant(1.)
         self.topography = hasattr(state.fields, "topography")
-        self.extra_terms = extra_terms
+        if extra_terms is not None:
+            self.extra_terms = extra_terms
+        else:
+            self.extra_terms = []
 
         self._build_forcing_solvers()
 
@@ -75,6 +78,8 @@ class Forcing(object):
             L += self.coriolis_term()
         if self.euler_poincare:
             L += self.euler_poincare_term()
+        for term in self.extra_terms:
+            L += inner(self.test, term)*dx
         L = self.scaling * L
         if self.sponge:
             L += self.mu_scaling*self.sponge_term()
@@ -226,7 +231,8 @@ class EadyForcing(IncompressibleForcing):
 
     def forcing_term(self):
 
-        L = super(EadyForcing, self).forcing_term()
+        # L = super(EadyForcing, self).forcing_term()
+        L = Forcing.forcing_term(self)
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
         Vp = self.state.spaces("DG")
@@ -270,29 +276,32 @@ class CompressibleEadyForcing(CompressibleForcing):
 
     def forcing_term(self):
 
-        L = super(EadyForcing, self).forcing_term()
+        # L = super(EadyForcing, self).forcing_term()
+        L = Forcing.forcing_term(self)
         dthetady = self.state.parameters.dthetady
         Pi0 = self.state.parameters.Pi0
         cp = self.state.parameters.cp
 
-        Pi = exner(theta0, rho0, state)
+        _, rho0, theta0 = split(self.x0)
+        Pi = exner(theta0, rho0, self.state)
         Pi_0 = Constant(Pi0)
 
-        L += cp*dthetady*(Pi-Pi_0)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
+        L += cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0.,1.,0.]))*dx  # Eady forcing
         return L
 
-    def _build_forcing_solver(self):
+    def _build_forcing_solvers(self):
 
-        super(CompressibleEadyForcing, self)._build_forcing_solver()
+        super(CompressibleEadyForcing, self)._build_forcing_solvers()
         # theta_forcing
         dthetady = self.state.parameters.dthetady
-        Vt = state.spaces("HDiv_v")
+        Vt = self.state.spaces("HDiv_v")
         F = TrialFunction(Vt)
         gamma = TestFunction(Vt)
         self.thetaF = Function(Vt)
+        u0, _, _ = split(self.x0)
 
         a = gamma*F*dx
-        L = -gamma*(dthetady*inner(u0,as_vector([0.,1.,0.])))*dx
+        L = -gamma*(dthetady*inner(u0, as_vector([0.,1.,0.])))*dx
 
         theta_forcing_problem = LinearVariationalProblem(
             a,L,self.thetaF
@@ -302,7 +311,7 @@ class CompressibleEadyForcing(CompressibleForcing):
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
-        super(CompressibleEadyForcing).apply(scaling, x_in, x_nl, x_out, **kwargs):
+        Forcing.apply(self, scaling, x_in, x_nl, x_out, **kwargs)
         self.theta_forcing_solver.solve()  # places forcing in self.thetaF
         _, _, theta_out = x_out.split()
         theta_out += self.thetaF

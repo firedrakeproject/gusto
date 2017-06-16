@@ -117,7 +117,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 # Set up forcing
 # [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
 balanced_pg = as_vector((0.,1.0e-4*20,0))
-compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
+compressible_forcing = CompressibleForcing(state, extra_terms=[balanced_pg])
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
