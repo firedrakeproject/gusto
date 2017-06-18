@@ -74,6 +74,7 @@ class CompressibleForcing(Forcing):
         Omega = state.Omega
         cp = state.parameters.cp
         mu = state.mu
+        K_d = state.K_d
 
         n = FacetNormal(state.mesh)
 
@@ -101,6 +102,9 @@ class CompressibleForcing(Forcing):
         if mu is not None:
             self.mu_scaling = Constant(1.)
             L -= self.mu_scaling*mu*inner(w,state.k)*inner(u0,state.k)*dx
+
+        if K_d is not None:
+            L -= K_d * div(w) * div(u) * dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
