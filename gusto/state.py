@@ -86,6 +86,7 @@ class State(object):
                  family="RT",
                  Coriolis=None, sponge_function=None,
                  geopotential_form=False,
+                 divergence_damper=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -96,6 +97,7 @@ class State(object):
         self.Omega = Coriolis
         self.mu = sponge_function
         self.geopotential_form = geopotential_form
+        self.K_d = divergence_damper
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
