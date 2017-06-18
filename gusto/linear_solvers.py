@@ -114,6 +114,7 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
+        K_d = state.K_d
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
@@ -169,6 +170,10 @@ class CompressibleSolver(TimesteppingSolver):
 
         if mu is not None:
             eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+
+        if K_d is not None:
+            eqn += K_d * div(w) * div(u) * dx
+
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 

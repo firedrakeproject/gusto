@@ -104,7 +104,7 @@ class CompressibleForcing(Forcing):
             L -= self.mu_scaling*mu*inner(w,state.k)*inner(u0,state.k)*dx
 
         if K_d is not None:
-            L -= K_d * div(w) * div(u) * dx
+            L -= K_d * div(w) * div(u0) * dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
