@@ -16,6 +16,8 @@ class Forcing(object):
     If False then this term is not added.
     :arg linear: if True then we are solving a linear equation so nonlinear
     terms (namely the Euler Poincare term) should not be added.
+    :arg extra_terms: extra terms to add to the u component of the forcing
+    term - these will be multiplied by the appropriate test function.
     """
     __metaclass__ = ABCMeta
 
@@ -38,13 +40,12 @@ class Forcing(object):
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
+        self.topography = hasattr(state.fields, "topography")
+        self.extra_terms = extra_terms
+
+        # some constants to use for scaling terms
         self.scaling = Constant(1.)
         self.mu_scaling = Constant(1.)
-        self.topography = hasattr(state.fields, "topography")
-        if extra_terms is not None:
-            self.extra_terms = extra_terms
-        else:
-            self.extra_terms = []
 
         self._build_forcing_solvers()
 
@@ -78,13 +79,15 @@ class Forcing(object):
             L += self.coriolis_term()
         if self.euler_poincare:
             L += self.euler_poincare_term()
-        for term in self.extra_terms:
-            L += inner(self.test, term)*dx
-        L = self.scaling * L
-        if self.sponge:
-            L += self.mu_scaling*self.sponge_term()
         if self.topography:
             L += self.topography_term()
+        if self.extra_terms is not None:
+            L += inner(self.test, self.extra_terms)*dx
+        # scale L
+        L = self.scaling * L
+        # sponge term has a separate scaling factor as it is always implicit
+        if self.sponge:
+            L += self.mu_scaling*self.sponge_term()
         return L
 
     def _build_forcing_solvers(self):
@@ -231,19 +234,19 @@ class EadyForcing(IncompressibleForcing):
 
     def forcing_term(self):
 
-        # L = super(EadyForcing, self).forcing_term()
         L = Forcing.forcing_term(self)
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
         Vp = self.state.spaces("DG")
         eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
 
-        L -= dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
+        L -= self.scaling*dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
         return L
 
     def _build_forcing_solvers(self):
 
         super(EadyForcing, self)._build_forcing_solvers()
+
         # b_forcing
         dbdy = self.state.parameters.dbdy
         Vb = self.state.spaces("HDiv_v")
@@ -253,7 +256,7 @@ class EadyForcing(IncompressibleForcing):
         u0, _, b0 = split(self.x0)
 
         a = gamma*F*dx
-        L = -gamma*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
+        L = -self.scaling*gamma*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
 
         b_forcing_problem = LinearVariationalProblem(
             a, L, self.bF
@@ -286,7 +289,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         Pi = exner(theta0, rho0, self.state)
         Pi_0 = Constant(Pi0)
 
-        L += cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0.,1.,0.]))*dx  # Eady forcing
+        L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0.,1.,0.]))*dx  # Eady forcing
         return L
 
     def _build_forcing_solvers(self):
@@ -301,7 +304,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         u0, _, _ = split(self.x0)
 
         a = gamma*F*dx
-        L = -gamma*(dthetady*inner(u0, as_vector([0.,1.,0.])))*dx
+        L = -self.scaling*gamma*(dthetady*inner(u0, as_vector([0.,1.,0.])))*dx
 
         theta_forcing_problem = LinearVariationalProblem(
             a,L,self.thetaF
