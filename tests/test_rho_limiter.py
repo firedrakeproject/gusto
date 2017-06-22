@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, Expression
-from gusto.theta_limiter import RhoLimiter
+from gusto.rho_limiter import RhoLimiter
 import json
 from math import pi
 
