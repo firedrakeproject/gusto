@@ -57,7 +57,7 @@ def setup_rho_limiter(dirname):
     xc = 200.
     zc = 200.
     rc = 100.
-    rho_pert = Function(Vt).interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
+    rho_pert = Function(Vr).interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
                                                     conditional(sqrt((z - zc) ** 2.0) < rc,
                                                                 Constant(0.2),
                                                                 Constant(0.0)), Constant(0.0)))
