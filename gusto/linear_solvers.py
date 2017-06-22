@@ -172,7 +172,7 @@ class CompressibleSolver(TimesteppingSolver):
             eqn += dt*mu*inner(w,k)*inner(u,k)*dx
 
         if K_d is not None:
-            eqn += K_d * div(w) * div(u) * dx
+            eqn += beta*K_d * div(w) * div(u) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
