@@ -127,4 +127,4 @@ class ThetaLimiter(Limiter):
         self.vertex_limiter.apply(self.theta_hat)
         self.copy_vertex_values_back(field)
         self.check_midpoint_values(field)
-        #self.remap_to_embedded_space(field)
+        self.remap_to_embedded_space(field)
