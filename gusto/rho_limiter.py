@@ -106,4 +106,4 @@ class RhoLimiter(Limiter):
         self.copy_vertex_values(field)
         self.vertex_limiter.apply(self.theta_hat)
         self.copy_vertex_values_back(field)
-        #self.remap_to_embedded_space(field)
+        self.remap_to_embedded_space(field)

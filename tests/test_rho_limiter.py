@@ -76,17 +76,16 @@ def setup_rho_limiter(dirname):
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-#    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=RhoLimiter(rho0.function_space()))
 
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)
 
-    return stepper, 500.0
+    return stepper, 300.0
 
 
 def run_rho_limiter(dirname):
