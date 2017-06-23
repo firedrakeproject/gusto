@@ -64,9 +64,6 @@ class Forcing(object):
         u0 = split(self.x0)[0]
         return -0.5*div(self.test)*inner(u0, u0)*dx
 
-    def gravity_term(self):
-        pass
-
     @abstractmethod
     def pressure_gradient_term(self):
         pass
