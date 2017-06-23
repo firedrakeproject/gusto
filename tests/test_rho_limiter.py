@@ -1,7 +1,6 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression
-from gusto.rho_limiter import RhoLimiter
+    SpatialCoordinate, ExtrudedMesh, Expression, VertexBasedLimiter
 import json
 from math import pi
 
@@ -80,7 +79,7 @@ def setup_rho_limiter(dirname):
     # build advection dictionary
     advection_dict = {}
     advection_dict["u"] = NoAdvection(state, u0, None)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=RhoLimiter(rho0.function_space()))
+    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=VertexBasedLimiter(rho0.function_space()))
 
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict)

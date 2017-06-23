@@ -49,12 +49,12 @@ class RhoLimiter(Limiter):
         :param space : FunctionSpace instance
         """
 
-        self.Vt = space
-        self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1) # space with only vertex DOF
+        self.Vr = space
+        self.Q1DG = FunctionSpace(self.Vr.mesh(), 'DG', 1) # space with only vertex DOF
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
         self.theta_hat = Function(self.Q1DG) # theta function with only vertex DOF
-        self.w = Function(self.Vt)
-        self.result = Function(self.Vt)
+        self.w = Function(self.Vr)
+        self.result = Function(self.Vr)
         par_loop(_weight_kernel, dx, {"weight": (self.w, INC)})
         
     def copy_vertex_values(self, field):
@@ -100,10 +100,10 @@ class RhoLimiter(Limiter):
         """
         Re-computes centroids and applies limiter to given field
         """
-        assert field.function_space() == self.Vt, \
+        assert field.function_space() == self.Vr, \
             'Given field does not belong to this objects function space'
 
-        self.copy_vertex_values(field)
-        self.vertex_limiter.apply(self.theta_hat)
-        self.copy_vertex_values_back(field)
-        self.remap_to_embedded_space(field)
+        #self.copy_vertex_values(field)
+        self.vertex_limiter.apply(field)
+        #self.copy_vertex_values_back(field)
+        #self.remap_to_embedded_space(field)
