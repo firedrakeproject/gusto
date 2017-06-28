@@ -88,7 +88,7 @@ def setup_rho_limiter(dirname):
     linear_solver = NoSolver(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+    stepper = AdvectionTimestepper(state, advection_dict)
 
     return stepper, 300.0
 
