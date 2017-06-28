@@ -81,8 +81,14 @@ def setup_rho_limiter(dirname):
     advection_dict["u"] = NoAdvection(state, u0, None)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=VertexBasedLimiter(rho0.function_space()))
 
+    # forcing
+    forcing = NoForcing(state)
+
+    # linear solver
+    linear_solver = NoSolver(state)
+
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict)
+    stepper = Timestepper(state, advection_dict)
 
     return stepper, 300.0
 
