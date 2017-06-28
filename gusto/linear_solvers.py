@@ -408,3 +408,12 @@ class ShallowWaterSolver(TimesteppingSolver):
         """
 
         self.uD_solver.solve()
+
+
+class NoSolver(TimeSteppingSolver):
+
+    def _setup_solver(self):
+        pass
+
+    def solve(self):
+        pass
