@@ -410,7 +410,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         self.uD_solver.solve()
 
 
-class NoSolver(TimeSteppingSolver):
+class NoSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         pass
