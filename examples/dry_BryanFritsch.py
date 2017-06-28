@@ -11,7 +11,7 @@ if '--running-tests' in sys.argv:
     tmax = 4.
     deltax = 1000.
 else:
-    deltax = 500.
+    deltax = 1000.
     tmax = 1000.
 
 L = 10000.
@@ -24,14 +24,13 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_perturbation_bothlimiters', dumpfreq=5, dumplist=['u','theta','rho'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='dry_perturbation_rholimiter_1000res', dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              divergence_damper = 100.0,
               timestepping=timestepping,
               output=output,
               parameters=params,
@@ -106,8 +105,8 @@ thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn, limiter=VertexBasedLimiter(rho0.function_space()))
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))
+advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
+advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
@@ -142,8 +141,11 @@ compressible_forcing = CompressibleForcing(state)
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
 
+diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(50.),
+                                       mu=Constant(10./deltax), bcs=bcs)}
+
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
-                      compressible_forcing)
+                      compressible_forcing, diffusion_dict)
 
 stepper.run(t=0, tmax=tmax)

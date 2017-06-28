@@ -11,15 +11,15 @@ else:
 
 L = 1000.
 H = 1000.
-nlayers = int(H/10.)
-ncolumns = int(L/10.)
+nlayers = int(H/50.)
+ncolumns = int(L/50.)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='rb', dumpfreq=1, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='rb', dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
