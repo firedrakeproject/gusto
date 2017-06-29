@@ -41,8 +41,13 @@ state = State(mesh, horizontal_degree=1,
 u0 = state.fields.u
 D0 = state.fields.D
 
-x, y, z = SpatialCoordinate(mesh)
 R0 = Constant(R)
+
+x0, y0, z0 = SpatialCoordinate(mesh)
+x = R0*x0/sqrt(x0*x0 + y0*y0 + z0*z0)  # because coords can behave unexpectedly
+y = R0*y0/sqrt(x0*x0 + y0*y0 + z0*z0)  # away from nodes, e.g. at quad points
+z = R0*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+
 tc = Constant(0.0)  # Constant to hold the current time
 Tc = Constant(T)
 
