@@ -24,7 +24,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_perturbation_newadvective_200res', dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='dry_perturbation_diffusion_u20_200res', dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
@@ -99,7 +99,7 @@ state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 
 # Set up advection schemes
-ueqn = AdvectionEquation(state, Vu, equation_form="advective")
+ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
@@ -138,8 +138,15 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
+# diffusion
+bcs = [DirichletBC(Vu, 0.0, "bottom"),
+           DirichletBC(Vu, 0.0, "top")]
+
+diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(20.),
+                                       mu=Constant(10./deltax), bcs=bcs)}
+
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
-                      compressible_forcing)
+                      compressible_forcing, diffusion_dict=diffusion_dict)
 
 stepper.run(t=0, tmax=tmax)
