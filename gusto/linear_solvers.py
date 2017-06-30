@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
@@ -104,6 +104,9 @@ class CompressibleSolver(TimesteppingSolver):
                            'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
         else:
             self.params = params
+        
+        # Hydrostatic projector
+        self.P = state.P
 
         # setup the solver
         self._setup_solver()
@@ -154,15 +157,9 @@ class CompressibleSolver(TimesteppingSolver):
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
-        
-        a =inner(w, (u - u_in))*dx
-        '''
-        #Projection for hydrostatic case
-        if state.h is True:
-            a -= (inner(state.k, w)*inner(state.k ,u))*dx
-        '''
+
         eqn = (
-            a
+            inner(w, (self.P(u) - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
@@ -182,10 +179,8 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
@@ -256,7 +251,7 @@ class IncompressibleSolver(TimesteppingSolver):
                            'fieldsplit_0_pc_type':'lu',
                            'fieldsplit_1_pc_type':'lu',
                            'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
+                           'fieldsplit_1_pc_factor_mat_solver_package': 'mumps',
                            'fieldsplit_0_ksp_type':'preonly',
                            'fieldsplit_1_ksp_type':'preonly'}
         else:
@@ -311,10 +306,8 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # preconditioner equation
         L = self.L

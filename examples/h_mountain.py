@@ -1,33 +1,40 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
+from firedrake import Expression, FunctionSpace, as_vector, \
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
 import sys
+from numpy import pi
 
-dt = 5.0
+# Parameters
+Length = 240000
+Height = 50000.
+res = 12
+columns = res*12
+nlayers = res*20
+dt = 0.1
+dumpfrequency = 1
+tmax = 5.
+Tsurf = 250.
+u_av = 1e-11 # Final speed 20.
+hill_profile_value = Constant(10000.)
+mu_value = 0.3
+sponge_layer = Height - 20000.
+hydrostatic_switch = True
+
 if '--running-tests' in sys.argv:
     tmax = dt
-else:
-    tmax = 9000.
 
-n = 2
-
-nlayers = 7*n  # horizontal layers
-columns = 18*n  # number of columns
-L = 144000.
-m = PeriodicIntervalMesh(columns, L)
+m = PeriodicIntervalMesh(columns, Length)
 
 # build volume mesh
-H = 35000.  # Height position of the model top
-ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
 x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
-H = Constant(H)
-a = Constant(1000.)
-xc = Constant(L/2.)
+H = Constant(Height)
+xc = Constant(Length/2.)
 smooth_z = True
 if smooth_z:
-    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
+    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=hill_profile_value, xc=xc)
     new_coords = Function(Vc).interpolate(xexpr)
 else:
     new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
@@ -35,20 +42,20 @@ mesh = Mesh(new_coords)
 
 # sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
-mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
+mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=sponge_layer, mubar=mu_value/dt)
 # mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='h_mountain_smootherz', dumpfreq=18, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='h_mountain_test4', dumpfreq=dumpfrequency, dumplist=['u'], perturbation_fields=['theta', 'rho'], Verbose=False)
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber(), VerticalVelocity()]
+diagnostic_fields = [CourantNumber(), VelocityZ()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
               sponge_function=mu,
-              hydrostatic=True,
+              hydrostatic=hydrostatic_switch,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -69,7 +76,6 @@ Vr = rho0.function_space()
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
 g = parameters.g
-N = parameters.N
 p_0 = parameters.p_0
 c_p = parameters.cp
 R_d = parameters.R_d
@@ -77,8 +83,10 @@ kappa = parameters.kappa
 
 x, z = SpatialCoordinate(mesh)
 
+# Hydrostatic case: Isothermal with T = 250
+N = g/sqrt(c_p*Tsurf)
+
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
@@ -97,7 +105,7 @@ params = {'pc_type': 'fieldsplit',
           'fieldsplit_0_sub_pc_type': 'ilu',
           'fieldsplit_1_ksp_type': 'richardson',
           'fieldsplit_1_ksp_max_it': 5,
-          "fieldsplit_1_ksp_monitor_true_residual": True,
+          #"fieldsplit_1_ksp_monitor_true_residual": True,
           'fieldsplit_1_pc_type': 'bjacobi',
           'fieldsplit_1_sub_pc_type': 'ilu'}
 Pi = Function(Vr)
@@ -125,7 +133,7 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundar
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
-u0.project(as_vector([10.0,0.0]))
+u0.project(as_vector([u_av,0.0]))
 remove_initial_w(u0, state.Vv)
 
 state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
@@ -145,13 +153,13 @@ advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
 advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
 
 # Set up linear solver
-lu_params = {
-'pc_type':'lu',
-'ksp_type':'preonly',
-'pc_factor_mat_solver_package':'mumps',
-'mat_type':'aij',
-'ksp_converged_reason':True}
+lu_params = {'pc_type':'lu',
+             'ksp_type':'preonly',
+             'pc_factor_mat_solver_package':'mumps',
+             'mat_type':'aij' #,'ksp_converged_reason':True
+             }
 
+# Non-hydrostatic parameters:
 schur_params = {'pc_type': 'fieldsplit',
                 'pc_fieldsplit_type': 'schur',
                 'ksp_type': 'gmres',
@@ -160,26 +168,34 @@ schur_params = {'pc_type': 'fieldsplit',
                 'ksp_gmres_restart': 50,
                 'pc_fieldsplit_schur_fact_type': 'FULL',
                 'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
+                'fieldsplit_0_ksp_type': 'preonly',
                 'fieldsplit_0_pc_type': 'bjacobi',
                 'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": True,
+                'fieldsplit_1_ksp_type': 'preonly',
                 'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_pc_gamg_sym_graph': True,
                 'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
                 'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
                 'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 5,
+                'fieldsplit_1_mg_levels_ksp_max_it': 1,
+                #'fieldsplit_1_mg_levels_ksp_monitor_true_residual': True,
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, params=schur_params)
+
+# Increase background windspeed to 20m/s over 500s
+def wind_forcing(t):
+    """Wind forcing of form 1/(1 + t^4)"""
+
+    peak = 250.
+    a_av = 20.
+    
+    return (1/(1-state.timestepping.alpha)*5/7*a_av/(100*pi)*
+           (1./(1. + ((t-peak)/100)**4))*state.i)
+
+linear_solver = CompressibleSolver(state, params=lu_params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state, extra_terms=None) #wind_forcing)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,

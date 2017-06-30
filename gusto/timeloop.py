@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC, Expression
+from firedrake import DirichletBC
 
 
 class BaseTimestepper(object):
@@ -28,11 +28,9 @@ class BaseTimestepper(object):
         unp1 = self.state.xnp1.split()[0]
 
         if unp1.function_space().extruded:
-            dim = unp1.ufl_element().value_shape()[0]
-            bc = ("0.0",)*dim
             M = unp1.function_space()
-            bcs = [DirichletBC(M, Expression(bc), "bottom"),
-                   DirichletBC(M, Expression(bc), "top")]
+            bcs = [DirichletBC(M, 0.0, "bottom"),
+                   DirichletBC(M, 0.0, "top")]
 
             for bc in bcs:
                 bc.apply(unp1)
@@ -55,7 +53,8 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing, diffusion_dict=None, physics_list=None):
+    def __init__(self, state, advection_dict, linear_solver, forcing,
+                 diffusion_dict=None, physics_list=None):
 
         super(Timestepper, self).__init__(state, advection_dict)
         self.linear_solver = linear_solver
@@ -73,7 +72,9 @@ class Timestepper(BaseTimestepper):
         else:
             self.incompressible = False
 
-    def run(self, t, tmax, pickup=False):
+        state.xb.assign(state.xn)
+
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
 
         xstar_fields = {name: func for (name, func) in
@@ -87,23 +88,24 @@ class Timestepper(BaseTimestepper):
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
-        if state.mu is not None:
-            mu_alpha = [0., dt]
+        if state.mu or state.h is not None:
+            stage = [0., 1.]
         else:
-            mu_alpha = [None, None]
-
+            stage = [None, None]
+        
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, pickup)
+            t = state.dump(t, diagnostic_everydump, pickup)
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
-
+            
+            state.time = t
             t += dt
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, mu_alpha=mu_alpha[0])
+                                   state.xstar, stage=stage[0], time=t)
                 state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
@@ -121,7 +123,7 @@ class Timestepper(BaseTimestepper):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha=mu_alpha[1],
+                                           state.xrhs, stage=stage[1],
                                            incompressible=self.incompressible)
 
                         state.xrhs -= state.xnp1
@@ -140,6 +142,7 @@ class Timestepper(BaseTimestepper):
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
+            state.xb.assign(state.xn)
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
@@ -152,10 +155,10 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t, diagnostic_everydump, pickup=False)
 
         state.diagnostic_dump()
-        print "TIMELOOP complete. t= "+str(t-dt)+" tmax="+str(tmax)
+        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
 
 
 class AdvectionTimestepper(BaseTimestepper):
@@ -177,7 +180,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.setup_dump()
         state.dump()
 
-        while t < tmax + 0.5*dt:
+        while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print "STEP", t, dt
 

@@ -58,8 +58,8 @@ class TransportEquation(object):
 
         # default solver options
         self.solver_parameters = {'ksp_type':'preonly',
-                                  'pc_type':'bjacobi',
-                                  'sub_pc_type': 'ilu'}
+                                  'pc_type':'lu',
+                                  'pc_factor_mat_solver_package': 'mumps'}
 
     def mass_term(self, q):
         return inner(self.test, q)*dx
@@ -290,6 +290,9 @@ class VectorInvariant(TransportEquation):
         super(VectorInvariant, self).__init__(state, V, ibp)
 
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
+        
+        # Hydrostatic projector
+        self.P = self.state.P
 
         if self.state.mesh.topological_dimension() == 2:
             self.perp = state.perp
@@ -305,35 +308,29 @@ class VectorInvariant(TransportEquation):
         else:
             raise RuntimeError("topological mesh dimension must be 2 or 3")
 
-        #Project test function for hydrostatic case
-        if self.state.h is True:
-            self.test_h = self.test - self.state.k*inner(self.test, self.state.k)
-        else:
-            self.test_h = self.test
-
     def advection_term(self, q):
-
+    
         if self.state.mesh.topological_dimension() == 3:
             # <w,curl(u) cross ubar + grad( u.ubar)>
             # =<curl(u),ubar cross w> - <div(w), u.ubar>
             # =<u,curl(ubar cross w)> -
             #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
-
+        
             both = lambda u: 2*avg(u)
-
+            
             L = (
-                inner(q, curl(cross(self.ubar, self.test_h)))*dx
-                - inner(both(self.Upwind*q),
-                        both(cross(self.n, cross(self.ubar, self.test_h))))*self.dS
+                inner(self.P(q), curl(cross(self.ubar, self.P(self.test))))*dx
+                - inner(both(self.Upwind*self.P(q)),
+                        both(cross(self.n, cross(self.ubar, self.P(self.test)))))*self.dS
             )
-
+    
         else:
-
+        
             if self.ibp == "once":
                 L = (
-                    -inner(self.gradperp(inner(self.test_h, self.perp(self.ubar))), q)*dx
-                    - inner(jump(inner(self.test_h, self.perp(self.ubar)), self.n),
-                            self.perp_u_upwind(q))*self.dS
+                    -inner(self.gradperp(inner(self.P(self.test), self.perp(self.ubar))), self.P(q))*dx
+                    - inner(jump(inner(self.P(self.test), self.perp(self.ubar)), self.n),
+                            self.perp_u_upwind(self.P(q)))*self.dS
                 )
             else:
                 L = (
@@ -343,8 +340,8 @@ class VectorInvariant(TransportEquation):
                     + jump(inner(self.test,
                                  self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                 )
-
-        L -= 0.5*div(self.test_h)*inner(q, self.ubar)*dx
+                    
+        L -= 0.5*div(self.P(self.test))*inner(self.P(q), self.ubar)*dx
 
         return L
 
@@ -352,14 +349,14 @@ class VectorInvariant(TransportEquation):
 class EulerPoincare(VectorInvariant):
     """
     Class defining the Euler-Poincare form of the vector advection equation.
-
+    
     :arg state: :class:`.State` object.
     :arg V: Function space
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
     """
-
+    
     def advection_term(self, q):
         L = super(EulerPoincare, self).advection_term(q)
-        L -= 0.5*div(self.test_h)*inner(q, self.ubar)*dx
+        L -= 0.5*div(self.P(self.test))*inner(self.P(q), self.ubar)*dx
         return L
