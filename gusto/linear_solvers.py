@@ -353,12 +353,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         K = Tensor(beta*cp*inner(thetabar*w,n)*l0*(dS_vp + dS_hp)
                    + beta*cp*inner(thetabar*w,n)*l0*ds_vp
-                   + beta*cp*inner(thetabar*w,n)*l0*ds_tbp
-        )
+                   + beta*cp*inner(thetabar*w,n)*l0*ds_tbp)
         L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp)
-                   + dl*inner(u,n)*ds_vp 
-                   + dl*inner(u,n)*ds_tbp
-        )
+                   + dl*inner(u,n)*ds_vp
+                   + dl*inner(u,n)*ds_tbp)
 
         #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
         # reduced eqns for l0
