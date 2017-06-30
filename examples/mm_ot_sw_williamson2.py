@@ -27,7 +27,7 @@ for ref_level, dt in ref_dt.iteritems():
 
     dirname = "mm_ot_sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=3)
+                                 refinement_level=ref_level, degree=2)
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
     mesh.init_cell_orientations(global_normal)
 
@@ -45,16 +45,21 @@ for ref_level, dt in ref_dt.iteritems():
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
-    x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
+
+    x0, y0, z0 = SpatialCoordinate(mesh)
     R0 = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
+    x = R0*x0/sqrt(x0*x0 + y0*y0 + z0*z0)  # because coords can behave unexpectedly
+    y = R0*y0/sqrt(x0*x0 + y0*y0 + z0*z0)  # away from nodes, e.g. at quad points
+    z = R0*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+
+    u_max = Constant(u_0)
+    uexpr = as_vector([-u_max*y/R0, u_max*x/R0, 0.0])
     h0 = Constant(H)
     Omega = Constant(parameters.Omega)
     g = Constant(parameters.g)
-    Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
+    Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(z*z/(R0*R0)))/g
     # Coriolis expression
-    fexpr = 2*Omega*x[2]/R0
+    fexpr = 2*Omega*z/R0
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)
@@ -69,15 +74,15 @@ for ref_level, dt in ref_dt.iteritems():
     state.uexpr = uexpr
 
     advection_dict = {}
-    # advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["u"] = NoAdvection(state, u0)
+    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
+    # advection_dict["u"] = NoAdvection(state, u0)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    # sw_forcing = ShallowWaterForcing(state)
-    sw_forcing = NoForcing(state)
+    sw_forcing = ShallowWaterForcing(state)
+    # sw_forcing = NoForcing(state)
 
     def initialise_fn():
         state.fields("u").project(uexpr)

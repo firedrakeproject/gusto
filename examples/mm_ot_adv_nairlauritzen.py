@@ -107,7 +107,7 @@ def initialise_fn():
     state.fields("D").interpolate(Dexpr)
 
 
-monitor = MonitorFunction(state.fields("D"))
+monitor = MonitorFunction(state.fields("D"), adapt_to="hessian", avg_weight=0.5, max_min_cap=4.0)
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 
 mesh_generator.get_first_mesh(initialise_fn)

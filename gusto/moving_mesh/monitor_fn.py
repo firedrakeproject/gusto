@@ -179,10 +179,12 @@ class MonitorFunction(object):
         else:
             # consider doing this step twice (or more), since m_avg will
             # decrease after m_prereg is capped
-            for ii in range(1):
+            for ii in range(4):
                 m_int = assemble(self.m_integral)
                 m_avg = m_int/self.total_area
                 self.m_prereg.dat.data[:] = np.fmin(self.m_prereg.dat.data[:], (self.max_min_cap - 1.0)*(self.avg_weight/(1.0 - self.avg_weight))*m_avg)
+                print m_int, assemble(self.m_integral)
+            print
 
             self.m.assign(Constant(self.avg_weight)*Constant(m_avg) + Constant(1.0 - self.avg_weight)*self.m_prereg)
 
@@ -194,7 +196,7 @@ class MonitorFunction(object):
         self.m.dat.data[:] /= m_min
 
         # debugging
-        # print max(m.dat.data_ro)/min(m.dat.data_ro)
+        # print "after creation:", np.min(self.m.dat.data_ro), np.max(self.m.dat.data_ro)
 
         # return the monitor function, or do nothing?
         # return self.m
@@ -242,6 +244,8 @@ class MonitorFunction(object):
 
         # project self.m_dg back into P1 as self.m
         self.solv_m_p1_proj.solve()
+
+        # print "after advection:", np.min(self.m.dat.data_ro), np.max(self.m.dat.data_ro)
 
         # safety check for now
         assert (self.m.dat.data_ro >= 0.0).all()
