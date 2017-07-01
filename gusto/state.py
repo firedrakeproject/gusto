@@ -166,6 +166,9 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
+        # Store time step
+        self.time = Constant(0.)
+
     # Project test function for hydrostatic case
     def P(self, q):
         if self.h is True:

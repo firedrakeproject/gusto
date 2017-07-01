@@ -7,12 +7,12 @@ from numpy import pi
 # Parameters
 Length = 240000
 Height = 50000.
-res = 12
+res = 1
 columns = res*12
 nlayers = res*20
-dt = 0.1
-dumpfrequency = 1
-tmax = 5.
+dt = 5
+dumpfrequency = 2
+tmax = 800.
 Tsurf = 250.
 u_av = 1e-11 # Final speed 20.
 hill_profile_value = Constant(10000.)
@@ -47,7 +47,7 @@ mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='h_mountain_test4', dumpfreq=dumpfrequency, dumplist=['u'], perturbation_fields=['theta', 'rho'], Verbose=False)
+output = OutputParameters(dirname='h_mountain_test5', dumpfreq=dumpfrequency, dumplist=['u'], perturbation_fields=['theta', 'rho'], Verbose=False)
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityZ()]
@@ -183,19 +183,17 @@ schur_params = {'pc_type': 'fieldsplit',
 
 
 # Increase background windspeed to 20m/s over 500s
-def wind_forcing(t):
-    """Wind forcing of form 1/(1 + t^4)"""
+f_peak = 250.
+u_t = 20.
 
-    peak = 250.
-    a_av = 20.
-    
-    return (1/(1-state.timestepping.alpha)*5/7*a_av/(100*pi)*
-           (1./(1. + ((t-peak)/100)**4))*state.i)
+wind_forcing = (1/(1-state.timestepping.alpha)*5/7*u_t/(100*pi)*
+               (1./(1. + ((state.time-f_peak)/100)**4))*state.i)
+
 
 linear_solver = CompressibleSolver(state, params=lu_params)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, extra_terms=None) #wind_forcing)
+compressible_forcing = CompressibleForcing(state, extra_terms=wind_forcing)
 
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,

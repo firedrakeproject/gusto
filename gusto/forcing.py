@@ -79,7 +79,6 @@ class CompressibleForcing(Forcing):
         cp = state.parameters.cp
         mu = state.mu
         self.stage = Constant(1.)
-        self.time = Constant(0.)
 
         n = FacetNormal(state.mesh)
 
@@ -106,10 +105,6 @@ class CompressibleForcing(Forcing):
 
         if state.h is True:
             L += (2*self.stage-1)*inner(u0, state.k)*inner(w, state.k)*dx  # Hydrostatic term
-            
-            # Time dependent initial forcing
-            if self.extra_terms is not None:
-                self.extra_terms = self.extra_terms(self.time)
         
         if mu is not None:
             L -= self.stage*state.timestepping.dt*mu*inner(w,state.k)*inner(u0,state.k)*dx
@@ -132,8 +127,6 @@ class CompressibleForcing(Forcing):
         self.scaling.assign(scaling)
         if 'stage' in kwargs and kwargs['stage'] is not None:
             self.stage.assign(kwargs['stage'])
-        if 'time' in kwargs:
-            self.time.assign(kwargs['time'])
         
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
