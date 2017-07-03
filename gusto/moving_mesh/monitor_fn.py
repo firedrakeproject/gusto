@@ -4,7 +4,7 @@ from mpi4py import MPI
 from firedrake import FunctionSpace, VectorFunctionSpace, TensorFunctionSpace, \
     Function, Constant, dx, dS, assemble, TrialFunction, TestFunction, sqrt, \
     dot, inner, FacetNormal, jump, grad, div, as_vector, \
-    LinearVariationalProblem, LinearVariationalSolver, LinearSolver, par_loop, \
+    LinearVariationalProblem, LinearVariationalSolver, par_loop, \
     RW, READ, Mesh
 
 
@@ -111,23 +111,31 @@ class MonitorFunction(object):
             self.L_monitor = v_p1*sqrt(inner(self.hessf, self.hessf))*dx
 
         # Define mesh 'backwards advection'
+        dgparams = {'ksp_type': 'preonly',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'}
+
         u_dg = TrialFunction(DP1)
         v_dg = TestFunction(DP1)
         n = FacetNormal(self.mesh)
 
-        self.a_dg = v_dg*u_dg*dx
+        a_dg = v_dg*u_dg*dx
         vn = 0.5*(dot(self.mesh_adv_vel, n) + abs(dot(self.mesh_adv_vel, n)))
-        self.L_madv = self.m_dg*div(v_dg*self.mesh_adv_vel)*dx - jump(v_dg)*jump(vn*self.m_dg)*dS
-        self.L_madv_fn = Function(DP1)
-        self.a_dg_mat = assemble(self.a_dg)
+        L_madv = self.m_dg*div(v_dg*self.mesh_adv_vel)*dx - jump(v_dg)*jump(vn*self.m_dg)*dS
+
+        prob_madv = LinearVariationalProblem(a_dg, L_madv, self.dm)
+        self.solv_madv = LinearVariationalSolver(prob_madv,
+                                                 solver_parameters=dgparams)
 
         # Set up forms for centroid-generation (slope limiter)
         u_p0 = TrialFunction(P0)
         v_p0 = TestFunction(P0)
-        self.a_p0 = v_p0*u_p0*dx
-        self.L_p0 = v_p0*self.m_dg*dx
-        self.a_p0_mat = assemble(self.a_p0)
-        self.a_p0_rhs = Function(P0)
+        a_p0 = v_p0*u_p0*dx
+        L_p0 = v_p0*self.m_dg*dx
+
+        prob_madv_p0 = LinearVariationalProblem(a_p0, L_p0, self.mbar)
+        self.solv_madv_p0 = LinearVariationalSolver(prob_madv_p0,
+                                                    solver_parameters=dgparams)
 
         # Set up forms for projection of DG m back into P1
         u_p1 = TrialFunction(P1)
@@ -212,32 +220,18 @@ class MonitorFunction(object):
         # Make discontinuous m
         self.m_dg.interpolate(self.m_old)
 
-        # Set up solver. Do this here rather than setting
-        # constant_jacobian=False, since doing several steps
-        assemble(self.a_dg, tensor=self.a_dg_mat)
-        A = LinearSolver(self.a_dg_mat,
-                         solver_parameters={'ksp_type': 'preonly',
-                                            'pc_type': 'bjacobi',
-                                            'sub_pc_type': 'ilu'})
-
-        assemble(self.a_p0, tensor=self.a_p0_mat)
-        A_p0 = LinearSolver(self.a_p0_mat,
-                            solver_parameters={'ksp_type': 'preonly',
-                                               'pc_type': 'bjacobi',
-                                               'sub_pc_type': 'ilu'})
-
         # Advect m by -v
+        self.solv_madv.invalidate_jacobian()
+        self.solv_madv_p0.invalidate_jacobian()
         steps = 5
         for ii in range(steps):
-            # assemble and solve advection step
-            assemble(self.L_madv, tensor=self.L_madv_fn)
-            A.solve(self.dm, self.L_madv_fn)
+            # solve advection step
+            self.solv_madv.solve()
 
             self.m_dg.assign(self.m_dg + Constant(1.0/steps)*self.dm)
 
             # obtain centroids for slope limiting
-            assemble(self.L_p0, tensor=self.a_p0_rhs)
-            A_p0.solve(self.mbar, self.a_p0_rhs)
+            self.solv_madv_p0.solve()
 
             # perform slope limiting
             self._limit_slope(self.m_dg, self.mbar, self.m_max, self.m_min)
