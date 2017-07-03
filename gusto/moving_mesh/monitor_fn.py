@@ -183,8 +183,8 @@ class MonitorFunction(object):
                 m_int = assemble(self.m_integral)
                 m_avg = m_int/self.total_area
                 self.m_prereg.dat.data[:] = np.fmin(self.m_prereg.dat.data[:], (self.max_min_cap - 1.0)*(self.avg_weight/(1.0 - self.avg_weight))*m_avg)
-                print m_int, assemble(self.m_integral)
-            print
+                # print m_int, assemble(self.m_integral)
+            # print
 
             self.m.assign(Constant(self.avg_weight)*Constant(m_avg) + Constant(1.0 - self.avg_weight)*self.m_prereg)
 
