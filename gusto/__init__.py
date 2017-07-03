@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from gusto.configuration import *   # noqa
 from gusto.advection import *       # noqa
 from gusto.diagnostics import *     # noqa
+from gusto.eady_diagnostics import *     # noqa
 from gusto.diffusion import *     # noqa
 from gusto.transport_equation import *     # noqa
 from gusto.forcing import *         # noqa
