@@ -64,9 +64,9 @@ class Advection(object):
             self.xdg_in = Function(equation.space)
             self.xdg_out = Function(equation.space)
             self.x_projected = Function(field.function_space())
-            parameters = {'ksp_type':'cg',
-                          'pc_type':'bjacobi',
-                          'sub_pc_type':'ilu'}
+            parameters = {'ksp_type': 'cg',
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
             self.xdg_in = Function(fs)

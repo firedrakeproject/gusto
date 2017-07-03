@@ -32,7 +32,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 ##############################################################################
 # Coriolis expression
 f = 1.e-04
-Omega = as_vector([0.,0.,f*0.5])
+Omega = as_vector([0., 0., f*0.5])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -52,7 +52,7 @@ timestepping = TimesteppingParameters(dt=dt)
 # and documented in configuration.py
 output = OutputParameters(dirname='compressible_eady',
                           dumpfreq=int(tdump/dt),
-                          dumplist=['u','rho','theta'],
+                          dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['rho', 'theta'])
 
 # class containing physical parameters
@@ -160,10 +160,10 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u':u0, 'rho':rho0, 'theta':theta0})
+state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 
 # set the background profiles
-state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
 ##############################################################################
 # Set up advection schemes
@@ -171,7 +171,7 @@ state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
+thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
 
 advection_dict = {}
 advection_dict["u"] = SSPRK3(state, u0, ueqn)

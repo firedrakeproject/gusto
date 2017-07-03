@@ -30,7 +30,7 @@ def setup_tracer(dirname):
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
-                  diagnostic_fields=[Difference('theta','tracer')])
+                  diagnostic_fields=[Difference('theta', 'tracer')])
 
     # declare initial fields
     u0 = state.fields("u")
@@ -75,7 +75,7 @@ def setup_tracer(dirname):
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction":"horizontal"},
+                             supg_params={"dg_direction": "horizontal"},
                              equation_form="advective")
 
     # build advection dictionary

@@ -4,10 +4,10 @@ from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
 import sys
 
 if '--running-tests' in sys.argv:
-    res_dt = {800.:4.}
+    res_dt = {800.: 4.}
     tmax = 4.
 else:
-    res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+    res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
 
 L = 51200.
@@ -69,8 +69,8 @@ for delta, dt in res_dt.iteritems():
     water0.interpolate(theta_pert)
     rho0.assign(rho_b)
 
-    state.initialise({'u':u0, 'rho':rho0, 'theta': theta0, 'water': water0})
-    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0, 'water': water0})
+    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -78,10 +78,10 @@ for delta, dt in res_dt.iteritems():
     supg = True
     if supg:
         thetaeqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction":"horizontal"},
+                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
         watereqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction":"horizontal"},
+                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
     else:
         thetaeqn = EmbeddedDGAdvection(state, Vt,

@@ -28,7 +28,7 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-Omega = as_vector((0.,0.,0.5e-4))
+Omega = as_vector((0., 0., 0.5e-4))
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
@@ -78,12 +78,12 @@ rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
 state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
+thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
 advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
@@ -116,7 +116,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
 # [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
-balanced_pg = as_vector((0.,1.0e-4*20,0))
+balanced_pg = as_vector((0., 1.0e-4*20, 0.))
 compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
 
 # build time stepper
