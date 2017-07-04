@@ -118,7 +118,7 @@ class Forcing(object):
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
-        self.mu_scaling = kwargs.get('mu_alpha')
+        self.mu_scaling.assign(kwargs.get('mu_alpha'))
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         uF = x_out.split()[0]
