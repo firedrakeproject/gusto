@@ -197,6 +197,14 @@ class ThetaMethod(Advection):
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
     def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+
+        if not solver_params:
+            # theta method leads to asymmetric matrix, per lhs function below,
+            # so don't use CG
+            solver_params = {'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
         super(ThetaMethod, self).__init__(state, field, equation, solver_params)
 
         self.theta = theta
