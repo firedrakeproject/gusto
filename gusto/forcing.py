@@ -118,14 +118,12 @@ class Forcing(object):
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
-        self.x_out = x_out
-        if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
-            self.mu_scaling.assign(kwargs['mu_alpha'])
+        self.mu_scaling = kwargs.get('mu_alpha')
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
-        uF = self.x_out.split()[0]
+        uF = x_out.split()[0]
 
-        self.x_out.assign(x_in)
+        x_out.assign(x_in)
         uF += self.uF
 
 
@@ -222,7 +220,7 @@ class IncompressibleForcing(Forcing):
 
         super(IncompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         if 'incompressible' in kwargs and kwargs['incompressible']:
-            _, p_out, _ = self.x_out.split()
+            _, p_out, _ = x_out.split()
             self.divergence_solver.solve()
             p_out.assign(self.divu)
 
@@ -268,7 +266,7 @@ class EadyForcing(IncompressibleForcing):
 
         super(EadyForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         self.b_forcing_solver.solve()  # places forcing in self.bF
-        _, _, b_out = self.x_out.split()
+        _, _, b_out = x_out.split()
         b_out += self.bF
 
 
