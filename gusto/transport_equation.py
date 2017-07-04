@@ -236,6 +236,14 @@ class SUPGAdvection(AdvectionEquation):
                         linear solver.
     """
     def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+
+        if not solver_params:
+            # SUPG method leads to asymmetric matrix (since the test function
+            # is effectively modified), so don't use CG
+            solver_params = {'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
         super(SUPGAdvection, self).__init__(state, V, ibp, equation_form, solver_params)
 
         # if using SUPG we either integrate by parts twice, or not at all
