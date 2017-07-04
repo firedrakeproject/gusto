@@ -137,7 +137,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than pi') in the vertical
         # component of the gradient
@@ -149,7 +149,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
@@ -162,13 +162,13 @@ class CompressibleSolver(TimesteppingSolver):
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_vp
+            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -195,7 +195,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta = Function(Vtheta)
 
         theta_eqn = gamma*(theta - theta_in +
-                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -242,15 +242,15 @@ class IncompressibleSolver(TimesteppingSolver):
         self.state = state
 
         if params is None:
-            self.params = {'ksp_type':'gmres',
-                           'pc_type':'fieldsplit',
-                           'pc_fieldsplit_type':'additive',
-                           'fieldsplit_0_pc_type':'lu',
-                           'fieldsplit_1_pc_type':'lu',
+            self.params = {'ksp_type': 'gmres',
+                           'pc_type': 'fieldsplit',
+                           'pc_fieldsplit_type': 'additive',
+                           'fieldsplit_0_pc_type': 'lu',
+                           'fieldsplit_1_pc_type': 'lu',
                            'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
                            'fieldsplit_1_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_0_ksp_type':'preonly',
-                           'fieldsplit_1_ksp_type':'preonly'}
+                           'fieldsplit_0_ksp_type': 'preonly',
+                           'fieldsplit_1_ksp_type': 'preonly'}
         else:
             self.params = params
 
@@ -281,21 +281,21 @@ class IncompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        b = -dot(k,u)*dot(k,grad(bbar))*beta + b_in
+        b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         eqn = (
             inner(w, (u - u_in))*dx
             - beta*div(w)*p*dx
-            - beta*inner(w,k)*b*dx
+            - beta*inner(w, k)*b*dx
             + phi*div(u)*dx
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -309,7 +309,7 @@ class IncompressibleSolver(TimesteppingSolver):
         # preconditioner equation
         L = self.L
         Ap = (
-            inner(w,u) + L*L*div(w)*div(u) +
+            inner(w, u) + L*L*div(w)*div(u) +
             phi*p/L/L
         )*dx
 
@@ -333,7 +333,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in +
-                       dot(k,u)*dot(k,grad(bbar))*beta)*dx
+                       dot(k, u)*dot(k, grad(bbar))*beta)*dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),

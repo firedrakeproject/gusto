@@ -81,8 +81,8 @@ class GeostrophicImbalance(DiagnosticField):
 
         v = TrialFunction(Vu)
         w = TestFunction(Vu)
-        a = inner(w,v)*dx
-        L = (div(w)*p+inner(w,as_vector([f*u[1], 0.0, b])))*dx
+        a = inner(w, v)*dx
+        L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
 
         bc = ("0.", "0.", "0.")
         bcs = [DirichletBC(Vu, Expression(bc), "bottom"),
@@ -159,7 +159,7 @@ class SawyerEliassenU(DiagnosticField):
     def setup_solver(self, state):
         u = state.fields("u")
         b = state.fields("b")
-        v = inner(u,as_vector([0.,1.,0.]))
+        v = inner(u, as_vector([0., 1., 0.]))
 
         # spaces
         V0 = FunctionSpace(state.mesh, "CG", 2)
@@ -226,9 +226,9 @@ class SawyerEliassenU(DiagnosticField):
 
             # anisotropic form
             Equ += eps*(
-                div(dot(mu,grad(psi)))*div(dot(mu,grad(xsi)))*dx
+                div(dot(mu, grad(psi)))*div(dot(mu, grad(xsi)))*dx
                 - (
-                    avg(dot(dot(grad(grad(psi)), n),n))*jump(grad(xsi), n=n)
+                    avg(dot(dot(grad(grad(psi)), n), n))*jump(grad(xsi), n=n)
                     + avg(dot(dot(grad(grad(xsi)), n), n))*jump(grad(psi), n=n)
                     - jump(nn*grad(psi), n=n)*jump(nn*grad(xsi), n=n)
                 )*(dS_h + dS_v)
@@ -244,7 +244,7 @@ class SawyerEliassenU(DiagnosticField):
         self.u = Function(Vu)
         utrial = TrialFunction(Vu)
         w = TestFunction(Vu)
-        a = inner(w,utrial)*dx
+        a = inner(w, utrial)*dx
         L = (w[0]*(-self.stm.dx(2))+w[2]*(self.stm.dx(0)))*dx
         ugproblem = LinearVariationalProblem(a, L, self.u)
         self.sawyer_eliassen_u_solver = LinearVariationalSolver(

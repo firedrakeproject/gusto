@@ -115,8 +115,8 @@ class LinearAdvection(TransportEquation):
             raise NotImplementedError("If we are solving a linear advection equation, we do not integrate by parts.")
 
         # default solver options
-        self.solver_parameters = {'ksp_type':'cg',
-                                  'pc_type':'bjacobi',
+        self.solver_parameters = {'ksp_type': 'cg',
+                                  'pc_type': 'bjacobi',
                                   'sub_pc_type': 'ilu'}
 
     def advection_term(self, q):
@@ -125,7 +125,7 @@ class LinearAdvection(TransportEquation):
             L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
                  jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
-            L = self.test*dot(self.ubar,self.state.k)*dot(self.state.k,grad(self.qbar))*dx
+            L = self.test*dot(self.ubar, self.state.k)*dot(self.state.k, grad(self.qbar))*dx
         return L
 
 
@@ -161,17 +161,17 @@ class AdvectionEquation(TransportEquation):
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
         else:
             if self.ibp == "once":
-                L = -inner(div(outer(self.test,self.ubar)),q)*dx
+                L = -inner(div(outer(self.test, self.ubar)), q)*dx
             else:
-                L = inner(outer(self.test,self.ubar),grad(q))*dx
+                L = inner(outer(self.test, self.ubar), grad(q))*dx
 
         if self.dS is not None and self.ibp is not None:
             L += dot(jump(self.test), (self.un('+')*q('+')
                                        - self.un('-')*q('-')))*self.dS
             if self.ibp == "twice":
-                L -= (inner(self.test('+'),dot(self.ubar('+'), self.n('+'))*q('+'))
-                      + inner(self.test('-'),dot(self.ubar('-'),
-                                                 self.n('-'))*q('-')))*self.dS
+                L -= (inner(self.test('+'), dot(self.ubar('+'), self.n('+'))*q('+'))
+                      + inner(self.test('-'), dot(self.ubar('-'),
+                                                  self.n('-'))*q('-')))*self.dS
 
         return L
 
@@ -239,6 +239,14 @@ class SUPGAdvection(AdvectionEquation):
                         linear solver.
     """
     def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+
+        if not solver_params:
+            # SUPG method leads to asymmetric matrix (since the test function
+            # is effectively modified), so don't use CG
+            solver_params = {'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
         super(SUPGAdvection, self).__init__(state, V, ibp, equation_form, solver_params)
 
         # if using SUPG we either integrate by parts twice, or not at all
@@ -289,7 +297,7 @@ class SUPGAdvection(AdvectionEquation):
             elif supg_params["dg_direction"] == "vertical":
                 taus[2] = 0.0
 
-            tau = Constant(((taus[0], 0., 0.), (0.,taus[1], 0.), (0., 0., taus[2])))
+            tau = Constant(((taus[0], 0., 0.), (0., taus[1], 0.), (0., 0., taus[2])))
         dtest = dot(dot(self.ubar, tau), grad(self.test))
         self.test += dtest
 
@@ -316,7 +324,7 @@ class VectorInvariant(TransportEquation):
                 self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
             else:
                 outward_normals = CellNormal(state.mesh)
-                self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'),q('+')) + self.Upwind('-')*cross(outward_normals('-'),q('-'))
+                self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'), q('+')) + self.Upwind('-')*cross(outward_normals('-'), q('-'))
             self.gradperp = lambda u: state.perp(grad(u))
         elif self.state.mesh.topological_dimension() == 3:
             if self.ibp == "twice":

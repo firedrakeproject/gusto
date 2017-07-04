@@ -22,7 +22,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         global_normal = Expression(("x[0]", "x[1]", "x[2]"))
         mesh.init_cell_orientations(global_normal)
 
-        fieldlist = ['u','D']
+        fieldlist = ['u', 'D']
         timestepping = TimesteppingParameters(dt=dt)
 
         state = State(mesh, horizontal_degree=1,
@@ -38,7 +38,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         if vector:
             space = VectorFunctionSpace(mesh, "DG", 1)
             fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
-            f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
+            f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))", "0.0", "0.0"))
         else:
             space = state.spaces("DG")
             fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
@@ -57,7 +57,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         dt = 0.01
         tmax = 2.5
 
-        fieldlist = ['u','rho', 'theta']
+        fieldlist = ['u', 'rho', 'theta']
         timestepping = TimesteppingParameters(dt=dt)
         parameters = CompressibleParameters()
 
@@ -94,7 +94,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     # interpolate initial conditions
     f.interpolate(fexpr)
     f_end.interpolate(f_end_expr)
-    state.initialise({'u':u0, 'f':f})
+    state.initialise({'u': u0, 'f': f})
 
     if spatial_opts is None:
         fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)
@@ -150,7 +150,7 @@ def test_advection_embedded_dg(tmpdir, ibp, equation_form, space):
     time_discretisation = "ssprk"
     vector = False
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"embedded_dg":{"space":space}})
+    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"embedded_dg": {"space": space}})
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
@@ -165,5 +165,5 @@ def test_advection_supg(tmpdir, time_discretisation, ibp, equation_form, vector)
     else:
         direction = "horizontal"
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"supg_params":{"dg_direction":direction}})
+    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"supg_params": {"dg_direction": direction}})
     assert(abs(f_err.dat.data.max()) < error[geometry])

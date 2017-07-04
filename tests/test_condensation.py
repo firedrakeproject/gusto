@@ -36,7 +36,7 @@ def setup_condens(dirname):
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
-                  diagnostic_fields=[Sum('water_v','water_c')])
+                  diagnostic_fields=[Sum('water_v', 'water_c')])
 
     # declare initial fields
     u0 = state.fields("u")
@@ -87,13 +87,13 @@ def setup_condens(dirname):
     water_v0.interpolate(w_expr)
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'water_v': water_v0, 'water_c':water_c0})
+                      'water_v': water_v0, 'water_c': water_c0})
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction":"horizontal"},
+                             supg_params={"dg_direction": "horizontal"},
                              equation_form="advective")
 
     # build advection dictionary

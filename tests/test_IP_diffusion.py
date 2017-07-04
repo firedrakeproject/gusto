@@ -11,7 +11,7 @@ def setup_IPdiffusion(vector, DG):
     m = PeriodicIntervalMesh(50, L)
     mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
 
-    fieldlist = ['u','D']
+    fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=dt)
     parameters = CompressibleParameters()
     output = OutputParameters(dirname="IPdiffusion")
@@ -52,7 +52,7 @@ def run(dirname, vector, DG):
 
     kappa = Constant(0.05)
     if vector:
-        kappa = Constant([[0.05, 0.],[0., 0.05]])
+        kappa = Constant([[0.05, 0.], [0., 0.05]])
     mu = Constant(5.)
     dt = state.timestepping.dt
     tmax = 2.5

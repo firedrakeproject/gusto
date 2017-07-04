@@ -9,13 +9,13 @@ dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
     # avoid using mumps on Travis
-    linear_solver_params = {'ksp_type':'gmres',
-                            'pc_type':'fieldsplit',
-                            'pc_fieldsplit_type':'additive',
-                            'fieldsplit_0_pc_type':'lu',
-                            'fieldsplit_1_pc_type':'lu',
-                            'fieldsplit_0_ksp_type':'preonly',
-                            'fieldsplit_1_ksp_type':'preonly'}
+    linear_solver_params = {'ksp_type': 'gmres',
+                            'pc_type': 'fieldsplit',
+                            'pc_fieldsplit_type': 'additive',
+                            'fieldsplit_0_pc_type': 'lu',
+                            'fieldsplit_1_pc_type': 'lu',
+                            'fieldsplit_0_ksp_type': 'preonly',
+                            'fieldsplit_1_ksp_type': 'preonly'}
 else:
     tmax = 3600.
     # use default linear solver parameters (i.e. mumps)
@@ -116,7 +116,7 @@ incompressible_hydrostatic_balance(state, b_b, p0)
 
 # interpolate velocity to vector valued function space
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-uinit = Function(W_VectorCG1).interpolate(as_vector([20.0,0.0]))
+uinit = Function(W_VectorCG1).interpolate(as_vector([20.0, 0.0]))
 # project to the function space we actually want to use
 # this step is purely because it is not yet possible to interpolate to the
 # vector function spaces we require for the compatible finite element
@@ -126,7 +126,7 @@ u0.project(uinit)
 # pass these initial conditions to the state.initialise method
 state.initialise({'u': u0, 'b': b0})
 # set the background buoyancy
-state.set_reference_profiles({'b':b_b})
+state.set_reference_profiles({'b': b_b})
 
 ##############################################################################
 # Set up advection schemes
@@ -136,7 +136,7 @@ ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
-                         supg_params={"dg_direction":"horizontal"},
+                         supg_params={"dg_direction": "horizontal"},
                          equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, Vb,

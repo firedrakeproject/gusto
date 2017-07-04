@@ -11,13 +11,13 @@ if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
     # avoid using mumps on Travis
-    linear_solver_params = {'ksp_type':'gmres',
-                            'pc_type':'fieldsplit',
-                            'pc_fieldsplit_type':'additive',
-                            'fieldsplit_0_pc_type':'lu',
-                            'fieldsplit_1_pc_type':'lu',
-                            'fieldsplit_0_ksp_type':'preonly',
-                            'fieldsplit_1_ksp_type':'preonly'}
+    linear_solver_params = {'ksp_type': 'gmres',
+                            'pc_type': 'fieldsplit',
+                            'pc_fieldsplit_type': 'additive',
+                            'fieldsplit_0_pc_type': 'lu',
+                            'fieldsplit_1_pc_type': 'lu',
+                            'fieldsplit_0_ksp_type': 'preonly',
+                            'fieldsplit_1_ksp_type': 'preonly'}
 else:
     tmax = 30*day
     tdump = 2*hour
@@ -49,7 +49,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 # set up all the other things that state requires
 ##############################################################################
 # Coriolis expression
-Omega = as_vector([0.,0.,f*0.5])
+Omega = as_vector([0., 0., f*0.5])
 
 # list of prognostic fieldnames
 # this is passed to state and used to construct a dictionary,
@@ -166,20 +166,20 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u':u0, 'p':p0, 'b':b0})
+state.initialise({'u': u0, 'p': p0, 'b': b0})
 
 # set the background profiles
-state.set_reference_profiles({'p':p_b, 'b':b_b})
+state.set_reference_profiles({'p': p_b, 'b': b_b})
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
-# we need a DG funciton space for the embedded DG advection scheme
+# we need a DG function space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
-                         supg_params={"dg_direction":"horizontal"},
+                         supg_params={"dg_direction": "horizontal"},
                          equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, Vb,

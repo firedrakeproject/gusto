@@ -19,13 +19,13 @@ H = 35000.  # Height position of the model top
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
-x = Function(Vc).interpolate(as_vector([coord[0],coord[1]]))
+x = Function(Vc).interpolate(as_vector([coord[0], coord[1]]))
 H = Constant(H)
 a = Constant(1000.)
 xc = Constant(L/2.)
 smooth_z = True
 if smooth_z:
-    xexpr = Expression(("x[0]","x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
+    xexpr = Expression(("x[0]", "x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
     new_coords = Function(Vc).interpolate(xexpr)
 else:
     new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
@@ -122,18 +122,18 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundar
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
-u0.project(as_vector([10.0,0.0]))
+u0.project(as_vector([10.0, 0.0]))
 remove_initial_w(u0, state.Vv)
 
 state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"}, equation_form="advective")
 else:
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 advection_dict = {}
