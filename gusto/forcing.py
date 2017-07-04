@@ -31,9 +31,12 @@ class Forcing(object):
 
         # set up functions
         self.Vu = state.spaces("HDiv")
-        self.x0 = Function(state.W)   # copy x to here
+        # this is the function that the forcing term is applied to
+        self.x0 = Function(state.W)
         self.test = TestFunction(self.Vu)
         self.trial = TrialFunction(self.Vu)
+        # this is the function that contains the result of solving
+        # <test, trial> = <test, F(x0)>, where F is the forcing term
         self.uF = Function(self.Vu)
 
         # find out which terms we need
