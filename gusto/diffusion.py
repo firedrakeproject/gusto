@@ -50,7 +50,7 @@ class InteriorPenalty(Diffusion):
         phi = TrialFunction(V)
         self.phi1 = Function(V)
         n = FacetNormal(state.mesh)
-        a = inner(gamma,phi)*dx + dt*inner(grad(gamma), grad(phi)*kappa)*dx
+        a = inner(gamma, phi)*dx + dt*inner(grad(gamma), grad(phi)*kappa)*dx
 
         def get_flux_form(dS, M):
 
@@ -61,8 +61,8 @@ class InteriorPenalty(Diffusion):
 
         a += dt*get_flux_form(dS_v, kappa)
         a += dt*get_flux_form(dS_h, kappa)
-        L = inner(gamma,phi)*dx
-        problem = LinearVariationalProblem(a, action(L,self.phi1), self.phi1, bcs=bcs)
+        L = inner(gamma, phi)*dx
+        problem = LinearVariationalProblem(a, action(L, self.phi1), self.phi1, bcs=bcs)
         self.solver = LinearVariationalSolver(problem)
 
     def apply(self, x_in, x_out):

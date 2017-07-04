@@ -50,7 +50,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     w1 = Function(WV)
 
     if(params is None):
-        params = {'ksp_type':'gmres',
+        params = {'ksp_type': 'gmres',
                   'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
                   'pc_fieldsplit_schur_fact_type': 'full',
@@ -99,7 +99,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     cp = state.parameters.cp
 
     alhs = (
-        (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
         + dpi*div(theta0*v)*dx
     )
 
@@ -110,13 +110,13 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    arhs = -cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+    arhs = -cp*inner(dv, n)*theta0*pi_boundary*bmeasure
     if state.geopotential_form:
         Phi = state.Phi
-        arhs += div(dv)*Phi*dx - inner(dv,n)*Phi*bmeasure
+        arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
     else:
         g = state.parameters.g
-        arhs -= g*inner(dv,state.k)*dx
+        arhs -= g*inner(dv, state.k)*dx
 
     bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
 
@@ -163,14 +163,14 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         dv, dpi = TestFunctions(W)
         pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
         F = (
-            (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
+            (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
             + dpi*div(theta0*v)*dx
-            + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+            + cp*inner(dv, n)*theta0*pi_boundary*bmeasure
         )
         if state.geopotential_form:
-            F += - div(dv)*Phi*dx + inner(dv,n)*Phi*bmeasure
+            F += - div(dv)*Phi*dx + inner(dv, n)*Phi*bmeasure
         else:
-            F += g*inner(dv,state.k)*dx
+            F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
@@ -200,8 +200,8 @@ def eady_initial_v(state, p0, v):
 
     n = FacetNormal(state.mesh)
 
-    a = inner(wg,g)*dx
-    L = -div(wg)*p0*dx + inner(wg,n)*p0*ds_tb
+    a = inner(wg, g)*dx
+    L = -div(wg)*p0*dx + inner(wg, n)*p0*ds_tb
     pgrad = Function(Vu)
     solve(a == L, pgrad)
 
@@ -233,8 +233,8 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
 
     n = FacetNormal(state.mesh)
 
-    a = inner(wg,g)*dx
-    L = -div(wg)*Pi*dx + inner(wg,n)*Pi*ds_tb
+    a = inner(wg, g)*dx
+    L = -div(wg)*Pi*dx + inner(wg, n)*Pi*ds_tb
     pgrad = Function(Vu)
     solve(a == L, pgrad)
 

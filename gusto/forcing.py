@@ -159,7 +159,7 @@ class CompressibleForcing(Forcing):
         return L
 
 
-def exner(theta,rho,state):
+def exner(theta, rho, state):
     """
     Compute the exner function.
     """
@@ -170,7 +170,7 @@ def exner(theta,rho,state):
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
 
 
-def exner_rho(theta,rho,state):
+def exner_rho(theta, rho, state):
     R_d = state.parameters.R_d
     p_0 = state.parameters.p_0
     kappa = state.parameters.kappa
@@ -178,7 +178,7 @@ def exner_rho(theta,rho,state):
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
 
 
-def exner_theta(theta,rho,state):
+def exner_theta(theta, rho, state):
     R_d = state.parameters.R_d
     p_0 = state.parameters.p_0
     kappa = state.parameters.kappa
@@ -198,7 +198,7 @@ class IncompressibleForcing(Forcing):
 
     def gravity_term(self):
         _, _, b0 = split(self.x0)
-        L = b0*inner(self.test,self.state.k)*dx
+        L = b0*inner(self.test, self.state.k)*dx
         return L
 
     def _build_forcing_solvers(self):
@@ -238,9 +238,9 @@ class EadyForcing(IncompressibleForcing):
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
         Vp = self.state.spaces("DG")
-        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
+        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"), H=H))
 
-        L -= self.scaling*dbdy*eady_exp*inner(self.test,as_vector([0.,1.,0.]))*dx
+        L -= self.scaling*dbdy*eady_exp*inner(self.test, as_vector([0., 1., 0.]))*dx
         return L
 
     def _build_forcing_solvers(self):
@@ -256,7 +256,7 @@ class EadyForcing(IncompressibleForcing):
         u0, _, b0 = split(self.x0)
 
         a = gamma*F*dx
-        L = -self.scaling*gamma*(dbdy*inner(u0, as_vector([0.,1.,0.])))*dx
+        L = -self.scaling*gamma*(dbdy*inner(u0, as_vector([0., 1., 0.])))*dx
 
         b_forcing_problem = LinearVariationalProblem(
             a, L, self.bF
@@ -289,7 +289,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         Pi = exner(theta0, rho0, self.state)
         Pi_0 = Constant(Pi0)
 
-        L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0.,1.,0.]))*dx  # Eady forcing
+        L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0., 1., 0.]))*dx  # Eady forcing
         return L
 
     def _build_forcing_solvers(self):
@@ -304,10 +304,10 @@ class CompressibleEadyForcing(CompressibleForcing):
         u0, _, _ = split(self.x0)
 
         a = gamma*F*dx
-        L = -self.scaling*gamma*(dthetady*inner(u0, as_vector([0.,1.,0.])))*dx
+        L = -self.scaling*gamma*(dthetady*inner(u0, as_vector([0., 1., 0.])))*dx
 
         theta_forcing_problem = LinearVariationalProblem(
-            a,L,self.thetaF
+            a, L, self.thetaF
         )
 
         self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)

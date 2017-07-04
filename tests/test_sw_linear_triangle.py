@@ -20,7 +20,7 @@ def setup_sw(dirname):
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=3600.)
-    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u','D'], dumpfreq=12)
+    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 

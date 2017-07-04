@@ -5,11 +5,11 @@ import sys
 
 day = 24.*60.*60.
 if '--running-tests' in sys.argv:
-    ref_dt = {3:3000.}
+    ref_dt = {3: 3000.}
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3:900., 4:450., 5:225., 6:112.5}
+    ref_dt = {3: 900., 4: 450., 5: 225., 6: 112.5}
     tmax = 50*day
 
 # setup shallow water parameters
@@ -65,7 +65,7 @@ for ref_level, dt in ref_dt.iteritems():
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u':u0, 'D':D0})
+    state.initialise({'u': u0, 'D': D0})
 
     ueqn = EulerPoincare(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")

@@ -60,7 +60,7 @@ def setup_sk(dirname):
     theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
-    u0.project(as_vector([20.0,0.0]))
+    u0.project(as_vector([20.0, 0.0]))
 
     state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
@@ -68,7 +68,7 @@ def setup_sk(dirname):
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"})
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
     advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)

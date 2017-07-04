@@ -237,7 +237,7 @@ class State(object):
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
                     chk.load(field)
-                t = chk.read_attribute("/","time")
+                t = chk.read_attribute("/", "time")
                 next(self.dumpcount)
 
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
@@ -274,7 +274,7 @@ class State(object):
                     # Dump all the fields to a checkpoint
                     for field in self.to_pickup:
                         chk.store(field)
-                    chk.write_attribute("/","time",t)
+                    chk.write_attribute("/", "time", t)
 
             if diagnostic_everydump:
                 self.diagnostic_dump()
@@ -380,10 +380,10 @@ def get_latlon_mesh(mesh):
               'cg': (coords_orig, READ)})
 
     # lat-lon 'x' = atan2(y, x)
-    coords_latlon.dat.data[:,0] = np.arctan2(coords_dg.dat.data[:,1], coords_dg.dat.data[:,0])
+    coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
     # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-    coords_latlon.dat.data[:,1] = np.arcsin(coords_dg.dat.data[:,2]/np.sqrt(coords_dg.dat.data[:,0]**2 + coords_dg.dat.data[:,1]**2 + coords_dg.dat.data[:,2]**2))
-    coords_latlon.dat.data[:,2] = 0.0
+    coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
+    coords_latlon.dat.data[:, 2] = 0.0
 
     kernel = op2.Kernel("""
     #define PI 3.141592653589793

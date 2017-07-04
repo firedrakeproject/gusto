@@ -43,7 +43,7 @@ class Diagnostics(object):
         V = FunctionSpace(f.function_space().mesh(), "DG", 1)
         c = Function(V)
         c.assign(1)
-        rms = sqrt(assemble((dot(f,f))*dx)/assemble(c*dx))
+        rms = sqrt(assemble((dot(f, f))*dx)/assemble(c*dx))
         return rms
 
     @staticmethod
@@ -154,9 +154,9 @@ class Energy(DiagnosticField):
         Computes 0.5*dot(u, u) with an option to multiply rho
         """
         if rho is not None:
-            energy = 0.5*rho*dot(u,u)
+            energy = 0.5*rho*dot(u, u)
         else:
-            energy = 0.5*dot(u,u)
+            energy = 0.5*dot(u, u)
         return energy
 
 
