@@ -5,7 +5,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
 from gusto.advection import NoAdvection
 from gusto.moving_mesh.utility_functions import spherical_logarithm
-from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver, Projector
+from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver
 
 
 class BaseTimestepper(object):

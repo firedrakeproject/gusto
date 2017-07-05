@@ -6,7 +6,7 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
 parameters["pyop2_options"]["lazy_evaluation"] = False
 # setup resolution and timestepping parameters for convergence test
 # ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {3:1000.}
+ref_dt = {3: 1000.}
 
 # setup shallow water parameters
 R = 6371220.
@@ -28,7 +28,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh.init_cell_orientations(global_normal)
 
     timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-    output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D','u'])
+    output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D', 'u'])
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",

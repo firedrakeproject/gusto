@@ -26,7 +26,7 @@ global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D','u'])
+output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D', 'u'])
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",

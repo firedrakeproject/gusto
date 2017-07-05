@@ -1,8 +1,8 @@
 from math import pi
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, parameters, asin, acos, atan_2, Min, Max, sin, cos
-    
+    Constant, as_vector, parameters, asin, acos, atan_2, Min, sin, cos
+
 
 parameters["pyop2_options"]["lazy_evaluation"] = False
 
@@ -26,7 +26,7 @@ global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D','u'])
+output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'u'])
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
