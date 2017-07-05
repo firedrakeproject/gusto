@@ -49,12 +49,6 @@ Dexpr = Expression("R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0)) < r
 D0.interpolate(Dexpr)
 state.initialise({'u': u0, 'D': D0})
 
-# Coriolis expression
-Omega = Constant(parameters.Omega)
-fexpr = 2*Omega*x[2]/R0
-V = FunctionSpace(mesh, "CG", 1)
-state.f = Function(V).interpolate(fexpr)  # Coriolis frequency (1/s)
-
 eqn_form = "continuity"
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
 
