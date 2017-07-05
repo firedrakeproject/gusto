@@ -100,7 +100,7 @@ class Forcing(object):
             bcs = None
 
         u_forcing_problem = LinearVariationalProblem(
-            a, L, self.uF, bcs=bcs, constant_jacobian=self.state.constant_jacobian)
+            a, L, self.uF, bcs=bcs, constant_jacobian=self.state.constant_jacobian
         )
 
         self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
