@@ -14,5 +14,5 @@ def spherical_logarithm(X0, X1, v, R):
     v.dat.data[:] -= X0.dat.data_ro*np.einsum('ij,ij->i', v.dat.data_ro, X0.dat.data_ro).reshape(-1, 1)/R**2
 
     # v <- theta*R*v-hat, where theta is the angle between X0 and X1
-    # np.minimum(theta, 1.0) is used to avoid silly floating point errors
-    v.dat.data[:] = np.arccos(np.minimum(np.einsum('ij,ij->i', X0.dat.data_ro, X1.dat.data_ro)/R**2, 1.0)).reshape(-1, 1)*R*v.dat.data_ro[:]/np.linalg.norm(v.dat.data_ro, axis=1).reshape(-1, 1)
+    # fmin(theta, 1.0) is used to avoid silly floating point errors
+    v.dat.data[:] = np.arccos(np.fmin(np.einsum('ij,ij->i', X0.dat.data_ro, X1.dat.data_ro)/R**2, 1.0)).reshape(-1, 1)*R*v.dat.data_ro[:]/np.linalg.norm(v.dat.data_ro, axis=1).reshape(-1, 1)
