@@ -332,8 +332,6 @@ class MovingMeshAdvectionStep(AdvectionStep):
 
     def apply(self, x_in, x_out):
         dt = self.state.timestepping.dt
-        v_V1 = self.v_V1
-        v1_V1 = self.v1_V1
         X0 = self.X0
         X1 = self.X1
 
@@ -345,8 +343,8 @@ class MovingMeshAdvectionStep(AdvectionStep):
             self.v /= dt
             spherical_logarithm(X1, X0, self.v1, self.state.mesh._radius)
             self.v1 /= -dt
-            v_V1.project(self.v)
-            v1_V1.project(self.v1)
+            self.v_V1.project(self.v)
+            self.v1_V1.project(self.v1)
         else:
             self.v_V1.project((X1 - X0)/dt)
             self.v1_V1.project(-(X0 - X1)/dt)
@@ -360,7 +358,7 @@ class MovingMeshAdvectionStep(AdvectionStep):
                 if hasattr(self.state, "uexpr"):
                     un.project(self.state.uexpr)
 
-                advection.update_ubar((1 - self.alpha)*(un - v_V1))
+                advection.update_ubar((1 - self.alpha)*(un - self.v_V1))
 
                 # advects field on old mesh
                 advection.apply(x_in[field], self.x_mid[field])
@@ -374,7 +372,7 @@ class MovingMeshAdvectionStep(AdvectionStep):
                 if hasattr(self.state, "uexpr"):
                     unp1.project(self.state.uexpr)
 
-                advection.update_ubar(self.alpha*(unp1 - v1_V1))
+                advection.update_ubar(self.alpha*(unp1 - self.v1_V1))
 
                 # advects field on new mesh
                 advection.apply(self.x_mid[field], x_out[field])
