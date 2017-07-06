@@ -136,22 +136,19 @@ class Timestepper(BaseTimestepper):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
 
             t += dt
+            state.xnp1.assign(state.xn)
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
-                state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
-                if state.timestepping.move_mesh:
-                    state.mesh.coordinates.assign(self.X0)
-
                 # At the moment, this is automagically moving the mesh (if
                 # appropriate), which is not ideal
                 with timed_stage("Advection"):
                     self.Advection.apply(xstar_fields, xp_fields)
 
-                state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+                state.xrhs.assign(0.)  # residual for the linear solve
 
                 for i in range(state.timestepping.maxi):
 
@@ -160,7 +157,8 @@ class Timestepper(BaseTimestepper):
                                            state.xrhs, mu_alpha=mu_alpha[1],
                                            incompressible=self.incompressible)
 
-                        state.xrhs -= state.xnp1
+                    state.xrhs -= state.xnp1
+
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
 
