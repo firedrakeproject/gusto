@@ -38,12 +38,12 @@ class BaseTimestepper(object):
         if state.timestepping.move_mesh:
             self.X0 = Function(state.mesh.coordinates)
             self.X1 = Function(state.mesh.coordinates)
-            self.Advection = MovingMeshAdvectionManager(
+            self.Advection = MovingMeshAdvectionStep(
                 fieldlist,
                 state.xn, state.xnp1,
                 advection_dict, state.timestepping.alpha, state, self.X0, self.X1)
         else:
-            self.Advection = AdvectionManager(
+            self.Advection = AdvectionStep(
                 fieldlist,
                 state.xn, state.xnp1,
                 advection_dict, state.timestepping.alpha)
@@ -246,7 +246,7 @@ class AdvectionTimestepper(BaseTimestepper):
             return {field: getattr(state.fields, field) for field in x_end}
 
 
-class AdvectionManager(object):
+class AdvectionStep(object):
     def __init__(self, fieldlist, xn, xnp1, advection_dict, alpha):
         self.fieldlist = fieldlist
         self.xn = xn
@@ -264,10 +264,10 @@ class AdvectionManager(object):
             advection.apply(x_in[field], x_out[field])
 
 
-class MovingMeshAdvectionManager(AdvectionManager):
+class MovingMeshAdvectionStep(AdvectionStep):
     def __init__(self, fieldlist, xn, xnp1,
                  advection_dict, alpha, state, X0, X1):
-        super(MovingMeshAdvectionManager, self).__init__(
+        super(MovingMeshAdvectionStep, self).__init__(
             fieldlist, xn, xnp1, advection_dict, alpha)
 
         self.state = state
