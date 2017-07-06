@@ -343,11 +343,20 @@ class MovingMeshAdvectionStep(AdvectionStep):
             self.v /= dt
             spherical_logarithm(X1, X0, self.v1, self.state.mesh._radius)
             self.v1 /= -dt
+
+            self.state.mesh.coordinates.assign(X0)
             self.v_V1.project(self.v)
+
+            self.state.mesh.coordinates.assign(X1)
             self.v1_V1.project(self.v1)
+
         else:
+            self.state.mesh.coordinates.assign(X0)
             self.v_V1.project((X1 - X0)/dt)
+
+            self.state.mesh.coordinates.assign(X1)
             self.v1_V1.project(-(X0 - X1)/dt)
+
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
 
