@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 600.}
+    ref_dt = {3: 3000.}
     tmax = 5*day
 
 # setup shallow water parameters
