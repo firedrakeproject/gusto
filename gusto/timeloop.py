@@ -129,6 +129,7 @@ class Timestepper(BaseTimestepper):
                 print "STEP", t, dt
 
             if state.timestepping.move_mesh:
+                # This is used as the "old mesh" domain in projections
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
                 with timed_stage("Mesh generation"):
@@ -233,6 +234,8 @@ class AdvectionTimestepper(BaseTimestepper):
             state.xnp1.assign(state.xn)
 
             if state.timestepping.move_mesh:
+                # This is used as the "old mesh" domain in projections
+                state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
