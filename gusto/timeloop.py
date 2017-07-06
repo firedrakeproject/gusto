@@ -207,6 +207,8 @@ class AdvectionTimestepper(BaseTimestepper):
         dt = self.dt
         xn_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xn.split())}
+        xnp1_fields = {name: func for (name, func) in
+                       zip(state.fieldlist, state.xnp1.split())}
 
         with timed_stage("Dump output"):
             state.setup_dump()
@@ -232,7 +234,12 @@ class AdvectionTimestepper(BaseTimestepper):
             # At the moment, this is automagically moving the mesh (if
             # appropriate), which is not ideal
             with timed_stage("Advection"):
-                self.Advection.apply(xn_fields, xn_fields)
+                self.Advection.apply(xn_fields, xnp1_fields)
+
+            # technically the above advection could be done "in place",
+            # but writing into a new field and assigning back is more
+            # robust to future changes
+            state.xn.assign(state.xnp1)
 
             with timed_stage("Physics"):
                 for physics in self.physics_list:
