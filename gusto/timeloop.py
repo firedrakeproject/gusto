@@ -302,7 +302,7 @@ class MovingMeshAdvectionStep(AdvectionStep):
             fieldlist, xn, xnp1, advection_dict, alpha)
 
         self.state = state
-        x1 = state.xstar.copy()
+        x1 = Function(state.xstar.function_space())
         self.x1 = {name: func for (name, func) in
                    zip(state.fieldlist, x1.split())}
         self.X0 = X0
