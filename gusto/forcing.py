@@ -358,5 +358,4 @@ class NoForcing(Forcing):
         pass
 
     def apply(self, scale, x_in, x_nl, x_out, **kwargs):
-
         x_out.assign(x_in)
