@@ -75,14 +75,12 @@ for ref_level, dt in ref_dt.iteritems():
 
     advection_dict = {}
     advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    # advection_dict["u"] = NoAdvection(state, u0)
     advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
     sw_forcing = ShallowWaterForcing(state)
-    # sw_forcing = NoForcing(state)
 
     def initialise_fn():
         state.fields("u").project(uexpr)
