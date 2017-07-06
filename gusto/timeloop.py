@@ -221,7 +221,8 @@ class AdvectionTimestepper(BaseTimestepper):
                 state.t_const.assign(t + 0.5*dt)
 
             t += dt
-            state.xnp1.assign(state.xn)
+            state.xnp1.assign(state.xn)  # since advection velocity ubar is
+                                         # calculated from xn and xnp1
 
             if state.timestepping.move_mesh:
                 self.X0.assign(self.X1)
@@ -260,6 +261,8 @@ class AdvectionStep(object):
             un = self.xn.split()[0]
             unp1 = self.xnp1.split()[0]
             advection.update_ubar(un + self.alpha*(unp1-un))
+
+        for field, advection in self.advection_dict.iteritems():
             # advects field
             advection.apply(x_in[field], x_out[field])
 
