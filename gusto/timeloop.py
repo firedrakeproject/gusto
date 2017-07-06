@@ -41,7 +41,8 @@ class BaseTimestepper(object):
             self.Advection = MovingMeshAdvectionStep(
                 fieldlist,
                 state.xn, state.xnp1,
-                advection_dict, state.timestepping.alpha, state, self.X0, self.X1)
+                advection_dict, state.timestepping.alpha,
+                state, self.X0, self.X1)
         else:
             self.Advection = AdvectionStep(
                 fieldlist,
@@ -218,7 +219,11 @@ class AdvectionTimestepper(BaseTimestepper):
             if state.output.Verbose:
                 print "STEP", t, dt
 
-            # for time dependent stuff, e.g. expressions for u
+            # Horrible hacky magic: for time dependent stuff, e.g.
+            # expressions for u, or forcing, stick a ufl Constant onto
+            # state.t_const, and we automatically update that inside
+            # the time loop
+
             if hasattr(state, "t_const"):
                 state.t_const.assign(t + 0.5*dt)
 
@@ -263,14 +268,29 @@ class AdvectionStep(object):
         self.alpha = alpha
 
     def apply(self, x_in, x_out):
-        for field, advection in self.advection_dict.iteritems():
-            # first computes ubar from xn and xnp1
+
+        # Horrible hacky magic: if you want the velocity to be set
+        # analytically, e.g. for an advection-only problem, put the
+        # corresponding UFL expression in state.uexpr, and we will
+        # use it here, splatting whatever was in un and unp1.
+        #
+        # Otherwise nothing happens here.
+
+        if hasattr(self.state, "uexpr"):
             un = self.xn.split()[0]
             unp1 = self.xnp1.split()[0]
+            un.project(self.state.uexpr)
+            unp1.assign(un)
+
+        # Update ubar for each advection object
+        for field, advection in self.advection_dict.iteritems():
+            un = self.xn.split()[0]
+            unp1 = self.xnp1.split()[0]
+
             advection.update_ubar(un + self.alpha*(unp1-un))
 
+        # Advect fields
         for field, advection in self.advection_dict.iteritems():
-            # advects field
             advection.apply(x_in[field], x_out[field])
 
 
