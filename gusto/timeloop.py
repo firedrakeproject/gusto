@@ -228,8 +228,9 @@ class AdvectionTimestepper(BaseTimestepper):
                 state.t_const.assign(t + 0.5*dt)
 
             t += dt
-            state.xnp1.assign(state.xn)  # since advection velocity ubar is
-                                         # calculated from xn and xnp1
+
+            # since advection velocity ubar is calculated from xn and xnp1
+            state.xnp1.assign(state.xn)
 
             if state.timestepping.move_mesh:
                 self.X0.assign(self.X1)
