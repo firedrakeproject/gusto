@@ -273,6 +273,9 @@ class AdvectionStep(object):
 
     def apply(self, x_in, x_out):
 
+        un = self.xn.split()[0]
+        unp1 = self.xnp1.split()[0]
+
         # Horrible hacky magic: if you want the velocity to be set
         # analytically, e.g. for an advection-only problem, put the
         # corresponding UFL expression in state.uexpr, and we will
@@ -281,17 +284,12 @@ class AdvectionStep(object):
         # Otherwise nothing happens here.
 
         if hasattr(self.state, "uexpr"):
-            un = self.xn.split()[0]
-            unp1 = self.xnp1.split()[0]
             un.project(self.state.uexpr)
             unp1.assign(un)
 
         # Update ubar for each advection object
         for field, advection in self.advection_dict.iteritems():
-            un = self.xn.split()[0]
-            unp1 = self.xnp1.split()[0]
-
-            advection.update_ubar(un + self.alpha*(unp1-un))
+            advection.update_ubar((1 - self.alpha)*un + self.alpha*unp1)
 
         # Advect fields
         for field, advection in self.advection_dict.iteritems():
@@ -360,28 +358,29 @@ class MovingMeshAdvectionStep(AdvectionStep):
         un = self.xn.split()[0]
         unp1 = self.xnp1.split()[0]
 
+        # Horrible hacky magic: if you want the velocity to be set
+        # analytically, e.g. for an advection-only problem, put the
+        # corresponding UFL expression in state.uexpr, and we will
+        # use it here, splatting whatever was in un and unp1.
+
+        if hasattr(self.state, "uexpr"):
+            self.state.mesh.coordinates.assign(X0)
+            un.project(self.state.uexpr)
+            self.state.mesh.coordinates.assign(X1)
+            unp1.project(self.state.uexpr)
+
         for field, advection in self.advection_dict.iteritems():
-            if not isinstance(advection, NoAdvection):
-                self.state.mesh.coordinates.assign(X0)
+            # advect field on old mesh
+            self.state.mesh.coordinates.assign(X0)
+            advection.update_ubar((1 - self.alpha)*(un - self.v_V1))
+            advection.apply(x_in[field], self.x_mid[field])
 
-                if hasattr(self.state, "uexpr"):
-                    un.project(self.state.uexpr)
+            # put mesh_new into mesh so it gets into LHS of projections
+            self.state.mesh.coordinates.assign(X1)
 
-                advection.update_ubar((1 - self.alpha)*(un - self.v_V1))
+            if field in self.projections(self.x_mid).keys():
+                self.projections(self.x_mid)[field].solve()
 
-                # advects field on old mesh
-                advection.apply(x_in[field], self.x_mid[field])
-
-                # put mesh_new into mesh so it gets into LHS of projections
-                self.state.mesh.coordinates.assign(X1)
-
-                if field in self.projections(self.x_mid).keys():
-                    self.projections(self.x_mid)[field].solve()
-
-                if hasattr(self.state, "uexpr"):
-                    unp1.project(self.state.uexpr)
-
-                advection.update_ubar(self.alpha*(unp1 - self.v1_V1))
-
-                # advects field on new mesh
-                advection.apply(self.x_mid[field], x_out[field])
+            # advect field on new mesh
+            advection.update_ubar(self.alpha*(unp1 - self.v1_V1))
+            advection.apply(self.x_mid[field], x_out[field])
