@@ -39,13 +39,13 @@ class BaseTimestepper(object):
             self.X0 = Function(state.mesh.coordinates)
             self.X1 = Function(state.mesh.coordinates)
             self.Advection = MovingMeshAdvectionStep(
-                fieldlist,
+                state, fieldlist,
                 state.xn, state.xnp1,
                 advection_dict, state.timestepping.alpha,
-                state, self.X0, self.X1)
+                self.X0, self.X1)
         else:
             self.Advection = AdvectionStep(
-                fieldlist,
+                state, fieldlist,
                 state.xn, state.xnp1,
                 advection_dict, state.timestepping.alpha)
 
@@ -264,7 +264,8 @@ class AdvectionTimestepper(BaseTimestepper):
 
 
 class AdvectionStep(object):
-    def __init__(self, fieldlist, xn, xnp1, advection_dict, alpha):
+    def __init__(self, state, fieldlist, xn, xnp1, advection_dict, alpha):
+        self.state = state
         self.fieldlist = fieldlist
         self.xn = xn
         self.xnp1 = xnp1
@@ -297,12 +298,11 @@ class AdvectionStep(object):
 
 
 class MovingMeshAdvectionStep(AdvectionStep):
-    def __init__(self, fieldlist, xn, xnp1,
-                 advection_dict, alpha, state, X0, X1):
+    def __init__(self, state, fieldlist, xn, xnp1,
+                 advection_dict, alpha, X0, X1):
         super(MovingMeshAdvectionStep, self).__init__(
-            fieldlist, xn, xnp1, advection_dict, alpha)
+            state, fieldlist, xn, xnp1, advection_dict, alpha)
 
-        self.state = state
         x_mid = Function(state.xstar.function_space())
         self.x_mid = {name: func for (name, func) in
                       zip(state.fieldlist, x_mid.split())}
