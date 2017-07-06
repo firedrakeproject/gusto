@@ -302,9 +302,9 @@ class MovingMeshAdvectionStep(AdvectionStep):
             fieldlist, xn, xnp1, advection_dict, alpha)
 
         self.state = state
-        x1 = Function(state.xstar.function_space())
-        self.x1 = {name: func for (name, func) in
-                   zip(state.fieldlist, x1.split())}
+        x_mid = Function(state.xstar.function_space())
+        self.x_mid = {name: func for (name, func) in
+                      zip(state.fieldlist, x_mid.split())}
         self.X0 = X0
         self.X1 = X1
 
@@ -360,13 +360,13 @@ class MovingMeshAdvectionStep(AdvectionStep):
                 advection.update_ubar((1 - self.alpha)*(un - v_V1))
 
                 # advects field on old mesh
-                advection.apply(x_in[field], self.x1[field])
+                advection.apply(x_in[field], self.x_mid[field])
 
                 # put mesh_new into mesh so it gets into LHS of projections
                 self.state.mesh.coordinates.assign(X1)
 
-                if field in self.projections(self.x1).keys():
-                    self.projections(self.x1)[field].solve()
+                if field in self.projections(self.x_mid).keys():
+                    self.projections(self.x_mid)[field].solve()
 
                 if hasattr(self.state, "uexpr"):
                     unp1.project(self.state.uexpr)
@@ -374,4 +374,4 @@ class MovingMeshAdvectionStep(AdvectionStep):
                 advection.update_ubar(self.alpha*(unp1 - v1_V1))
 
                 # advects field on new mesh
-                advection.apply(self.x1[field], x_out[field])
+                advection.apply(self.x_mid[field], x_out[field])
