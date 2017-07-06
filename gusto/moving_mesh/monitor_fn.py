@@ -85,11 +85,11 @@ class MonitorFunction(object):
         # TODO: generalise to vector-valued f
 
         if self.adapt_to in ("gradient", "hessian"):
-            # Forms for lumped weak gradient of f
+            # Forms for lumped gradient of f
             v_vp1 = TestFunction(VectorP1)
             v_ones = as_vector(np.ones(dim))
             self.a_vp1_lumped = dot(v_vp1, v_ones)*dx
-            self.L_vp1 = -div(v_vp1)*self.f*dx
+            self.L_vp1 = inner(v_vp1, grad(self.f))*dx
 
             if self.adapt_to == "hessian":
                 # Forms for lumped hessian of f
