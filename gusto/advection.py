@@ -107,7 +107,7 @@ class Advection(object):
         :arg x: :class:`.Function` object, the input Function.
         :arg x_out: :class:`.Function` object, the output Function.
         """
-    pass
+        pass
 
 
 class NoAdvection(Advection):
@@ -125,7 +125,6 @@ class NoAdvection(Advection):
         pass
 
     def apply(self, x_in, x_out):
-
         x_out.assign(x_in)
 
 

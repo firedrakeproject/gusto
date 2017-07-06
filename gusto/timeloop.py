@@ -146,6 +146,8 @@ class Timestepper(BaseTimestepper):
                 if state.timestepping.move_mesh:
                     state.mesh.coordinates.assign(self.X0)
 
+                # At the moment, this is automagically moving the mesh (if
+                # appropriate), which is not ideal
                 with timed_stage("Advection"):
                     self.Advection.apply(xstar_fields, xp_fields)
 
