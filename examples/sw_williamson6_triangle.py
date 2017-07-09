@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, cos, sin, asin, atan_2
+    Constant, cos, sin, pi
 import sys
 
 dt = 900.
@@ -8,12 +8,18 @@ day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     tmax = dt
 else:
-    tmax = 14*day
+    tmax = 35*day
 
 refinements = 4  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 8000.
+
+perturb = False
+if perturb:
+    dirname = "sw_rossby_wave_perturbed"
+else:
+    dirname = "sw_rossby_wave_unperturbed"
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
@@ -22,13 +28,14 @@ mesh.init_cell_orientations(global_normal)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sw_rossby_wave_ll', dumpfreq=24, dumplist_latlon=['D'])
+output = OutputParameters(dirname=dirname, dumpfreq=24, dumplist_latlon=['D'])
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
+              Coriolis=parameters.Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -47,22 +54,12 @@ h0 = Constant(H)
 g = Constant(parameters.g)
 Omega = Constant(parameters.Omega)
 
-x0, y0, z0 = SpatialCoordinate(mesh)
-x = Rc*x0/sqrt(x0*x0 + y0*y0 + z0*z0)
-y = Rc*y0/sqrt(x0*x0 + y0*y0 + z0*z0)
-z = Rc*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
-
-theta = asin(z/Rc)  # latitude
-lamda = atan_2(y, x)  # longitude
+theta, lamda = latlon_coords(mesh)
 
 u_zonal = Rc*omega*cos(theta) + Rc*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
 u_merid = -Rc*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
 
-cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
-cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
-cartesian_w_expr = u_merid*cos(theta)
-
-uexpr = as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
+uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
 
 def Atheta(theta):
@@ -79,14 +76,19 @@ def Ctheta(theta):
 
 Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
-# Coriolis expression
-fexpr = 2*Omega*z/Rc
-V = FunctionSpace(mesh, "CG", 1)
-f = state.fields("coriolis", V)
-f.interpolate(fexpr)  # Coriolis frequency (1/s)
-
 u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
-D0.interpolate(Dexpr)
+
+if perturb:
+    x0, y0, z0 = SpatialCoordinate(mesh)
+    thetac = (40/180.)*pi  # 40 deg latitude
+    lamdac = (50/360.)*2*pi  # 50 deg longitude
+    xc = Rc*cos(thetac)*cos(lamdac)
+    yc = Rc*cos(thetac)*sin(lamdac)
+    zc = Rc*sin(thetac)
+    Dpert = (x0*xc + y0*yc + z0*zc)/(40.*Rc**2)
+    D0.interpolate(Dexpr + Dpert)
+else:
+    D0.interpolate(Dexpr)
 
 state.initialise({'u': u0, 'D': D0})
 

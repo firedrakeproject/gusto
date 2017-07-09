@@ -151,6 +151,11 @@ class State(object):
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
             self.k = interpolate(x/R, mesh.coordinates.function_space())
+            if self.Omega is not None:
+                fexpr = 2*self.Omega*x[2]/R
+                V = FunctionSpace(mesh, "CG", 1)
+                f = self.fields("coriolis", V)
+                f.interpolate(fexpr)  # Coriolis frequency (1/s)
             if dim == 2:
                 outward_normals = CellNormal(mesh)
                 self.perp = lambda u: cross(outward_normals, u)
