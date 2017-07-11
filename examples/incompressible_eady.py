@@ -70,7 +70,8 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='incompressible_eady',
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'p', 'b'],
-                          perturbation_fields=['p', 'b'])
+                          perturbation_fields=['p', 'b'],
+                          diagnostic_everydump=True)
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -206,4 +207,4 @@ stepper = Timestepper(state, advection_dict, linear_solver, forcing)
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax)
