@@ -160,19 +160,27 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
+        #  Constant to hold current time
+        self.t = Constant(0.0)
+
     def setup_dump(self, pickup=False):
 
         # setup dump files
         # check for existence of directory so as not to overwrite
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
-        outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
            and path.exists(self.dumpdir) and not pickup:
             exit("results directory '%s' already exists" % self.dumpdir)
+        outfile = path.join(self.dumpdir, "field_output.pvd")
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
+
+        # Setup dictionary for point data and store points
+        self.point_data = defaultdict(partial(defaultdict, list))
+        for name, points in self.output.point_data.iteritems():
+            self.point_data[name]["points"] = points
 
         # create field dictionary
         self.field_dict = {field.name(): field for field in self.fields}
@@ -221,12 +229,10 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
+    def dump(self, t=0, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
-        :arg diagnostic_everydump: dump diagnostics everytime dump()
-        is called.
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
@@ -266,6 +272,10 @@ class State(object):
                     data = self.diagnostics.total(self.field_dict[name])
                     self.diagnostic_data[name]["total"].append(data)
 
+            # store pointwise data
+            for name, points in self.output.point_data.iteritems():
+                self.point_data[name][t].append([x.tolist() for x in self.field_dict[name].at(points)])
+
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
             for file in files:
@@ -276,10 +286,22 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/", "time", t)
 
-            if diagnostic_everydump:
+            if self.output.diagnostic_everydump:
                 self.diagnostic_dump()
 
+            if self.output.pointwise_everydump:
+                self.pointwise_dump()
+
+        self.t.assign(t)
         return t
+
+    def pointwise_dump(self):
+        """
+        Dump point data dictionary
+        """
+        if self.output.point_data is not None:
+            with open(path.join(self.dumpdir, "point_data.json"), "w") as f:
+                f.write(json.dumps(self.point_data, indent=4))
 
     def diagnostic_dump(self):
         """
