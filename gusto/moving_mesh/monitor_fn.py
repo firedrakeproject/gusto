@@ -229,6 +229,10 @@ class MonitorFunction(object):
         self.mesh.coordinates.assign(x_new)
         self.mesh_adv_vel.assign(x_old - x_new)
 
+        # store min and max to ensure these are not exceeded later
+        m_min = self.m_old.comm.allreduce(self.m_old.dat.data_ro.min(), op=MPI.MIN)
+        m_max = self.m_old.comm.allreduce(self.m_old.dat.data_ro.max(), op=MPI.MAX)
+
         # Make discontinuous m
         self.m_dg.interpolate(self.m_old)
 
@@ -252,6 +256,11 @@ class MonitorFunction(object):
         self.solv_m_p1_proj.solve()
 
         # print "after advection:", np.min(self.m.dat.data_ro), np.max(self.m.dat.data_ro)
+
+        self.m.dat.data[:] = np.fmin(self.m.dat.data[:], m_max)
+        self.m.dat.data[:] = np.fmax(self.m.dat.data[:], m_min)
+
+        # print "after advection-limiting:", np.min(self.m.dat.data_ro), np.max(self.m.dat.data_ro)
 
         # safety check for now
         assert (self.m.dat.data_ro >= 0.0).all()
