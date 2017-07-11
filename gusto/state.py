@@ -274,7 +274,7 @@ class State(object):
 
             # store pointwise data
             for name, points in self.output.point_data.iteritems():
-                self.point_data[name][t].append([x.tolist() for x in self.field_dict[name].at(points)])
+                self.point_data[name][t] = [x.tolist() for x in self.field_dict[name].at(points)]
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
