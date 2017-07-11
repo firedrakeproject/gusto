@@ -55,8 +55,10 @@ class MonitorFunction(object):
         DP1 = FunctionSpace(self.mesh, "DQ" if quads else "DP", 1)  # for advection
 
         if self.adapt_to in ("gradient", "hessian"):
+            RT1 = FunctionSpace(self.mesh, "RTCF" if quads else "RT", 1)
             VectorP1 = VectorFunctionSpace(self.mesh, "Q" if quads else "P", 1)
             self.gradf = Function(VectorP1)
+            gradf_rt = Function(RT1)
             self.gradf_lhs = Function(VectorP1)
             if self.adapt_to == "hessian":
                 TensorP1 = TensorFunctionSpace(self.mesh, "Q" if quads else "P", 1)
@@ -85,11 +87,19 @@ class MonitorFunction(object):
         # TODO: generalise to vector-valued f
 
         if self.adapt_to in ("gradient", "hessian"):
-            # Forms for lumped gradient of f
+            # Form gradient of f in lowest-order RT space using int. by parts
+            u_rt1 = TrialFunction(RT1)
+            v_rt1 = TestFunction(RT1)
+            a_rt1 = dot(v_rt1, u_rt1)*dx
+            L_rt1 = div(v_rt1)*self.f*dx
+            gradf_rt1_prob = LinearVariationalProblem(a_rt1, L_rt1, gradf_rt, constant_jacobian=False)
+            self.gradf_rt1_solv = LinearVariationalSolver(gradf_rt1_prob, solver_parameters={'ksp_type': 'cg'})
+
+            # Lumped projection into (P1)^3
             v_vp1 = TestFunction(VectorP1)
             v_ones = as_vector(np.ones(dim))
             self.a_vp1_lumped = dot(v_vp1, v_ones)*dx
-            self.L_vp1 = inner(v_vp1, grad(self.f))*dx
+            self.L_vp1 = inner(v_vp1, gradf_rt)*dx
 
             if self.adapt_to == "hessian":
                 # Forms for lumped hessian of f
@@ -150,6 +160,8 @@ class MonitorFunction(object):
         self.f.dat.data[:] = self.user_f.dat.data[:]
 
         if self.adapt_to in ("gradient", "hessian"):
+            # Form RT gradient
+            self.gradf_rt1_solv.solve()
             # Form mass-lumped gradient
             assemble(self.L_vp1, tensor=self.gradf)
             assemble(self.a_vp1_lumped, tensor=self.gradf_lhs)
