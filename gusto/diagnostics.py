@@ -332,8 +332,8 @@ class PotentialVorticity(DiagnosticField):
 
         a = q*gamma*D*dx
         L = (gamma*f - inner(gradperp(gamma), u))*dx
-        pv_problem = LinearVariationalProblem(a, L, self.field(space))
-        solver = LinearVariationalSolver(pv_problem)
+        pv_problem = LinearVariationalProblem(a, L, self.field(space), constant_jacobian=False)
+        solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
         self._solver = solver
         return self._solver
 
