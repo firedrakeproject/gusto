@@ -341,6 +341,11 @@ class PotentialVorticity(DiagnosticField):
         """Computes the potential vorticity by solving
         the weighted mass system.
         """
-        V = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+        if hasattr(self, "_space"):
+            V = self._space
+        else:
+            self._space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+            V = self._space
+
         self.solver(state, V).solve()
         return self.field(V)
