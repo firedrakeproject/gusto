@@ -19,8 +19,9 @@ H = 10000.
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
+diagnostic_fields = [PotentialVorticity()]
 
-perturb = False
+perturb = True
 if perturb:
     dirname = "sw_galewsky_jet_perturbed"
 else:
@@ -31,7 +32,7 @@ global_normal = Expression(("x[0]", "x[1]", "x[2]"))
 mesh.init_cell_orientations(global_normal)
 
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname=dirname, dumplist_latlon=['D'])
+output = OutputParameters(dirname=dirname, dumplist_latlon=['D', "potential_vorticity"])
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
@@ -40,7 +41,8 @@ state = State(mesh, horizontal_degree=1,
               output=output,
               parameters=parameters,
               diagnostics=diagnostics,
-              fieldlist=fieldlist)
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # initial conditions
 u0 = state.fields("u")
