@@ -283,6 +283,7 @@ for (int i=0; i<xi.dofs; i++) {
 
         # remake mesh solver with new tolerance
         self.params["snes_rtol"] = self.tol
+        self.params["snes_linesearch_type"] = "l2"
 
         self.mesh_solv = NonlinearVariationalSolver(self.mesh_prob,
                                                     nullspace=self.nullspace,
