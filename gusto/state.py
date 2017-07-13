@@ -371,13 +371,13 @@ def get_latlon_mesh(mesh):
     coords_dg = Function(mesh_dg_fs)
     coords_latlon = Function(mesh_dg_fs)
     par_loop("""
-    for (int i=0; i<3; i++) {
+for (int i=0; i<3; i++) {
     for (int j=0; j<3; j++) {
-    dg[i][j] = cg[i][j];
+        dg[i][j] = cg[i][j];
     }
-    }
-    """, dx, {'dg': (coords_dg, WRITE),
-              'cg': (coords_orig, READ)})
+}
+""", dx, {'dg': (coords_dg, WRITE),
+          'cg': (coords_orig, READ)})
 
     # lat-lon 'x' = atan2(y, x)
     coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
@@ -386,28 +386,29 @@ def get_latlon_mesh(mesh):
     coords_latlon.dat.data[:, 2] = 0.0
 
     kernel = op2.Kernel("""
-    #define PI 3.141592653589793
-    #define TWO_PI 6.283185307179586
-    void splat_coords(double **coords) {
-        double diff0 = (coords[0][0] - coords[1][0]);
-        double diff1 = (coords[0][0] - coords[2][0]);
-        double diff2 = (coords[1][0] - coords[2][0]);
+#define PI 3.141592653589793
+#define TWO_PI 6.283185307179586
+void splat_coords(double **coords) {
+    double diff0 = (coords[0][0] - coords[1][0]);
+    double diff1 = (coords[0][0] - coords[2][0]);
+    double diff2 = (coords[1][0] - coords[2][0]);
 
-        if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
-            const int sign0 = coords[0][0] < 0 ? -1 : 1;
-            const int sign1 = coords[1][0] < 0 ? -1 : 1;
-            const int sign2 = coords[2][0] < 0 ? -1 : 1;
-            if (sign0 < 0) {
-                coords[0][0] += TWO_PI;
-            }
-            if (sign1 < 0) {
-                coords[1][0] += TWO_PI;
-            }
-            if (sign2 < 0) {
-                coords[2][0] += TWO_PI;
-            }
+    if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
+        const int sign0 = coords[0][0] < 0 ? -1 : 1;
+        const int sign1 = coords[1][0] < 0 ? -1 : 1;
+        const int sign2 = coords[2][0] < 0 ? -1 : 1;
+        if (sign0 < 0) {
+            coords[0][0] += TWO_PI;
         }
-    }""", "splat_coords")
+        if (sign1 < 0) {
+            coords[1][0] += TWO_PI;
+        }
+        if (sign2 < 0) {
+            coords[2][0] += TWO_PI;
+        }
+    }
+}
+""", "splat_coords")
 
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))

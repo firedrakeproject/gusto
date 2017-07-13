@@ -21,21 +21,21 @@ class Diagnostics(object):
     @staticmethod
     def min(f):
         fmin = op2.Global(1, np.finfo(float).max, dtype=float)
-        op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
-        {
-        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-        }""", "minify"),
-                     f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+        op2.par_loop(op2.Kernel("""
+void minify(double *a, double *b) {
+    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
         return fmin.data[0]
 
     @staticmethod
     def max(f):
         fmax = op2.Global(1, np.finfo(float).min, dtype=float)
-        op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
-        {
-        a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
-        }""", "maxify"),
-                     f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+        op2.par_loop(op2.Kernel("""
+void maxify(double *a, double *b) {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
         return fmax.data[0]
 
     @staticmethod
