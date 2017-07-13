@@ -43,7 +43,7 @@ class Diagnostics(object):
         V = FunctionSpace(f.function_space().mesh(), "DG", 1)
         c = Function(V)
         c.assign(1)
-        rms = sqrt(assemble((dot(f, f))*dx)/assemble(c*dx))
+        rms = sqrt(assemble(dot(f, f)*dx)/assemble(c*dx))
         return rms
 
     @staticmethod
