@@ -103,10 +103,12 @@ linear_solver = ShallowWaterSolver(state)
 # Set up forcing
 sw_forcing = ShallowWaterForcing(state)
 
+
 def initialise_fn():
     state.fields("u").project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
     state.fields("D").interpolate(Dexpr)
     pv(state)
+
 
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)

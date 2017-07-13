@@ -93,6 +93,7 @@ def Dval(X):
             val.append((Rc/g)*v[0])
     return val
 
+
 # Get coordinates to pass to Dval function
 W = VectorFunctionSpace(mesh, D0.ufl_element())
 X = interpolate(mesh.coordinates, W)

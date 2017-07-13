@@ -94,6 +94,7 @@ def Dval(X):
             val.append((Rc/g)*v[0])
     return val
 
+
 # Get coordinates to pass to Dval function
 W = VectorFunctionSpace(mesh, D0.ufl_element())
 X = interpolate(mesh.coordinates, W)
@@ -129,6 +130,7 @@ linear_solver = ShallowWaterSolver(state)
 # Set up forcing
 sw_forcing = ShallowWaterForcing(state)
 
+
 def initialise_fn():
     state.fields("u").project(uexpr)
 
@@ -142,6 +144,7 @@ def initialise_fn():
         D_pert = Function(state.fields("D").function_space()).interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
         state.fields("D").dat.data[:] += D_pert.dat.data[:]
     pv(state)
+
 
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
