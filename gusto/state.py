@@ -230,7 +230,7 @@ class State(object):
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
-        if(pickup):
+        if pickup:
             # Open the checkpointing file for writing
             chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:

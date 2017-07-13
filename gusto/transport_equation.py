@@ -279,14 +279,14 @@ class SUPGAdvection(AdvectionEquation):
             raise RuntimeError("Invalid dg_direction in supg_params.")
 
         # make SUPG test function
-        if(state.mesh.topological_dimension() == 2):
+        if state.mesh.topological_dimension() == 2:
             taus = [supg_params["ax"], supg_params["ay"]]
             if supg_params["dg_direction"] == "horizontal":
                 taus[0] = 0.0
             elif supg_params["dg_direction"] == "vertical":
                 taus[1] = 0.0
             tau = Constant(((taus[0], 0.), (0., taus[1])))
-        elif(state.mesh.topological_dimension() == 3):
+        elif state.mesh.topological_dimension() == 3:
             taus = [supg_params["ax"], supg_params["ay"], supg_params["az"]]
             if supg_params["dg_direction"] == "horizontal":
                 taus[0] = 0.0

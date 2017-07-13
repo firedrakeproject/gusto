@@ -49,7 +49,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     L = phi*div(F)*dx
     w1 = Function(WV)
 
-    if(params is None):
+    if params is None:
         params = {'ksp_type': 'gmres',
                   'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
@@ -123,7 +123,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
-    if(params is None):
+    if params is None:
         params = {'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
                   'ksp_type': 'gmres',
