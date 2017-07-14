@@ -10,24 +10,20 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
 from gusto.forcing import exner
 
 
 def latlon_coords(mesh):
     x0, y0, z0 = SpatialCoordinate(mesh)
-    Rc = Constant(mesh._radius)
-    x = Rc*x0/sqrt(x0*x0 + y0*y0 + z0*z0)
-    y = Rc*y0/sqrt(x0*x0 + y0*y0 + z0*z0)
-    z = Rc*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
-
-    theta = asin(z/Rc)  # latitude
-    lamda = atan_2(y, x)  # longitude
+    unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+    safe = Min(Max(unsafe, -1.0), 1.0)  # avoid silly roundoff errors
+    theta = asin(safe)  # latitude
+    lamda = atan_2(y0, x0)  # longitude
     return theta, lamda
 
 
 def sphere_to_cartesian(mesh, u_zonal, u_merid):
-
     theta, lamda = latlon_coords(mesh)
 
     cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
