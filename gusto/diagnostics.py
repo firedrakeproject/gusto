@@ -296,25 +296,21 @@ class Perturbed_Diagnostic(DiagnosticField):
     def __init__(self, diagnostic, key=None):
         self.diagnostic = diagnostic
         self.perturbation = True
-        self.key = key # a string to identify the diagnostic
-
+        self.key = key  # a string to identify the diagnostic
 
     @property
     def name(self):
         return self.diagnostic.name+"_perturbation"
 
-
     def initialise(self, state):
         # set up the base field for the diagnostic
-        self.initial_field = Function(self.diagnostic.field(state.mesh).function_space()).assign(diagnostic.compute(state))
-
+        self.initial_field = Function(self.diagnostic.field(state.mesh).function_space()).assign(self.diagnostic.compute(state))
 
     def field(self, mesh):
         if hasattr(self, "_field"):
             return self._field
         self._field = Function(self.diagnostic.field(mesh).function_space(), name=self.name)
         return self._field
-
 
     def compute(self, state):
         current_field = self.diagnostic.compute(state)
