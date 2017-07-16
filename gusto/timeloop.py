@@ -105,7 +105,8 @@ class Timestepper(BaseTimestepper):
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
-                state.xnp1.assign(state.xn)
+
+            state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
 
@@ -116,6 +117,7 @@ class Timestepper(BaseTimestepper):
                         advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
                         advection.apply(xstar_fields[field], xp_fields[field])
+
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
                 for i in range(state.timestepping.maxi):
@@ -125,7 +127,8 @@ class Timestepper(BaseTimestepper):
                                            state.xrhs, mu_alpha=mu_alpha[1],
                                            incompressible=self.incompressible)
 
-                        state.xrhs -= state.xnp1
+                    state.xrhs -= state.xnp1
+
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
 
