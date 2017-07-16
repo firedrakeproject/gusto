@@ -38,8 +38,8 @@ state = State(mesh, horizontal_degree=1,
               fieldlist=fieldlist)
 
 # interpolate initial conditions
-u0 = state.fields.u
-D0 = state.fields.D
+u0 = state.fields("u")
+D0 = state.fields("D")
 
 R0 = Constant(R)
 

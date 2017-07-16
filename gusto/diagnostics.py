@@ -321,8 +321,8 @@ class PotentialVorticity(DiagnosticField):
         if hasattr(self, "_solver"):
             return self._solver
 
-        u = state.fields.u
-        D = state.fields.D
+        u = state.fields("u")
+        D = state.fields("D")
         gamma = TestFunction(space)
         q = TrialFunction(space)
         f = state.fields("coriolis", space)
