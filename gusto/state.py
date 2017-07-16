@@ -312,6 +312,19 @@ class State(object):
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
 
+    def set_diagnostic_reference_profiles(self, reference_profiles, diagnostic_fields):
+        """
+        Initialise the perturbed diagnostic fields with base fields of the user's choice.
+        """
+        for name, profile in reference_profiles.iteritems():
+            for diagnostic in diagnostic_fields:
+                if hasattr(diagnostic, 'perturbation'):
+                    if hasattr(diagnostic, 'key'):
+                        if name is diagnostic.key:
+                            diagnostic.initialise(self)
+                            diagnostic.initial_field.interpolate(profile)
+                            diagnostic.perturbation = False
+
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
         Build:
