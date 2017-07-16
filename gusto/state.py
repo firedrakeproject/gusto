@@ -192,6 +192,12 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
+        # initialise the base state for any perturbed diagnostic fields
+        for diagnostic in self.diagnostic_fields:
+            if hasattr(diagnostic, "perturbation"):
+                if diagnostic.perturbation:
+                    diagnostic.initialise(self)
+
         # add diagnostic fields to field dictionary and ensure they are dumped
         for diagnostic in self.diagnostic_fields:
             f = diagnostic(self)
