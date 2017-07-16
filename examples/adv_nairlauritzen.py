@@ -61,8 +61,8 @@ def dist(lamda_, theta_):
     return acos(sin(theta_)*sin(theta) + cos(theta_)*cos(theta)*cos(lamda - lamda_))
 
 
-d1 = Min(1.0, pow(dist(lamda_c1, theta_c)/R_t, 2))
-d2 = Min(1.0, pow(dist(lamda_c2, theta_c)/R_t, 2))
+d1 = Min(1.0, dist(lamda_c1, theta_c)/R_t)
+d2 = Min(1.0, dist(lamda_c2, theta_c)/R_t)
 Dexpr = 0.5*(1.0 + cos(pi*d1)) + 0.5*(1.0 + cos(pi*d2))
 
 u_zonal = R0*(k*pow(sin(lamda_prime), 2)*sin(2*theta)*cos(pi*tc/Tc) + 2*pi*cos(theta)/Tc)
