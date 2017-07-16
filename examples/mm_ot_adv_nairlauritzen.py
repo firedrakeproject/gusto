@@ -1,7 +1,7 @@
 from math import pi
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, parameters, asin, acos, atan_2, Min, sin, cos
+from firedrake import IcosahedralSphereMesh, Expression, Constant, parameters, \
+    acos, Min, sin, cos
 
 
 parameters["pyop2_options"]["lazy_evaluation"] = False
@@ -43,11 +43,6 @@ D0 = state.fields.D
 
 R0 = Constant(R)
 
-x0, y0, z0 = SpatialCoordinate(mesh)
-x = R0*x0/sqrt(x0*x0 + y0*y0 + z0*z0)  # because coords can behave unexpectedly
-y = R0*y0/sqrt(x0*x0 + y0*y0 + z0*z0)  # away from nodes, e.g. at quad points
-z = R0*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
-
 tc = Constant(0.0)  # Constant to hold the current time
 Tc = Constant(T)
 
@@ -58,8 +53,7 @@ lamda_c2 = Constant(7.0*pi/6.0)  # longitude of blob 2 centre
 h_max = Constant(1.0)  # height of IC
 R_t = Constant(0.5*R)  # base radius of blobs
 
-theta = asin(z/R0)  # latitude
-lamda = atan_2(y, x)  # longitude
+theta, lamda = latlon_coords(mesh)
 lamda_prime = lamda - 2*pi*tc/Tc
 
 
@@ -74,11 +68,7 @@ Dexpr = 0.5*(1.0 + cos(pi*d1)) + 0.5*(1.0 + cos(pi*d2))
 u_zonal = R0*(k*pow(sin(lamda_prime), 2)*sin(2*theta)*cos(pi*tc/Tc) + 2*pi*cos(theta)/Tc)
 u_merid = R0*k*sin(2*lamda_prime)*cos(theta)*cos(pi*tc/Tc)
 
-cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
-cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
-cartesian_w_expr = u_merid*cos(theta)
-
-uexpr = as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
+uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
 u0.project(uexpr)
 D0.interpolate(Dexpr)
