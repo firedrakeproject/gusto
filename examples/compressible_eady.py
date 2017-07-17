@@ -67,7 +67,7 @@ diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), VelocityY(),
-                     ExnerPi(), ExnerPi_perturbation(),
+                     ExnerPi(), Perturbed_Diagnostic(ExnerPi(), key='Exner_pi'),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
@@ -140,6 +140,7 @@ theta0.interpolate(theta_b + theta_pert)
 rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 compressible_hydrostatic_balance(state, theta0, rho0)
+Pi_b = exner(theta_b, rho_b, state)
 
 # set Pi0
 Pi0 = calculate_Pi0(state, theta0, rho0)
@@ -164,6 +165,7 @@ state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 
 # set the background profiles
 state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.set_diagnostic_reference_profiles({'Exner_pi':Pi_b}, diagnostic_fields)
 
 ##############################################################################
 # Set up advection schemes
