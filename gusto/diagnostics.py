@@ -195,19 +195,6 @@ class ExnerPi(DiagnosticField):
         return self.field(state.mesh).interpolate(Pi)
 
 
-class ExnerPi_perturbation(ExnerPi):
-    name = "ExnerPi_perturbation"
-
-    def compute(self, state):
-        rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        theta = state.fields("theta")
-        thetabar = state.fields("thetabar")
-        Pi = exner(theta, rho, state)
-        Pibar = exner(thetabar, rhobar, state)
-        return self.field(state.mesh).interpolate(Pi-Pibar)
-
-
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
