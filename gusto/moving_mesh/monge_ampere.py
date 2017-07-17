@@ -159,9 +159,9 @@ class OptimalTransportMeshGenerator(MeshGenerator):
                        "fieldsplit_0_mg_levels_pc_type": "ilu",
                        "fieldsplit_1_pc_type": "ilu",
                        "fieldsplit_1_ksp_type": "preonly",
-                       "ksp_max_it": 200,
+                       "ksp_max_it": 100,
                        "snes_max_it": 50,
-                       "ksp_gmres_restart": 200,
+                       "ksp_gmres_restart": 100,
                        "snes_rtol": initial_tol,
                        "snes_linesearch_type": "bt",
                        # "ksp_monitor": True,
@@ -283,7 +283,8 @@ for (int i=0; i<xi.dofs; i++) {
 
         # remake mesh solver with new tolerance
         self.params["snes_rtol"] = self.tol
-        self.params["snes_linesearch_type"] = "l2"
+        self.params["snes_linesearch_type"] = "bt"
+        self.params["snes_max_it"] = 15
 
         self.mesh_solv = NonlinearVariationalSolver(self.mesh_prob,
                                                     nullspace=self.nullspace,

@@ -239,7 +239,7 @@ class MonitorFunction(object):
         # Advect m by -v
         self.solv_madv.invalidate_jacobian()
         self.solv_madv_p0.invalidate_jacobian()
-        steps = 5
+        steps = 10
         for ii in range(steps):
             # solve advection step
             self.solv_madv.solve()
