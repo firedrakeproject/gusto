@@ -165,7 +165,7 @@ state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
 
 # set the background profiles
 state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
-state.set_diagnostic_reference_profiles({'Exner_pi':Pi_b}, diagnostic_fields)
+state.set_diagnostic_reference_profiles({'Exner_pi': Pi_b}, diagnostic_fields)
 
 ##############################################################################
 # Set up advection schemes
