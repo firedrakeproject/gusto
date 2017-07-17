@@ -324,6 +324,8 @@ class State(object):
                             diagnostic.initialise(self)
                             diagnostic.initial_field.interpolate(profile)
                             diagnostic.perturbation = False
+                            break
+            print "Error: no matching key found for perturbed diagnostic."
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
