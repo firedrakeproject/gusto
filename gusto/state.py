@@ -326,6 +326,7 @@ class State(object):
                             diagnostic.perturbation = False
                             break
             print "Error: no matching key found for perturbed diagnostic."
+            raise LookupError
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
