@@ -52,10 +52,10 @@ D0 = state.fields("D")
 theta, lamda = latlon_coords(mesh)
 
 # expressions for meridional and zonal velocity
-u_max = Constant(80.)
+u_max = 80.0
 theta0 = pi/7.
 theta1 = pi/2. - theta0
-en = exp(-4./((theta1-theta0)**2))
+en = np.exp(-4./((theta1-theta0)**2))
 u_zonal_expr = (u_max/en)*exp(1/((theta - theta0)*(theta - theta1)))
 u_zonal = conditional(ge(theta, theta0), conditional(le(theta, theta1), u_zonal_expr, 0.), 0.)
 u_merid = Constant(0.)
@@ -70,27 +70,42 @@ g = Constant(parameters.g)
 
 def D_integrand(th):
     # Initial D field is calculated by integrating D_integrand w.r.t. theta
+    # Assumes the input is between theta0 and theta1.
     from scipy import exp, sin, tan
-    f = 2*parameters.Omega*sin(th)
-    en = exp(-4./((theta1 - theta0)**2))
-    u_zon = (80./en)*exp(1/((th - theta0)*(th - theta1)))
-    u_zon[th >= theta1] = 0.
-    u_zon[th <= theta0] = 0.
-    return -u_zon*(f+tan(th)*u_zon/R)
+    f = 2.0*parameters.Omega*sin(th)
+    u_zon = (80.0/en)*exp(1.0/((th - theta0)*(th - theta1)))
+    return u_zon*(f + tan(th)*u_zon/R)
 
 
 def Dval(X):
     # Function to return value of D at X
-    from scipy import sqrt, arcsin, integrate
-    val = []
-    for x in X:
-        z = R*x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])
-        th = arcsin(z/R)
-        if th <= theta0:
-            val.append(0.)
+    from scipy import integrate
+
+    # Preallocate output array
+    val = np.zeros(len(X))
+
+    angles = np.zeros(len(X))
+
+    # Minimize work by only calculating integrals for points with
+    # theta between theta_0 and theta_1.
+    # For theta <= theta_0, the integral is 0
+    # For theta >= theta_1, the integral is constant.
+
+    # Precalculate this constant:
+    poledepth, _ = integrate.quad(D_integrand, theta0, theta1, epsrel=1.0e-12, limit=100)
+    poledepth *= -R/parameters.g
+
+    angles[:] = np.arcsin(X[:, 2]/R)
+
+    for ii in range(len(X)):
+        if angles[ii] <= theta0:
+            val[ii] = 0.0
+        elif angles[ii] >= theta1:
+            val[ii] = poledepth
         else:
-            v = integrate.quadrature(D_integrand, theta0, th, tol=1.e-8, maxiter=100)
-            val.append((Rc/g)*v[0])
+            v, _ = integrate.quad(D_integrand, theta0, angles[ii], epsrel=1.0e-12, limit=100)
+            val[ii] = -(R/parameters.g)*v
+
     return val
 
 
