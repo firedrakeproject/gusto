@@ -99,7 +99,7 @@ class OptimalTransportMeshGenerator(MeshGenerator):
         v, tau = TestFunctions(MixedSpace)
 
         # sphere
-        modgphi = sqrt(dot(grad(self.phi), grad(self.phi)) + 1e-8)
+        modgphi = sqrt(dot(grad(self.phi), grad(self.phi)) + 1e-14)
         expxi = self.xi*cos(modgphi) + grad(self.phi)*sin(modgphi)/modgphi
         projxi = Identity(3) - outer(self.xi, self.xi)
 
@@ -210,10 +210,17 @@ for (int i=0; i<xi.dofs; i++) {
     for (int j=0; j<3; j++) {
         norm += u[i][j]*u[i][j];
     }
-    norm = sqrt(norm) + 1e-8;
 
-    for (int j=0; j<3; j++) {
-        xout[i][j] = xi[i][j]*cos(norm) + (u[i][j]/norm)*sin(norm);
+    norm = sqrt(norm);
+
+    if(norm < 1.0e-14) {
+        for (int j=0; j<3; j++) {
+            xout[i][j] = xi[i][j];
+        }
+    } else {
+        for (int j=0; j<3; j++) {
+            xout[i][j] = xi[i][j]*cos(norm) + (u[i][j]/norm)*sin(norm);
+        }
     }
 }
 """, dx, {'xi': (self.xi, READ),
