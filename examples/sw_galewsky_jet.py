@@ -104,8 +104,8 @@ def Dval(X):
         elif angles[ii] >= theta1:
             val[ii] = poledepth
         else:
-            # Fixed quadrature with 64 points seems to give relative errors
-            # below 1e-12 for a quantity O(1e-3).
+            # Fixed quadrature with 64 points gives absolute errors below 1e-13
+            # for a quantity of order 1e-3.
             v, _ = integrate.fixed_quad(D_integrand, theta0, angles[ii], n=64)
             val[ii] = -(R/parameters.g)*v
 
