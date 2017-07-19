@@ -53,17 +53,17 @@ D0 = state.fields("D")
 theta, lamda = latlon_coords(mesh)
 
 # expressions for meridional and zonal velocity
-u_max = Constant(80.)
+u_max = 80.0
 theta0 = pi/7.
 theta1 = pi/2. - theta0
 en = exp(-4./((theta1-theta0)**2))
 u_zonal_expr = (u_max/en)*exp(1/((theta - theta0)*(theta - theta1)))
 u_zonal = conditional(ge(theta, theta0), conditional(le(theta, theta1), u_zonal_expr, 0.), 0.)
-u_merid = Constant(0.)
+u_merid = 0.0
 
 # get cartesian components of velocity
 uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
-u0.project(uexpr)
+u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
 
 Rc = Constant(R)
 g = Constant(parameters.g)
@@ -71,27 +71,45 @@ g = Constant(parameters.g)
 
 def D_integrand(th):
     # Initial D field is calculated by integrating D_integrand w.r.t. theta
+    # Assumes the input is between theta0 and theta1.
+    # Note that this function operates on vectorized input.
     from scipy import exp, sin, tan
-    f = 2*parameters.Omega*sin(th)
-    en = exp(-4./((theta1 - theta0)**2))
-    u_zon = (80./en)*exp(1/((th - theta0)*(th - theta1)))
-    u_zon[th >= theta1] = 0.
-    u_zon[th <= theta0] = 0.
-    return -u_zon*(f+tan(th)*u_zon/R)
+    f = 2.0*parameters.Omega*sin(th)
+    u_zon = (80.0/en)*exp(1.0/((th - theta0)*(th - theta1)))
+    return u_zon*(f + tan(th)*u_zon/R)
 
 
 def Dval(X):
     # Function to return value of D at X
-    from scipy import sqrt, arcsin, integrate
-    val = []
-    for x in X:
-        z = R*x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2])
-        th = arcsin(z/R)
-        if th <= theta0:
-            val.append(0.)
+    from scipy import integrate
+
+    # Preallocate output array
+    val = np.zeros(len(X))
+
+    angles = np.zeros(len(X))
+
+    # Minimize work by only calculating integrals for points with
+    # theta between theta_0 and theta_1.
+    # For theta <= theta_0, the integral is 0
+    # For theta >= theta_1, the integral is constant.
+
+    # Precalculate this constant:
+    poledepth, _ = integrate.fixed_quad(D_integrand, theta0, theta1, n=64)
+    poledepth *= -R/parameters.g
+
+    angles[:] = np.arcsin(X[:, 2]/R)
+
+    for ii in range(len(X)):
+        if angles[ii] <= theta0:
+            val[ii] = 0.0
+        elif angles[ii] >= theta1:
+            val[ii] = poledepth
         else:
-            v = integrate.quadrature(D_integrand, theta0, th, tol=1.e-8, maxiter=100)
-            val.append((Rc/g)*v[0])
+            # Fixed quadrature with 64 points gives absolute errors below 1e-13
+            # for a quantity of order 1e-3.
+            v, _ = integrate.fixed_quad(D_integrand, theta0, angles[ii], n=64)
+            val[ii] = -(R/parameters.g)*v
+
     return val
 
 
@@ -105,7 +123,7 @@ C = Function(D0.function_space()).assign(Constant(1.0))
 area = assemble(C*dx)
 Dmean = assemble(D0*dx)/area
 D0 -= Dmean
-D0 += Constant(parameters.H)
+D0 += parameters.H
 
 # optional perturbation
 if perturb:
@@ -132,17 +150,20 @@ sw_forcing = ShallowWaterForcing(state)
 
 
 def initialise_fn():
-    state.fields("u").project(uexpr)
+    u0 = state.fields("u")
+    D0 = state.fields("D")
+
+    u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
 
     X = interpolate(mesh.coordinates, W)
-    state.fields("D").dat.data[:] = Dval(X.dat.data_ro)
+    D0.dat.data[:] = Dval(X.dat.data_ro)
     area = assemble(C*dx)
     Dmean = assemble(D0*dx)/area
-    state.fields("D").dat.data[:] -= Dmean
-    state.fields("D").dat.data[:] += parameters.H
+    D0 -= Dmean
+    D0 += parameters.H
     if perturb:
-        D_pert = Function(state.fields("D").function_space()).interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
-        state.fields("D").dat.data[:] += D_pert.dat.data[:]
+        D_pert.interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
+        D0 += D_pert
     pv(state)
 
 

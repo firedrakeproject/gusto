@@ -58,7 +58,7 @@ theta1 = pi/2. - theta0
 en = np.exp(-4./((theta1-theta0)**2))
 u_zonal_expr = (u_max/en)*exp(1/((theta - theta0)*(theta - theta1)))
 u_zonal = conditional(ge(theta, theta0), conditional(le(theta, theta1), u_zonal_expr, 0.), 0.)
-u_merid = Constant(0.)
+u_merid = 0.0
 
 # get cartesian components of velocity
 uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
