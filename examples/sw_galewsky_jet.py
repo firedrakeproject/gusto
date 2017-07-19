@@ -71,6 +71,7 @@ g = Constant(parameters.g)
 def D_integrand(th):
     # Initial D field is calculated by integrating D_integrand w.r.t. theta
     # Assumes the input is between theta0 and theta1.
+    # Note that this function operates on vectorized input.
     from scipy import exp, sin, tan
     f = 2.0*parameters.Omega*sin(th)
     u_zon = (80.0/en)*exp(1.0/((th - theta0)*(th - theta1)))
@@ -92,7 +93,7 @@ def Dval(X):
     # For theta >= theta_1, the integral is constant.
 
     # Precalculate this constant:
-    poledepth, _ = integrate.quad(D_integrand, theta0, theta1, epsrel=1.0e-12, limit=100)
+    poledepth, _ = integrate.fixed_quad(D_integrand, theta0, theta1, n=64)
     poledepth *= -R/parameters.g
 
     angles[:] = np.arcsin(X[:, 2]/R)
@@ -103,7 +104,9 @@ def Dval(X):
         elif angles[ii] >= theta1:
             val[ii] = poledepth
         else:
-            v, _ = integrate.quad(D_integrand, theta0, angles[ii], epsrel=1.0e-12, limit=100)
+            # Fixed quadrature with 64 points seems to give relative errors
+            # below 1e-12 for a quantity O(1e-3).
+            v, _ = integrate.fixed_quad(D_integrand, theta0, angles[ii], n=64)
             val[ii] = -(R/parameters.g)*v
 
     return val
