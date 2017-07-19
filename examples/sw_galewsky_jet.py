@@ -62,7 +62,7 @@ u_merid = Constant(0.)
 
 # get cartesian components of velocity
 uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
-u0.project(uexpr)
+u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
 
 Rc = Constant(R)
 g = Constant(parameters.g)
