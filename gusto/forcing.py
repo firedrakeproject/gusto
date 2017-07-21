@@ -148,7 +148,7 @@ class CompressibleForcing(Forcing):
         if self.moisture is not None:
             water_t = Function(theta0.function_space()).interpolate(Constant(0.0))
             for water in moisture:
-                water_t += water
+                water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)
 
         pi = exner(theta0, rho0, self.state)
