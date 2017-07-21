@@ -146,7 +146,7 @@ class CompressibleForcing(Forcing):
         theta_rho = Function(theta0.function_space()).assign(theta0)
 
         # adjust density potential temp for moisture species
-        if self.moisture:
+        if self.moisture is not None:
             water_t = Function(theta0.function_space())
             for water in moisture:
                 water_t += water
@@ -169,6 +169,35 @@ class CompressibleForcing(Forcing):
             L = -g*inner(self.test, self.state.k)*dx
 
         return L
+
+    def theta_forcing(self):
+
+
+    def _build_forcing_solvers(self):
+
+        super(CompressibleForcing, self)._build_forcing_solvers()
+        if self.moisture is not None:
+            _, _, theta0 = split(self.x0)
+            Vt = theta0.function_space()
+            p = TrialFunction(Vt)
+            q = TestFunction(Vt)
+            self.theta_new = Function(Vt)
+
+            a = p * q * dx
+            L = q * dx * self.theta_forcing()
+
+            theta_problem = LinearVariationalProblem(a, L, self.theta_new)
+
+            self.theta_solver = LinearVariationalSolver(theta_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+
+        super(CompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
+        if 'compressible' in kwargs and kwargs['compressible']:
+            if self.moisture is not None:
+                _, _, theta_out = x_out.split()
+                self.theta_solver.solve()
+                theta_out.assign(self.theta_new)
 
 
 def exner(theta, rho, state):
