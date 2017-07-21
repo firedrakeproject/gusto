@@ -160,14 +160,14 @@ class CompressibleSolver(TimesteppingSolver):
         dS_vp = dS_v(degree=(self.quadrature_degree))
 
         # introduce density potential temperatures
-        theta_rho = Function(theta_in.function_space()).assign(theta)
-        theta_rho_bar = Function(theta_in.function_space()).assign(thetabar)
+        theta_rho = Function(Vtheta).assign(theta)
+        theta_rho_bar = Function(Vtheta).assign(thetabar)
 
         # add moisture fields
         if self.moisture is not None:
-            water_t = Function(theta_in.function_space()).interpolate(Constant(0.0))
+            water_t = Function(Vtheta).interpolate(Constant(0.0))
             for water in self.moisture:
-                water_t += water
+                water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)
             theta_rho_bar = theta_rho_bar / (1 + water_t)
 
