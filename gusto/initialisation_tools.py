@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, conditional, exp
 from gusto.forcing import exner
 
 
