@@ -6,7 +6,7 @@ as balanced initial conditions.
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
-    Function, Constant, assemble, \
+    Function, Constant, assemble, Expression, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, conditional, exp
@@ -289,7 +289,7 @@ def calculate_Pi0(state, theta0, rho0):
     return Pi0
 
 
-def moist_hydrostatic_balance(state, theta_e, water_t):
+def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
@@ -297,6 +297,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
     :arg state: The :class:`State` object.
     :arg theta_e: The initial wet equivalent potential temperature profile.
     :arg water_t: The total water pseudo-mixing ratio profile.
+    :arg pi_boundary: the value of pi on the lower boundary of the domain.
     """
 
     theta0 = state.fields('theta')
@@ -306,6 +307,8 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
+    Vv = state.spaces("Vv")
+    n = FacetNormal(state.mesh)
 
     param = state.parameters
 
@@ -322,6 +325,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
     w_sat2 = param.w_sat2
     w_sat3 = param.w_sat3
     w_sat4 = param.w_sat4
+    g = param.g
 
     quadrature_degree = (5,5)
 
@@ -404,6 +408,16 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
 
     theta_v, w_v, pi, v = split(z)
 
+    # define variables
+    T = pi * theta_v / (1 + w_v * R_v / R_d)
+    p = p_0 * pi ** (cp / R_d)
+    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
+    w_sat = conditional(w_sat1 /
+                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4) > water_t,
+                        water_t,
+                        w_sat1 /
+                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+
     F = (-gamma * theta_e * dxp
          + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
          (- R_d / (cp + c_pl * water_t)) *
@@ -427,7 +441,6 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
     theta_v, w_v, pi, v = z.split()
     
     # assign final values
-    Pi.assign(pi)
     theta0.assign(theta_v)
     water_v0.assign(w_v)
 
