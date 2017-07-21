@@ -208,6 +208,68 @@ class ExnerPi_perturbation(ExnerPi):
         return self.field(state.mesh).interpolate(Pi-Pibar)
 
 
+class Theta_e(DiagnosticField):
+    name = "Theta_e"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cp = X.cp
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        p = p_0 * (R_d * theta * rho / p_0) ** (1.0 / (1.0 - kappa))
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+        w_c = state.fields('water_c')
+        w_t = w_c + w_v
+
+        return self.field(state.mesh).interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
+
+
+class InternalEnergyDensity(DiagnosticField):
+    name = "InternalEnergy"
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cv = X.cv
+        c_vv = X.c_vv
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+        
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        w_c = state.fields('water_c')
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+
+        return self.field(state.mesh).interpolate(rho * (cv * T + c_vv * w_v * T + c_pl * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+
+
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
