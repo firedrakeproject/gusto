@@ -22,7 +22,7 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
         self.state = state
         if linear:
             self.euler_poincare = False
@@ -46,6 +46,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.sponge = state.mu is not None
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
+        self.moisture = moisture
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
