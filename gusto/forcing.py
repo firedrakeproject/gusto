@@ -142,11 +142,21 @@ class CompressibleForcing(Forcing):
         cp = self.state.parameters.cp
         n = FacetNormal(self.state.mesh)
 
+        # introduce density potential temp
+        theta_rho = Function(theta0.function_space()).assign(theta0)
+
+        # adjust density potential temp for moisture species
+        if self.moisture:
+            water_t = Function(theta0.function_space())
+            for water in moisture:
+                water_t += water
+            theta_rho = theta_rho / (1 + water_t)
+
         pi = exner(theta0, rho0, self.state)
 
         L = (
-            + cp*div(theta0*self.test)*pi*dx
-            - cp*jump(self.test*theta0, n)*avg(pi)*dS_v
+            + cp*div(theta_rho*self.test)*pi*dx
+            - cp*jump(self.test*theta_rho, n)*avg(pi)*dS_v
         )
         return L
 
