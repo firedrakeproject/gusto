@@ -1,6 +1,6 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, exp
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
