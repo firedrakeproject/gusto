@@ -388,7 +388,6 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
         solver.solve()
         theta0.assign(theta0 * (1 - epsilon) + epsilon * theta_v)
         water_v0.assign(water_v0 * (1 - epsilon) + epsilon * w_v)
-        theta_old.assign(theta0)
 
     # now begin on Newton solver, setup up new mixed space
     Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
