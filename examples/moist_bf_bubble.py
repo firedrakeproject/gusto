@@ -21,7 +21,6 @@ ncolumns = int(L/deltax)
 m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 diffusion = True
-divergence_term = False
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
@@ -73,15 +72,12 @@ cp = params.cp
 
 # Define constant theta_e and water_t
 Tsurf = 320.0
-theta_e_top = 320.0
 total_water = 0.02
 theta_e = Function(Vt).interpolate(Constant(Tsurf))
 water_t = Function(Vt).interpolate(Constant(total_water))
 
 # Calculate hydrostatic fields
-moist_hydrostatic_balance(state, theta_e, water_t,
-                          theta_e_constant=Tsurf,
-                          water_t_constant=total_water)
+moist_hydrostatic_balance(state, theta_e, water_t)
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
@@ -143,7 +139,6 @@ Pi = (R_d * theta0 * rho0 / p_0) ** kappa
 state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
                   'water_v':water_v0, 'water_c':water_c0})
 state.set_reference_profiles({'rho':rho_b, 'theta':theta_b, 'water_v':water_vb})
-state.set_diagnostic_reference_profiles({'theta_e_pert':theta_e_b}, diagnostic_fields)
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
