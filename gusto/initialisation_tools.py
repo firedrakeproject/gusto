@@ -92,6 +92,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
 
 def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                                      top=False, pi_boundary=Constant(1.0),
+                                     water_t=None,
                                      solve_for_rho=False,
                                      params=None):
     """
@@ -105,6 +106,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     it at the bottom.
     :arg pi_boundary: a field or expression to use as boundary data for pi on
     the top or bottom as specified.
+    :arg moisture: the initial total water mixing ratio field.
     """
 
     # Calculate hydrostatic Pi
@@ -118,9 +120,15 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     cp = state.parameters.cp
 
+    # introduce density potential temperature
+    theta_rho = theta0
+    
+    if water_t is not None:
+        theta_rho = theta_rho / (1 + water_t)
+
     alhs = (
-        (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
-        + dpi*div(theta0*v)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta_rho)*pi)*dx
+        + dpi*div(theta_rho*v)*dx
     )
 
     if top:
@@ -130,7 +138,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    arhs = -cp*inner(dv, n)*theta0*pi_boundary*bmeasure
+    arhs = -cp*inner(dv, n)*theta_rho*pi_boundary*bmeasure
     if state.geopotential_form:
         Phi = state.Phi
         arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
@@ -277,3 +285,150 @@ def calculate_Pi0(state, theta0, rho0):
     Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
     return Pi0
+
+
+def moist_hydrostatic_balance(state, theta_e, water_t):
+    """
+    Given a wet equivalent potential temperature, theta_e, and the total moisture
+    content, water_t, compute a hydrostatically balance virtual potential temperature,
+    dry density and water vapour profile.
+    :arg state: The :class:`State` object.
+    :arg theta_e: The initial wet equivalent potential temperature profile.
+    :arg water_t: The total water pseudo-mixing ratio profile.
+    """
+
+    theta0 = state.fields('theta')
+    rho0 = state.fields('rho')
+    water_v0 = state.fields('water_v')
+
+    # Calculate hydrostatic Pi
+    Vt = theta0.function_space()
+    Vr = rho0.function_space()
+
+    param = state.parameters
+
+    # define some parameters as attributes
+    R_d = param.R_d
+    p_0 = param.p_0
+    cp = param.cp
+    c_pv = param.c_pv
+    c_pl = param.c_pl
+    R_v = param.R_v
+    L_v0 = param.L_v0
+    T_0 = param.T_0
+    w_sat1 = param.w_sat1
+    w_sat2 = param.w_sat2
+    w_sat3 = param.w_sat3
+    w_sat4 = param.w_sat4
+
+    quadrature_degree = (5,5)
+
+    if(params is None):
+        params = {'ksp_type':'preonly',
+                  'ksp_monitor_true_residual': True,
+                  'ksp_converged_reason': True,
+                  'snes_converged_reason':True,
+                  'ksp_max_it': 100,
+                  'mat_type':'aij',
+                  'pc_type':'lu',
+                  'pc_factor_mat_solver_package':'mumps'}
+
+    theta0.interpolate(theta_e)
+    water_v0.interpolate(water_t)
+    Pi = Function(Vr)
+    epsilon = 0.9 # relaxation constant
+
+    # set up mixed space
+    Z = MixedFunctionSpace((Vt, Vt))
+    z = Function(Z)
+
+    gamma, phi = TestFunctions(Z)
+
+    theta_v, w_v = z.split()
+
+    # give first guesses for trial functions
+    theta_v.assign(theta0)
+    w_v.assign(water_v0)
+
+    theta_v, w_v = split(z)
+
+    # define variables
+    T = Pi * theta_v / (1 + w_v * R_v / R_d)
+    p = p_0 * Pi ** (cp / R_d)
+    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
+    w_sat = conditional(w_sat1 /
+                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4) > water_t,
+                        water_t,
+                        w_sat1 /
+                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+
+    dxp = dx(degree=(quadrature_degree))
+
+    # set up weak form of theta_e and w_sat equations
+    F = (-gamma * theta_e * dxp
+         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
+         (- R_d / (cp + c_pl * water_t)) *
+         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         - phi * w_v * dxp
+         + phi * w_sat * dxp)
+
+    problem = NonlinearVariationalProblem(F, z)
+    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+
+    theta_v, w_v = z.split()
+
+    Pi_h = Function(Vr).interpolate((p / p_0) ** (R_d / cp))
+
+    # solve for Pi with theta_v and w_v constant
+    # then solve for theta_v and w_v with Pi constant
+    for i in range(5):
+        compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi_h, water_t=water_t)
+        Pi.assign(Pi * (1 - epsilon) + epsilon * Pi_h)
+        solver.solve()
+        theta0.assign(theta0 * (1 - epsilon) + epsilon * theta_v)
+        water_v0.assign(water_v0 * (1 - epsilon) + epsilon * w_v)
+        theta_old.assign(theta0)
+
+    # now begin on Newton solver, setup up new mixed space
+    Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
+    z = Function(Z)
+
+    gamma, phi, psi, w = TestFunctions(Z)
+
+    theta_v, w_v, pi, v = z.split()
+
+    # use previous values as first guesses for newton solver
+    theta_v.assign(theta0)
+    w_v.assign(water_v0)
+    pi.assign(Pi)
+
+    theta_v, w_v, pi, v = split(z)
+
+    F = (-gamma * theta_e * dxp
+         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
+         (- R_d / (cp + c_pl * water_t)) *
+         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         - phi * w_v * dxp
+         + phi * w_sat * dxp
+         + cp * inner(v,w) * dxp
+         - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
+         + psi * div(theta_v * v / (1.0 + water_t)) * dxp
+         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * ds_b
+         + g * inner(w, state.k) * dxp
+    )
+
+    bcs = [DirichletBC(Z.sub(3), Expression(("0.", "0.")), "top")]
+         
+    problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+
+    solver.solve()
+    
+    theta_v, w_v, pi, v = z.split()
+    
+    # assign final values
+    Pi.assign(pi)
+    theta0.assign(theta_v)
+    water_v0.assign(w_v)
+
+    compressible_hydrostatic_balance(state, theta0, rho0, water_t=water_t, solve_for_rho=True)
