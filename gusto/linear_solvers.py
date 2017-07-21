@@ -70,11 +70,14 @@ class CompressibleSolver(TimesteppingSolver):
     quadrature degree in the horizontal direction and q_v is that in
     the vertical direction
     :arg params (optional): solver parameters
+    :arg moisture (optional): a list of moisture fields
     """
 
-    def __init__(self, state, quadrature_degree=None, params=None):
+    def __init__(self, state, quadrature_degree=None, params=None, moisture=None):
 
         self.state = state
+
+        self.moisture = moisture
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -156,14 +159,26 @@ class CompressibleSolver(TimesteppingSolver):
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
 
+        # introduce density potential temperatures
+        theta_rho = Function(theta_in.function_space()).assign(theta)
+        theta_rho_bar = Function(theta_in.function_space()).assign(thetabar)
+
+        # add moisture fields
+        if self.moisture is not None:
+            water_t = Function(theta_in.function_space()).interpolate(Constant(0.0))
+            for water in self.moisture:
+                water_t += water
+            theta_rho = theta_rho / (1 + water_t)
+            theta_rho_bar = theta_rho_bar / (1 + water_t)
+
         eqn = (
             inner(w, (u - u_in))*dx
-            - beta*cp*div(theta*V(w))*pibar*dxp
+            - beta*cp*div(theta_rho*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
-            - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
+            - beta*cp*div(theta_rho_bar*w)*pi*dxp
+            + beta*cp*jump(theta_rho_bar*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
