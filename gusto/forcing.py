@@ -141,9 +141,10 @@ class CompressibleForcing(Forcing):
         u0, rho0, theta0 = split(self.x0)
         cp = self.state.parameters.cp
         n = FacetNormal(self.state.mesh)
+        Vtheta = self.state.spaces("HDiv_v")
 
         # introduce density potential temp
-        theta_rho = Function(theta0.function_space()).assign(theta0)
+        theta_rho = theta0
 
         # adjust density potential temp for moisture species
         if self.moisture is not None:
