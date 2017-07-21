@@ -172,6 +172,26 @@ class CompressibleForcing(Forcing):
 
     def theta_forcing(self):
 
+        cv = self.state.parameters.cv
+        c_vv = self.state.parameters.c_vv
+        c_pv = self.state.parameters.c_pv
+        c_pl = self.state.parameters.c_pl
+        R_d = self.state.parameters.R_d
+        R_v = self.state.parameters.R_v
+
+        u0, _, theta0 = split(self.x0)
+        water_v = self.state.fields('water_v')
+        water_c = self.state.fields('water_c')
+
+        c_vml = cv + water_v * c_vv + water_c * c_pl
+        c_pml = cp + water_v * c_pv + water_c * c_pl
+        R_m = R_d + water_v * R_v
+
+        L = -theta0 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u0)
+
+        return L
+        
+
 
     def _build_forcing_solvers(self):
 
