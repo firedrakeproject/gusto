@@ -29,7 +29,7 @@ extensions = ['sphinx.ext.autodoc',
               #'sphinxcontrib.youtube',
               'sphinxcontrib.bibtex']
 
-mathjax_path = 'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'
+mathjax_path = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML'
 
 # Both the class’ and the __init__ method’s docstring are concatenated and
 # inserted into the class definition
@@ -49,7 +49,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Gusto'
-copyright = u'2016, Imperial College London and others'
+copyright = u'2016-2017, Imperial College London and others'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
