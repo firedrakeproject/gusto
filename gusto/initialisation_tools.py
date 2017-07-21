@@ -325,15 +325,14 @@ def moist_hydrostatic_balance(state, theta_e, water_t):
 
     quadrature_degree = (5,5)
 
-    if(params is None):
-        params = {'ksp_type':'preonly',
-                  'ksp_monitor_true_residual': True,
-                  'ksp_converged_reason': True,
-                  'snes_converged_reason':True,
-                  'ksp_max_it': 100,
-                  'mat_type':'aij',
-                  'pc_type':'lu',
-                  'pc_factor_mat_solver_package':'mumps'}
+    params = {'ksp_type':'preonly',
+              'ksp_monitor_true_residual': True,
+              'ksp_converged_reason': True,
+              'snes_converged_reason':True,
+              'ksp_max_it': 100,
+              'mat_type':'aij',
+              'pc_type':'lu',
+              'pc_factor_mat_solver_package':'mumps'}
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
