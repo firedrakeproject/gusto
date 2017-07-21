@@ -188,9 +188,8 @@ class CompressibleForcing(Forcing):
 
         L = -theta0 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u0)
 
-        return L
+        return self.scaling * L
         
-
 
     def _build_forcing_solvers(self):
 
