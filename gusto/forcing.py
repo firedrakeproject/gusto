@@ -147,8 +147,8 @@ class CompressibleForcing(Forcing):
 
         # adjust density potential temp for moisture species
         if self.moisture is not None:
-            water_t = Function(theta0.function_space()).interpolate(Constant(0.0))
-            for water in moisture:
+            water_t = Function(Vtheta).interpolate(Constant(0.0))
+            for water in self.moisture:
                 water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)
 
@@ -173,6 +173,7 @@ class CompressibleForcing(Forcing):
     def theta_forcing(self):
 
         cv = self.state.parameters.cv
+        cp = self.state.parameters.cp
         c_vv = self.state.parameters.c_vv
         c_pv = self.state.parameters.c_pv
         c_pl = self.state.parameters.c_pl
@@ -197,13 +198,14 @@ class CompressibleForcing(Forcing):
         super(CompressibleForcing, self)._build_forcing_solvers()
         if self.moisture is not None:
             _, _, theta0 = split(self.x0)
-            Vt = theta0.function_space()
+            Vt = self.state.spaces("HDiv_v")
             p = TrialFunction(Vt)
             q = TestFunction(Vt)
             self.theta_new = Function(Vt)
 
             a = p * q * dx
-            L = q * dx * self.theta_forcing()
+            L = self.theta_forcing()
+            L = q * L * dx
 
             theta_problem = LinearVariationalProblem(a, L, self.theta_new)
 
