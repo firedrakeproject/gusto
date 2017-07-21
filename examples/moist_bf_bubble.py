@@ -44,6 +44,7 @@ rho0 = state.fields("rho")
 theta0 = state.fields("theta")
 water_v0 = state.fields("water_v", theta0.function_space())
 water_c0 = state.fields("water_c", theta0.function_space())
+moisture = ["water_v","water_c"]
 
 # spaces
 Vu = u0.function_space()
@@ -177,10 +178,10 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = CompressibleSolver(state, params=schur_params)
+linear_solver = CompressibleSolver(state, params=schur_params, moisture=moisture)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
