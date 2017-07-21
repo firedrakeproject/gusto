@@ -20,16 +20,15 @@ ncolumns = int(L/deltax)
 
 m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-rigid_walls = True
 diffusion = True
 divergence_term = False
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='wet_BF_Theta_e_320_NoThetaForcing_WithDiffusion60', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [Perturbed_Diagnostic(Theta_e(), key='theta_e_pert'), Theta_e()]
+diagnostic_fields = [Theta_e()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
@@ -183,18 +182,14 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
 
-linear_solver = MoistSolver(state, params=schur_params, rigid_walls=rigid_walls)
+linear_solver = CompressibleSolver(state, params=schur_params)
 
 # Set up forcing
-compressible_forcing = MoistForcing(state, rigid_walls=rigid_walls, divergence_term=divergence_term)
+compressible_forcing = CompressibleForcing(state)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
        DirichletBC(Vu, 0.0, "top")]
-
-if rigid_walls:
-       bcs.append(DirichletBC(Vu, 0.0, 1))
-       bcs.append(DirichletBC(Vu, 0.0, 2))
 
 diffusion_dict = {}
 
