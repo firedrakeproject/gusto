@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, conditional, cos, pi, sqrt, exp, NonlinearVariationalProblem, \
-    NonlinearVariationalSolver, TestFunction, dx, grad, inner, IntervalMesh
+    NonlinearVariationalSolver, TestFunction, dx, TrialFunction
 import sys
 
 dt = 1.0
@@ -51,7 +51,7 @@ Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
 x = SpatialCoordinate(mesh)
-quadrature_degree = (5,5)
+quadrature_degree = (5, 5)
 dxp = dx(degree=(quadrature_degree))
 
 # declare some parameters
