@@ -86,19 +86,13 @@ rho_b = Function(Vr).assign(rho0)
 water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
 
-
-T_b = theta_b * (R_d * theta_b * rho_b / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + water_vb * R_v / R_d)
-p_b = p_0 * (R_d * theta_b * rho_b / p_0) ** (1.0 / (1.0 - kappa))
-theta_e_b = Function(Vt).interpolate(T_b * (p_b / (p_0 * (1 + water_vb * R_v / R_d))) ** - (R_d / (cp + c_pl * water_t))
-                                     * exp(water_vb * (L_v0 - (c_pl - c_pv) * (T_b - T_0)) / (T_b * (cp + c_pl * water_t))))
-
 # define perturbation
 xc = 5000.
 zc = 2000.
 rc = 2000.
-tdash = 2.0
+Tdash = 2.0
 theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0 + (x[1] - zc) ** 2.0) > rc,
-                                                  0.0, tdash *
+                                                  0.0, Tdash *
                                                   (cos(pi * sqrt(((x[0] - xc) / rc) ** 2.0 + ((x[1] - zc) / rc) ** 2.0) / 2.0))
                                                   ** 2.0))
 
@@ -120,10 +114,7 @@ phi = TestFunction(Vt)
 
 p = p_0 * (R_d * theta0 * rho0 / p_0) ** (1.0 / (1.0 - kappa))
 T = theta0 * (R_d * theta0 * rho0 / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
-w_sat = conditional(w_sat1 /
-                    (p * exp(w_sat2 * ((T - T_0) / (T - w_sat3))) - w_sat4) > water_t, water_t,
-                    w_sat1 /
-                    (p * exp(w_sat2 * ((T - T_0) / (T - w_sat3))) - w_sat4))
+w_sat = w_sat1 / (p * exp(w_sat2 * ((T - T_0) / (T - w_sat3))) - w_sat4)
 
 w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
 w_problem = NonlinearVariationalProblem(w_functional, w_v)
@@ -131,10 +122,7 @@ w_solver = NonlinearVariationalSolver(w_problem)
 w_solver.solve()
 
 water_v0.assign(w_v)
-
 water_c0.assign(water_t - water_v0)
-
-Pi = (R_d * theta0 * rho0 / p_0) ** kappa
 
 # initialise fields
 state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
