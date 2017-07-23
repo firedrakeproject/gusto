@@ -126,7 +126,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     theta_rho = theta0
     
     if water_t is not None:
-        theta_rho = theta_rho / (1 + water_t)
+        theta_rho = theta0 / (1 + water_t)
 
     alhs = (
         (cp*inner(v, dv) - cp*div(dv*theta_rho)*pi)*dx
@@ -361,11 +361,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     T = Pi * theta_v / (1 + w_v * R_v / R_d)
     p = p_0 * Pi ** (cp / R_d)
     L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = conditional(w_sat1 /
-                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4) > water_t,
-                        water_t,
-                        w_sat1 /
-                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
 
     dxp = dx(degree=(quadrature_degree))
 
@@ -412,11 +408,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     T = pi * theta_v / (1 + w_v * R_v / R_d)
     p = p_0 * pi ** (cp / R_d)
     L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = conditional(w_sat1 /
-                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4) > water_t,
-                        water_t,
-                        w_sat1 /
-                        (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
 
     F = (-gamma * theta_e * dxp
          + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
