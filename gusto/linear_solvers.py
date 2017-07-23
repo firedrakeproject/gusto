@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning, Constant
+    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning, Constant, Expression
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
