@@ -204,25 +204,23 @@ class CompressibleForcing(Forcing):
             Vt = self.state.spaces("HDiv_v")
             p = TrialFunction(Vt)
             q = TestFunction(Vt)
-            self.theta_new = Function(Vt)
+            self.thetaF = Function(Vt)
 
             a = p * q * dx
             L = self.theta_forcing()
             L = q * L * dx
 
-            theta_problem = LinearVariationalProblem(a, L, self.theta_new)
+            theta_problem = LinearVariationalProblem(a, L, self.thetaF)
 
             self.theta_solver = LinearVariationalSolver(theta_problem)
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         super(CompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
-        if 'compressible' in kwargs and kwargs['compressible']:
-            if self.moisture is not None:
-                _, _, theta_out = x_out.split()
-                self.theta_solver.solve()
-                theta_out.assign(self.theta_new)
-
+        if self.moisture is not None:
+            self.theta_solver.solve()
+            _, _, theta_out = x_out.split()
+            theta_out += self.thetaF
 
 def exner(theta, rho, state):
     """
