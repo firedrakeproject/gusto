@@ -24,7 +24,7 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='moist_bf', dumpfreq=1, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e()]
@@ -96,7 +96,7 @@ theta_e_b = Function(Vt).interpolate(T_b * (p_b / (p_0 * (1 + water_vb * R_v / R
 xc = 10000.
 zc = 2000.
 rc = 2000.
-tdash = 2.0
+tdash = 0.0
 theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0 + (x[1] - zc) ** 2.0) > rc,
                                                   0.0, tdash *
                                                   (cos(pi * sqrt(((x[0] - xc) / rc) ** 2.0 + ((x[1] - zc) / rc) ** 2.0) / 2.0))
