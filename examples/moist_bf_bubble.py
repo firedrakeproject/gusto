@@ -10,21 +10,21 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100.
+    deltax = 400.
     tmax = 1000.
 
-L = 20000.
+L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
 
-m = IntervalMesh(ncolumns, L)
+m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=1, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e()]
@@ -93,10 +93,10 @@ theta_e_b = Function(Vt).interpolate(T_b * (p_b / (p_0 * (1 + water_vb * R_v / R
                                      * exp(water_vb * (L_v0 - (c_pl - c_pv) * (T_b - T_0)) / (T_b * (cp + c_pl * water_t))))
 
 # define perturbation
-xc = 10000.
+xc = 5000.
 zc = 2000.
 rc = 2000.
-tdash = 0.0
+tdash = 2.0
 theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0 + (x[1] - zc) ** 2.0) > rc,
                                                   0.0, tdash *
                                                   (cos(pi * sqrt(((x[0] - xc) / rc) ** 2.0 + ((x[1] - zc) / rc) ** 2.0) / 2.0))

@@ -69,7 +69,7 @@ class Forcing(object, metaclass=ABCMeta):
         u0 = split(self.x0)[0]
         return -0.5*div(self.test)*inner(u0, u0)*dx
 
-    @abstractmethod
+#    @abstractmethod
     def pressure_gradient_term(self):
         pass
 
@@ -153,6 +153,8 @@ class CompressibleForcing(Forcing):
                 water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)
 
+        theta_rho = theta0 / (1 + water_t)
+
         pi = exner(theta0, rho0, self.state)
 
         L = (
@@ -219,7 +221,7 @@ class CompressibleForcing(Forcing):
             if self.moisture is not None:
                 _, _, theta_out = x_out.split()
                 self.theta_solver.solve()
-                theta_out.assign(self.theta_new)
+                #theta_out.assign(self.theta_new)
 
 
 def exner(theta, rho, state):
