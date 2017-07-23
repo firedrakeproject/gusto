@@ -260,7 +260,7 @@ class InternalEnergyDensity(DiagnosticField):
         L_v0 = X.L_v0
         T_0 = X.T_0
         kappa = X.kappa
-        
+
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
