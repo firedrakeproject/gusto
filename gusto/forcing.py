@@ -220,7 +220,7 @@ class CompressibleForcing(Forcing):
             if self.moisture is not None:
                 _, _, theta_out = x_out.split()
                 self.theta_solver.solve()
-                #theta_out.assign(self.theta_new)
+                theta_out.assign(self.theta_new)
 
 
 def exner(theta, rho, state):
