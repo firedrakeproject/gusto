@@ -101,12 +101,12 @@ theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
 
 # find perturbed rho
 gamma = TestFunction(Vr)
-rho_trial = Function(Vr)
-rho_functional = gamma * theta0 * rho_trial * dxp - gamma * rho_b * theta_b * dxp
-rho_problem = NonlinearVariationalProblem(rho_functional, rho_trial)
-rho_solver = NonlinearVariationalSolver(rho_problem)
+rho_trial = TrialFunction(Vr)
+a = gamma * rho_trial * dxp
+L = gamma * (rho_b * theta_b / theta0) * dxp
+rho_problem = LinearVariationalProblem(a, L, rho0)
+rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
-rho0.assign(rho_trial)
 
 # find perturbed water_v
 w_v = Function(Vt)
