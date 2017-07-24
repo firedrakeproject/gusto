@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, cos, sin, asin, atan_2
+from firedrake import IcosahedralSphereMesh, Expression, Constant, cos, sin
 import sys
 
 dt = 900.
@@ -47,22 +46,12 @@ h0 = Constant(H)
 g = Constant(parameters.g)
 Omega = Constant(parameters.Omega)
 
-x0, y0, z0 = SpatialCoordinate(mesh)
-x = Rc*x0/sqrt(x0*x0 + y0*y0 + z0*z0)
-y = Rc*y0/sqrt(x0*x0 + y0*y0 + z0*z0)
-z = Rc*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
-
-theta = asin(z/Rc)  # latitude
-lamda = atan_2(y, x)  # longitude
+theta, lamda = latlon_coords(mesh)
 
 u_zonal = Rc*omega*cos(theta) + Rc*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
 u_merid = -Rc*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
 
-cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
-cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
-cartesian_w_expr = u_merid*cos(theta)
-
-uexpr = as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
+uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
 
 def Atheta(theta):
@@ -80,6 +69,7 @@ def Ctheta(theta):
 Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
 # Coriolis expression
+x, y, z = SpatialCoordinate(mesh)
 fexpr = 2*Omega*z/Rc
 V = FunctionSpace(mesh, "CG", 1)
 f = state.fields("coriolis", V)
