@@ -294,10 +294,7 @@ class Perturbation(Difference):
 
 class PotentialVorticity(DiagnosticField):
     """Diagnostic field for potential vorticity."""
-
-    @property
-    def name(self):
-        return "potential_vorticity"
+    name = "potential_vorticity"
 
     def field(self, space):
         """Returns the potential vorticity field.
