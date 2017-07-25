@@ -195,19 +195,6 @@ class ExnerPi(DiagnosticField):
         return self.field(state.mesh).interpolate(Pi)
 
 
-class ExnerPi_perturbation(ExnerPi):
-    name = "ExnerPi_perturbation"
-
-    def compute(self, state):
-        rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        theta = state.fields("theta")
-        thetabar = state.fields("thetabar")
-        Pi = exner(theta, rho, state)
-        Pibar = exner(thetabar, rhobar, state)
-        return self.field(state.mesh).interpolate(Pi-Pibar)
-
-
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
@@ -289,3 +276,29 @@ class Perturbation(Difference):
     @property
     def name(self):
         return self.field1+"_perturbation"
+
+
+class Perturbed_Diagnostic(DiagnosticField):
+
+    def __init__(self, diagnostic, key=None):
+        self.diagnostic = diagnostic
+        self.perturbation = True
+        self.key = key  # a string to identify the diagnostic
+
+    @property
+    def name(self):
+        return self.diagnostic.name+"_perturbation"
+
+    def initialise(self, state):
+        # set up the base field for the diagnostic
+        self.initial_field = Function(self.diagnostic.field(state.mesh).function_space()).assign(self.diagnostic.compute(state))
+
+    def field(self, mesh):
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(self.diagnostic.field(mesh).function_space(), name=self.name)
+        return self._field
+
+    def compute(self, state):
+        current_field = self.diagnostic.compute(state)
+        return self.field(state.mesh).assign(current_field - self.initial_field)

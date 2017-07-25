@@ -192,6 +192,12 @@ class State(object):
             self.diagnostic_fields.append(f)
             self.diagnostics.register(f.name)
 
+        # initialise the base state for any perturbed diagnostic fields
+        for diagnostic in self.diagnostic_fields:
+            if hasattr(diagnostic, "perturbation"):
+                if diagnostic.perturbation:
+                    diagnostic.initialise(self)
+
         # add diagnostic fields to field dictionary and ensure they are dumped
         for diagnostic in self.diagnostic_fields:
             f = diagnostic(self)
@@ -305,6 +311,26 @@ class State(object):
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
+
+    def set_diagnostic_reference_profiles(self, reference_profiles, diagnostic_fields):
+        """
+        Initialise the perturbed diagnostic fields with base fields of the user's choice.
+        """
+        for name, profile in reference_profiles.iteritems():
+            found_diagnostic = False
+            for diagnostic in diagnostic_fields:
+                print diagnostic
+                if hasattr(diagnostic, 'perturbation'):
+                    if hasattr(diagnostic, 'key'):
+                        if name is diagnostic.key:
+                            diagnostic.initialise(self)
+                            diagnostic.initial_field.interpolate(profile)
+                            diagnostic.perturbation = False
+                            found_diagnostic = True
+                            break
+            if not found_diagnostic:
+                print "Error: no matching key found for perturbed diagnostic", name
+                raise LookupError
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
