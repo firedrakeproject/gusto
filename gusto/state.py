@@ -22,7 +22,7 @@ class SpaceCreator(object):
         try:
             return getattr(self, name)
         except AttributeError:
-            value = FunctionSpace(mesh, family, degree)
+            value = FunctionSpace(mesh, family, degree, name)
             setattr(self, name, value)
             return value
 
@@ -160,6 +160,21 @@ class State(object):
                 self.Phi = Function(V).interpolate(Expression("x[1]"))
             self.Phi *= parameters.g
 
+    def setup_diagnostics(self):
+        # add special case diagnostic fields
+        for name in self.output.perturbation_fields:
+            f = Perturbation(self, name)
+            self.diagnostic_fields.append(f)
+
+        for name in self.output.steady_state_error_fields:
+            f = SteadyStateError(self, name)
+            self.diagnostic_fields.append(f)
+
+        for diagnostic in self.diagnostic_fields:
+            print diagnostic
+            diagnostic.setup(self.mesh, self.spaces, self.fields)
+            self.diagnostics.register(diagnostic.name)
+
     def setup_dump(self, pickup=False):
 
         # setup dump files
@@ -176,21 +191,6 @@ class State(object):
 
         # create field dictionary
         self.field_dict = {field.name(): field for field in self.fields}
-
-        # register any diagnostic fields to diagnostics
-        for diagnostic in self.diagnostic_fields:
-            self.diagnostics.register(diagnostic.name)
-
-        # add special case diagnostic fields
-        for name in self.output.perturbation_fields:
-            f = Perturbation(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
-        for name in self.output.steady_state_error_fields:
-            f = SteadyStateError(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
 
         # add diagnostic fields to field dictionary and ensure they are dumped
         for diagnostic in self.diagnostic_fields:

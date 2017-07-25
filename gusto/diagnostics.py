@@ -64,6 +64,20 @@ class DiagnosticField(object):
         """The name of this diagnostic field"""
         pass
 
+    def function_space(self, spaces, mesh=None, name=None):
+        if name is not None:
+            fs = spaces(name)
+        else:
+            fs = spaces("DG0", mesh, "DG", 0)
+        return fs
+
+    def setup(self, mesh, spaces, fields):
+        if hasattr(self, "fs_name"):
+            fs = self.function_space(spaces, name=self.fs_name)
+        else:
+            fs = self.function_space(spaces, mesh=mesh)
+        self.field = fields(self.name, fs, pickup=False)
+
     @abstractmethod
     def compute(self, state):
         """ Compute the diagnostic field from the current state"""
@@ -76,78 +90,61 @@ class DiagnosticField(object):
 class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
-    def area(self, mesh):
-        if not hasattr(self, "_area"):
-            V = FunctionSpace(mesh, "DG", 0)
-            self.expr = TestFunction(V)*dx
-            self._area = Function(V)
-        assemble(self.expr, tensor=self._area)
-        return self._area
+    def setup(self, mesh, spaces, fields):
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
+        super(CourantNumber, self).setup(mesh, spaces, fields)
+        # set up area computation
+        V = spaces("DG0")
+        test = TestFunction(V)
+        self.area = Function(V)
+        assemble(test*dx, tensor=self.area)
 
     def compute(self, state):
         u = state.fields("u")
         dt = Constant(state.timestepping.dt)
-        return self.field(state.mesh).project(sqrt(dot(u, u))/sqrt(self.area(state.mesh))*dt)
+        return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
 
 
 class VelocityX(DiagnosticField):
     name = "VelocityX"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def function_space(self, spaces, mesh):
+        fs = spaces("CG1", mesh, "CG", 1)
+        return fs
 
     def compute(self, state):
         u = state.fields("u")
         uh = u[0]
-        return self.field(state.mesh).interpolate(uh)
+        return self.field.interpolate(uh)
 
 
 class VelocityZ(DiagnosticField):
     name = "VelocityZ"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def function_space(self, spaces, mesh):
+        fs = spaces("CG1", mesh, "CG", 1)
+        return fs
 
     def compute(self, state):
         u = state.fields("u")
         w = u[u.geometric_dimension() - 1]
-        return self.field(state.mesh).interpolate(w)
+        return self.field.interpolate(w)
 
 
 class VelocityY(DiagnosticField):
     name = "VelocityY"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def function_space(self, spaces, mesh):
+        fs = spaces("CG1", mesh, "CG", 1)
+        return fs
 
     def compute(self, state):
         u = state.fields("u")
         v = u[1]
-        return self.field(state.mesh).interpolate(v)
+        return self.field.interpolate(v)
 
 
 class Energy(DiagnosticField):
-
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
 
     def kinetic(self, u, rho=None):
         """
@@ -166,7 +163,7 @@ class KineticEnergy(Energy):
     def compute(self, state):
         u = state.fields("u")
         energy = self.kinetic(u)
-        return self.field(state.mesh).interpolate(energy)
+        return self.field.interpolate(energy)
 
 
 class CompressibleKineticEnergy(Energy):
@@ -176,23 +173,21 @@ class CompressibleKineticEnergy(Energy):
         u = state.fields("u")
         rho = state.fields("rho")
         energy = self.kinetic(u, rho)
-        return self.field(state.mesh).interpolate(energy)
+        return self.field.interpolate(energy)
 
 
 class ExnerPi(DiagnosticField):
     name = "ExnerPi"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def function_space(self, spaces, mesh):
+        fs = spaces("CG1", mesh, "CG", 1)
+        return fs
 
     def compute(self, state):
         rho = state.fields("rho")
         theta = state.fields("theta")
         Pi = exner(theta, rho, state)
-        return self.field(state.mesh).interpolate(Pi)
+        return self.field.interpolate(Pi)
 
 
 class ExnerPi_perturbation(ExnerPi):
@@ -205,7 +200,7 @@ class ExnerPi_perturbation(ExnerPi):
         thetabar = state.fields("thetabar")
         Pi = exner(theta, rho, state)
         Pibar = exner(thetabar, rhobar, state)
-        return self.field(state.mesh).interpolate(Pi-Pibar)
+        return self.field.interpolate(Pi-Pibar)
 
 
 class Sum(DiagnosticField):
@@ -216,25 +211,16 @@ class Sum(DiagnosticField):
 
     @property
     def name(self):
-        if isinstance(self.field1, DiagnosticField):
-            return self.field1.name+"_plus_"+self.field2.name
-        else:
-            return self.field1+"_plus_"+self.field2
+        return self.field1+"_plus_"+self.field2
 
-    def field(self, field1):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(field1.function_space(), name=self.name)
-        return self._field
+    def setup(self, mesh, spaces, fields):
+        self.fs_name = fields(self.field1).function_space().name
+        super(Sum, self).setup(mesh, spaces, fields)
 
     def compute(self, state):
-        if isinstance(self.field1, DiagnosticField):
-            field1 = self.field1.compute(state)
-            field2 = self.field2.compute(state)
-        else:
-            field1 = state.fields(self.field1)
-            field2 = state.fields(self.field2)
-        return self.field(field1).assign(field1 + field2)
+        field1 = state.fields(self.field1)
+        field2 = state.fields(self.field2)
+        return self.field.assign(field1 + field2)
 
 
 class Difference(DiagnosticField):
@@ -245,25 +231,16 @@ class Difference(DiagnosticField):
 
     @property
     def name(self):
-        if isinstance(self.field1, DiagnosticField):
-            return self.field1.name+"_minus_"+self.field2.name
-        else:
-            return self.field1+"_minus_"+self.field2
+        return self.field1+"_minus_"+self.field2
 
-    def field(self, field1):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(field1.function_space(), name=self.name)
-        return self._field
+    def setup(self, mesh, spaces, fields):
+        self.fs_name = fields(self.field1).function_space().name
+        super(Difference, self).setup(mesh, spaces, fields)
 
     def compute(self, state):
-        if isinstance(self.field1, DiagnosticField):
-            field1 = self.field1.compute(state)
-            field2 = self.field2.compute(state)
-        else:
-            field1 = state.fields(self.field1)
-            field2 = state.fields(self.field2)
-        return self.field(field1).assign(field1 - field2)
+        field1 = state.fields(self.field1)
+        field2 = state.fields(self.field2)
+        return self.field.assign(field1 - field2)
 
 
 class SteadyStateError(Difference):

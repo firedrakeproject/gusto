@@ -86,8 +86,10 @@ def setup_condens(dirname):
     rho0.interpolate(rho_b)
     water_v0.interpolate(w_expr)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'water_v': water_v0, 'water_c': water_c0})
+    # state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
+    #                   'water_v': water_v0, 'water_c': water_c0})
+    initial_conditions = {'u': u0, 'rho': rho0, 'theta': theta0,
+                          'water_v': water_v0, 'water_c': water_c0}
     state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 
     # set up advection schemes
@@ -109,13 +111,13 @@ def setup_condens(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advection_dict, physics_list=physics_list)
 
-    return stepper, 5.0
+    return initial_conditions, stepper, 5.0
 
 
 def run_condens(dirname):
 
-    stepper, tmax = setup_condens(dirname)
-    stepper.run(t=0, tmax=tmax)
+    ics, stepper, tmax = setup_condens(dirname)
+    stepper.run(ics, t=0, tmax=tmax)
 
 
 def test_condens_setup(tmpdir):
