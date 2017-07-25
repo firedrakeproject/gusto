@@ -35,13 +35,9 @@ class BaseTimestepper(object):
             for bc in bcs:
                 bc.apply(unp1)
 
-    def initialise(self, initial_conditions):
-        self.state.initialise(initial_conditions)
-        self.state.setup_diagnostics()
-
     @abstractmethod
-    def run(self, initial_conditions):
-        self.initialise(initial_conditions)
+    def run(self):
+        pass
 
 
 class Timestepper(BaseTimestepper):
@@ -78,9 +74,9 @@ class Timestepper(BaseTimestepper):
 
         state.xb.assign(state.xn)
 
-    def run(self, initial_conditions, t, tmax, diagnostic_everydump=False, pickup=False):
-        super(Timestepper, self).initialise(initial_conditions)
+    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
+        state.setup_diagnostics()
 
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
@@ -175,9 +171,10 @@ class AdvectionTimestepper(BaseTimestepper):
         else:
             self.physics_list = []
 
-    def run(self, initial_conditions, t, tmax, x_end=None):
-        super(AdvectionTimestepper, self).initialise(initial_conditions)
+    def run(self, t, tmax, x_end=None):
+
         state = self.state
+        state.setup_diagnostics()
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
