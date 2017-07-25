@@ -24,12 +24,14 @@ def setup_sw(dirname, euler_poincare):
     timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
+    diagnostic_fields = [PotentialVorticity()]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
+                  diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
