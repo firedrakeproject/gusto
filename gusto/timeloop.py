@@ -105,7 +105,8 @@ class Timestepper(BaseTimestepper):
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
-                state.xnp1.assign(state.xn)
+
+            state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
 
@@ -116,6 +117,7 @@ class Timestepper(BaseTimestepper):
                         advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                         # advects a field from xstar and puts result in xp
                         advection.apply(xstar_fields[field], xp_fields[field])
+
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
                 for i in range(state.timestepping.maxi):
@@ -125,7 +127,8 @@ class Timestepper(BaseTimestepper):
                                            state.xrhs, mu_alpha=mu_alpha[1],
                                            incompressible=self.incompressible)
 
-                        state.xrhs -= state.xnp1
+                    state.xrhs -= state.xnp1
+
                     with timed_stage("Implicit solve"):
                         self.linear_solver.solve()  # solves linear system and places result in state.dy
 
@@ -176,8 +179,9 @@ class AdvectionTimestepper(BaseTimestepper):
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)
 
-        state.setup_dump()
-        state.dump(t)
+        with timed_stage("Dump output"):
+            state.setup_dump()
+            state.dump(t)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -185,17 +189,20 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
-            for name, advection in self.advection_dict.iteritems():
-                field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects field
-                advection.apply(field, field)
+            with timed_stage("Advection"):
+                for name, advection in self.advection_dict.iteritems():
+                    field = getattr(state.fields, name)
+                    # first computes ubar from state.xn and state.xnp1
+                    advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                    # advects field
+                    advection.apply(field, field)
 
-            for physics in self.physics_list:
-                physics.apply()
+            with timed_stage("Physics"):
+                for physics in self.physics_list:
+                    physics.apply()
 
-            state.dump(t)
+            with timed_stage("Dump output"):
+                state.dump(t)
 
         state.diagnostic_dump()
 
