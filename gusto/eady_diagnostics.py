@@ -67,6 +67,7 @@ class GeostrophicImbalance(DiagnosticField):
     name = "GeostrophicImbalance"
 
     def setup(self, state):
+        super(GeostrophicImbalance, self).setup(state)
         u = state.fields("u")
         b = state.fields("b")
         p = state.fields("p")
@@ -98,6 +99,7 @@ class TrueResidualV(DiagnosticField):
     name = "TrueResidualV"
 
     def setup(self, state):
+        super(TrueResidualV, self).setup(state)
         unew, pnew, bnew = state.xn.split()
         uold, pold, bold = state.xb.split()
         ubar = 0.5*(unew+uold)
@@ -127,9 +129,12 @@ class TrueResidualV(DiagnosticField):
 
 class SawyerEliassenU(DiagnosticField):
     name = "SawyerEliassenU"
-    fs_name = "HDiv"
 
-    def setup_solver(self, state):
+    def setup(self, state):
+
+        space = state.spaces("HDiv")
+        super(SawyerEliassenU, self).setup(state, space=space)
+
         u = state.fields("u")
         b = state.fields("b")
         v = inner(u, as_vector([0., 1., 0.]))

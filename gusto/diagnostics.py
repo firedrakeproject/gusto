@@ -65,12 +65,10 @@ class DiagnosticField(object):
         """The name of this diagnostic field"""
         pass
 
-    def setup(self, mesh, spaces, fields):
-        if hasattr(self, "fs_name"):
-            fs = spaces(self.fs_name)
-        else:
-            fs = spaces("DG0", mesh, "DG", 0)
-        self.field = fields(self.name, fs, pickup=False)
+    def setup(self, state, space=None):
+        if space is None:
+            space = state.spaces("DG0", state.mesh, "DG", 0)
+        self.field = state.fields(self.name, space, pickup=False)
 
     @abstractmethod
     def compute(self, state):
@@ -84,11 +82,11 @@ class DiagnosticField(object):
 class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
-    def setup(self, mesh, spaces, fields):
+    def setup(self, state):
 
-        super(CourantNumber, self).setup(mesh, spaces, fields)
+        super(CourantNumber, self).setup(state)
         # set up area computation
-        V = spaces("DG0")
+        V = state.spaces("DG0")
         test = TestFunction(V)
         self.area = Function(V)
         assemble(test*dx, tensor=self.area)
@@ -102,9 +100,9 @@ class CourantNumber(DiagnosticField):
 class VelocityX(DiagnosticField):
     name = "VelocityX"
 
-    def function_space(self, spaces, mesh):
-        fs = spaces("CG1", mesh, "CG", 1)
-        return fs
+    def setup(self, state):
+        space = state.spaces("CG1", state.mesh, "CG", 1)
+        super(VelocityX, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -115,9 +113,9 @@ class VelocityX(DiagnosticField):
 class VelocityZ(DiagnosticField):
     name = "VelocityZ"
 
-    def function_space(self, spaces, mesh):
-        fs = spaces("CG1", mesh, "CG", 1)
-        return fs
+    def setup(self, state):
+        space = state.spaces("CG1", state.mesh, "CG", 1)
+        super(VelocityZ, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -128,9 +126,9 @@ class VelocityZ(DiagnosticField):
 class VelocityY(DiagnosticField):
     name = "VelocityY"
 
-    def function_space(self, spaces, mesh):
-        fs = spaces("CG1", mesh, "CG", 1)
-        return fs
+    def setup(self, state):
+        space = state.spaces("CG1", state.mesh, "CG", 1)
+        super(VelocityY, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -171,30 +169,32 @@ class CompressibleKineticEnergy(Energy):
 
 
 class ExnerPi(DiagnosticField):
-    name = "ExnerPi"
 
-    def function_space(self, spaces, mesh):
-        fs = spaces("CG1", mesh, "CG", 1)
-        return fs
+    def __init__(self, reference=False):
+        self.reference = reference
+        if reference:
+            self.rho_name = "rhobar"
+            self.theta_name = "thetabar"
+        else:
+            self.rho_name = "rho"
+            self.theta_name = "theta"
+
+    @property
+    def name(self):
+        if self.reference:
+            return "ExnerPibar"
+        else:
+            return "ExnerPi"
+
+    def setup(self, state):
+        space = state.spaces("CG1", state.mesh, "CG", 1)
+        super(ExnerPi, self).setup(state, space=space)
 
     def compute(self, state):
-        rho = state.fields("rho")
-        theta = state.fields("theta")
+        rho = state.fields(self.rho_name)
+        theta = state.fields(self.theta_name)
         Pi = exner(theta, rho, state)
         return self.field.interpolate(Pi)
-
-
-class ExnerPi_perturbation(ExnerPi):
-    name = "ExnerPi_perturbation"
-
-    def compute(self, state):
-        rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        theta = state.fields("theta")
-        thetabar = state.fields("thetabar")
-        Pi = exner(theta, rho, state)
-        Pibar = exner(thetabar, rhobar, state)
-        return self.field.interpolate(Pi-Pibar)
 
 
 class Sum(DiagnosticField):
@@ -207,9 +207,14 @@ class Sum(DiagnosticField):
     def name(self):
         return self.field1+"_plus_"+self.field2
 
-    def setup(self, mesh, spaces, fields):
-        self.fs_name = fields(self.field1).function_space().name
-        super(Sum, self).setup(mesh, spaces, fields)
+    def setup(self, state):
+        space = state.fields(self.field1).function_space()
+        super(Sum, self).setup(state, space=space)
+        field_names = [f.name() for f in state.fields]
+        if self.field1 not in field_names:
+            raise RuntimeError("Field called %s does not exist" % self.field1)
+        if self.field2 not in field_names:
+            raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -227,9 +232,14 @@ class Difference(DiagnosticField):
     def name(self):
         return self.field1+"_minus_"+self.field2
 
-    def setup(self, mesh, spaces, fields):
-        self.fs_name = fields(self.field1).function_space().name
-        super(Difference, self).setup(mesh, spaces, fields)
+    def setup(self, state):
+        space = state.fields(self.field1).function_space()
+        super(Difference, self).setup(state, space=space)
+        field_names = [f.name() for f in state.fields]
+        if self.field1 not in field_names:
+            raise RuntimeError("Field called %s does not exist" % self.field1)
+        if self.field2 not in field_names:
+            raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -253,7 +263,7 @@ class SteadyStateError(Difference):
 
 class Perturbation(Difference):
 
-    def __init__(self, state, name):
+    def __init__(self, name):
         self.field1 = name
         self.field2 = name+'bar'
 
@@ -266,53 +276,33 @@ class PotentialVorticity(DiagnosticField):
     """Diagnostic field for potential vorticity."""
     name = "potential_vorticity"
 
-    def field(self, space):
-        """Returns the potential vorticity field.
-
-        :arg space: The continuous finite element space.
-        """
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(space, name=self.name)
-        return self._field
-
-    def solver(self, state, space):
+    def setup(self, state):
         """Solver for potential vorticity. Solves
         a weighted mass system to generate the
         potential vorticity from known velocity and
         depth fields.
 
         :arg state: The state containing model.
-        :arg space: The continuous finite element space.
         """
-        if hasattr(self, "_solver"):
-            return self._solver
-
+        space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+        super(PotentialVorticity, self).setup(state, space=space)
         u = state.fields("u")
         D = state.fields("D")
         gamma = TestFunction(space)
         q = TrialFunction(space)
-        f = state.fields("coriolis", space)
+        f = state.fields("coriolis")
 
         cell_normals = CellNormal(state.mesh)
         gradperp = lambda psi: cross(cell_normals, grad(psi))
 
         a = q*gamma*D*dx
         L = (gamma*f - inner(gradperp(gamma), u))*dx
-        pv_problem = LinearVariationalProblem(a, L, self.field(space), constant_jacobian=False)
-        solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
-        self._solver = solver
-        return self._solver
+        pv_problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
+        self.solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
 
     def compute(self, state):
         """Computes the potential vorticity by solving
         the weighted mass system.
         """
-        if hasattr(self, "_space"):
-            V = self._space
-        else:
-            self._space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
-            V = self._space
-
-        self.solver(state, V).solve()
-        return self.field(V)
+        self.solver.solve()
+        return self.field

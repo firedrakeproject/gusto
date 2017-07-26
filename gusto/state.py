@@ -163,7 +163,7 @@ class State(object):
     def setup_diagnostics(self):
         # add special case diagnostic fields
         for name in self.output.perturbation_fields:
-            f = Perturbation(self, name)
+            f = Perturbation(name)
             self.diagnostic_fields.append(f)
 
         for name in self.output.steady_state_error_fields:
@@ -172,7 +172,8 @@ class State(object):
 
         for diagnostic in self.diagnostic_fields:
             print diagnostic
-            diagnostic.setup(self.mesh, self.spaces, self.fields)
+            diagnostic.setup(self)
+            f = diagnostic(self)
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, pickup=False):
@@ -189,17 +190,8 @@ class State(object):
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
-        # create field dictionary
-        self.field_dict = {field.name(): field for field in self.fields}
-
-        # add diagnostic fields to field dictionary and ensure they are dumped
-        for diagnostic in self.diagnostic_fields:
-            f = diagnostic(self)
-            f.dump = True
-            self.field_dict[f.name()] = f
-
         # make list of fields to dump
-        self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
+        self.to_dump = [field for field in self.fields if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -217,7 +209,7 @@ class State(object):
         self.to_dump_latlon = []
         fields_ll = {}
         for name in self.output.dumplist_latlon:
-            f = self.field_dict[name]
+            f = self.fields(name)
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
@@ -260,10 +252,10 @@ class State(object):
             for name in self.diagnostics.fields:
                 for fn in diagnostic_fns:
                     d = getattr(self.diagnostics, fn)
-                    data = d(self.field_dict[name])
+                    data = d(self.fields(name))
                     self.diagnostic_data[name][fn].append(data)
-                if len(self.field_dict[name].ufl_shape) is 0:
-                    data = self.diagnostics.total(self.field_dict[name])
+                if len(self.fields(name).ufl_shape) is 0:
+                    data = self.diagnostics.total(self.fields(name))
                     self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
