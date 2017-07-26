@@ -64,18 +64,11 @@ class DiagnosticField(object):
         """The name of this diagnostic field"""
         pass
 
-    def function_space(self, spaces, mesh=None, name=None):
-        if name is not None:
-            fs = spaces(name)
-        else:
-            fs = spaces("DG0", mesh, "DG", 0)
-        return fs
-
     def setup(self, mesh, spaces, fields):
         if hasattr(self, "fs_name"):
-            fs = self.function_space(spaces, name=self.fs_name)
+            fs = spaces(self.fs_name)
         else:
-            fs = self.function_space(spaces, mesh=mesh)
+            fs = spaces("DG0", mesh, "DG", 0)
         self.field = fields(self.name, fs, pickup=False)
 
     @abstractmethod
