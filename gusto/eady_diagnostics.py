@@ -60,7 +60,7 @@ class CompressibleEadyPotentialEnergy(Energy):
         Pi = exner(theta, rho, state)
 
         potential = rho*(g*z + cv*Pi*theta - cp*Pi0*theta)
-        return self.field(state.mesh).interpolate(potential)
+        return self.field.interpolate(potential)
 
 
 class GeostrophicImbalance(DiagnosticField):
