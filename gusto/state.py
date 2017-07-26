@@ -171,7 +171,6 @@ class State(object):
             self.diagnostic_fields.append(f)
 
         for diagnostic in self.diagnostic_fields:
-            print diagnostic
             diagnostic.setup(self)
             f = diagnostic(self)
             self.diagnostics.register(diagnostic.name)
