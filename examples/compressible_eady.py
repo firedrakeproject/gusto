@@ -71,10 +71,10 @@ diagnostic_fields = [CourantNumber(), VelocityY(),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
-                     Sum(CompressibleKineticEnergy(),
-                         CompressibleEadyPotentialEnergy()),
-                     Difference(CompressibleKineticEnergy(),
-                                CompressibleKineticEnergyY())]
+                     Sum("CompressibleKineticEnergy",
+                         "CompressibleEadyPotentialEnergy"),
+                     Difference("CompressibleKineticEnergy",
+                                "CompressibleKineticEnergyY")]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
