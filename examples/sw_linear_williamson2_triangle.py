@@ -61,9 +61,9 @@ D0.interpolate(Dexpr)
 state.initialise({'u': u0, 'D': D0})
 
 Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
-advection_dict = {}
-advection_dict["u"] = NoAdvection(state, u0, None)
-advection_dict["D"] = ForwardEuler(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", NoAdvection(state, u0, None)))
+advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -71,7 +71,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state, linear=True)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

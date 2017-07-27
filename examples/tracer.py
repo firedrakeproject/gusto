@@ -88,11 +88,11 @@ for delta, dt in res_dt.items():
                                        equation_form="advective")
         watereqn = EmbeddedDGAdvection(state, Vt,
                                        equation_form="advective")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
-    advection_dict["water"] = SSPRK3(state, water0, watereqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advected_fields.append(("water", SSPRK3(state, water0, watereqn)))
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -126,11 +126,11 @@ for delta, dt in res_dt.items():
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
-                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.), mu=Constant(10./delta))}
+    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs)),
+                       ("theta", InteriorPenalty(state, Vt, kappa=Constant(75.), mu=Constant(10./delta)))]
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
-                          compressible_forcing, diffusion_dict)
+    stepper = Timestepper(state, advected_fields, linear_solver,
+                          compressible_forcing, diffused_fields)
 
     stepper.run(t=0, tmax=tmax)

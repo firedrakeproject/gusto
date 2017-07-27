@@ -173,10 +173,10 @@ ueqn = AdvectionEquation(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
 
-advection_dict = {}
-advection_dict["u"] = SSPRK3(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+advected_fields = []
+advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
+advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
@@ -213,7 +213,7 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+stepper = Timestepper(state, advected_fields, linear_solver, forcing)
 
 ##############################################################################
 # Run!
