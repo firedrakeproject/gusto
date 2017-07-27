@@ -231,7 +231,7 @@ class State(object):
         diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
         diagnostics_data.history = "Created " + time.ctime()
         diagnostics_data.source = "Output from Gusto model"
-        time_dim = diagnostics_data.createDimension("time", None)
+        diagnostics_data.createDimension("time", None)
         times = diagnostics_data.createVariable("time", "f8", ("time",))
         times.units = "seconds"
         for field in self.diagnostics.fields:
@@ -246,7 +246,7 @@ class State(object):
         point_data.description = "Point data for simulation %s" % self.output.dirname
         point_data.history = "Created " + time.ctime()
         point_data.source = "Output from Gusto model"
-        time_dim = point_data.createDimension("time", None)
+        point_data.createDimension("time", None)
         times = point_data.createVariable("time", "f8", ("time",))
         times.units = "seconds"
         for field, plist in self.output.point_data.iteritems():
@@ -256,7 +256,7 @@ class State(object):
             for i in range(len(plist)):
                 name = "x"+str(i)
                 dim_names.append(name)
-                dim = grp.createDimension(name, np[i])
+                grp.createDimension(name, np[i])
                 var = grp.createVariable(name, "f8", (name,))
                 var[:] = plist[i]
             dims = tuple(d for d in dim_names)
@@ -297,7 +297,6 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
-            diagnostic_fns = ['min', 'max', 'rms', 'l2']
             for name in self.diagnostics.fields:
                 for fn in self.diagnostics.available_diagnostics:
                     d = getattr(self.diagnostics, fn)
@@ -342,7 +341,7 @@ class State(object):
                 grp = data.groups[fname]
                 field = grp.variables[fname]
                 print np.array(point_data[fname]).shape
-                field[idx,:,:] = np.array(point_data[fname])
+                field[idx, :, :] = np.array(point_data[fname])
 
     def diagnostic_dump(self):
         """
