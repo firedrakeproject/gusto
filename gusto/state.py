@@ -178,11 +178,6 @@ class State(object):
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, float))
 
-        # Setup dictionary for point data and store points
-        self.point_data = defaultdict(partial(defaultdict, list))
-        for name, points in self.output.point_data.iteritems():
-            self.point_data[name]["points"] = points
-
         # create field dictionary
         self.field_dict = {field.name(): field for field in self.fields}
 
@@ -231,19 +226,43 @@ class State(object):
             self.to_dump_latlon.append(fields_ll[name])
 
         # setup diagnostics netcdf file
-        self.netcdf_filename = self.dumpdir+"/diagnostics.nc"
-        netcdf_data = Dataset(self.netcdf_filename, "w")
-        netcdf_data.description = "Diagnostics data for simulation %s" % self.output.dirname
-        netcdf_data.history = "Created " + time.ctime()
-        netcdf_data.source = "Output from Gusto model"
-        time_dim = netcdf_data.createDimension("time", None)
-        times = netcdf_data.createVariable("time", "f8", ("time",))
+        self.diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+        diagnostics_data = Dataset(self.diagnostics_filename, "w")
+        diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
+        diagnostics_data.history = "Created " + time.ctime()
+        diagnostics_data.source = "Output from Gusto model"
+        time_dim = diagnostics_data.createDimension("time", None)
+        times = diagnostics_data.createVariable("time", "f8", ("time",))
         times.units = "seconds"
         for field in self.diagnostics.fields:
-            grp = netcdf_data.createGroup(field)
+            grp = diagnostics_data.createGroup(field)
             for diagnostic in self.diagnostics.available_diagnostics:
                 var = grp.createVariable(diagnostic, 'f8', ('time'))
-        netcdf_data.close()
+        diagnostics_data.close()
+
+        # setup point data netcdf file
+        self.pointdata_filename = self.dumpdir+"/point_data.nc"
+        point_data = Dataset(self.pointdata_filename, "w")
+        point_data.description = "Point data for simulation %s" % self.output.dirname
+        point_data.history = "Created " + time.ctime()
+        point_data.source = "Output from Gusto model"
+        time_dim = point_data.createDimension("time", None)
+        times = point_data.createVariable("time", "f8", ("time",))
+        times.units = "seconds"
+        for field, plist in self.output.point_data.iteritems():
+            grp = point_data.createGroup(field)
+            np = [len(p) for p in plist]
+            dim_names = ["time"]
+            for i in range(len(plist)):
+                name = "x"+str(i)
+                dim_names.append(name)
+                dim = grp.createDimension(name, np[i])
+                var = grp.createVariable(name, "f8", (name,))
+                var[:] = plist[i]
+            dims = tuple(d for d in dim_names)
+            fvar = grp.createVariable(field, "f8", dims)
+            print fvar.shape
+        point_data.close()
 
     def dump(self, t=0, pickup=False):
         """
@@ -287,10 +306,14 @@ class State(object):
                 if len(self.field_dict[name].ufl_shape) is 0:
                     data = self.diagnostics.total(self.field_dict[name])
                     self.diagnostic_data[name]["total"] = data
+            self.diagnostic_dump()
 
-            # store pointwise data
-            for name, points in self.output.point_data.iteritems():
-                self.point_data[name][t] = [x.tolist() for x in self.field_dict[name].at(points)]
+            # calculate pointwise data
+            point_data = {}
+            for name, plist in self.output.point_data.iteritems():
+                points = [p for p in itertools.product(*plist)]
+                point_data[name] = [x.tolist() for x in self.field_dict[name].at(points)]
+            self.pointwise_dump(point_data)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
@@ -302,26 +325,30 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/", "time", t)
 
-            self.diagnostic_dump()
-
-            if self.output.pointwise_everydump:
-                self.pointwise_dump()
-
         self.t.assign(t)
         return t
 
-    def pointwise_dump(self):
+    def pointwise_dump(self, point_data):
         """
-        Dump point data dictionary
+        Dump point data
         """
         if self.output.point_data is not None:
-            pass
+            data = Dataset(self.pointdata_filename, "a")
+            time = data.dimensions["time"]
+            idx = len(time)
+            times = data.variables["time"]
+            times[idx:idx+1] = self.t
+            for fname in self.output.point_data.keys():
+                grp = data.groups[fname]
+                field = grp.variables[fname]
+                print np.array(point_data[fname]).shape
+                field[idx,:,:] = np.array(point_data[fname])
 
     def diagnostic_dump(self):
         """
         Dump diagnostics data
         """
-        data = Dataset(self.netcdf_filename, "a")
+        data = Dataset(self.diagnostics_filename, "a")
         time = data.dimensions["time"]
         idx = len(time)
         times = data.variables["time"]

@@ -20,12 +20,11 @@ H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 points_x = np.linspace(0., L, 100)
-points_z = 0.
-points = [[px, points_z] for px in points_x]
+points_z = [0.]
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'], point_data={'theta_perturbation': points}, pointwise_everydump=True)
+output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'], perturbation_fields=['theta', 'rho'], point_data={'theta_perturbation': [points_x, points_z]}, pointwise_everydump=True)
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
