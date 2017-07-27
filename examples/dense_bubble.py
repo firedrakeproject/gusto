@@ -15,7 +15,7 @@ L = 51200.
 # build volume mesh
 H = 6400.  # Height position of the model top
 
-for delta, dt in res_dt.iteritems():
+for delta, dt in res_dt.items():
 
     dirname = "db_dx%s_dt%s" % (delta, dt)
     nlayers = int(H/delta)  # horizontal layers
