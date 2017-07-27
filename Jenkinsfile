@@ -20,8 +20,8 @@ pipeline {
                 sh 'mkdir build'
                 dir('build') {
                     timestamps {
-                        sh 'curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install'
-                        sh 'python3 ./firedrake-install --disable-ssh --minimal-petsc'
+                        sh 'curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/python3/scripts/firedrake-install'
+                        sh 'python3 ./firedrake-install --disable-ssh --minimal-petsc --package-branch firedrake python3'
                     }
                 }
             }
