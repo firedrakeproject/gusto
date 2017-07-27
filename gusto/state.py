@@ -172,7 +172,6 @@ class State(object):
 
         for diagnostic in self.diagnostic_fields:
             diagnostic.setup(self)
-            f = diagnostic(self)
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, pickup=False):
@@ -253,7 +252,7 @@ class State(object):
                     d = getattr(self.diagnostics, fn)
                     data = d(self.fields(name))
                     self.diagnostic_data[name][fn].append(data)
-                if len(self.fields(name).ufl_shape) is 0:
+                if len(self.fields(name).ufl_shape) == 0:
                     data = self.diagnostics.total(self.fields(name))
                     self.diagnostic_data[name]["total"].append(data)
 
