@@ -60,15 +60,20 @@ class DiagnosticField(object):
 
     __metaclass__ = ABCMeta
 
+    def __init__(self):
+        self._initialised = False
+
     @abstractproperty
     def name(self):
         """The name of this diagnostic field"""
         pass
 
     def setup(self, state, space=None):
-        if space is None:
-            space = state.spaces("DG0", state.mesh, "DG", 0)
-        self.field = state.fields(self.name, space, pickup=False)
+        if not self._initialised:
+            self._initialised = True
+            if space is None:
+                space = state.spaces("DG0", state.mesh, "DG", 0)
+            self.field = state.fields(self.name, space, pickup=False)
 
     @abstractmethod
     def compute(self, state):
@@ -83,13 +88,13 @@ class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
     def setup(self, state):
-
-        super(CourantNumber, self).setup(state)
-        # set up area computation
-        V = state.spaces("DG0")
-        test = TestFunction(V)
-        self.area = Function(V)
-        assemble(test*dx, tensor=self.area)
+        if not self._initialised:
+            super(CourantNumber, self).setup(state)
+            # set up area computation
+            V = state.spaces("DG0")
+            test = TestFunction(V)
+            self.area = Function(V)
+            assemble(test*dx, tensor=self.area)
 
     def compute(self, state):
         u = state.fields("u")
@@ -101,8 +106,9 @@ class VelocityX(DiagnosticField):
     name = "VelocityX"
 
     def setup(self, state):
-        space = state.spaces("CG1", state.mesh, "CG", 1)
-        super(VelocityX, self).setup(state, space=space)
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(VelocityX, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -114,8 +120,9 @@ class VelocityZ(DiagnosticField):
     name = "VelocityZ"
 
     def setup(self, state):
-        space = state.spaces("CG1", state.mesh, "CG", 1)
-        super(VelocityZ, self).setup(state, space=space)
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(VelocityZ, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -127,8 +134,9 @@ class VelocityY(DiagnosticField):
     name = "VelocityY"
 
     def setup(self, state):
-        space = state.spaces("CG1", state.mesh, "CG", 1)
-        super(VelocityY, self).setup(state, space=space)
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(VelocityY, self).setup(state, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -171,6 +179,7 @@ class CompressibleKineticEnergy(Energy):
 class ExnerPi(DiagnosticField):
 
     def __init__(self, reference=False):
+        super(ExnerPi, self).__init__()
         self.reference = reference
         if reference:
             self.rho_name = "rhobar"
@@ -187,8 +196,9 @@ class ExnerPi(DiagnosticField):
             return "ExnerPi"
 
     def setup(self, state):
-        space = state.spaces("CG1", state.mesh, "CG", 1)
-        super(ExnerPi, self).setup(state, space=space)
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(ExnerPi, self).setup(state, space=space)
 
     def compute(self, state):
         rho = state.fields(self.rho_name)
@@ -200,6 +210,7 @@ class ExnerPi(DiagnosticField):
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
+        super(Sum, self).__init__()
         self.field1 = field1
         self.field2 = field2
 
@@ -208,13 +219,14 @@ class Sum(DiagnosticField):
         return self.field1+"_plus_"+self.field2
 
     def setup(self, state):
-        space = state.fields(self.field1).function_space()
-        super(Sum, self).setup(state, space=space)
-        field_names = [f.name() for f in state.fields]
-        if self.field1 not in field_names:
-            raise RuntimeError("Field called %s does not exist" % self.field1)
-        if self.field2 not in field_names:
-            raise RuntimeError("Field called %s does not exist" % self.field2)
+        if not self._initialised:
+            space = state.fields(self.field1).function_space()
+            super(Sum, self).setup(state, space=space)
+            field_names = [f.name() for f in state.fields]
+            if self.field1 not in field_names:
+                raise RuntimeError("Field called %s does not exist" % self.field1)
+            if self.field2 not in field_names:
+                raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -225,6 +237,7 @@ class Sum(DiagnosticField):
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
+        super(Difference, self).__init__()
         self.field1 = field1
         self.field2 = field2
 
@@ -233,13 +246,14 @@ class Difference(DiagnosticField):
         return self.field1+"_minus_"+self.field2
 
     def setup(self, state):
-        space = state.fields(self.field1).function_space()
-        super(Difference, self).setup(state, space=space)
-        field_names = [f.name() for f in state.fields]
-        if self.field1 not in field_names:
-            raise RuntimeError("Field called %s does not exist" % self.field1)
-        if self.field2 not in field_names:
-            raise RuntimeError("Field called %s does not exist" % self.field2)
+        if not self._initialised:
+            space = state.fields(self.field1).function_space()
+            super(Difference, self).setup(state, space=space)
+            field_names = [f.name() for f in state.fields]
+            if self.field1 not in field_names:
+                raise RuntimeError("Field called %s does not exist" % self.field1)
+            if self.field2 not in field_names:
+                raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -250,6 +264,7 @@ class Difference(DiagnosticField):
 class SteadyStateError(Difference):
 
     def __init__(self, state, name):
+        DiagnosticField.__init__(self)
         self.field1 = name
         self.field2 = name+'_init'
         field1 = state.fields(name)
@@ -264,6 +279,7 @@ class SteadyStateError(Difference):
 class Perturbation(Difference):
 
     def __init__(self, name):
+        DiagnosticField.__init__(self)
         self.field1 = name
         self.field2 = name+'bar'
 
@@ -284,21 +300,22 @@ class PotentialVorticity(DiagnosticField):
 
         :arg state: The state containing model.
         """
-        space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
-        super(PotentialVorticity, self).setup(state, space=space)
-        u = state.fields("u")
-        D = state.fields("D")
-        gamma = TestFunction(space)
-        q = TrialFunction(space)
-        f = state.fields("coriolis")
+        if not self._initialised:
+            space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+            super(PotentialVorticity, self).setup(state, space=space)
+            u = state.fields("u")
+            D = state.fields("D")
+            gamma = TestFunction(space)
+            q = TrialFunction(space)
+            f = state.fields("coriolis")
 
-        cell_normals = CellNormal(state.mesh)
-        gradperp = lambda psi: cross(cell_normals, grad(psi))
+            cell_normals = CellNormal(state.mesh)
+            gradperp = lambda psi: cross(cell_normals, grad(psi))
 
-        a = q*gamma*D*dx
-        L = (gamma*f - inner(gradperp(gamma), u))*dx
-        pv_problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
-        self.solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
+            a = q*gamma*D*dx
+            L = (gamma*f - inner(gradperp(gamma), u))*dx
+            pv_problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
+            self.solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
 
     def compute(self, state):
         """Computes the potential vorticity by solving
