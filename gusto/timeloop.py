@@ -175,7 +175,6 @@ class AdvectionTimestepper(BaseTimestepper):
             self.physics_list = []
 
     def run(self, t, tmax, x_end=None):
-
         state = self.state
         state.setup_diagnostics()
 
