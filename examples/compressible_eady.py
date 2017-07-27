@@ -53,8 +53,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='compressible_eady',
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['rho', 'theta'],
-                          diagnostic_everydump=True)
+                          perturbation_fields=['rho', 'theta'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided

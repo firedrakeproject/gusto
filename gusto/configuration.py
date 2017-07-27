@@ -50,10 +50,6 @@ class OutputParameters(Configuration):
     perturbation_fields = []
     #: Dictionary of fields and points at which to dump them
     point_data = {}
-    #: Flag to indicate whether we should dump diagnostics at every timestep
-    diagnostic_everydump = False
-    #: Flag to indicate whether we should dump point data at every timestep
-    pointwise_everydump = False
 
 
 class CompressibleParameters(Configuration):

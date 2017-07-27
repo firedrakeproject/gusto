@@ -70,8 +70,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='incompressible_eady',
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'p', 'b'],
-                          perturbation_fields=['p', 'b'],
-                          diagnostic_everydump=True)
+                          perturbation_fields=['p', 'b'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
