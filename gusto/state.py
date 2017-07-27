@@ -233,6 +233,7 @@ class State(object):
         self.netcdf_filename = self.dumpdir+"/diagnostics.nc"
         netcdf_data = Dataset(self.netcdf_filename, "w")
         time = netcdf_data.createDimension("time", None)
+        times = netcdf_data.createVariable("time", "f8", ("time",))
         for field in self.diagnostics.fields:
             grp = netcdf_data.createGroup(field)
             for diagnostic in self.diagnostics.available_diagnostics:
@@ -273,11 +274,8 @@ class State(object):
 
             # compute diagnostics
             diagnostic_fns = ['min', 'max', 'rms', 'l2']
-            print "HELLO"
             for name in self.diagnostics.fields:
-                print name
                 for fn in self.diagnostics.available_diagnostics:
-                    print fn
                     d = getattr(self.diagnostics, fn)
                     data = d(self.field_dict[name])
                     self.diagnostic_data[name][fn] = data
@@ -321,6 +319,8 @@ class State(object):
         data = Dataset(self.netcdf_filename, "a")
         time = data.dimensions["time"]
         idx = len(time)
+        times = data.variables["time"]
+        times[idx:idx+1] = self.t
         for fname in data.groups.keys():
             field = data.groups[fname]
             for dname in field.variables.keys():
