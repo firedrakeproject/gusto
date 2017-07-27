@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression
 import numpy as np

@@ -89,7 +89,6 @@ def test_sw_setup(tmpdir, euler_poincare):
     run_sw(dirname, euler_poincare=euler_poincare)
     with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
         data = json.load(f)
-    print data.keys()
     Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
     ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 

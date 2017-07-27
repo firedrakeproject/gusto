@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
@@ -9,7 +8,7 @@ from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 
-class TimesteppingSolver(object):
+class TimesteppingSolver(object, metaclass=ABCMeta):
     """
     Base class for timestepping linear solvers for Gusto.
 
@@ -18,7 +17,6 @@ class TimesteppingSolver(object):
     :arg state: :class:`.State` object.
     :arg params (optional): solver parameters
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, params=None):
 

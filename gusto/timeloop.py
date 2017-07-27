@@ -1,11 +1,10 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
-class BaseTimestepper(object):
+class BaseTimestepper(object, metaclass=ABCMeta):
     """
     Base timestepping class for Gusto
 
@@ -14,7 +13,6 @@ class BaseTimestepper(object):
         fieldname is the name of the field to be advection and scheme is an
         :class:`.AdvectionScheme` object
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, advection_dict):
 
@@ -99,7 +97,7 @@ class Timestepper(BaseTimestepper):
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-                print "STEP", t, dt
+                print("STEP", t, dt)
 
             t += dt
             with timed_stage("Apply forcing terms"):
@@ -148,7 +146,7 @@ class Timestepper(BaseTimestepper):
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
-                for name, diffusion in self.diffusion_dict.iteritems():
+                for name, diffusion in self.diffusion_dict.items():
                     field = getattr(state.fields, name)
                     diffusion.apply(field, field)
 
@@ -160,7 +158,7 @@ class Timestepper(BaseTimestepper):
                 state.dump(t, diagnostic_everydump, pickup=False)
 
         state.diagnostic_dump()
-        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
+        print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
 class AdvectionTimestepper(BaseTimestepper):
@@ -185,12 +183,12 @@ class AdvectionTimestepper(BaseTimestepper):
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-                print "STEP", t, dt
+                print("STEP", t, dt)
 
             t += dt
 
             with timed_stage("Advection"):
-                for name, advection in self.advection_dict.iteritems():
+                for name, advection in self.advection_dict.items():
                     field = getattr(state.fields, name)
                     # first computes ubar from state.xn and state.xnp1
                     advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)

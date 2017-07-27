@@ -22,7 +22,7 @@ fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
-for ref_level, dt in ref_dt.iteritems():
+for ref_level, dt in ref_dt.items():
 
     dirname = "sw_W5_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
