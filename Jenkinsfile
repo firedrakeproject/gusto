@@ -5,6 +5,7 @@ pipeline {
     environment {
         PATH = "/usr/local/bin:/usr/bin:/bin"
         CC = "mpicc"
+        PYTHONHASHSEED="1243123"
     }
     stages {
         stage('Clean') {
@@ -19,10 +20,8 @@ pipeline {
                 sh 'mkdir build'
                 dir('build') {
                     timestamps {
-                        sh 'pip2 install virtualenv'
                         sh 'curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install'
-                        sh 'python2 ./firedrake-install --disable-ssh --minimal-petsc'
-                        sh '$HOME/.local/bin/virtualenv --relocatable firedrake'
+                        sh 'python3 ./firedrake-install --disable-ssh --minimal-petsc'
                     }
                 }
             }
@@ -32,7 +31,7 @@ pipeline {
                 timestamps {
                     sh '''
 . build/firedrake/bin/activate
-pip install -e .
+python -m pip install -e .
 '''
                 }
             }
@@ -54,8 +53,8 @@ make lint
 . build/firedrake/bin/activate
 export PYOP2_CACHE_DIR=${VIRTUAL_ENV}/pyop2_cache
 export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=${VIRTUAL_ENV}/tsfc_cache
-firedrake-clean
-py.test -v tests -n 4
+python $(which firedrake-clean)
+python -m pytest -n 4 -v tests
 '''
                 }
             }
