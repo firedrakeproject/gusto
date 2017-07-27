@@ -3,7 +3,7 @@ from os import path
 import itertools
 from collections import defaultdict
 from functools import partial
-import json
+from netCDF4 import Dataset
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
 from sys import exit
@@ -175,7 +175,7 @@ class State(object):
         outfile = path.join(self.dumpdir, "field_output.pvd")
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.diagnostic_data = defaultdict(partial(defaultdict, list))
+        self.diagnostic_data = defaultdict(partial(defaultdict, float))
 
         # Setup dictionary for point data and store points
         self.point_data = defaultdict(partial(defaultdict, list))
@@ -229,6 +229,16 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
+        # setup diagnostics netcdf file
+        self.netcdf_filename = self.dumpdir+"/diagnostics.nc"
+        netcdf_data = Dataset(self.netcdf_filename, "w")
+        time = netcdf_data.createDimension("time", None)
+        for field in self.diagnostics.fields:
+            grp = netcdf_data.createGroup(field)
+            for diagnostic in self.diagnostics.available_diagnostics:
+                var = grp.createVariable(diagnostic, 'f8', ('time'))
+        netcdf_data.close()
+
     def dump(self, t=0, pickup=False):
         """
         Dump output
@@ -263,14 +273,17 @@ class State(object):
 
             # compute diagnostics
             diagnostic_fns = ['min', 'max', 'rms', 'l2']
+            print "HELLO"
             for name in self.diagnostics.fields:
-                for fn in diagnostic_fns:
+                print name
+                for fn in self.diagnostics.available_diagnostics:
+                    print fn
                     d = getattr(self.diagnostics, fn)
                     data = d(self.field_dict[name])
-                    self.diagnostic_data[name][fn].append(data)
+                    self.diagnostic_data[name][fn] = data
                 if len(self.field_dict[name].ufl_shape) is 0:
                     data = self.diagnostics.total(self.field_dict[name])
-                    self.diagnostic_data[name]["total"].append(data)
+                    self.diagnostic_data[name]["total"] = data
 
             # store pointwise data
             for name, points in self.output.point_data.iteritems():
@@ -286,8 +299,7 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/", "time", t)
 
-            if self.output.diagnostic_everydump:
-                self.diagnostic_dump()
+            self.diagnostic_dump()
 
             if self.output.pointwise_everydump:
                 self.pointwise_dump()
@@ -300,15 +312,20 @@ class State(object):
         Dump point data dictionary
         """
         if self.output.point_data is not None:
-            with open(path.join(self.dumpdir, "point_data.json"), "w") as f:
-                f.write(json.dumps(self.point_data, indent=4))
+            pass
 
     def diagnostic_dump(self):
         """
-        Dump diagnostics dictionary
+        Dump diagnostics data
         """
-        with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
-            f.write(json.dumps(self.diagnostic_data, indent=4))
+        data = Dataset(self.netcdf_filename, "a")
+        time = data.dimensions["time"]
+        idx = len(time)
+        for fname in data.groups.keys():
+            field = data.groups[fname]
+            for dname in field.variables.keys():
+                d = field.variables[dname]
+                d[idx:idx+1] = self.diagnostic_data[fname][dname]
 
     def initialise(self, initial_conditions):
         """

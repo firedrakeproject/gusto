@@ -8,6 +8,8 @@ import numpy as np
 
 class Diagnostics(object):
 
+    available_diagnostics = ["min", "max", "rms", "l2"]
+
     def __init__(self, *fields):
 
         self.fields = list(fields)
