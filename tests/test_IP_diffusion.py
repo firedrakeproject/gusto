@@ -71,7 +71,7 @@ def run(dirname, vector, DG):
         f_diffusion.apply(f, fp1)
         f.assign(fp1)
 
-        if(next(dumpcount) % 25) == 0:
+        if (next(dumpcount) % 25) == 0:
             outfile.write(f)
     return f
 

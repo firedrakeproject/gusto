@@ -104,11 +104,11 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundar
 
 def min(f):
     fmin = op2.Global(1, [1000], dtype=float)
-    op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
-    {
+    op2.par_loop(op2.Kernel("""
+void minify(double *a, double *b) {
     a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-    }""", "minify"),
-                 f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+}
+""", "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
     return fmin.data[0]
 
 
@@ -160,8 +160,8 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_pc_type': 'gamg',
                 'fieldsplit_1_pc_gamg_sym_graph': True,
                 'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                 'fieldsplit_1_mg_levels_ksp_max_it': 5,
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}

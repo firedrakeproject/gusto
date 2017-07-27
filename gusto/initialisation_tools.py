@@ -9,8 +9,28 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
 from gusto.forcing import exner
+
+
+def latlon_coords(mesh):
+    x0, y0, z0 = SpatialCoordinate(mesh)
+    unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+    safe = Min(Max(unsafe, -1.0), 1.0)  # avoid silly roundoff errors
+    theta = asin(safe)  # latitude
+    lamda = atan_2(y0, x0)  # longitude
+    return theta, lamda
+
+
+def sphere_to_cartesian(mesh, u_zonal, u_merid):
+    theta, lamda = latlon_coords(mesh)
+
+    cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
+    cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
+    cartesian_w_expr = u_merid*cos(theta)
+
+    return as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -49,7 +69,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     L = phi*div(F)*dx
     w1 = Function(WV)
 
-    if(params is None):
+    if params is None:
         params = {'ksp_type': 'gmres',
                   'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
@@ -123,7 +143,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
-    if(params is None):
+    if params is None:
         params = {'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
                   'ksp_type': 'gmres',
@@ -137,8 +157,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                   'fieldsplit_0_pc_type': 'gamg',
                   'fieldsplit_1_pc_gamg_sym_graph': True,
                   'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                   'fieldsplit_1_mg_levels_ksp_max_it': 5,
                   'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                   'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}

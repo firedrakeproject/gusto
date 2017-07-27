@@ -1,5 +1,6 @@
-from firedrake import assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, Constant, op2
+from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
+    TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
+    LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
@@ -21,21 +22,21 @@ class Diagnostics(object):
     @staticmethod
     def min(f):
         fmin = op2.Global(1, np.finfo(float).max, dtype=float)
-        op2.par_loop(op2.Kernel("""void minify(double *a, double *b)
-        {
-        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-        }""", "minify"),
-                     f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+        op2.par_loop(op2.Kernel("""
+void minify(double *a, double *b) {
+    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
         return fmin.data[0]
 
     @staticmethod
     def max(f):
         fmax = op2.Global(1, np.finfo(float).min, dtype=float)
-        op2.par_loop(op2.Kernel("""void maxify(double *a, double *b)
-        {
-        a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
-        }""", "maxify"),
-                     f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+        op2.par_loop(op2.Kernel("""
+void maxify(double *a, double *b) {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
         return fmax.data[0]
 
     @staticmethod
@@ -43,7 +44,7 @@ class Diagnostics(object):
         V = FunctionSpace(f.function_space().mesh(), "DG", 1)
         c = Function(V)
         c.assign(1)
-        rms = sqrt(assemble((dot(f, f))*dx)/assemble(c*dx))
+        rms = sqrt(assemble(dot(f, f)*dx)/assemble(c*dx))
         return rms
 
     @staticmethod
@@ -289,3 +290,59 @@ class Perturbation(Difference):
     @property
     def name(self):
         return self.field1+"_perturbation"
+
+
+class PotentialVorticity(DiagnosticField):
+    """Diagnostic field for potential vorticity."""
+    name = "potential_vorticity"
+
+    def field(self, space):
+        """Returns the potential vorticity field.
+
+        :arg space: The continuous finite element space.
+        """
+        if hasattr(self, "_field"):
+            return self._field
+        self._field = Function(space, name=self.name)
+        return self._field
+
+    def solver(self, state, space):
+        """Solver for potential vorticity. Solves
+        a weighted mass system to generate the
+        potential vorticity from known velocity and
+        depth fields.
+
+        :arg state: The state containing model.
+        :arg space: The continuous finite element space.
+        """
+        if hasattr(self, "_solver"):
+            return self._solver
+
+        u = state.fields("u")
+        D = state.fields("D")
+        gamma = TestFunction(space)
+        q = TrialFunction(space)
+        f = state.fields("coriolis", space)
+
+        cell_normals = CellNormal(state.mesh)
+        gradperp = lambda psi: cross(cell_normals, grad(psi))
+
+        a = q*gamma*D*dx
+        L = (gamma*f - inner(gradperp(gamma), u))*dx
+        pv_problem = LinearVariationalProblem(a, L, self.field(space), constant_jacobian=False)
+        solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
+        self._solver = solver
+        return self._solver
+
+    def compute(self, state):
+        """Computes the potential vorticity by solving
+        the weighted mass system.
+        """
+        if hasattr(self, "_space"):
+            V = self._space
+        else:
+            self._space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+            V = self._space
+
+        self.solver(state, V).solve()
+        return self.field(V)
