@@ -22,7 +22,7 @@ class SpaceCreator(object):
         try:
             return getattr(self, name)
         except AttributeError:
-            value = FunctionSpace(mesh, family, degree, name)
+            value = FunctionSpace(mesh, family, degree)
             setattr(self, name, value)
             return value
 
