@@ -133,7 +133,6 @@ def test_tracer_setup(tmpdir):
     run_tracer(dirname)
     with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
         data = json.load(f)
-    print data.keys()
 
     diffl2 = data["theta_minus_tracer"]["l2"][-1] / data["theta"]["l2"][0]
 

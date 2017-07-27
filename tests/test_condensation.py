@@ -124,7 +124,6 @@ def test_condens_setup(tmpdir):
     run_condens(dirname)
     with open(path.join(dirname, "condens/diagnostics.json"), "r") as f:
         data = json.load(f)
-    print data.keys()
 
     water_t_0 = data["water_v_plus_water_c"]["total"][0]
     water_t_T = data["water_v_plus_water_c"]["total"][-1]

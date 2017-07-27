@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from os import path
 import itertools
 from collections import defaultdict
@@ -199,7 +198,7 @@ class State(object):
             self.field_dict[f.name()] = f
 
         # make list of fields to dump
-        self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
+        self.to_dump = [field for (name, field) in self.field_dict.items() if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -242,7 +241,7 @@ class State(object):
 
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
-            print "DBG dumping", t
+            print("DBG dumping", t)
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:
@@ -292,7 +291,7 @@ class State(object):
         """
         Initialise state variables
         """
-        for name, ic in initial_conditions.iteritems():
+        for name, ic in initial_conditions.items():
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -301,7 +300,7 @@ class State(object):
         """
         Initialise reference profiles
         """
-        for name, profile in reference_profiles.iteritems():
+        for name, profile in reference_profiles.items():
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
