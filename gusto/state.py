@@ -4,6 +4,7 @@ import itertools
 from collections import defaultdict
 from functools import partial
 from netCDF4 import Dataset
+import time
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
 from sys import exit
@@ -232,8 +233,12 @@ class State(object):
         # setup diagnostics netcdf file
         self.netcdf_filename = self.dumpdir+"/diagnostics.nc"
         netcdf_data = Dataset(self.netcdf_filename, "w")
-        time = netcdf_data.createDimension("time", None)
+        netcdf_data.description = "Diagnostics data for simulation %s" % self.output.dirname
+        netcdf_data.history = "Created " + time.ctime()
+        netcdf_data.source = "Output from Gusto model"
+        time_dim = netcdf_data.createDimension("time", None)
         times = netcdf_data.createVariable("time", "f8", ("time",))
+        times.units = "seconds"
         for field in self.diagnostics.fields:
             grp = netcdf_data.createGroup(field)
             for diagnostic in self.diagnostics.available_diagnostics:
