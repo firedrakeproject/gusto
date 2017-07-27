@@ -1,6 +1,6 @@
 from os import path
 import itertools
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
@@ -174,7 +174,7 @@ class State(object):
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
         # create field dictionary
-        self.field_dict = {field.name(): field for field in self.fields}
+        self.field_dict = OrderedDict((field.name(), field) for field in self.fields)
 
         # register any diagnostic fields to diagnostics
         for diagnostic in self.diagnostic_fields:
@@ -214,11 +214,10 @@ class State(object):
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
-        fields_ll = {}
         for name in self.output.dumplist_latlon:
             f = self.field_dict[name]
-            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(fields_ll[name])
+            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            self.to_dump_latlon.append(field)
 
     def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
