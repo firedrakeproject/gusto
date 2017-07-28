@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, Expression
-import json
+from netCDF4 import Dataset
 from math import pi
 
 # This setup creates a bubble of water vapour that is advected
@@ -122,11 +122,12 @@ def test_condens_setup(tmpdir):
 
     dirname = str(tmpdir)
     run_condens(dirname)
-    with open(path.join(dirname, "condens/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
+    filename = path.join(dirname, "condens/diagnostics.nc")
+    data = Dataset(filename, "r")
 
-    water_t_0 = data["water_v_plus_water_c"]["total"][0]
-    water_t_T = data["water_v_plus_water_c"]["total"][-1]
+    water = data.groups["water_v_plus_water_c"]
+    total = water.variables["total"]
+    water_t_0 = total[0]
+    water_t_T = total[-1]
 
     assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12

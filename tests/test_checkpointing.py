@@ -108,23 +108,13 @@ def setup_sk(dirname):
     stepper = Timestepper(state, advection_dict, linear_solver,
                           compressible_forcing)
 
-    return stepper, 10*dt
+    return stepper, 2*dt
 
 
-def run_sk_linear(dirname):
-
-    stepper, tmax = setup_sk(dirname)
-    stepper.run(t=0., tmax=tmax)
-    import os
-    os.system('mkdir sk_nonlinear/bk')
-    os.system('mv sk_nonlinear/field_output* sk_nonlinear/bk')
-    stepper, tmax = setup_sk(dirname)
-    # should pick up from the end of the previous run.
-    dt = stepper.state.timestepping.dt
-    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
-
-
-def test_sk(tmpdir):
+def test_checkpointing(tmpdir):
 
     dirname = str(tmpdir)
-    run_sk_linear(dirname)
+    stepper, tmax = setup_sk(dirname)
+    stepper.run(t=0., tmax=tmax)
+    dt = stepper.state.timestepping.dt
+    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)

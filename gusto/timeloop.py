@@ -161,8 +161,6 @@ class Timestepper(BaseTimestepper):
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
-        state.diagnostic_dump()
-        state.pointwise_dump()
         print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
 
 

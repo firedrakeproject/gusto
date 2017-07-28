@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     Expression, Constant
-import json
+from netCDF4 import Dataset
 
 
 def setup_tracer(dirname):
@@ -131,10 +131,11 @@ def test_tracer_setup(tmpdir):
 
     dirname = str(tmpdir)
     run_tracer(dirname)
-    with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
+    filename = path.join(dirname, "tracer/diagnostics.nc")
+    data = Dataset(filename, "r")
 
-    diffl2 = data["theta_minus_tracer"]["l2"][-1] / data["theta"]["l2"][0]
+    diff = data.groups["theta_minus_tracer"]
+    theta = data.groups["theta"]
+    diffl2 = diff["l2"][-1] / theta["l2"][0]
 
     assert diffl2 < 1e-5

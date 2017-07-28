@@ -225,44 +225,71 @@ class State(object):
             fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(fields_ll[name])
 
-        # setup diagnostics netcdf file
+        # we create new netcdf files to write to, unless pickup=True, in
+        # which case we just need the filenames
         self.diagnostics_filename = self.dumpdir+"/diagnostics.nc"
-        diagnostics_data = Dataset(self.diagnostics_filename, "w")
-        diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
-        diagnostics_data.history = "Created " + time.ctime()
-        diagnostics_data.source = "Output from Gusto model"
-        diagnostics_data.createDimension("time", None)
-        times = diagnostics_data.createVariable("time", "f8", ("time",))
-        times.units = "seconds"
-        for field in self.diagnostics.fields:
-            grp = diagnostics_data.createGroup(field)
-            for diagnostic in self.diagnostics.available_diagnostics:
-                var = grp.createVariable(diagnostic, 'f8', ('time'))
-        diagnostics_data.close()
-
-        # setup point data netcdf file
         self.pointdata_filename = self.dumpdir+"/point_data.nc"
-        point_data = Dataset(self.pointdata_filename, "w")
-        point_data.description = "Point data for simulation %s" % self.output.dirname
-        point_data.history = "Created " + time.ctime()
-        point_data.source = "Output from Gusto model"
-        point_data.createDimension("time", None)
-        times = point_data.createVariable("time", "f8", ("time",))
-        times.units = "seconds"
-        for field, plist in self.output.point_data.iteritems():
-            grp = point_data.createGroup(field)
-            np = [len(p) for p in plist]
-            dim_names = ["time"]
-            for i in range(len(plist)):
-                name = "x"+str(i)
-                dim_names.append(name)
-                grp.createDimension(name, np[i])
-                var = grp.createVariable(name, "f8", (name,))
-                var[:] = plist[i]
-            dims = tuple(d for d in dim_names)
-            fvar = grp.createVariable(field, "f8", dims)
-            print fvar.shape
-        point_data.close()
+
+        if not pickup:
+
+            # setup diagnostics netcdf file
+            diagnostics_data = Dataset(self.diagnostics_filename, "w")
+            # some file info
+            diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
+            diagnostics_data.history = "Created " + time.ctime()
+            diagnostics_data.source = "Output from Gusto model"
+            # create time dimension - has size None because we will append
+            # to variables along this dimension
+            diagnostics_data.createDimension("time", None)
+            # create time variable so that we can set the values time values
+            times = diagnostics_data.createVariable("time", "f8", ("time",))
+            times.units = "seconds"
+            # create a group for each field - each group will contain the
+            # a variable for each diagnostic
+            for field in self.diagnostics.fields:
+                grp = diagnostics_data.createGroup(field)
+                for diagnostic in self.diagnostics.available_diagnostics:
+                    grp.createVariable(diagnostic, 'f8', ('time'))
+            # close the file
+            diagnostics_data.close()
+
+            # setup point data netcdf file
+            point_data = Dataset(self.pointdata_filename, "w")
+            point_data.description = "Point data for simulation %s" % self.output.dirname
+            point_data.history = "Created " + time.ctime()
+            point_data.source = "Output from Gusto model"
+            # create time dimension - has size None because we will append
+            # to variables along this dimension
+            point_data.createDimension("time", None)
+            # create time variable so that we can set the values time values
+            times = point_data.createVariable("time", "f8", ("time",))
+            times.units = "seconds"
+            # create a group for each field - each group will have dimensions
+            # set according to the information in plist
+            for field, plist in self.output.point_data.iteritems():
+                grp = point_data.createGroup(field)
+                # start list of dinemsions that point data will have
+                dim_names = ["time"]
+                # get number of points in each direction
+                npts = [len(p) for p in plist]
+                # each list in plist corresponds to a set of points in
+                # one direction
+                for i in range(len(plist)):
+                    # make a name for this dimension, save it, create the
+                    # dimension and the variable corresponding to the
+                    # dimension and assign the point values to the
+                    # dimension variable
+                    name = "x"+str(i)
+                    dim_names.append(name)
+                    grp.createDimension(name, npts[i])
+                    var = grp.createVariable(name, "f8", (name,))
+                    var[:] = plist[i]
+                # get tuple of dimensions that the output field varies over
+                dims = tuple(d for d in dim_names)
+                # finally, create field variable
+                grp.createVariable(field, "f8", dims)
+            # close the file
+            point_data.close()
 
     def dump(self, t=0, pickup=False):
         """
@@ -281,20 +308,11 @@ class State(object):
                 t = chk.read_attribute("/", "time")
                 next(self.dumpcount)
 
-        elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
-
-            print "DBG dumping", t
+        else:
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:
                 field(self)
-
-            # dump fields
-            self.dumpfile.write(*self.to_dump)
-
-            # dump fields on latlon mesh
-            if len(self.output.dumplist_latlon) > 0:
-                self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
             for name in self.diagnostics.fields:
@@ -302,14 +320,12 @@ class State(object):
                     d = getattr(self.diagnostics, fn)
                     data = d(self.field_dict[name])
                     self.diagnostic_data[name][fn] = data
-                if len(self.field_dict[name].ufl_shape) is 0:
-                    data = self.diagnostics.total(self.field_dict[name])
-                    self.diagnostic_data[name]["total"] = data
             self.diagnostic_dump()
 
             # calculate pointwise data
             point_data = {}
             for name, plist in self.output.point_data.iteritems():
+                # get points in the right format for the at function
                 points = [p for p in itertools.product(*plist)]
                 point_data[name] = [x.tolist() for x in self.field_dict[name].at(points)]
             self.pointwise_dump(point_data)
@@ -324,7 +340,14 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/", "time", t)
 
-        self.t.assign(t)
+            if(next(self.dumpcount) % self.output.dumpfreq) == 0:
+                # dump fields
+                self.dumpfile.write(*self.to_dump)
+
+                # dump fields on latlon mesh
+                if len(self.output.dumplist_latlon) > 0:
+                    self.dumpfile_ll.write(*self.to_dump_latlon)
+
         return t
 
     def pointwise_dump(self, point_data):
