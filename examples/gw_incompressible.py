@@ -131,7 +131,7 @@ state.set_reference_profiles({'b': b_b})
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
-# advection_dict is a dictionary containing field_name: advection class
+# advected_fields is a dictionary containing field_name: advection class
 ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
@@ -141,9 +141,9 @@ if supg:
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["b"] = SSPRK3(state, b0, beqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
@@ -158,7 +158,7 @@ forcing = IncompressibleForcing(state)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       forcing)
 
 ##############################################################################

@@ -63,14 +63,14 @@ def setup_sw(dirname, euler_poincare):
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["D"] = SSPRK3(state, D0, Deqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           sw_forcing)
 
     return stepper, 0.25*day
@@ -89,7 +89,6 @@ def test_sw_setup(tmpdir, euler_poincare):
     run_sw(dirname, euler_poincare=euler_poincare)
     with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
         data = json.load(f)
-    print data.keys()
     Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
     ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
 

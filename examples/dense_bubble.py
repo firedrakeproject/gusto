@@ -15,7 +15,7 @@ L = 51200.
 # build volume mesh
 H = 6400.  # Height position of the model top
 
-for delta, dt in res_dt.iteritems():
+for delta, dt in res_dt.items():
 
     dirname = "db_dx%s_dt%s" % (delta, dt)
     nlayers = int(H/delta)  # horizontal layers
@@ -81,10 +81,10 @@ for delta, dt in res_dt.iteritems():
     else:
         thetaeqn = EmbeddedDGAdvection(state, Vt,
                                        equation_form="advective")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -118,13 +118,13 @@ for delta, dt in res_dt.iteritems():
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.),
-                                           mu=Constant(10./delta), bcs=bcs),
-                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.),
-                                               mu=Constant(10./delta))}
+    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=Constant(75.),
+                                             mu=Constant(10./delta), bcs=bcs)),
+                       ("theta", InteriorPenalty(state, Vt, kappa=Constant(75.),
+                                                 mu=Constant(10./delta)))]
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
-                          compressible_forcing, diffusion_dict)
+    stepper = Timestepper(state, advected_fields, linear_solver,
+                          compressible_forcing, diffused_fields)
 
     stepper.run(t=0, tmax=tmax)

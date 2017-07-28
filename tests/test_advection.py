@@ -111,9 +111,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     elif time_discretisation == "implicit_midpoint":
         f_advection = ThetaMethod(state, f, fequation)
 
-    advection_dict = {}
-    advection_dict["f"] = f_advection
-    timestepper = AdvectionTimestepper(state, advection_dict)
+    advected_fields = [("f", f_advection)]
+    timestepper = AdvectionTimestepper(state, advected_fields)
 
     return timestepper, tmax, f_end
 
