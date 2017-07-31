@@ -268,7 +268,7 @@ class State(object):
             # set according to the information in plist
             for field, plist in self.output.point_data.iteritems():
                 grp = point_data.createGroup(field)
-                # start list of dinemsions that point data will have
+                # start list of dimensions that point data will have
                 dim_names = ["time"]
                 # get number of points in each direction
                 npts = [len(p) for p in plist]
