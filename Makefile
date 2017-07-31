@@ -5,6 +5,8 @@ lint:
 	@flake8 examples
 	@echo "    Linting gusto tests"
 	@flake8 tests
+	@echo "    Linting gusto plotting scripts"
+	@flake8 tests
 
 test:
 	@echo "    Running all tests"
