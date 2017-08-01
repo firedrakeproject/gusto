@@ -8,4 +8,4 @@ lint:
 
 test:
 	@echo "    Running all tests"
-	@python3 - m pytest tests $(PYTEST_ARGS)
+	@python3 -m pytest tests $(PYTEST_ARGS)

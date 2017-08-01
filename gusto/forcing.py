@@ -85,7 +85,7 @@ class Forcing(object, metaclass=ABCMeta):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L += self.mu_scaling*self.sponge_term()
+            L -= self.mu_scaling*self.sponge_term()
         return L
 
     def _build_forcing_solvers(self):
