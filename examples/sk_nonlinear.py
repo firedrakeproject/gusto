@@ -26,7 +26,7 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
-                          point_data={'theta_perturbation': [points_x, points_z]})
+                          point_data=[('theta_perturbation', [points_x, points_z])])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]

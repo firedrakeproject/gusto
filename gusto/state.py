@@ -270,7 +270,7 @@ class State(object):
         times.units = "seconds"
         # create a group for each field - each group will have dimensions
         # set according to the information in plist
-        for field, plist in self.output.point_data.items():
+        for field, plist in self.output.point_data:
             grp = point_data.createGroup(field)
             # start list of dimensions that point data will have
             dim_names = ["time"]
@@ -328,7 +328,7 @@ class State(object):
 
             # calculate pointwise data
             point_data = {}
-            for name, plist in self.output.point_data.items():
+            for name, plist in self.output.point_data:
                 # get points in the right format for the at function
                 points = [p for p in itertools.product(*plist)]
                 point_data[name] = np.asarray(self.field_dict[name].at(points))
@@ -364,7 +364,7 @@ class State(object):
             idx = len(time)
             times = data.variables["time"]
             times[idx:idx+1] = self.t
-            for fname in self.output.point_data.keys():
+            for fname, _ in self.output.point_data:
                 grp = data.groups[fname]
                 field = grp.variables[fname]
                 field[idx, :, :] = np.array(point_data[fname])
