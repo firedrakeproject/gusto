@@ -3,7 +3,6 @@ A module containing some tools for computing initial conditions, such
 as balanced initial conditions.
 """
 
-from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \

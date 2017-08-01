@@ -1,7 +1,6 @@
-from __future__ import absolute_import
 from os import path
 import itertools
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from functools import partial
 from netCDF4 import Dataset
 import time
@@ -179,7 +178,7 @@ class State(object):
         self.diagnostic_data = defaultdict(partial(defaultdict, float))
 
         # create field dictionary
-        self.field_dict = {field.name(): field for field in self.fields}
+        self.field_dict = OrderedDict((field.name(), field) for field in self.fields)
 
         # register any diagnostic fields to diagnostics
         for diagnostic in self.diagnostic_fields:
@@ -203,7 +202,7 @@ class State(object):
             self.field_dict[f.name()] = f
 
         # make list of fields to dump
-        self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
+        self.to_dump = [field for (name, field) in self.field_dict.items() if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -219,11 +218,10 @@ class State(object):
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
-        fields_ll = {}
         for name in self.output.dumplist_latlon:
             f = self.field_dict[name]
-            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(fields_ll[name])
+            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
@@ -385,7 +383,7 @@ class State(object):
         """
         Initialise state variables
         """
-        for name, ic in initial_conditions.iteritems():
+        for name, ic in initial_conditions.items():
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -394,7 +392,7 @@ class State(object):
         """
         Initialise reference profiles
         """
-        for name, profile in reference_profiles.iteritems():
+        for name, profile in reference_profiles.items():
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)

@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression
 import numpy as np
@@ -98,10 +97,10 @@ def setup_dcmip(dirname):
     # Set up advection schemes
     rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
     thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
-    advection_dict = {}
-    advection_dict["u"] = NoAdvection(state, state.fields("u"))
-    advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
-    advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
+    advected_fields = []
+    advected_fields.append(("u", NoAdvection(state, state.fields("u"))))
+    advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
     # Set up linear solver
     params = {'pc_type': 'fieldsplit',
@@ -134,7 +133,7 @@ def setup_dcmip(dirname):
     compressible_forcing = CompressibleForcing(state, linear=True)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           compressible_forcing)
 
     return stepper, timestepping.dt

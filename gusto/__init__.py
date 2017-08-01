@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from gusto.configuration import *   # noqa
 from gusto.advection import *       # noqa
 from gusto.diagnostics import *     # noqa

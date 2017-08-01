@@ -61,9 +61,7 @@ void maxify(double *a, double *b) {
             pass
 
 
-class DiagnosticField(object):
-
-    __metaclass__ = ABCMeta
+class DiagnosticField(object, metaclass=ABCMeta):
 
     @abstractproperty
     def name(self):

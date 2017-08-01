@@ -79,11 +79,11 @@ def setup_tracer(dirname):
                              equation_form="advective")
 
     # build advection dictionary
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
-    advection_dict["tracer"] = SSPRK3(state, tracer0, thetaeqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advected_fields.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -115,7 +115,7 @@ def setup_tracer(dirname):
     compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           compressible_forcing)
 
     return stepper, 100.0
