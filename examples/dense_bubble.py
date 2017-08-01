@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, DirichletBC, Constant, pi, cos
+    SpatialCoordinate, Constant, DirichletBC, pi, cos
 import sys
 
 if '--running-tests' in sys.argv:
@@ -51,10 +51,9 @@ for delta, dt in res_dt.items():
     Vr = rho0.function_space()
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
@@ -62,13 +61,13 @@ for delta, dt in res_dt.items():
 
     x = SpatialCoordinate(mesh)
     a = 5.0e3
-    deltaTheta = Constant(1.0e-2)
-    xc = Constant(0.5*L)
-    xr = Constant(4000.)
-    zc = Constant(3000.)
-    zr = Constant(2000.)
+    deltaTheta = 1.0e-2
+    xc = 0.5*L
+    xr = 4000.
+    zc = 3000.
+    zr = 2000.
     r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
-    theta_pert = conditional(r > 1., Constant(0.), -7.5*(1.+cos(pi*r)))
+    theta_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
 
@@ -126,10 +125,10 @@ for delta, dt in res_dt.items():
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=Constant(75.),
-                                             mu=Constant(10./delta), bcs=bcs)),
-                       ("theta", InteriorPenalty(state, Vt, kappa=Constant(75.),
-                                                 mu=Constant(10./delta)))]
+    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75.,
+                                             mu=10./delta, bcs=bcs)),
+                       ("theta", InteriorPenalty(state, Vt, kappa=75.,
+                                                 mu=10./delta))]
 
     # build time stepper
     stepper = Timestepper(state, advected_fields, linear_solver,

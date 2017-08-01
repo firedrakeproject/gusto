@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
-    Constant, as_vector, pi, sqrt
+    as_vector, pi, sqrt
 import sys
 
 day = 24.*60.*60.
@@ -15,7 +15,6 @@ else:
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
-u_0 = 20.  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
@@ -46,27 +45,25 @@ for ref_level, dt in ref_dt.items():
     u0 = state.fields('u')
     D0 = state.fields('D')
     x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R0 = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
+    u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
+    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     theta, lamda = latlon_coords(mesh)
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
+    Omega = parameters.Omega
+    g = parameters.g
+    Rsq = R**2
+    R0 = pi/9.
     R0sq = R0**2
-    RR = pi/9.
-    Rsq = RR**2
     lamda_c = 3*pi/2.
     lsq = (lamda - lamda_c)**2
     theta_c = pi/6.
     thsq = (theta - theta_c)**2
-    rsq = conditional(Rsq < lsq+thsq, Rsq, lsq+thsq)
+    rsq = conditional(R0sq < lsq+thsq, R0sq, lsq+thsq)
     r = sqrt(rsq)
-    bexpr = 2000 * (1 - r/R)
-    Dexpr = (h0 - ((R0 * Omega * u_0 + 0.5*u_0**2)*x[2]**2/R0sq))/g - bexpr
+    bexpr = 2000 * (1 - r/R0)
+    Dexpr = (H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq))/g - bexpr
 
     # Coriolis
-    fexpr = 2*Omega*x[2]/R0
+    fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)

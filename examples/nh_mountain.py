@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp, pi, cos
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, exp, pi, cos
 import sys
 
 dt = 5.0
@@ -20,15 +20,14 @@ ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
 x = Function(Vc).interpolate(as_vector([coord[0], coord[1]]))
-H = Constant(H)
-a = Constant(1000.)
-xc = Constant(L/2.)
+a = 1000.
+xc = L/2.
 x, z = SpatialCoordinate(ext_mesh)
-hm = Constant(1.)
+hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
 smooth_z = True
 if smooth_z:
-    zh = Constant(5000.)
+    zh = 5000.
     xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 else:
     xexpr = as_vector([x, z + ((H-z)/H)*zs])
@@ -38,8 +37,8 @@ mesh = Mesh(new_coords)
 # sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
 x, z = SpatialCoordinate(mesh)
-zc = Constant(H-10000.)
-mubar = Constant(0.15/dt)
+zc = H-10000.
+mubar = 0.15/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
@@ -103,7 +102,7 @@ params = {'pc_type': 'fieldsplit',
           'fieldsplit_1_sub_pc_type': 'ilu'}
 Pi = Function(Vr)
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=0.5, params=params)
 
 
 def min(f):
@@ -122,7 +121,7 @@ p1 = min(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=pi_top, solve_for_rho=True, params=params)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)

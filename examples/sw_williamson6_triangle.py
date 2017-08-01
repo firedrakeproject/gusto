@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Constant, cos, sin, SpatialCoordinate
+from firedrake import IcosahedralSphereMesh, cos, sin, SpatialCoordinate
 import sys
 
 dt = 900.
@@ -39,17 +39,15 @@ state = State(mesh, horizontal_degree=1,
 # Initial/current conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-Rc = Constant(R)
-omega = Constant(7.848e-6)  # note lower-case, not the same as Omega
-K = Constant(7.848e-6)
-h0 = Constant(H)
-g = Constant(parameters.g)
-Omega = Constant(parameters.Omega)
+omega = 7.848e-6  # note lower-case, not the same as Omega
+K = 7.848e-6
+g = parameters.g
+Omega = parameters.Omega
 
 theta, lamda = latlon_coords(mesh)
 
-u_zonal = Rc*omega*cos(theta) + Rc*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
-u_merid = -Rc*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
+u_zonal = R*omega*cos(theta) + R*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
+u_merid = -R*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
 
 uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
@@ -66,10 +64,10 @@ def Ctheta(theta):
     return 0.25*(K**2)*(cos(theta)**8)*(5*cos(theta)**2 - 6)
 
 
-Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
+Dexpr = H + (R**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
 # Coriolis
-fexpr = 2*Omega*x[2]/Rc
+fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
 f = state.fields("coriolis", V)
 f.interpolate(fexpr)  # Coriolis frequency (1/s)

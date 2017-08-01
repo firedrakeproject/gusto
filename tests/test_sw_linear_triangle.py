@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
 import json
 
@@ -11,7 +10,6 @@ def setup_sw(dirname):
     R = 6371220.
     H = 2000.
     day = 24.*60.*60.
-    u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
@@ -32,24 +30,20 @@ def setup_sw(dirname):
                   diagnostics=diagnostics,
                   fieldlist=fieldlist)
 
-    g = parameters.g
-    Omega = parameters.Omega
-
     # Coriolis
-    R = Constant(R)
-    Omega = Constant(parameters.Omega)
+    Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", Function(V))
     f.interpolate(fexpr)  # Coriolis frequency (1/s)
-    u_max = Constant(u_0)
 
     # interpolate initial conditions
     # Initial/current conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
+    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    g = Constant(parameters.g)
+    g = parameters.g
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)

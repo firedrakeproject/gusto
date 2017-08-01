@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
 import sys
 
@@ -16,7 +15,6 @@ else:
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
-u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
@@ -47,15 +45,13 @@ for ref_level, dt in ref_dt.items():
     u0 = state.fields("u")
     D0 = state.fields("D")
     x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R0 = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
-    Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
+    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
+    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    Omega = parameters.Omega
+    g = parameters.g
+    Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
     # Coriolis expression
-    fexpr = 2*Omega*x[2]/R0
+    fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)

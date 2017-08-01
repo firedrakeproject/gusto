@@ -36,8 +36,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
 
         if vector:
             space = VectorFunctionSpace(mesh, "DG", 1)
-            fexpr = as_vector([exp(-x[2]**2 - x[1]**2), Constant(0.), Constant(0.)])
-            f_end_expr = as_vector([exp(-x[2]**2 - x[0]**2), Constant(0.), Constant(0.)])
+            fexpr = as_vector([exp(-x[2]**2 - x[1]**2), 0., 0.])
+            f_end_expr = as_vector([exp(-x[2]**2 - x[0]**2), 0., 0.])
         else:
             space = state.spaces("DG")
             fexpr = exp(-x[2]**2 - x[1]**2)

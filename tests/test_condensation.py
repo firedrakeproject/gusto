@@ -56,10 +56,9 @@ def setup_condens(dirname):
     water_c0 = state.fields("water_c", Vt)
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate initial rho
@@ -67,14 +66,14 @@ def setup_condens(dirname):
                                      solve_for_rho=True)
 
     # set up water_v
-    xc = Constant(500.)
-    zc = Constant(350.)
-    rc = Constant(250.)
+    xc = 500.
+    zc = 350.
+    rc = 250.
     r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
-    w_expr = conditional(r > rc, Constant(0.), 0.25*(1. + cos((pi/rc)*r)))
+    w_expr = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
     # set up velocity field
-    u_max = Constant(10.0)
+    u_max = 10.0
 
     psi_expr = ((-u_max * L / pi) *
                 sin(2 * pi * x[0] / L) *
