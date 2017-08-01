@@ -5,7 +5,6 @@ from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
-from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
@@ -182,7 +181,7 @@ class State(object):
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
            and path.exists(self.dumpdir) and not pickup:
-            exit("results directory '%s' already exists" % self.dumpdir)
+            raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
@@ -279,8 +278,10 @@ class State(object):
     def initialise(self, initial_conditions):
         """
         Initialise state variables
+
+        :arg initial_conditions: An iterable of pairs (field_name, pointwise_value)
         """
-        for name, ic in initial_conditions.items():
+        for name, ic in initial_conditions:
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -288,8 +289,10 @@ class State(object):
     def set_reference_profiles(self, reference_profiles):
         """
         Initialise reference profiles
+
+        :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
-        for name, profile in reference_profiles.items():
+        for name, profile in reference_profiles:
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)

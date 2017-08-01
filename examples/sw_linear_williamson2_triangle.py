@@ -58,7 +58,8 @@ g = Constant(parameters.g)
 Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0),
+                  ('D', D0)])
 
 Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
 advected_fields = []

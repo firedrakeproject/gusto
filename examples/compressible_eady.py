@@ -160,10 +160,13 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
 
 # set the background profiles
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 ##############################################################################
 # Set up advection schemes
