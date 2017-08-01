@@ -53,7 +53,8 @@ def setup_sw(dirname, euler_poincare):
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0),
+                      ('D', D0)])
 
     if euler_poincare:
         ueqn = EulerPoincare(state, u0.function_space())

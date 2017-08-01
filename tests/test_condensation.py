@@ -86,9 +86,13 @@ def setup_condens(dirname):
     rho0.interpolate(rho_b)
     water_v0.interpolate(w_expr)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'water_v': water_v0, 'water_c': water_c0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise([('u', u0),
+                      ('rho', rho0),
+                      ('theta', theta0),
+                      ('water_v', water_v0),
+                      ('water_c', water_c0)])
+    state.set_reference_profiles([('rho', rho_b),
+                                  ('theta', theta_b)])
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")

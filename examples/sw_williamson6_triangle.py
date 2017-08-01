@@ -78,7 +78,8 @@ f.interpolate(fexpr)  # Coriolis frequency (1/s)
 u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
 D0.interpolate(Dexpr)
 
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0),
+                  ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
