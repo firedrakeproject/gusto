@@ -76,10 +76,10 @@ state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
 # Set up advection schemes
 rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
 thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
-advection_dict = {}
-advection_dict["u"] = NoAdvection(state, u0, None)
-advection_dict["rho"] = ForwardEuler(state, rho0, rhoeqn)
-advection_dict["theta"] = ForwardEuler(state, theta0, thetaeqn)
+advected_fields = []
+advected_fields.append(("u", NoAdvection(state, u0, None)))
+advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
+advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
@@ -112,7 +112,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 compressible_forcing = CompressibleForcing(state, linear=True)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)

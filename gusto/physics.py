@@ -2,13 +2,12 @@ from abc import ABCMeta, abstractmethod
 from firedrake import exp, Interpolator, conditional, interpolate
 
 
-class Physics(object):
+class Physics(object, metaclass=ABCMeta):
     """
     Base class for physics processes for Gusto.
 
     :arg state: :class:`.State` object.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state):
         self.state = state

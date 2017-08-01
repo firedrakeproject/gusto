@@ -83,9 +83,9 @@ state.initialise({'u': u0, 'D': D0})
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["D"] = SSPRK3(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -93,7 +93,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

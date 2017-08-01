@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
@@ -6,7 +5,7 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     dot, dS, Constant, warning, Expression, as_vector
 
 
-class Forcing(object):
+class Forcing(object, metaclass=ABCMeta):
     """
     Base class for forcing terms for Gusto.
 
@@ -19,7 +18,6 @@ class Forcing(object):
     :arg extra_terms: extra terms to add to the u component of the forcing
     term - these will be multiplied by the appropriate test function.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
         self.state = state
@@ -87,7 +85,7 @@ class Forcing(object):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L += self.mu_scaling*self.sponge_term()
+            L -= self.mu_scaling*self.sponge_term()
         return L
 
     def _build_forcing_solvers(self):

@@ -56,9 +56,7 @@ void maxify(double *a, double *b) {
         return assemble(f * dx)
 
 
-class DiagnosticField(object):
-
-    __metaclass__ = ABCMeta
+class DiagnosticField(object, metaclass=ABCMeta):
 
     def __init__(self):
         self._initialised = False

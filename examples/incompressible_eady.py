@@ -184,9 +184,9 @@ if supg:
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
-advection_dict = {}
-advection_dict["u"] = SSPRK3(state, u0, ueqn)
-advection_dict["b"] = SSPRK3(state, b0, beqn)
+advected_fields = []
+advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
+advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
@@ -201,7 +201,7 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+stepper = Timestepper(state, advected_fields, linear_solver, forcing)
 
 ##############################################################################
 # Run!

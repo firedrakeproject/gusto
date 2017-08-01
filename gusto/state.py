@@ -1,7 +1,6 @@
-from __future__ import absolute_import
 from os import path
 import itertools
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
@@ -205,11 +204,10 @@ class State(object):
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
-        fields_ll = {}
         for name in self.output.dumplist_latlon:
             f = self.fields(name)
-            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(fields_ll[name])
+            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            self.to_dump_latlon.append(field)
 
     def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
@@ -232,7 +230,7 @@ class State(object):
 
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
-            print "DBG dumping", t
+            print("DBG dumping", t)
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:
@@ -282,7 +280,7 @@ class State(object):
         """
         Initialise state variables
         """
-        for name, ic in initial_conditions.iteritems():
+        for name, ic in initial_conditions.items():
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -291,7 +289,7 @@ class State(object):
         """
         Initialise reference profiles
         """
-        for name, profile in reference_profiles.iteritems():
+        for name, profile in reference_profiles.items():
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
