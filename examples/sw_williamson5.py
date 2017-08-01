@@ -53,7 +53,7 @@ for ref_level, dt in ref_dt.items():
     Rsq = R**2
     R0 = pi/9.
     R0sq = R0**2
-    lamda_c = 3*pi/2.
+    lamda_c = -pi/2.
     lsq = (lamda - lamda_c)**2
     theta_c = pi/6.
     thsq = (theta - theta_c)**2
