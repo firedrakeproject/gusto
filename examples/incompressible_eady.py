@@ -89,8 +89,8 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityY(),
                      KineticEnergy(), KineticEnergyY(),
                      EadyPotentialEnergy(),
-                     Sum(KineticEnergy(), EadyPotentialEnergy()),
-                     Difference(KineticEnergy(), KineticEnergyY()),
+                     Sum("KineticEnergy", "EadyPotentialEnergy"),
+                     Difference("KineticEnergy", "KineticEnergyY"),
                      GeostrophicImbalance(), TrueResidualV()]
 
 # setup state, passing in the mesh, information on the required finite element

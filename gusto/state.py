@@ -1,6 +1,6 @@
 from os import path
 import itertools
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
@@ -160,6 +160,20 @@ class State(object):
                 self.Phi = Function(V).interpolate(z)
             self.Phi *= parameters.g
 
+    def setup_diagnostics(self):
+        # add special case diagnostic fields
+        for name in self.output.perturbation_fields:
+            f = Perturbation(name)
+            self.diagnostic_fields.append(f)
+
+        for name in self.output.steady_state_error_fields:
+            f = SteadyStateError(self, name)
+            self.diagnostic_fields.append(f)
+
+        for diagnostic in self.diagnostic_fields:
+            diagnostic.setup(self)
+            self.diagnostics.register(diagnostic.name)
+
     def setup_dump(self, pickup=False):
 
         # setup dump files
@@ -174,32 +188,8 @@ class State(object):
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
-        # create field dictionary
-        self.field_dict = OrderedDict((field.name(), field) for field in self.fields)
-
-        # register any diagnostic fields to diagnostics
-        for diagnostic in self.diagnostic_fields:
-            self.diagnostics.register(diagnostic.name)
-
-        # add special case diagnostic fields
-        for name in self.output.perturbation_fields:
-            f = Perturbation(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
-        for name in self.output.steady_state_error_fields:
-            f = SteadyStateError(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
-        # add diagnostic fields to field dictionary and ensure they are dumped
-        for diagnostic in self.diagnostic_fields:
-            f = diagnostic(self)
-            f.dump = True
-            self.field_dict[f.name()] = f
-
         # make list of fields to dump
-        self.to_dump = [field for (name, field) in self.field_dict.items() if field.dump]
+        self.to_dump = [field for field in self.fields if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -216,7 +206,7 @@ class State(object):
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
         for name in self.output.dumplist_latlon:
-            f = self.field_dict[name]
+            f = self.fields(name)
             field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
             self.to_dump_latlon.append(field)
 
@@ -259,10 +249,10 @@ class State(object):
             for name in self.diagnostics.fields:
                 for fn in diagnostic_fns:
                     d = getattr(self.diagnostics, fn)
-                    data = d(self.field_dict[name])
+                    data = d(self.fields(name))
                     self.diagnostic_data[name][fn].append(data)
-                if len(self.field_dict[name].ufl_shape) is 0:
-                    data = self.diagnostics.total(self.field_dict[name])
+                if len(self.fields(name).ufl_shape) == 0:
+                    data = self.diagnostics.total(self.fields(name))
                     self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
