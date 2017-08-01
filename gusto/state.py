@@ -5,7 +5,6 @@ from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
-from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
@@ -168,7 +167,7 @@ class State(object):
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
            and path.exists(self.dumpdir) and not pickup:
-            exit("results directory '%s' already exists" % self.dumpdir)
+            raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
