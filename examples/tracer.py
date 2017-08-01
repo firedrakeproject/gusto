@@ -71,7 +71,7 @@ for delta, dt in res_dt.items():
 
     state.initialise([('u', u0),
                       ('rho', rho0),
-                      ('theta', theta0)
+                      ('theta', theta0),
                       ('water', water0)])
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
