@@ -229,65 +229,71 @@ class State(object):
         self.pointdata_filename = self.dumpdir+"/point_data.nc"
 
         if not pickup:
+            self.setup_diagnostics_output()
+            self.setup_pointdata_output()
 
-            # setup diagnostics netcdf file
-            diagnostics_data = Dataset(self.diagnostics_filename, "w")
-            # some file info
-            diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
-            diagnostics_data.history = "Created " + time.ctime()
-            diagnostics_data.source = "Output from Gusto model"
-            # create time dimension - has size None because we will append
-            # to variables along this dimension
-            diagnostics_data.createDimension("time", None)
-            # create time variable so that we can set the values time values
-            times = diagnostics_data.createVariable("time", "f8", ("time",))
-            times.units = "seconds"
-            # create a group for each field - each group will contain the
-            # a variable for each diagnostic
-            for field in self.diagnostics.fields:
-                grp = diagnostics_data.createGroup(field)
-                for diagnostic in self.diagnostics.available_diagnostics:
-                    grp.createVariable(diagnostic, 'f8', ('time'))
-            # close the file
-            diagnostics_data.close()
+    def setup_diagnostics_output(self):
 
-            # setup point data netcdf file
-            point_data = Dataset(self.pointdata_filename, "w")
-            point_data.description = "Point data for simulation %s" % self.output.dirname
-            point_data.history = "Created " + time.ctime()
-            point_data.source = "Output from Gusto model"
-            # create time dimension - has size None because we will append
-            # to variables along this dimension
-            point_data.createDimension("time", None)
-            # create time variable so that we can set the values time values
-            times = point_data.createVariable("time", "f8", ("time",))
-            times.units = "seconds"
-            # create a group for each field - each group will have dimensions
-            # set according to the information in plist
-            for field, plist in self.output.point_data.iteritems():
-                grp = point_data.createGroup(field)
-                # start list of dimensions that point data will have
-                dim_names = ["time"]
-                # get number of points in each direction
-                npts = [len(p) for p in plist]
-                # each list in plist corresponds to a set of points in
-                # one direction
-                for i in range(len(plist)):
-                    # make a name for this dimension, save it, create the
-                    # dimension and the variable corresponding to the
-                    # dimension and assign the point values to the
-                    # dimension variable
-                    name = "x"+str(i)
-                    dim_names.append(name)
-                    grp.createDimension(name, npts[i])
-                    var = grp.createVariable(name, "f8", (name,))
-                    var[:] = plist[i]
-                # get tuple of dimensions that the output field varies over
-                dims = tuple(d for d in dim_names)
-                # finally, create field variable
-                grp.createVariable(field, "f8", dims)
-            # close the file
-            point_data.close()
+        # setup diagnostics netcdf file
+        diagnostics_data = Dataset(self.diagnostics_filename, "w")
+        # some file info
+        diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
+        diagnostics_data.history = "Created " + time.ctime()
+        diagnostics_data.source = "Output from Gusto model"
+        # create time dimension - has size None because we will append
+        # to variables along this dimension
+        diagnostics_data.createDimension("time", None)
+        # create time variable so that we can set the values time values
+        times = diagnostics_data.createVariable("time", "f8", ("time",))
+        times.units = "seconds"
+        # create a group for each field - each group will contain the
+        # a variable for each diagnostic
+        for field in self.diagnostics.fields:
+            grp = diagnostics_data.createGroup(field)
+            for diagnostic in self.diagnostics.available_diagnostics:
+                grp.createVariable(diagnostic, 'f8', ('time'))
+        # close the file
+        diagnostics_data.close()
+
+    def setup_pointdata_output(self):
+
+        # setup point data netcdf file
+        point_data = Dataset(self.pointdata_filename, "w")
+        point_data.description = "Point data for simulation %s" % self.output.dirname
+        point_data.history = "Created " + time.ctime()
+        point_data.source = "Output from Gusto model"
+        # create time dimension - has size None because we will append
+        # to variables along this dimension
+        point_data.createDimension("time", None)
+        # create time variable so that we can set the values time values
+        times = point_data.createVariable("time", "f8", ("time",))
+        times.units = "seconds"
+        # create a group for each field - each group will have dimensions
+        # set according to the information in plist
+        for field, plist in self.output.point_data.items():
+            grp = point_data.createGroup(field)
+            # start list of dimensions that point data will have
+            dim_names = ["time"]
+            # get number of points in each direction
+            npts = [len(p) for p in plist]
+            # each list in plist corresponds to a set of points in
+            # one direction
+            for i in range(len(plist)):
+                # make a name for this dimension, save it, create the
+                # dimension and the variable corresponding to the
+                # dimension and assign the point values to the
+                # dimension variable
+                name = "x"+str(i)
+                dim_names.append(name)
+                grp.createDimension(name, npts[i])
+                var = grp.createVariable(name, "f8", (name,))
+                var[:] = plist[i]
+            # get tuple of dimensions that the output field varies over
+            dims = tuple(d for d in dim_names)
+            # finally, create field variable
+            grp.createVariable(field, "f8", dims)
+        # close the file
+        point_data.close()
 
     def dump(self, t=0, pickup=False):
         """
@@ -322,7 +328,7 @@ class State(object):
 
             # calculate pointwise data
             point_data = {}
-            for name, plist in self.output.point_data.iteritems():
+            for name, plist in self.output.point_data.items():
                 # get points in the right format for the at function
                 points = [p for p in itertools.product(*plist)]
                 point_data[name] = [x.tolist() for x in self.field_dict[name].at(points)]
