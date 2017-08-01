@@ -1,6 +1,6 @@
 from os import path
 import itertools
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
