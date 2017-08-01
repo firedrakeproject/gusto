@@ -134,8 +134,8 @@ for delta, dt in res_dt.items():
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75., mu=10./delta, bcs=bcs)),
-                       ("theta", InteriorPenalty(state, Vt, kappa=75., mu=10./delta))]
+    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75., mu=Constant(10./delta), bcs=bcs)),
+                       ("theta", InteriorPenalty(state, Vt, kappa=75., mu=Constant(10./delta)))]
 
     # build time stepper
     stepper = Timestepper(state, advected_fields, linear_solver,
