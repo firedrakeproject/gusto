@@ -57,10 +57,10 @@ for ref_level, dt in ref_dt.items():
     lsq = (lamda - lamda_c)**2
     theta_c = pi/6.
     thsq = (theta - theta_c)**2
-    rsq = conditional(R0sq < lsq+thsq, R0sq, lsq+thsq)
+    rsq = Min(R0sq, lsq+thsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R0)
-    Dexpr = (H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq))/g - bexpr
+    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 
     # Coriolis
     fexpr = 2*Omega*x[2]/R
