@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    dot, dS, Constant, warning, Expression, as_vector
+    dot, dS, Constant, warning, as_vector, SpatialCoordinate
 
 
 class Forcing(object, metaclass=ABCMeta):
@@ -236,7 +236,8 @@ class EadyForcing(IncompressibleForcing):
         dbdy = self.state.parameters.dbdy
         H = self.state.parameters.H
         Vp = self.state.spaces("DG")
-        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"), H=H))
+        _, _, z = SpatialCoordinate(self.state.mesh)
+        eady_exp = Function(Vp).interpolate(z-H/2.)
 
         L -= self.scaling*dbdy*eady_exp*inner(self.test, as_vector([0., 1., 0.]))*dx
         return L

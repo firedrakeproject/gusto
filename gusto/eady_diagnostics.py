@@ -1,5 +1,5 @@
 from firedrake import SpatialCoordinate, TrialFunction, \
-    TestFunction, Function, DirichletBC, Expression, \
+    TestFunction, Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, \
     FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
     as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
@@ -79,9 +79,8 @@ class GeostrophicImbalance(DiagnosticField):
         a = inner(w, v)*dx
         L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
 
-        bc = ("0.", "0.", "0.")
-        bcs = [DirichletBC(Vu, Expression(bc), "bottom"),
-               DirichletBC(Vu, Expression(bc), "top")]
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
 
         self.imbalance = Function(Vu)
         imbalanceproblem = LinearVariationalProblem(a, L, self.imbalance, bcs=bcs)
@@ -174,8 +173,8 @@ class SawyerEliassenU(DiagnosticField):
         dbdy = state.parameters.dbdy
         x, y, z = SpatialCoordinate(state.mesh)
 
-        bcs = [DirichletBC(V0, Expression("0."), "bottom"),
-               DirichletBC(V0, Expression("0."), "top")]
+        bcs = [DirichletBC(V0, 0., "bottom"),
+               DirichletBC(V0, 0., "top")]
 
         Mat = as_matrix([[b.dx(2), 0., -f*self.v_v0.dx(2)],
                          [0., 0., 0.],

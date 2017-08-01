@@ -8,7 +8,7 @@ from gusto.diagnostics import Diagnostics, Perturbation, \
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
-    Expression, File, SpatialCoordinate, sqrt, Constant, inner, \
+    File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
@@ -153,9 +153,11 @@ class State(object):
         if geopotential_form:
             V = FunctionSpace(mesh, "CG", 1)
             if self.on_sphere:
-                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+                x, y, z = SpatialCoordinate(mesh)
+                self.Phi = Function(V).interpolate(sqrt(x**2 + y**2 + z**2))
             else:
-                self.Phi = Function(V).interpolate(Expression("x[1]"))
+                x, z = SpatialCoordinate(mesh)
+                self.Phi = Function(V).interpolate(z)
             self.Phi *= parameters.g
 
     def setup_diagnostics(self):
