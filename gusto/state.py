@@ -331,7 +331,7 @@ class State(object):
             for name, plist in self.output.point_data.items():
                 # get points in the right format for the at function
                 points = [p for p in itertools.product(*plist)]
-                point_data[name] = [x.tolist() for x in self.field_dict[name].at(points)]
+                point_data[name] = np.asarray(self.field_dict[name].at(points))
             self.pointwise_dump(point_data)
 
             # Open the checkpointing file (backup version)
@@ -344,7 +344,7 @@ class State(object):
                         chk.store(field)
                     chk.write_attribute("/", "time", t)
 
-            if(next(self.dumpcount) % self.output.dumpfreq) == 0:
+            if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
                 self.dumpfile.write(*self.to_dump)
 
