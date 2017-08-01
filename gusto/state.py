@@ -361,7 +361,6 @@ class State(object):
             for fname in self.output.point_data.keys():
                 grp = data.groups[fname]
                 field = grp.variables[fname]
-                print np.array(point_data[fname]).shape
                 field[idx, :, :] = np.array(point_data[fname])
 
     def diagnostic_dump(self):

@@ -2,6 +2,7 @@ import argparse
 from plotting import Plotting
 import matplotlib.pyplot as plt
 
+
 class PlotStats(Plotting):
 
     def plot(self, same_plot):
@@ -17,7 +18,8 @@ class PlotStats(Plotting):
             plt.legend(loc='upper left')
             plt.show()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="plot stats over time for specified field")
     parser.add_argument("filename", help="path to .nc file containing data")

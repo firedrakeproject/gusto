@@ -2,6 +2,7 @@ import argparse
 from plotting import Plotting
 import matplotlib.pyplot as plt
 
+
 class Plot1DProfile(Plotting):
 
     def __init__(self, filename, field_name, dim, dim_idxs, time_entries=None):
@@ -12,12 +13,12 @@ class Plot1DProfile(Plotting):
         if time_entries is not None:
             # check that no time entries exceed the length of the time dimension
             if any(i > len(self.time) for i in time_entries):
-                raise ValueError("You cannot plot a time entry greater than %i" % len(time))
+                raise ValueError("You cannot plot a time entry greater than %i" % len(self.time))
 
             self.times = []
             for i in time_entries:
                 self.times.append(self.time[i])
-            print("Profile will be plotted for times %s :" % [str(t) for t in self.times ])
+            print("Profile will be plotted for times %s :" % [str(t) for t in self.times])
         else:
             self.times = self.time
 
@@ -64,7 +65,8 @@ class Plot1DProfile(Plotting):
         if same_plot:
                 plt.show()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="plot 1D profile of field with x axis specified by dim and other spatial dimensions set to values corresponding to indices in dim_idxs")
     parser.add_argument("filename", help="path to .nc file containing data")
@@ -75,7 +77,7 @@ if __name__=="__main__":
     parser.add_argument("--dim_idxs", type=int, nargs="+")
     parser.add_argument("--same_plot", action="store_true")
     args = parser.parse_args()
-    print(args)
+
     plt1D = Plot1DProfile(args.filename, args.field_name,
-                            args.time_entries, args.dim, args.dim_idxs)
+                          args.time_entries, args.dim, args.dim_idxs)
     plt1D.plot(args.same_plot)

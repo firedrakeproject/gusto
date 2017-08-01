@@ -1,5 +1,6 @@
 from netCDF4 import Dataset
 
+
 class Plotting(object):
 
     def __init__(self, filename, field_name, stats=None):
