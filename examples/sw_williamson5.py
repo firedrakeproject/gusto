@@ -53,7 +53,7 @@ for ref_level, dt in ref_dt.items():
     h0 = Constant(H)
     Omega = Constant(parameters.Omega)
     g = Constant(parameters.g)
-    Rsq = R0**2
+    R0sq = R0**2
     RR = pi/9.
     Rsq = RR**2
     lamda_c = 3*pi/2.
@@ -63,7 +63,7 @@ for ref_level, dt in ref_dt.items():
     rsq = conditional(Rsq < lsq+thsq, Rsq, lsq+thsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R)
-    Dexpr = (h0 - ((R0 * Omega * u0 + 0.5*u0**2)*x[2]**2/Rsq))/g - bexpr
+    Dexpr = (h0 - ((R0 * Omega * u_0 + 0.5*u_0**2)*x[2]**2/R0sq))/g - bexpr
 
     # Coriolis
     fexpr = 2*Omega*x[2]/R0
