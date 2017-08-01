@@ -124,9 +124,10 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0, 0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'b': b0})
+state.initialise([('u', u0),
+                  ('b', b0)])
 # set the background buoyancy
-state.set_reference_profiles({'b': b_b})
+state.set_reference_profiles([('b', b_b)])
 
 ##############################################################################
 # Set up advection schemes

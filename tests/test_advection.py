@@ -94,7 +94,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     # interpolate initial conditions
     f.interpolate(fexpr)
     f_end.interpolate(f_end_expr)
-    state.initialise({'u': u0, 'f': f})
+    state.initialise([('u', u0), ('f', f)])
 
     if spatial_opts is None:
         fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)

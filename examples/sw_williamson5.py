@@ -65,7 +65,8 @@ for ref_level, dt in ref_dt.items():
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0),
+                      ('D', D0)])
 
     ueqn = EulerPoincare(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")

@@ -289,8 +289,10 @@ class State(object):
     def initialise(self, initial_conditions):
         """
         Initialise state variables
+
+        :arg initial_conditions: An iterable of pairs (field_name, pointwise_value)
         """
-        for name, ic in initial_conditions.items():
+        for name, ic in initial_conditions:
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -298,8 +300,10 @@ class State(object):
     def set_reference_profiles(self, reference_profiles):
         """
         Initialise reference profiles
+
+        :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
-        for name, profile in reference_profiles.items():
+        for name, profile in reference_profiles:
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
