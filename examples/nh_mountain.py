@@ -37,6 +37,7 @@ mesh = Mesh(new_coords)
 
 # sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
+x, z = SpatialCoordinate(mesh)
 zc = Constant(H-10000.)
 mubar = Constant(0.15/dt)
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
