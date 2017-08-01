@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Expression, Constant
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, pi
 import json
 
 
@@ -57,11 +56,12 @@ def setup_tracer(dirname):
                                      solve_for_rho=True)
 
     # set up perturbation to theta
-    theta_pert = Function(Vt).interpolate(
-        Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
-                   "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
-                   "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
-                   xc=500., zc=350., rc=250.))
+    xc = Constant(500.)
+    zc = Constant(350.)
+    rc = Constant(250.)
+    x = SpatialCoordinate(mesh)
+    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+    theta_pert = conditional(r > rc, Constant(0.), 0.25*(1. + cos((pi/rc)*r)))
 
     theta0.interpolate(theta_b + theta_pert)
     rho0.interpolate(rho_b)

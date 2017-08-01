@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import sys
@@ -19,8 +19,8 @@ u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements, degree=3)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)

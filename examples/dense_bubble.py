@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, DirichletBC
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, DirichletBC, Constant, pi, cos
 import sys
 
 if '--running-tests' in sys.argv:
@@ -62,8 +62,13 @@ for delta, dt in res_dt.items():
 
     x = SpatialCoordinate(mesh)
     a = 5.0e3
-    deltaTheta = 1.0e-2
-    theta_pert = Function(Vt).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=parameters.g))
+    deltaTheta = Constant(1.0e-2)
+    xc = Constant(0.5*L)
+    xr = Constant(4000.)
+    zc = Constant(3000.)
+    zr = Constant(2000.)
+    r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
+    theta_pert = conditional(r > 1., Constant(0.), -7.5*(1.+cos(pi*r)))
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
 

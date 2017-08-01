@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, Constant, cos, sin
+from firedrake import IcosahedralSphereMesh, Constant, cos, sin, SpatialCoordinate
 import sys
 
 dt = 900.
@@ -16,8 +16,8 @@ H = 8000.
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)
@@ -68,9 +68,8 @@ def Ctheta(theta):
 
 Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
-# Coriolis expression
-x, y, z = SpatialCoordinate(mesh)
-fexpr = 2*Omega*z/Rc
+# Coriolis
+fexpr = 2*Omega*x[2]/Rc
 V = FunctionSpace(mesh, "CG", 1)
 f = state.fields("coriolis", V)
 f.interpolate(fexpr)  # Coriolis frequency (1/s)

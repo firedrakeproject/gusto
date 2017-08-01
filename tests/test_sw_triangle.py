@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import json
@@ -17,8 +17,8 @@ def setup_sw(dirname, euler_poincare):
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    mesh.init_cell_orientations(x)
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
@@ -37,7 +37,6 @@ def setup_sw(dirname, euler_poincare):
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
-    x = SpatialCoordinate(mesh)
     u_max = Constant(u_0)
     R = Constant(R)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
@@ -45,7 +44,7 @@ def setup_sw(dirname, euler_poincare):
     Omega = Constant(parameters.Omega)
     g = Constant(parameters.g)
     Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis expression
+    # Coriolis
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", Function(V))

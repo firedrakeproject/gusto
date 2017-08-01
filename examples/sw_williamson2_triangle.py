@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import sys
@@ -28,8 +28,9 @@ for ref_level, dt in ref_dt.items():
     dirname = "sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    global_normal = x
+    mesh.init_cell_orientations(x)
 
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])

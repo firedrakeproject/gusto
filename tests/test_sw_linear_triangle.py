@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
     Constant, as_vector
 from math import pi
 import json
@@ -15,8 +15,8 @@ def setup_sw(dirname):
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    mesh.init_cell_orientations(x)
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=3600.)
@@ -35,10 +35,9 @@ def setup_sw(dirname):
     g = parameters.g
     Omega = parameters.Omega
 
-    # Coriolis expression
+    # Coriolis
     R = Constant(R)
     Omega = Constant(parameters.Omega)
-    x = SpatialCoordinate(mesh)
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", Function(V))

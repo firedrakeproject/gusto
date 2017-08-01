@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression
+    SpatialCoordinate, ExtrudedMesh
 import json
 from math import pi
 
@@ -67,11 +67,11 @@ def setup_condens(dirname):
                                      solve_for_rho=True)
 
     # set up water_v
-    w_expr = Function(Vt).interpolate(
-        Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
-                   "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
-                   "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
-                   xc=500., zc=350., rc=250.))
+    xc = Constant(500.)
+    zc = Constant(350.)
+    rc = Constant(250.)
+    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+    w_expr = conditional(r > rc, Constant(0.), 0.25*(1. + cos((pi/rc)*r)))
 
     # set up velocity field
     u_max = Constant(10.0)

@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Expression, \
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,\
     VectorFunctionSpace, File
 import pytest
 
@@ -23,20 +23,21 @@ def setup_IPdiffusion(vector, DG):
                   output=output,
                   fieldlist=fieldlist)
 
+    x = SpatialCoordinate(mesh)
     if vector:
         if DG:
             Space = VectorFunctionSpace(mesh, "DG", 1)
         else:
             Space = state.spaces("HDiv")
         f = Function(Space, name="f")
-        fexpr = Expression(("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", "0.0"), L=L)
+        fexpr = as_vector([exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2), Constant(0.)])
     else:
         if DG:
             Space = state.spaces("DG")
         else:
             Space = state.spaces("HDiv_v")
         f = Function(Space, name='f')
-        fexpr = Expression("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", L=L)
+        fexpr = exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2)
 
     try:
         f.interpolate(fexpr)
