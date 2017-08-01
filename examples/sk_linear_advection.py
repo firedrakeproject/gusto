@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, exp, sin
 import numpy as np
 import sys
@@ -63,7 +63,6 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = Function(W_DG1).interpolate(Expression("x[0]"))
 a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)

@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, \
+    as_vector, pi, sqrt
 import sys
 
 day = 24.*60.*60.
@@ -15,7 +15,6 @@ else:
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
-u_0 = 20.  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
@@ -27,8 +26,8 @@ for ref_level, dt in ref_dt.items():
     dirname = "sw_W5_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    mesh.init_cell_orientations(x)
 
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D'])
@@ -46,17 +45,25 @@ for ref_level, dt in ref_dt.items():
     u0 = state.fields('u')
     D0 = state.fields('D')
     x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R0 = Constant(R)
-    uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
-    Dexpr = Expression("h0 - ((R0 * Omega * u0 + pow(u0,2)/2.0)*(x[2]*x[2]/(R0*R0)))/g - (2000 * (1 - sqrt(fmin(pow(pi/9.0,2),pow(atan2(x[1]/R0,x[0]/R0)+1.0*pi/2.0,2)+pow(asin(x[2]/R0)-pi/6.0,2)))/(pi/9.0)))", h0=5960, R0=R0, Omega=Omega, u0=20.0, g=g)
-    bexpr = Expression("2000 * (1 - sqrt(fmin(pow(pi/9.0,2),pow(atan2(x[1]/R0,x[0]/R0)+1.0*pi/2.0,2)+pow(asin(x[2]/R0)-pi/6.0,2)))/(pi/9.0))", R0=R0)
+    u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
+    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    theta, lamda = latlon_coords(mesh)
+    Omega = parameters.Omega
+    g = parameters.g
+    Rsq = R**2
+    R0 = pi/9.
+    R0sq = R0**2
+    lamda_c = -pi/2.
+    lsq = (lamda - lamda_c)**2
+    theta_c = pi/6.
+    thsq = (theta - theta_c)**2
+    rsq = Min(R0sq, lsq+thsq)
+    r = sqrt(rsq)
+    bexpr = 2000 * (1 - r/R0)
+    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 
-    # Coriolis expression
-    fexpr = 2*Omega*x[2]/R0
+    # Coriolis
+    fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)

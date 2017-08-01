@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, FunctionSpace, as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, Constant, SpatialCoordinate, exp
+from firedrake import FunctionSpace, as_vector,\
+    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, exp, pi, cos
 import sys
 
 dt = 5.0
@@ -20,21 +20,26 @@ ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
 x = Function(Vc).interpolate(as_vector([coord[0], coord[1]]))
-H = Constant(H)
-a = Constant(1000.)
-xc = Constant(L/2.)
+a = 1000.
+xc = L/2.
+x, z = SpatialCoordinate(ext_mesh)
+hm = 1.
+zs = hm*a**2/((x-xc)**2 + a**2)
 smooth_z = True
 if smooth_z:
-    xexpr = Expression(("x[0]", "x[1] < zh ? x[1]+pow(cos(0.5*pi*x[1]/zh),6)*h*pow(a,2)/(pow(x[0]-xc,2)+pow(a,2)) : x[1]"), zh=5000., h=1., a=a, xc=xc)
-    new_coords = Function(Vc).interpolate(xexpr)
+    zh = 5000.
+    xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 else:
-    new_coords = Function(Vc).interpolate(as_vector([x[0], x[1]+(H-x[1])*a**2/(H*((x[0]-xc)**2+a**2))]))
+    xexpr = as_vector([x, z + ((H-z)/H)*zs])
+new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
 
 # sponge function
 W_DG = FunctionSpace(mesh, "DG", 2)
-mu_top = Expression("x[1] <= zc ? 0.0 : mubar*pow(sin((pi/2.)*(x[1]-zc)/(H-zc)),2)", H=H, zc=(H-10000.), mubar=0.15/dt)
-# mu_top = Expression("x[1] <= H-wb ? 0.0 : 0.5*alpha*(1.+cos((x[1]-H)*pi/wb))", H=H, alpha=0.01, wb=7000.)
+x, z = SpatialCoordinate(mesh)
+zc = H-10000.
+mubar = 0.15/dt
+mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
@@ -72,8 +77,6 @@ c_p = parameters.cp
 R_d = parameters.R_d
 kappa = parameters.kappa
 
-x, z = SpatialCoordinate(mesh)
-
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
@@ -99,7 +102,7 @@ params = {'pc_type': 'fieldsplit',
           'fieldsplit_1_sub_pc_type': 'ilu'}
 Pi = Function(Vr)
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(0.5), params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=0.5, params=params)
 
 
 def min(f):
@@ -118,7 +121,7 @@ p1 = min(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=Constant(pi_top), solve_for_rho=True, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=pi_top, solve_for_rho=True, params=params)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
