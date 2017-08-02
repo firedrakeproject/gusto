@@ -261,28 +261,20 @@ class State(object):
         times.units = "seconds"
         # create a group for each field - each group will have dimensions
         # set according to the information in plist
-        for field, plist in self.output.point_data:
+        for field, points in self.output.point_data:
             grp = point_data.createGroup(field)
             # start list of dimensions that point data will have
             dim_names = ["time"]
             # get number of points in each direction
-            npts = [len(p) for p in plist]
-            # each list in plist corresponds to a set of points in
-            # one direction
-            for i in range(len(plist)):
-                # make a name for this dimension, save it, create the
-                # dimension and the variable corresponding to the
-                # dimension and assign the point values to the
-                # dimension variable
-                name = "x"+str(i)
-                dim_names.append(name)
-                grp.createDimension(name, npts[i])
-                var = grp.createVariable(name, "f8", (name,))
-                var[:] = plist[i]
-            # get tuple of dimensions that the output field varies over
-            dims = tuple(d for d in dim_names)
+            npts, dim = points.shape
+            grp.createDimension("points", npts)
+            grp.createDimension("geometric_dimension", dim)
+            var = grp.createVariable("points", points.dtype,
+                                     ("points", "geometric_dimension"))
+            var[:] = points
             # finally, create field variable
-            grp.createVariable(field, "f8", dims)
+            grp.createVariable(field, self.fields(field).dat.data.dtype,
+                               ("time", "points"))
         # close the file
         point_data.close()
 
@@ -319,9 +311,8 @@ class State(object):
 
             # calculate pointwise data
             point_data = {}
-            for name, plist in self.output.point_data:
+            for name, points in self.output.point_data:
                 # get points in the right format for the at function
-                points = [p for p in itertools.product(*plist)]
                 point_data[name] = np.asarray(self.fields(name).at(points))
             self.pointwise_dump(point_data)
 
@@ -358,7 +349,7 @@ class State(object):
             for fname, _ in self.output.point_data:
                 grp = data.groups[fname]
                 field = grp.variables[fname]
-                field[idx, :, :] = np.array(point_data[fname])
+                field[idx, :] = np.array(point_data[fname])
 
     def diagnostic_dump(self):
         """

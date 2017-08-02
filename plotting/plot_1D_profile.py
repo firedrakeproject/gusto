@@ -1,11 +1,12 @@
 import argparse
 from plotting import Plotting
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Plot1DProfile(Plotting):
 
-    def __init__(self, filename, field_name, dim, dim_idxs, time_entries=None):
+    def __init__(self, filename, field_name, dim, val, time_entries=None):
 
         super().__init__(filename, field_name)
 
@@ -22,38 +23,27 @@ class Plot1DProfile(Plotting):
         else:
             self.times = self.time
 
-        # check that dim is a valid dimension for this data
-        ndims = len(self.grp.dimensions.keys())
-        if ndims < 2 or ndims > 3:
-            raise RuntimeError("I do not know what to do with data of dimension %i" % ndims)
-        if dim > ndims-1:
-            raise ValueError("Specified dim %i is greater than the number of spatial dimensions of this data %i (remember that dim=0 corresponds to the first dimension)." % (dim, ndims))
-        if len(dim_idxs) != ndims-1:
-            raise ValueError("You must specify the indices of %i dimensions." % ndims-1)
+        # get points
+        points = self.grp.variables["points"]
 
-        # set up slicing tuple (currently a list so we can append to it)
-        # first dimension is time, which we have already dealt with so
-        # we want all of these values
-        obj = [slice(None, None, 1)]
+        # check that user has fixed the values of all other dimensions 
+        if len(val) != points.shape[1]-1:
+            raise ValueError("You can must fix the values of exactly %s dimensions." % str(points.shape[1]-1))
 
-        # loop over dimensions and either append index for this
-        # dimension as specified by the user in dim_idxs, or, if we
-        # have reached the dimension to plot over, as specified by the
-        # dim option, then take all of the values
-        j = 0
-        for i in range(ndims):
-            if i != dim:
-                if dim_idxs[j] > len(self.grp.variables["x"+str(i)])-1:
-                    raise ValueError("Chosen index exceeds length of corresponding dimension")
-                obj.append(dim_idxs[j])
-                j += 1
-            else:
-                obj.append(slice(None, None, 1))
-                idx = "x"+str(dim)
+        # find out which points satisfy requirements
+        self.px = []
+        idx = []
+        for i, p in enumerate(points):
+            pq = np.delete(p, [dim])
+            if pq == val:
+                self.px.append(p[dim])
+                idx.append(i)
+
+        if len(idx) == 0:
+            raise RuntimeError("No points match your requirements")
+
         # field values
-        self.f = self.field[tuple(obj)]
-        # points
-        self.px = self.grp.variables[idx]
+        self.f = self.field[:, idx]
 
     def plot(self, same_plot):
 
@@ -72,12 +62,12 @@ if __name__ == "__main__":
     parser.add_argument("filename", help="path to .nc file containing data")
     parser.add_argument("field_name", help="name of field to be plotted")
     parser.add_argument("dim", type=int, help="index of dimension to plot on x axis. 0 corresponds to the first dimension in your pointdata.nc file.")
-    parser.add_argument("time_entries", type=int, nargs="+",
+    parser.add_argument("val", type=float, nargs="+", help="value of other dimension")
+    parser.add_argument("--time_entries", type=int, nargs="+",
                         help="integers specifying the time entries at which to plot data")
-    parser.add_argument("--dim_idxs", type=int, nargs="+")
     parser.add_argument("--same_plot", action="store_true")
     args = parser.parse_args()
 
     plt1D = Plot1DProfile(args.filename, args.field_name,
-                          args.dim, args.dim_idxs, args.time_entries)
+                          args.dim, args.val, args.time_entries)
     plt1D.plot(args.same_plot)
