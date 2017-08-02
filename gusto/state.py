@@ -14,6 +14,9 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
 import numpy as np
 
 
+__all__ = ["State"]
+
+
 class SpaceCreator(object):
 
     def __call__(self, name, mesh=None, family=None, degree=None):

@@ -6,6 +6,9 @@ from gusto.forcing import exner
 import numpy as np
 
 
+__all__ = ["CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity"]
+
+
 class Diagnostics(object):
 
     def __init__(self, *fields):
