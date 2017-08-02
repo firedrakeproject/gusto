@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Expression, Constant
+    Constant, SpatialCoordinate, pi
 from netCDF4 import Dataset
 
 
@@ -46,10 +46,9 @@ def setup_tracer(dirname):
     tracer0 = state.fields("tracer", Vt)
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate initial rho
@@ -57,19 +56,23 @@ def setup_tracer(dirname):
                                      solve_for_rho=True)
 
     # set up perturbation to theta
-    theta_pert = Function(Vt).interpolate(
-        Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
-                   "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
-                   "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
-                   xc=500., zc=350., rc=250.))
+    xc = 500.
+    zc = 350.
+    rc = 250.
+    x = SpatialCoordinate(mesh)
+    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+    theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
     theta0.interpolate(theta_b + theta_pert)
     rho0.interpolate(rho_b)
     tracer0.interpolate(theta0)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'tracer': tracer0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise([('u', u0),
+                      ('rho', rho0),
+                      ('theta', theta0),
+                      ('tracer', tracer0)])
+    state.set_reference_profiles([('rho', rho_b),
+                                  ('theta', theta_b)])
 
     # set up advection schemes
     ueqn = EulerPoincare(state, Vu)

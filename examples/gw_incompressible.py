@@ -104,10 +104,8 @@ bref = z*(N**2)
 b_b = Function(Vb).interpolate(bref)
 
 # setup constants
-a = Constant(5.0e3)
-deltab = Constant(1.0e-2)
-H = Constant(H)
-L = Constant(L)
+a = 5.0e3
+deltab = 1.0e-2
 b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
@@ -124,9 +122,10 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0, 0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'b': b0})
+state.initialise([('u', u0),
+                  ('b', b0)])
 # set the background buoyancy
-state.set_reference_profiles({'b': b_b})
+state.set_reference_profiles([('b', b_b)])
 
 ##############################################################################
 # Set up advection schemes

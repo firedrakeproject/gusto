@@ -89,8 +89,8 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityY(),
                      KineticEnergy(), KineticEnergyY(),
                      EadyPotentialEnergy(),
-                     Sum(KineticEnergy(), EadyPotentialEnergy()),
-                     Difference(KineticEnergy(), KineticEnergyY()),
+                     Sum("KineticEnergy", "EadyPotentialEnergy"),
+                     Difference("KineticEnergy", "KineticEnergyY"),
                      GeostrophicImbalance(), TrueResidualV()]
 
 # setup state, passing in the mesh, information on the required finite element
@@ -166,10 +166,13 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'p': p0, 'b': b0})
+state.initialise([('u', u0),
+                  ('p', p0),
+                  ('b', b0)])
 
 # set the background profiles
-state.set_reference_profiles({'p': p_b, 'b': b_b})
+state.set_reference_profiles([('p', p_b),
+                              ('b', b_b)])
 
 ##############################################################################
 # Set up advection schemes

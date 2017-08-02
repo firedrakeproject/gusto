@@ -53,7 +53,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='compressible_eady',
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['rho', 'theta'])
+                          perturbation_fields=['rho', 'theta', 'ExnerPi'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -67,14 +67,14 @@ diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), VelocityY(),
-                     ExnerPi(), ExnerPi_perturbation(),
+                     ExnerPi(), ExnerPi(reference=True),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
-                     Sum(CompressibleKineticEnergy(),
-                         CompressibleEadyPotentialEnergy()),
-                     Difference(CompressibleKineticEnergy(),
-                                CompressibleKineticEnergyY())]
+                     Sum("CompressibleKineticEnergy",
+                         "CompressibleEadyPotentialEnergy"),
+                     Difference("CompressibleKineticEnergy",
+                                "CompressibleKineticEnergyY")]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -160,10 +160,13 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
 
 # set the background profiles
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 ##############################################################################
 # Set up advection schemes

@@ -78,8 +78,11 @@ theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0]))
 
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
