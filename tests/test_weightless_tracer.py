@@ -1,6 +1,7 @@
+from os import path
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Constant, SpatialCoordinate, pi
+    Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
 import json
 
 

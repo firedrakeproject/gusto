@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh
+from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh, \
+    Function
 
 
 def setup_gw(dirname):
