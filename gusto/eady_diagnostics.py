@@ -8,6 +8,9 @@ from gusto.diagnostics import DiagnosticField, Energy
 from gusto.forcing import exner
 
 
+__all__ = ["KineticEnergyY", "CompressibleKineticEnergyY", "EadyPotentialEnergy", "CompressibleEadyPotentialEnergy", "GeostrophicImbalance", "TrueResidualV", "SawyerEliassenU"]
+
+
 class KineticEnergyY(Energy):
     name = "KineticEnergyY"
 

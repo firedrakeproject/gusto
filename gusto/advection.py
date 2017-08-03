@@ -5,6 +5,9 @@ from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
 
 
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+
+
 def embedded_dg(original_apply):
     """
     Decorator to add interpolation and projection steps for embedded

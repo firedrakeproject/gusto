@@ -2,6 +2,9 @@ from abc import ABCMeta, abstractmethod
 from firedrake import exp, Interpolator, conditional, interpolate
 
 
+__all__ = ["Condensation"]
+
+
 class Physics(object, metaclass=ABCMeta):
     """
     Base class for physics processes for Gusto.

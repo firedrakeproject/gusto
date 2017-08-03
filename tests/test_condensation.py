@@ -1,6 +1,8 @@
+from os import path
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh
+    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, sqrt, \
+    conditional, cos
 import json
 from math import pi
 

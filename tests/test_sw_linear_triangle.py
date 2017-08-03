@@ -1,5 +1,7 @@
+from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
+    FunctionSpace, Function
 from math import pi
 import json
 
