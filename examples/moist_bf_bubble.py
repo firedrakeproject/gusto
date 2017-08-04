@@ -1,8 +1,8 @@
-from __future__ import absolute_import
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, conditional, cos, pi, sqrt, exp, NonlinearVariationalProblem, \
-    NonlinearVariationalSolver, TestFunction, dx, TrialFunction
+    NonlinearVariationalSolver, TestFunction, dx, TrialFunction, Constant, Function, \
+    LinearVariationalProblem, LinearVariationalSolver
 import sys
 
 dt = 1.0
