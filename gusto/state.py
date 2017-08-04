@@ -53,6 +53,64 @@ class FieldCreator(object):
         return iter(self.fields)
 
 
+class PointDataOutput(object):
+    def __init__(self, filename, field_points, description,
+                 field_creator, create=True):
+        """Create a dump file that stores fields evaluated at points.
+
+        :arg filename: The filename.
+        :arg field_points: Iterable of pairs (field_name, evaluation_points).
+        :arg description: Description of the simulation.
+        :arg field_creator: The field creator (only used to determine
+            datatype of fields).
+        :kwarg create: If False, assume that filename already exists
+        """
+        # Overwrite on creation.
+        self.filename = filename
+        self.field_points = field_points
+        if not create:
+            return
+        with Dataset(filename, "w") as dataset:
+            dataset.description = "Point data for simulation {desc}".format(desc=description)
+            dataset.history = "Created {t}".format(t=time.ctime())
+            # FIXME add versioning information.
+            dataset.source = "Output from Gusto model"
+            # Appendable dimension, timesteps in the model
+            dataset.createDimension("time", None)
+
+            var = dataset.createVariable("time", np.float64, ("time", ))
+            var.units = "seconds"
+            # Now create the variable group for each field
+            for field_name, points in field_points:
+                group = dataset.createGroup(field_name)
+                npts, dim = points.shape
+                group.createDimension("points", npts)
+                group.createDimension("geometric_dimension", dim)
+                var = group.createVariable("points", points.dtype,
+                                           ("points", "geometric_dimension"))
+                var[:] = points
+                group.createVariable(field_name,
+                                     field_creator(field_name).dat.dtype,
+                                     ("time", "points"))
+
+    def dump(self, field_creator, t):
+        """Evaluate and dump field data at points.
+
+        :arg field_creator: :class:`FieldCreator` for accessing
+            fields.
+        :arg t: Simulation time at which dump occurs.
+        """
+        with Dataset(self.filename, "a") as dataset:
+            # Add new time index
+            idx = dataset.dimensions["time"].size
+            dataset.variables["time"][idx:idx + 1] = t
+            for field_name, points in self.field_points:
+                vals = np.asarray(field_creator(field_name).at(points))
+                group = dataset.groups[field_name]
+                var = group.variables[field_name]
+                var[idx, :] = vals
+
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
@@ -217,11 +275,16 @@ class State(object):
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
         self.diagnostics_filename = self.dumpdir+"/diagnostics.nc"
-        self.pointdata_filename = self.dumpdir+"/point_data.nc"
 
+        pointdata_filename = self.dumpdir+"/point_data.nc"
+
+        self.pointdata_output = PointDataOutput(pointdata_filename,
+                                                self.output.point_data,
+                                                self.output.dirname,
+                                                self.fields,
+                                                create=not pickup)
         if not pickup:
             self.setup_diagnostics_output()
-            self.setup_pointdata_output()
 
     def setup_diagnostics_output(self):
 
@@ -245,36 +308,6 @@ class State(object):
                 grp.createVariable(diagnostic, 'f8', ('time'))
         # close the file
         diagnostics_data.close()
-
-    def setup_pointdata_output(self):
-
-        # setup point data netcdf file
-        point_data = Dataset(self.pointdata_filename, "w")
-        point_data.description = "Point data for simulation %s" % self.output.dirname
-        point_data.history = "Created " + time.ctime()
-        point_data.source = "Output from Gusto model"
-        # create time dimension - has size None because we will append
-        # to variables along this dimension
-        point_data.createDimension("time", None)
-        # create time variable so that we can set the values time values
-        times = point_data.createVariable("time", "f8", ("time",))
-        times.units = "seconds"
-        # create a group for each field - each group will have dimensions
-        # set according to the information in plist
-        for field, points in self.output.point_data:
-            grp = point_data.createGroup(field)
-            # get number of points in each direction
-            npts, dim = points.shape
-            grp.createDimension("points", npts)
-            grp.createDimension("geometric_dimension", dim)
-            var = grp.createVariable("points", points.dtype,
-                                     ("points", "geometric_dimension"))
-            var[:] = points
-            # finally, create field variable
-            grp.createVariable(field, self.fields(field).dat.data.dtype,
-                               ("time", "points"))
-        # close the file
-        point_data.close()
 
     def dump(self, t=0, pickup=False):
         """
@@ -308,11 +341,7 @@ class State(object):
             self.diagnostic_dump()
 
             # calculate pointwise data
-            point_data = {}
-            for name, points in self.output.point_data:
-                # get points in the right format for the at function
-                point_data[name] = np.asarray(self.fields(name).at(points))
-            self.pointwise_dump(point_data)
+            self.pointdata_output.dump(self.fields, self.t)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
@@ -333,21 +362,6 @@ class State(object):
                     self.dumpfile_ll.write(*self.to_dump_latlon)
 
         return t
-
-    def pointwise_dump(self, point_data):
-        """
-        Dump point data
-        """
-        if self.output.point_data is not None:
-            data = Dataset(self.pointdata_filename, "a")
-            time = data.dimensions["time"]
-            idx = len(time)
-            times = data.variables["time"]
-            times[idx:idx+1] = self.t
-            for fname, _ in self.output.point_data:
-                grp = data.groups[fname]
-                field = grp.variables[fname]
-                field[idx, :] = np.array(point_data[fname])
 
     def diagnostic_dump(self):
         """
