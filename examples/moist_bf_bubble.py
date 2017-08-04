@@ -125,9 +125,14 @@ water_v0.assign(w_v)
 water_c0.assign(water_t - water_v0)
 
 # initialise fields
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                  'water_v': water_v0, 'water_c': water_c0})
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b, 'water_v': water_vb})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0),
+                  ('water_v', water_v0),
+                  ('water_c', water_c0)])
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b),
+                              ('water_v', water_vb)])
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
