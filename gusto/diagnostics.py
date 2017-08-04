@@ -241,11 +241,10 @@ class Theta_e(DiagnosticField):
 class InternalEnergy(DiagnosticField):
     name = "InternalEnergy"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(InternalEnergy, self).setup(state, space=space)
 
     def compute(self, state):
         X = state.parameters
@@ -266,7 +265,7 @@ class InternalEnergy(DiagnosticField):
         w_c = state.fields('water_c')
         T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
 
-        return self.field(state.mesh).interpolate(rho * (cv * T + c_vv * w_v * T + c_pl * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pl * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
 
 
 class Sum(DiagnosticField):
