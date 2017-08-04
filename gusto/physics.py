@@ -86,12 +86,15 @@ class Condensation(Physics):
                       (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
                                     (cp * R_v * T ** 2.0)))))
 
+        # make cond_rate function, that needs to be the same for all updates in one time step
+        self.cond_rate = Function(Vt)
+
         # adjust cond rate so negative concentrations don't occur
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
                                                       max_value(dot_r_cond, - self.water_c / dt),
-                                                      min_value(dot_r_cond, self.water_v / dt)), Vt)
+                                                      min_value(dot_r_cond, self.water_v / dt)), self.cond_rate)
 
-        self.cond_rate = Function(Vt)
+        # tell the prognostic fields what to update to
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
         self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
         self.theta_new = Interpolator(self.theta *
@@ -100,7 +103,7 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
-        self.cond_rate.assign(self.lim_cond_rate.interpolate())
+        self.lim_cond_rate.interpolate()
         self.water_v.assign(self.water_v_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
         self.theta.assign(self.theta_new.interpolate())
