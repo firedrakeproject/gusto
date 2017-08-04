@@ -180,11 +180,11 @@ compressible_forcing = CompressibleForcing(state, moisture=moisture)
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
        DirichletBC(Vu, 0.0, "top")]
 
-diffusion_dict = {}
+diffused_fields = []
 
 if diffusion:
-    diffusion_dict["u"] = InteriorPenalty(state, Vu, kappa=Constant(60.),
-                                          mu=Constant(10./deltax), bcs=bcs)
+    diffusion_fields = [('u', InteriorPenalty(state, Vu, kappa=Constant(60.),
+                                              mu=Constant(10./deltax), bcs=bcs))]
 
 # define condensation
 physics_list = [Condensation(state)]
@@ -192,6 +192,6 @@ physics_list = [Condensation(state)]
 # build time stepper
 stepper = Timestepper(state, advection_dict, linear_solver,
                       compressible_forcing, physics_list=physics_list,
-                      diffusion_dict=diffusion_dict)
+                      diffused_fields=diffused_fields)
 
 stepper.run(t=0, tmax=tmax)
