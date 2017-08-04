@@ -111,6 +111,51 @@ class PointDataOutput(object):
                 var[idx, :] = vals
 
 
+class DiagnosticsOutput(object):
+    def __init__(self, filename, diagnostics, description, create=True):
+        """Create a dump file that stores diagnostics.
+
+        :arg filename: The filename.
+        :arg diagnostics: The :class:`Diagnostics` object.
+        :arg description: A description.
+        :kwarg create: If False, assume that filename already exists
+        """
+        self.filename = filename
+        self.diagnostics = diagnostics
+        if not create:
+            return
+        with Dataset(filename, "w") as dataset:
+            dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
+            dataset.history = "Created {t}".format(t=time.ctime())
+            dataset.source = "Output from Gusto model"
+            dataset.createDimension("time", None)
+            var = dataset.createVariable("time", np.float64, ("time", ))
+            var.units = "seconds"
+            for name in diagnostics.fields:
+                group = dataset.createGroup(name)
+                for diagnostic in diagnostics.available_diagnostics:
+                    group.createVariable(diagnostic, np.float64, ("time", ))
+
+    def dump(self, diagnostic_fields, state, t):
+        """Dump diagnostics.
+
+        :arg diagnostic_fields: Iterable of :class:`DiagnosticField` objects.
+        :arg state: The :class:`State` at which to compute the diagnostic.
+        :arg t: The current time.
+        """
+        mapping = dict((df.name, df) for df in diagnostic_fields)
+        with Dataset(self.filename, "a") as dataset:
+            idx = dataset.dimension["time"].size
+            dataset.variables["time"][idx:idx + 1] = t
+            for name in self.diagnostics.fields:
+                field = mapping[name](state)
+                group = dataset.groups[name]
+                for dname in self.diagnostics.available_diagnostics:
+                    diagnostic = getattr(self.diagnostics, dname)
+                    var = group.variables[dname]
+                    var[idx:idx + 1] = diagnostic(field)
+
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
@@ -248,7 +293,6 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.diagnostic_data = defaultdict(partial(defaultdict, float))
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -274,7 +318,7 @@ class State(object):
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
-        self.diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+        diagnostics_filename = self.dumpdir+"/diagnostics.nc"
 
         pointdata_filename = self.dumpdir+"/point_data.nc"
 
@@ -283,31 +327,10 @@ class State(object):
                                                 self.output.dirname,
                                                 self.fields,
                                                 create=not pickup)
-        if not pickup:
-            self.setup_diagnostics_output()
-
-    def setup_diagnostics_output(self):
-
-        # setup diagnostics netcdf file
-        diagnostics_data = Dataset(self.diagnostics_filename, "w")
-        # some file info
-        diagnostics_data.description = "Diagnostics data for simulation %s" % self.output.dirname
-        diagnostics_data.history = "Created " + time.ctime()
-        diagnostics_data.source = "Output from Gusto model"
-        # create time dimension - has size None because we will append
-        # to variables along this dimension
-        diagnostics_data.createDimension("time", None)
-        # create time variable so that we can set the values time values
-        times = diagnostics_data.createVariable("time", "f8", ("time",))
-        times.units = "seconds"
-        # create a group for each field - each group will contain the
-        # a variable for each diagnostic
-        for field in self.diagnostics.fields:
-            grp = diagnostics_data.createGroup(field)
-            for diagnostic in self.diagnostics.available_diagnostics:
-                grp.createVariable(diagnostic, 'f8', ('time'))
-        # close the file
-        diagnostics_data.close()
+        self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
+                                                   self.diagnostics,
+                                                   self.output.dirname,
+                                                   create=not pickup)
 
     def dump(self, t=0, pickup=False):
         """
@@ -327,21 +350,10 @@ class State(object):
                 next(self.dumpcount)
 
         else:
-
-            # calculate diagnostic fields
-            for field in self.diagnostic_fields:
-                field(self)
-
-            # compute diagnostics
-            for name in self.diagnostics.fields:
-                for fn in self.diagnostics.available_diagnostics:
-                    d = getattr(self.diagnostics, fn)
-                    data = d(self.fields(name))
-                    self.diagnostic_data[name][fn] = data
-            self.diagnostic_dump()
-
-            # calculate pointwise data
-            self.pointdata_output.dump(self.fields, self.t)
+            # Output diagnostic data
+            self.diagnostic_output.dump(self.diagnostic_fields, self, t)
+            # Output pointwise data
+            self.pointdata_output.dump(self.fields, t)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
@@ -362,21 +374,6 @@ class State(object):
                     self.dumpfile_ll.write(*self.to_dump_latlon)
 
         return t
-
-    def diagnostic_dump(self):
-        """
-        Dump diagnostics data
-        """
-        data = Dataset(self.diagnostics_filename, "a")
-        time = data.dimensions["time"]
-        idx = len(time)
-        times = data.variables["time"]
-        times[idx:idx+1] = self.t
-        for fname in data.groups.keys():
-            field = data.groups[fname]
-            for dname in field.variables.keys():
-                d = field.variables[dname]
-                d[idx:idx+1] = self.diagnostic_data[fname][dname]
 
     def initialise(self, initial_conditions):
         """
