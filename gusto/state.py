@@ -263,8 +263,6 @@ class State(object):
         # set according to the information in plist
         for field, points in self.output.point_data:
             grp = point_data.createGroup(field)
-            # start list of dimensions that point data will have
-            dim_names = ["time"]
             # get number of points in each direction
             npts, dim = points.shape
             grp.createDimension("points", npts)
