@@ -6,7 +6,7 @@ from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergyDensity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy"]
 
 
 class Diagnostics(object):
@@ -211,11 +211,10 @@ class ExnerPi(DiagnosticField):
 class Theta_e(DiagnosticField):
     name = "Theta_e"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "CG", 1), name=self.name)
-        return self._field
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Theta_e, self).setup(state, space=space)
 
     def compute(self, state):
         X = state.parameters
@@ -236,10 +235,10 @@ class Theta_e(DiagnosticField):
         w_c = state.fields('water_c')
         w_t = w_c + w_v
 
-        return self.field(state.mesh).interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
+        return self.field.interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
 
 
-class InternalEnergyDensity(DiagnosticField):
+class InternalEnergy(DiagnosticField):
     name = "InternalEnergy"
 
     def field(self, mesh):

@@ -189,7 +189,7 @@ if diffusion:
 physics_list = [Condensation(state)]
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       compressible_forcing, physics_list=physics_list,
                       diffused_fields=diffused_fields)
 
