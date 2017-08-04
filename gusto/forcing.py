@@ -148,7 +148,7 @@ class CompressibleForcing(Forcing):
 
         # adjust density potential temp for moisture species
         if self.moisture is not None:
-            water_t = Function(Vtheta).interpolate(Constant(0.0))
+            water_t = Function(Vtheta).assign(0.0)
             for water in self.moisture:
                 water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)

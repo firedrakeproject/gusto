@@ -165,7 +165,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # add moisture fields
         if self.moisture is not None:
-            water_t = Function(Vtheta).interpolate(0.0)
+            water_t = Function(Vtheta).assign(0.0)
             for water in self.moisture:
                 water_t += self.state.fields(water)
             theta_rho = theta_rho / (1 + water_t)

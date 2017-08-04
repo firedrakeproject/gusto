@@ -74,8 +74,8 @@ cp = params.cp
 # Define constant theta_e and water_t
 Tsurf = 320.0
 total_water = 0.02
-theta_e = Function(Vt).interpolate(Tsurf)
-water_t = Function(Vt).interpolate(total_water)
+theta_e = Function(Vt).assign(Tsurf)
+water_t = Function(Vt).assign(total_water)
 
 # Calculate hydrostatic fields
 moist_hydrostatic_balance(state, theta_e, water_t)
