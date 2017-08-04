@@ -10,10 +10,10 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 400.
+    deltax = 100.
     tmax = 1000.
 
-L = 10000.
+L = 20000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
@@ -74,8 +74,8 @@ cp = params.cp
 # Define constant theta_e and water_t
 Tsurf = 320.0
 total_water = 0.02
-theta_e = Function(Vt).interpolate(Constant(Tsurf))
-water_t = Function(Vt).interpolate(Constant(total_water))
+theta_e = Function(Vt).interpolate(Tsurf)
+water_t = Function(Vt).interpolate(total_water)
 
 # Calculate hydrostatic fields
 moist_hydrostatic_balance(state, theta_e, water_t)
@@ -87,7 +87,7 @@ water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
 
 # define perturbation
-xc = 5000.
+xc = 10000.
 zc = 2000.
 rc = 2000.
 Tdash = 2.0
