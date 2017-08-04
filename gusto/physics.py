@@ -3,13 +3,15 @@ from firedrake import exp, Interpolator, conditional, Function, \
     min_value, max_value
 
 
-class Physics(object):
+__all__ = ["Condensation"]
+
+
+class Physics(object, metaclass=ABCMeta):
     """
     Base class for physics processes for Gusto.
 
     :arg state: :class:`.State` object.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state):
         self.state = state

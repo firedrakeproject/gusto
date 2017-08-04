@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
-    ExtrudedMesh, exp, sin
+    ExtrudedMesh, exp, sin, Function
 import numpy as np
 import sys
 
@@ -71,23 +71,26 @@ deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
-u0.project(as_vector([20.0,0.0]))
+u0.project(as_vector([20.0, 0.0]))
 
-state.initialise({'u':u0, 'rho':rho0, 'theta': theta0})
-state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction":"horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"}, equation_form="advective")
 else:
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 schur_params = {'pc_type': 'fieldsplit',
@@ -108,8 +111,8 @@ schur_params = {'pc_type': 'fieldsplit',
                 'fieldsplit_1_pc_type': 'gamg',
                 'fieldsplit_1_pc_gamg_sym_graph': True,
                 'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                 'fieldsplit_1_mg_levels_ksp_max_it': 5,
                 'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                 'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
@@ -120,7 +123,7 @@ linear_solver = CompressibleSolver(state, params=schur_params)
 compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)

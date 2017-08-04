@@ -1,13 +1,14 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, DirichletBC
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, Constant, DirichletBC, cos, pi, Function, sqrt, \
+    conditional
 import sys
 
 if '--running-tests' in sys.argv:
-    res_dt = {800.:4.}
+    res_dt = {800.: 4.}
     tmax = 4.
 else:
-    res_dt = {800.:4.,400.:2.,200.:1.,100.:0.5,50.:0.25}
+    res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
 
 L = 51200.
@@ -15,7 +16,7 @@ L = 51200.
 # build volume mesh
 H = 6400.  # Height position of the model top
 
-for delta, dt in res_dt.iteritems():
+for delta, dt in res_dt.items():
 
     dirname = "tracer_dx%s_dt%s" % (delta, dt)
     nlayers = int(H/delta)  # horizontal layers
@@ -52,10 +53,9 @@ for delta, dt in res_dt.iteritems():
     Vr = rho0.function_space()
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
@@ -64,13 +64,22 @@ for delta, dt in res_dt.iteritems():
     x = SpatialCoordinate(mesh)
     a = 5.0e3
     deltaTheta = 1.0e-2
-    theta_pert = Function(theta0.function_space()).interpolate(Expression("sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2)) > 1. ? 0.0 : -7.5*(cos(pi*(sqrt(pow((x[0]-xc)/xr,2)+pow((x[1]-zc)/zr,2))))+1)", xc=0.5*L, xr=4000., zc=3000., zr=2000., g=parameters.g))
+    xc = 0.5*L
+    xr = 4000.
+    zc = 3000.
+    zr = 2000.
+    r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
+    theta_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
     theta0.interpolate(theta_b + theta_pert)
     water0.interpolate(theta_pert)
     rho0.assign(rho_b)
 
-    state.initialise({'u':u0, 'rho':rho0, 'theta': theta0, 'water': water0})
-    state.set_reference_profiles({'rho':rho_b, 'theta':theta_b})
+    state.initialise([('u', u0),
+                      ('rho', rho0),
+                      ('theta', theta0),
+                      ('water', water0)])
+    state.set_reference_profiles([('rho', rho_b),
+                                  ('theta', theta_b)])
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -78,21 +87,21 @@ for delta, dt in res_dt.iteritems():
     supg = True
     if supg:
         thetaeqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction":"horizontal"},
+                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
         watereqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction":"horizontal"},
+                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
     else:
         thetaeqn = EmbeddedDGAdvection(state, Vt,
                                        equation_form="advective")
         watereqn = EmbeddedDGAdvection(state, Vt,
                                        equation_form="advective")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
-    advection_dict["water"] = SSPRK3(state, water0, watereqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advected_fields.append(("water", SSPRK3(state, water0, watereqn)))
 
     # Set up linear solver
     schur_params = {'pc_type': 'fieldsplit',
@@ -113,8 +122,8 @@ for delta, dt in res_dt.iteritems():
                     'fieldsplit_1_pc_type': 'gamg',
                     'fieldsplit_1_pc_gamg_sym_graph': True,
                     'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                    'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                     'fieldsplit_1_mg_levels_ksp_max_it': 5,
                     'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                     'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
@@ -126,11 +135,11 @@ for delta, dt in res_dt.iteritems():
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffusion_dict = {"u": InteriorPenalty(state, Vu, kappa=Constant(75.), mu=Constant(10./delta), bcs=bcs),
-                      "theta": InteriorPenalty(state, Vt, kappa=Constant(75.), mu=Constant(10./delta))}
+    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75., mu=Constant(10./delta), bcs=bcs)),
+                       ("theta", InteriorPenalty(state, Vt, kappa=75., mu=Constant(10./delta)))]
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
-                          compressible_forcing, diffusion_dict)
+    stepper = Timestepper(state, advected_fields, linear_solver,
+                          compressible_forcing, diffused_fields)
 
     stepper.run(t=0, tmax=tmax)

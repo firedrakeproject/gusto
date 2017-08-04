@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
+    FunctionSpace
 from math import pi
 import sys
 
@@ -15,12 +15,11 @@ refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
 R = 6371220.
 H = 2000.
-u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements, degree=3)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)
@@ -36,34 +35,31 @@ state = State(mesh, horizontal_degree=1,
               diagnostics=diagnostics,
               fieldlist=fieldlist)
 
-g = parameters.g
-Omega = parameters.Omega
-
 # Coriolis expression
-R = Constant(R)
-Omega = Constant(parameters.Omega)
+Omega = parameters.Omega
 x = SpatialCoordinate(mesh)
 fexpr = 2*Omega*x[2]/R
 V = FunctionSpace(mesh, "CG", 1)
 f = state.fields("coriolis", V)
 f.interpolate(fexpr)  # Coriolis frequency (1/s)
-u_max = Constant(u_0)
 
 # interpolate initial conditions
 # Initial/current conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
+u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-g = Constant(parameters.g)
+g = parameters.g
 Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0),
+                  ('D', D0)])
 
 Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
-advection_dict = {}
-advection_dict["u"] = NoAdvection(state, u0, None)
-advection_dict["D"] = ForwardEuler(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", NoAdvection(state, u0, None)))
+advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -71,7 +67,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state, linear=True)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from os import path
 import itertools
 from collections import defaultdict
@@ -6,14 +5,16 @@ from functools import partial
 import json
 from gusto.diagnostics import Diagnostics, Perturbation, \
     SteadyStateError
-from sys import exit
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
-    Expression, File, SpatialCoordinate, sqrt, Constant, inner, \
+    File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
+
+
+__all__ = ["State"]
 
 
 class SpaceCreator(object):
@@ -155,10 +156,26 @@ class State(object):
         if geopotential_form:
             V = FunctionSpace(mesh, "CG", 1)
             if self.on_sphere:
-                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
+                x, y, z = SpatialCoordinate(mesh)
+                self.Phi = Function(V).interpolate(sqrt(x**2 + y**2 + z**2))
             else:
-                self.Phi = Function(V).interpolate(Expression("x[1]"))
+                x, z = SpatialCoordinate(mesh)
+                self.Phi = Function(V).interpolate(z)
             self.Phi *= parameters.g
+
+    def setup_diagnostics(self):
+        # add special case diagnostic fields
+        for name in self.output.perturbation_fields:
+            f = Perturbation(name)
+            self.diagnostic_fields.append(f)
+
+        for name in self.output.steady_state_error_fields:
+            f = SteadyStateError(self, name)
+            self.diagnostic_fields.append(f)
+
+        for diagnostic in self.diagnostic_fields:
+            diagnostic.setup(self)
+            self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, pickup=False):
 
@@ -167,38 +184,15 @@ class State(object):
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname and path.exists(self.dumpdir) and not pickup:
-            exit("results directory '%s' already exists" % self.dumpdir)
+        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
+           and path.exists(self.dumpdir) and not pickup:
+            raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
         self.diagnostic_data = defaultdict(partial(defaultdict, list))
 
-        # create field dictionary
-        self.field_dict = {field.name(): field for field in self.fields}
-
-        # register any diagnostic fields to diagnostics
-        for diagnostic in self.diagnostic_fields:
-            self.diagnostics.register(diagnostic.name)
-
-        # add special case diagnostic fields
-        for name in self.output.perturbation_fields:
-            f = Perturbation(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
-        for name in self.output.steady_state_error_fields:
-            f = SteadyStateError(self, name)
-            self.diagnostic_fields.append(f)
-            self.diagnostics.register(f.name)
-
-        # add diagnostic fields to field dictionary and ensure they are dumped
-        for diagnostic in self.diagnostic_fields:
-            f = diagnostic(self)
-            f.dump = True
-            self.field_dict[f.name()] = f
-
         # make list of fields to dump
-        self.to_dump = [field for (name, field) in self.field_dict.iteritems() if field.dump]
+        self.to_dump = [field for field in self.fields if field.dump]
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -214,32 +208,33 @@ class State(object):
 
         # make functions on latlon mesh, as specified by dumplist_latlon
         self.to_dump_latlon = []
-        fields_ll = {}
         for name in self.output.dumplist_latlon:
-            f = self.field_dict[name]
-            fields_ll[name] = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(fields_ll[name])
+            f = self.fields(name)
+            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
+            self.to_dump_latlon.append(field)
 
-    def dump(self, t=0, pickup=False):
+    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
+        :arg diagnostic_everydump: dump diagnostics everytime dump()
+        is called.
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
-        if(pickup):
+        if pickup:
             # Open the checkpointing file for writing
             chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
                     chk.load(field)
-                t = chk.read_attribute("/","time")
+                t = chk.read_attribute("/", "time")
                 next(self.dumpcount)
 
         elif (next(self.dumpcount) % self.output.dumpfreq) == 0:
 
-            print "DBG dumping", t
+            print("DBG dumping", t)
 
             # calculate diagnostic fields
             for field in self.diagnostic_fields:
@@ -253,11 +248,14 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
+            diagnostic_fns = ['min', 'max', 'rms', 'l2']
             for name in self.diagnostics.fields:
-                data = self.diagnostics.l2(self.field_dict[name])
-                self.diagnostic_data[name]["l2"].append(data)
-                if len(self.field_dict[name].ufl_shape) is 0:
-                    data = self.diagnostics.total(self.field_dict[name])
+                for fn in diagnostic_fns:
+                    d = getattr(self.diagnostics, fn)
+                    data = d(self.fields(name))
+                    self.diagnostic_data[name][fn].append(data)
+                if len(self.fields(name).ufl_shape) == 0:
+                    data = self.diagnostics.total(self.fields(name))
                     self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
@@ -268,7 +266,10 @@ class State(object):
                     # Dump all the fields to a checkpoint
                     for field in self.to_pickup:
                         chk.store(field)
-                    chk.write_attribute("/","time",t)
+                    chk.write_attribute("/", "time", t)
+
+            if diagnostic_everydump:
+                self.diagnostic_dump()
 
         return t
 
@@ -276,15 +277,16 @@ class State(object):
         """
         Dump diagnostics dictionary
         """
-
         with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
             f.write(json.dumps(self.diagnostic_data, indent=4))
 
     def initialise(self, initial_conditions):
         """
         Initialise state variables
+
+        :arg initial_conditions: An iterable of pairs (field_name, pointwise_value)
         """
-        for name, ic in initial_conditions.iteritems():
+        for name, ic in initial_conditions:
             f_init = getattr(self.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
@@ -292,8 +294,10 @@ class State(object):
     def set_reference_profiles(self, reference_profiles):
         """
         Initialise reference profiles
+
+        :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
-        for name, profile in reference_profiles.iteritems():
+        for name, profile in reference_profiles:
             field = getattr(self.fields, name)
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
@@ -353,6 +357,7 @@ class State(object):
         self.xp = Function(W)
         self.xnp1 = Function(W)
         self.xrhs = Function(W)
+        self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
 
 
@@ -362,43 +367,44 @@ def get_latlon_mesh(mesh):
     coords_dg = Function(mesh_dg_fs)
     coords_latlon = Function(mesh_dg_fs)
     par_loop("""
-    for (int i=0; i<3; i++) {
+for (int i=0; i<3; i++) {
     for (int j=0; j<3; j++) {
-    dg[i][j] = cg[i][j];
+        dg[i][j] = cg[i][j];
     }
-    }
-    """, dx, {'dg': (coords_dg, WRITE),
-              'cg': (coords_orig, READ)})
+}
+""", dx, {'dg': (coords_dg, WRITE),
+          'cg': (coords_orig, READ)})
 
     # lat-lon 'x' = atan2(y, x)
-    coords_latlon.dat.data[:,0] = np.arctan2(coords_dg.dat.data[:,1], coords_dg.dat.data[:,0])
+    coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
     # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-    coords_latlon.dat.data[:,1] = np.arcsin(coords_dg.dat.data[:,2]/np.sqrt(coords_dg.dat.data[:,0]**2 + coords_dg.dat.data[:,1]**2 + coords_dg.dat.data[:,2]**2))
-    coords_latlon.dat.data[:,2] = 0.0
+    coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
+    coords_latlon.dat.data[:, 2] = 0.0
 
     kernel = op2.Kernel("""
-    #define PI 3.141592653589793
-    #define TWO_PI 6.283185307179586
-    void splat_coords(double **coords) {
-        double diff0 = (coords[0][0] - coords[1][0]);
-        double diff1 = (coords[0][0] - coords[2][0]);
-        double diff2 = (coords[1][0] - coords[2][0]);
+#define PI 3.141592653589793
+#define TWO_PI 6.283185307179586
+void splat_coords(double **coords) {
+    double diff0 = (coords[0][0] - coords[1][0]);
+    double diff1 = (coords[0][0] - coords[2][0]);
+    double diff2 = (coords[1][0] - coords[2][0]);
 
-        if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
-            const int sign0 = coords[0][0] < 0 ? -1 : 1;
-            const int sign1 = coords[1][0] < 0 ? -1 : 1;
-            const int sign2 = coords[2][0] < 0 ? -1 : 1;
-            if (sign0 < 0) {
-                coords[0][0] += TWO_PI;
-            }
-            if (sign1 < 0) {
-                coords[1][0] += TWO_PI;
-            }
-            if (sign2 < 0) {
-                coords[2][0] += TWO_PI;
-            }
+    if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
+        const int sign0 = coords[0][0] < 0 ? -1 : 1;
+        const int sign1 = coords[1][0] < 0 ? -1 : 1;
+        const int sign2 = coords[2][0] < 0 ? -1 : 1;
+        if (sign0 < 0) {
+            coords[0][0] += TWO_PI;
         }
-    }""", "splat_coords")
+        if (sign1 < 0) {
+            coords[1][0] += TWO_PI;
+        }
+        if (sign2 < 0) {
+            coords[2][0] += TWO_PI;
+        }
+    }
+}
+""", "splat_coords")
 
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))

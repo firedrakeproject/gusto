@@ -1,15 +1,17 @@
-from __future__ import absolute_import
 from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, Expression, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 
-class TimesteppingSolver(object):
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver"]
+
+
+class TimesteppingSolver(object, metaclass=ABCMeta):
     """
     Base class for timestepping linear solvers for Gusto.
 
@@ -18,7 +20,6 @@ class TimesteppingSolver(object):
     :arg state: :class:`.State` object.
     :arg params (optional): solver parameters
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, params=None):
 
@@ -38,8 +39,8 @@ class TimesteppingSolver(object):
                            'fieldsplit_1_ksp_type': 'preonly',
                            'fieldsplit_1_pc_type': 'gamg',
                            'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                            'fieldsplit_1_mg_levels_ksp_max_it': 1,
                            'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                            'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
@@ -97,8 +98,8 @@ class CompressibleSolver(TimesteppingSolver):
                            'fieldsplit_1_ksp_type': 'preonly',
                            'fieldsplit_1_pc_type': 'gamg',
                            'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                           'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                            'fieldsplit_1_mg_levels_ksp_max_it': 1,
                            'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                            'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
@@ -137,7 +138,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than pi') in the vertical
         # component of the gradient
@@ -149,7 +150,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
@@ -162,13 +163,13 @@ class CompressibleSolver(TimesteppingSolver):
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_vp
+            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -176,10 +177,8 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
@@ -197,7 +196,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta = Function(Vtheta)
 
         theta_eqn = gamma*(theta - theta_in +
-                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -244,15 +243,15 @@ class IncompressibleSolver(TimesteppingSolver):
         self.state = state
 
         if params is None:
-            self.params = {'ksp_type':'gmres',
-                           'pc_type':'fieldsplit',
-                           'pc_fieldsplit_type':'additive',
-                           'fieldsplit_0_pc_type':'lu',
-                           'fieldsplit_1_pc_type':'lu',
+            self.params = {'ksp_type': 'gmres',
+                           'pc_type': 'fieldsplit',
+                           'pc_fieldsplit_type': 'additive',
+                           'fieldsplit_0_pc_type': 'lu',
+                           'fieldsplit_1_pc_type': 'lu',
                            'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_0_ksp_type':'preonly',
-                           'fieldsplit_1_ksp_type':'preonly'}
+                           'fieldsplit_1_pc_factor_mat_solver_package': 'mumps',
+                           'fieldsplit_0_ksp_type': 'preonly',
+                           'fieldsplit_1_ksp_type': 'preonly'}
         else:
             self.params = params
 
@@ -283,21 +282,21 @@ class IncompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        b = -dot(k,u)*dot(k,grad(bbar))*beta + b_in
+        b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         eqn = (
             inner(w, (u - u_in))*dx
             - beta*div(w)*p*dx
-            - beta*inner(w,k)*b*dx
+            - beta*inner(w, k)*b*dx
             + phi*div(u)*dx
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -305,15 +304,13 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        dim = M.sub(0).ufl_element().value_shape()[0]
-        bc = ("0.0",)*dim
-        bcs = [DirichletBC(M.sub(0), Expression(bc), "bottom"),
-               DirichletBC(M.sub(0), Expression(bc), "top")]
+        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
+               DirichletBC(M.sub(0), 0.0, "top")]
 
         # preconditioner equation
         L = self.L
         Ap = (
-            inner(w,u) + L*L*div(w)*div(u) +
+            inner(w, u) + L*L*div(w)*div(u) +
             phi*p/L/L
         )*dx
 
@@ -337,7 +334,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in +
-                       dot(k,u)*dot(k,grad(bbar))*beta)*dx
+                       dot(k, u)*dot(k, grad(bbar))*beta)*dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),

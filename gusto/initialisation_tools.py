@@ -3,13 +3,36 @@ A module containing some tools for computing initial conditions, such
 as balanced initial conditions.
 """
 
-from __future__ import absolute_import
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, \
-    FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Expression, Function, Constant, \
+    TestFunction, TrialFunction, SpatialCoordinate, \
+    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
+    Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, zero
+    NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
+from gusto.forcing import exner
+
+
+__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0"]
+
+
+def latlon_coords(mesh):
+    x0, y0, z0 = SpatialCoordinate(mesh)
+    unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+    safe = Min(Max(unsafe, -1.0), 1.0)  # avoid silly roundoff errors
+    theta = asin(safe)  # latitude
+    lamda = atan_2(y0, x0)  # longitude
+    return theta, lamda
+
+
+def sphere_to_cartesian(mesh, u_zonal, u_merid):
+    theta, lamda = latlon_coords(mesh)
+
+    cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
+    cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
+    cartesian_w_expr = u_merid*cos(theta)
+
+    return as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
 
 
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
@@ -19,15 +42,12 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v = TrialFunction(Vv)
     w = TestFunction(Vv)
 
-    unp1 = state.xnp1.split()[0]
-    bc = zero(unp1.ufl_shape)
-
     if top:
         bstring = "top"
     else:
         bstring = "bottom"
 
-    bcs = [DirichletBC(Vv, bc, bstring)]
+    bcs = [DirichletBC(Vv, 0.0, bstring)]
 
     a = inner(w, v)*dx
     L = inner(state.k, w)*b0*dx
@@ -43,7 +63,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], bc, bstring)]
+    bcs = [DirichletBC(WV[0], 0.0, bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
@@ -51,8 +71,8 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     L = phi*div(F)*dx
     w1 = Function(WV)
 
-    if(params is None):
-        params = {'ksp_type':'gmres',
+    if params is None:
+        params = {'ksp_type': 'gmres',
                   'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
                   'pc_fieldsplit_schur_fact_type': 'full',
@@ -101,7 +121,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     cp = state.parameters.cp
 
     alhs = (
-        (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
         + dpi*div(theta0*v)*dx
     )
 
@@ -112,22 +132,20 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    arhs = -cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+    arhs = -cp*inner(dv, n)*theta0*pi_boundary*bmeasure
     if state.geopotential_form:
         Phi = state.Phi
-        arhs += div(dv)*Phi*dx - inner(dv,n)*Phi*bmeasure
+        arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
     else:
         g = state.parameters.g
-        arhs -= g*inner(dv,state.k)*dx
+        arhs -= g*inner(dv, state.k)*dx
 
-    if(state.mesh.geometric_dimension() == 2):
-        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.")), bstring)]
-    elif(state.mesh.geometric_dimension() == 3):
-        bcs = [DirichletBC(W.sub(0), Expression(("0.", "0.", "0.")), bstring)]
+    bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
+
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
-    if(params is None):
+    if params is None:
         params = {'pc_type': 'fieldsplit',
                   'pc_fieldsplit_type': 'schur',
                   'ksp_type': 'gmres',
@@ -141,8 +159,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                   'fieldsplit_0_pc_type': 'gamg',
                   'fieldsplit_1_pc_gamg_sym_graph': True,
                   'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
+                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                   'fieldsplit_1_mg_levels_ksp_max_it': 5,
                   'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                   'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
@@ -167,14 +185,14 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         dv, dpi = TestFunctions(W)
         pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
         F = (
-            (cp*inner(v,dv) - cp*div(dv*theta0)*pi)*dx
+            (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
             + dpi*div(theta0*v)*dx
-            + cp*inner(dv,n)*theta0*pi_boundary*bmeasure
+            + cp*inner(dv, n)*theta0*pi_boundary*bmeasure
         )
         if state.geopotential_form:
-            F += - div(dv)*Phi*dx + inner(dv,n)*Phi*bmeasure
+            F += - div(dv)*Phi*dx + inner(dv, n)*Phi*bmeasure
         else:
-            F += g*inner(dv,state.k)*dx
+            F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
@@ -185,9 +203,79 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
 
 def remove_initial_w(u, Vv):
-    bc = DirichletBC(u.function_space()[0], Constant((0,0)), "bottom")
+    bc = DirichletBC(u.function_space()[0], 0.0, "bottom")
     bc.apply(u)
     uv = Function(Vv).project(u)
     ustar = Function(u.function_space()).project(uv)
     uin = Function(u.function_space()).assign(u - ustar)
     u.assign(uin)
+
+
+def eady_initial_v(state, p0, v):
+    f = state.parameters.f
+    x, y, z = SpatialCoordinate(state.mesh)
+
+    # get pressure gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg, g)*dx
+    L = -div(wg)*p0*dx + inner(wg, n)*p0*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    Vp = p0.function_space()
+    phi = TestFunction(Vp)
+    m = TrialFunction(Vp)
+
+    a = f*phi*m*dx
+    L = phi*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v
+
+
+def compressible_eady_initial_v(state, theta0, rho0, v):
+    f = state.parameters.f
+    cp = state.parameters.cp
+
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
+
+    # get Pi gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg, g)*dx
+    L = -div(wg)*Pi*dx + inner(wg, n)*Pi*ds_tb
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    m = TrialFunction(Vr)
+    phi = TestFunction(Vr)
+
+    a = phi*f*m*dx
+    L = phi*cp*theta0*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v
+
+
+def calculate_Pi0(state, theta0, rho0):
+    # exner function
+    Vr = rho0.function_space()
+    Pi_exp = exner(theta0, rho0, state)
+    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
+
+    return Pi0
