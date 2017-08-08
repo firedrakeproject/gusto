@@ -137,19 +137,17 @@ class DiagnosticsOutput(object):
                 for diagnostic in diagnostics.available_diagnostics:
                     group.createVariable(diagnostic, np.float64, ("time", ))
 
-    def dump(self, diagnostic_fields, state, t):
+    def dump(self, state, t):
         """Dump diagnostics.
 
-        :arg diagnostic_fields: Iterable of :class:`DiagnosticField` objects.
         :arg state: The :class:`State` at which to compute the diagnostic.
         :arg t: The current time.
         """
-        mapping = dict((df.name, df) for df in diagnostic_fields)
         with Dataset(self.filename, "a") as dataset:
             idx = dataset.dimensions["time"].size
             dataset.variables["time"][idx:idx + 1] = t
             for name in self.diagnostics.fields:
-                field = mapping[name](state)
+                field = state.fields(name)
                 group = dataset.groups[name]
                 for dname in self.diagnostics.available_diagnostics:
                     diagnostic = getattr(self.diagnostics, dname)
@@ -352,7 +350,7 @@ class State(object):
 
         else:
             # Output diagnostic data
-            self.diagnostic_output.dump(self.diagnostic_fields, self, t)
+            self.diagnostic_output.dump(self, t)
             # Output pointwise data
             self.pointdata_output.dump(self.fields, t)
 
