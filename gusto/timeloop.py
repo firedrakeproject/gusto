@@ -213,7 +213,5 @@ class AdvectionTimestepper(BaseTimestepper):
             with timed_stage("Dump output"):
                 state.dump(t)
 
-        state.diagnostic_dump()
-
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
