@@ -265,7 +265,7 @@ class InternalEnergy(DiagnosticField):
         w_c = state.fields('water_c')
         T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
 
-        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pl * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pv * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
 
 
 class Sum(DiagnosticField):
