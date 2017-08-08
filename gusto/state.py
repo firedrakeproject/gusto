@@ -143,7 +143,7 @@ class DiagnosticsOutput(object):
         """
         mapping = dict((df.name, df) for df in diagnostic_fields)
         with Dataset(self.filename, "a") as dataset:
-            idx = dataset.dimension["time"].size
+            idx = dataset.dimensions["time"].size
             dataset.variables["time"][idx:idx + 1] = t
             for name in self.diagnostics.fields:
                 field = mapping[name](state)
