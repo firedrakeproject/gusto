@@ -5,6 +5,9 @@ Some simple tools for making model configuration nicer.
 from firedrake import sqrt
 
 
+__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters"]
+
+
 class Configuration(object):
 
     def __init__(self, **kwargs):

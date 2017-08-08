@@ -1,7 +1,7 @@
 from gusto import *
 import itertools
 from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
-    ExtrudedMesh, exp, sin
+    ExtrudedMesh, exp, sin, Function
 import numpy as np
 import sys
 

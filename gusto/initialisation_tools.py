@@ -13,6 +13,9 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
 from gusto.forcing import exner
 
 
+__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0"]
+
+
 def latlon_coords(mesh):
     x0, y0, z0 = SpatialCoordinate(mesh)
     unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)

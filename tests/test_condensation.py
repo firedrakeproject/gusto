@@ -1,7 +1,8 @@
+from os import path
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh
-from netCDF4 import Dataset
+    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, sqrt, \
+    conditional, cos
 from math import pi
 
 # This setup creates a bubble of water vapour that is advected

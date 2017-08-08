@@ -5,6 +5,9 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     dot, dS, Constant, warning, as_vector, SpatialCoordinate
 
 
+__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "NoForcing", "exner", "exner_rho", "exner_theta"]
+
+
 class Forcing(object, metaclass=ABCMeta):
     """
     Base class for forcing terms for Gusto.

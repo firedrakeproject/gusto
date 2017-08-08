@@ -4,6 +4,9 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
+__all__ = ["Timestepper", "AdvectionTimestepper"]
+
+
 class BaseTimestepper(object, metaclass=ABCMeta):
     """
     Base timestepping class for Gusto

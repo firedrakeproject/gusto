@@ -8,6 +8,9 @@ from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod
 
 
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver"]
+
+
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """
     Base class for timestepping linear solvers for Gusto.

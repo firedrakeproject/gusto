@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import as_vector, SpatialCoordinate, \
     PeriodicRectangleMesh, ExtrudedMesh, \
-    cos, sin, cosh, sinh, tanh, pi
+    cos, sin, cosh, sinh, tanh, pi, Function, sqrt
 import sys
 
 day = 24.*60.*60.
