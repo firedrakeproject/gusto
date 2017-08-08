@@ -1,7 +1,5 @@
 from os import path
 import itertools
-from collections import defaultdict
-from functools import partial
 from netCDF4 import Dataset
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, \

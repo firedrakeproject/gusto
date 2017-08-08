@@ -26,7 +26,7 @@ class Plot1DProfile(Plotting):
         # get points
         points = self.grp.variables["points"]
 
-        # check that user has fixed the values of all other dimensions 
+        # check that user has fixed the values of all other dimensions
         if len(val) != points.shape[1]-1:
             raise ValueError("You can must fix the values of exactly %s dimensions." % str(points.shape[1]-1))
 

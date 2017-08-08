@@ -19,7 +19,6 @@ if __name__ == "__main__":
     parser.add_argument("dim", type=int, help="index of dimension to plot on x axis. 0 corresponds to the first dimension in your pointdata.nc file.")
     parser.add_argument("val", type=float, nargs="+", help="value of other dimension")
 
-
     args = parser.parse_args()
 
     hov = Hovmoller(args.filename, args.field_name,
