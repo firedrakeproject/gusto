@@ -41,6 +41,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
     @abstractproperty
     def solver_parameters(self):
+        """Solver parameters for this solver"""
         pass
 
     @abstractmethod
@@ -62,7 +63,10 @@ class CompressibleSolver(TimesteppingSolver):
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
     quadrature degree in the horizontal direction and q_v is that in
     the vertical direction
-    :arg params (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
     """
 
     solver_parameters = {
@@ -225,7 +229,10 @@ class IncompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg L: the width of the domain, used in the preconditioner.
-    :arg params: Solver parameters.
+    :arg solver_parameters: (optional) Solver parameters.
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
     """
 
     solver_parameters = {
