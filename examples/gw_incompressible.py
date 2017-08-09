@@ -8,20 +8,8 @@ import sys
 dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
-    # avoid using mumps on Travis
-    linear_solver_params = {'ksp_type': 'gmres',
-                            'pc_type': 'fieldsplit',
-                            'pc_fieldsplit_type': 'additive',
-                            'fieldsplit_0_pc_type': 'lu',
-                            'fieldsplit_1_pc_type': 'lu',
-                            'fieldsplit_0_ksp_type': 'preonly',
-                            'fieldsplit_1_ksp_type': 'preonly'}
-    overwrite = True
 else:
     tmax = 3600.
-    # use default linear solver parameters (i.e. mumps)
-    linear_solver_params = None
-    overwrite = False
 
 ##############################################################################
 # set up mesh
@@ -149,7 +137,7 @@ advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L, solver_parameters=linear_solver_params, overwrite_solver_parameters=overwrite)
+linear_solver = IncompressibleSolver(state, L)
 
 ##############################################################################
 # Set up forcing

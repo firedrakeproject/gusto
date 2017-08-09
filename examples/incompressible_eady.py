@@ -10,7 +10,7 @@ dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
-    # avoid using mumps on Travis
+    # don't use mumps here, testing the overwrite-solver-options functionality
     linear_solver_params = {'ksp_type': 'gmres',
                             'pc_type': 'fieldsplit',
                             'pc_fieldsplit_type': 'additive',
