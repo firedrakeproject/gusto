@@ -349,6 +349,11 @@ class State(object):
                 next(self.dumpcount)
 
         else:
+
+            # Compute diagnostic fields
+            for field in self.diagnostic_fields:
+                field(self)
+
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
             # Output pointwise data
