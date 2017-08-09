@@ -18,7 +18,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     This is a dummy base class.
 
     :arg state: :class:`.State` object.
-    :arg solver_params (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters
     :arg overwrite_solver_parameters: boolean, if True use only the
     solver_parameters that have been passed in, if False then update
     the default solver parameters with the solver_parameters passed in.
@@ -30,20 +30,17 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.state = state
 
         if solver_parameters is not None:
-            if overwrite_solver_parameters:
-                self.solver_parameters = solver_parameters
-            else:
-                self.default_solver_parameters.update(solver_parameters)
-                self.solver_parameters = self.default_solver_parameters
-        else:
-            self.solver_parameters = self.default_solver_parameters
+            if not overwrite_solver_parameters:
+                p = self.solver_parameters
+                p.update(solver_parameters)
+                solver_parameters = p
+            self.solver_parameters = self.solver_parameters
 
-        print(self.solver_parameters)
         # setup the solver
         self._setup_solver()
 
     @abstractproperty
-    def default_solver_parameters(self):
+    def solver_parameters(self):
         pass
 
     @abstractmethod
@@ -68,7 +65,7 @@ class CompressibleSolver(TimesteppingSolver):
     :arg params (optional): solver parameters
     """
 
-    default_solver_parameters = {
+    solver_parameters = {
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
         'ksp_type': 'gmres',
@@ -231,7 +228,7 @@ class IncompressibleSolver(TimesteppingSolver):
     :arg params: Solver parameters.
     """
 
-    default_solver_parameters = {
+    solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'additive',
