@@ -165,16 +165,16 @@ class CompressibleSolver(TimesteppingSolver):
             for water in self.moisture:
                 water_t += self.state.fields(water)
             theta = theta / (1 + water_t)
-            theta_bar = theta_bar / (1 + water_t)
+            thetabar = thetabar / (1 + water_t)
 
         eqn = (
             inner(w, (u - u_in))*dx
-            - beta*cp*div(theta_rho*V(w))*pibar*dxp
+            - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
-            - beta*cp*div(theta_rho_bar*w)*pi*dxp
-            + beta*cp*jump(theta_rho_bar*w, n)*avg(pi)*dS_vp
+            - beta*cp*div(thetabar*w)*pi*dxp
+            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )

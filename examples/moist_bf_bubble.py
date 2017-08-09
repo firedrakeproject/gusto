@@ -91,10 +91,10 @@ xc = 10000.
 zc = 2000.
 rc = 2000.
 Tdash = 2.0
-theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2.0 + (x[1] - zc) ** 2.0) > rc,
+theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2) > rc,
                                                   0.0, Tdash *
-                                                  (cos(pi * sqrt(((x[0] - xc) / rc) ** 2.0 + ((x[1] - zc) / rc) ** 2.0) / 2.0))
-                                                  ** 2.0))
+                                                  (cos(pi * sqrt(((x[0] - xc) / rc) ** 2 + ((x[1] - zc) / rc) ** 2) / 2.0))
+                                                  ** 2))
 
 # define initial theta
 theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
