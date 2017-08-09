@@ -13,7 +13,10 @@ def embedded_dg(original_apply):
     def get_apply(self, x_in, x_out):
         if self.embedded_dg:
             def new_apply(self, x_in, x_out):
-                self.xdg_in.interpolate(x_in)
+                try:
+                    self.xdg_in.interpolate(x_in)
+                except:
+                    self.xdg_in.project(x_in)
                 original_apply(self, self.xdg_in, self.xdg_out)
                 self.Projector.project()
                 x_out.assign(self.x_projected)
