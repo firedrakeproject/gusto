@@ -34,7 +34,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 p = self.solver_parameters
                 p.update(solver_parameters)
                 solver_parameters = p
-            self.solver_parameters = self.solver_parameters
+            self.solver_parameters = solver_parameters
 
         # setup the solver
         self._setup_solver()
@@ -84,7 +84,6 @@ class CompressibleSolver(TimesteppingSolver):
                          'pc_type': 'gamg',
                          'mg_levels': {'ksp_type': 'chebyshev',
                                        'ksp_chebyshev_esteig': True,
-                                       'ksp_chebyshev_esteig_random': True,
                                        'ksp_max_it': 1,
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
