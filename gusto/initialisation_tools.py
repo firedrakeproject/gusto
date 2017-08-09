@@ -6,7 +6,7 @@ as balanced initial conditions.
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
-    Function, Constant, assemble, Expression, \
+    Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, exp
@@ -422,7 +422,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
          + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * ds_b
          + g * inner(w, state.k) * dxp)
 
-    bcs = [DirichletBC(Z.sub(3), Expression(("0.", "0.")), "top")]
+    bcs = [DirichletBC(Z.sub(3), 0.0, "top")]
 
     problem = NonlinearVariationalProblem(F, z, bcs=bcs)
     solver = NonlinearVariationalSolver(problem, solver_parameters=params)
