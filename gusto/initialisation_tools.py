@@ -160,7 +160,6 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                   'fieldsplit_1_pc_gamg_sym_graph': True,
                   'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
                   'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
                   'fieldsplit_1_mg_levels_ksp_max_it': 5,
                   'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
                   'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
