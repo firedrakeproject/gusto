@@ -73,17 +73,17 @@ class CompressibleSolver(TimesteppingSolver):
         'ksp_gmres_restart': 50,
         'pc_fieldsplit_schur_fact_type': 'FULL',
         'pc_fieldsplit_schur_precondition': 'selfp',
-        'fieldsplit_0_ksp_type': 'preonly',
-        'fieldsplit_0_pc_type': 'bjacobi',
-        'fieldsplit_0_sub_pc_type': 'ilu',
-        'fieldsplit_1_ksp_type': 'preonly',
-        'fieldsplit_1_pc_type': 'gamg',
-        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-        'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
-        'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
-        'fieldsplit_1_mg_levels_ksp_max_it': 1,
-        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'
+        'fieldsplit_0': {'ksp_type': 'preonly',
+                         'pc_type': 'bjacobi',
+                         'sub_pc_type': 'ilu'},
+        'fieldsplit_1': {'ksp_type': 'preonly',
+                         'pc_type': 'gamg',
+                         'mg_levels_ksp_type': 'chebyshev',
+                         'mg_levels_ksp_chebyshev_esteig': True,
+                         'mg_levels_ksp_chebyshev_esteig_random': True,
+                         'mg_levels_ksp_max_it': 1,
+                         'mg_levels_pc_type': 'bjacobi',
+                         'mg_levels_sub_pc_type': 'ilu'}
     }
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
@@ -232,12 +232,12 @@ class IncompressibleSolver(TimesteppingSolver):
         'ksp_type': 'gmres',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'additive',
-        'fieldsplit_0_pc_type': 'lu',
-        'fieldsplit_1_pc_type': 'lu',
-        'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
-        'fieldsplit_1_pc_factor_mat_solver_package': 'mumps',
-        'fieldsplit_0_ksp_type': 'preonly',
-        'fieldsplit_1_ksp_type': 'preonly'
+        'fieldsplit_0': {'ksp_type': 'preonly',
+                         'pc_type': 'lu',
+                         'pc_factor_mat_solver_package': 'mumps'},
+        'fieldsplit_1': {'ksp_type': 'preonly',
+                         'pc_type': 'lu',
+                         'pc_factor_mat_solver_package': 'mumps'}
     }
 
     def __init__(self, state, L, solver_parameters=None,
