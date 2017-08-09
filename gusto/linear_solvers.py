@@ -78,12 +78,12 @@ class CompressibleSolver(TimesteppingSolver):
                          'sub_pc_type': 'ilu'},
         'fieldsplit_1': {'ksp_type': 'preonly',
                          'pc_type': 'gamg',
-                         'mg_levels_ksp_type': 'chebyshev',
-                         'mg_levels_ksp_chebyshev_esteig': True,
-                         'mg_levels_ksp_chebyshev_esteig_random': True,
-                         'mg_levels_ksp_max_it': 1,
-                         'mg_levels_pc_type': 'bjacobi',
-                         'mg_levels_sub_pc_type': 'ilu'}
+                         'mg_levels': {'ksp_type': 'chebyshev',
+                                       'ksp_chebyshev_esteig': True,
+                                       'ksp_chebyshev_esteig_random': True,
+                                       'ksp_max_it': 1,
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'}}
     }
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
@@ -345,31 +345,27 @@ class IncompressibleSolver(TimesteppingSolver):
 
 class ShallowWaterSolver(TimesteppingSolver):
 
-    def __init__(self, state, params=None):
-
-        if params is None:
-            # Use hybridization parameters
-            params = {'ksp_type': 'preonly',
-                      'mat_type': 'matfree',
-                      'pc_type': 'python',
-                      'pc_python_type': 'firedrake.HybridizationPC',
-                      'hybridization': {'ksp_type': 'cg',
-                                        'pc_type': 'gamg',
-                                        'ksp_rtol': 1e-8,
-                                        'mg_levels': {'ksp_type': 'chebyshev',
-                                                      'ksp_max_it': 2,
-                                                      'pc_type': 'bjacobi',
-                                                      'sub_pc_type': 'ilu'},
-                                        # Broken residual construction
-                                        'hdiv_residual': {'ksp_type': 'cg',
-                                                          'pc_type': 'bjacobi',
-                                                          'sub_pc_type': 'ilu',
-                                                          'ksp_rtol': 1e-8},
-                                        # Projection step
-                                        'hdiv_projection': {'ksp_type': 'cg',
-                                                            'ksp_rtol': 1e-8}}}
-
-        super(ShallowWaterSolver, self).__init__(state, params)
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'},
+                          # Broken residual construction
+                          'hdiv_residual': {'ksp_type': 'cg',
+                                            'pc_type': 'bjacobi',
+                                            'sub_pc_type': 'ilu',
+                                            'ksp_rtol': 1e-8},
+                          # Projection step
+                          'hdiv_projection': {'ksp_type': 'cg',
+                                              'ksp_rtol': 1e-8}}
+    }
 
     def _setup_solver(self):
         state = self.state
