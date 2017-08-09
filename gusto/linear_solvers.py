@@ -3,6 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+from firedrake.solving_utils import flatten_parameters
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -31,8 +32,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
-                p = self.solver_parameters
-                p.update(solver_parameters)
+                p = flatten_parameters(self.solver_parameters)
+                p.update(flatten_parameters(solver_parameters))
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
