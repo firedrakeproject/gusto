@@ -16,10 +16,12 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_1_pc_type': 'lu',
                             'fieldsplit_0_ksp_type': 'preonly',
                             'fieldsplit_1_ksp_type': 'preonly'}
+    overwrite = True
 else:
     tmax = 3600.
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
+    overwrite = False
 
 ##############################################################################
 # set up mesh
@@ -147,7 +149,7 @@ advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L, params=linear_solver_params)
+linear_solver = IncompressibleSolver(state, L, solver_parameters=linear_solver_params, overwrite_solver_parameters=overwrite)
 
 ##############################################################################
 # Set up forcing
