@@ -1,11 +1,14 @@
 from firedrake import SpatialCoordinate, TrialFunction, \
-    TestFunction, Function, DirichletBC, Expression, \
+    TestFunction, Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, \
     FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
     as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
     sqrt, jump, FacetNormal
 from gusto.diagnostics import DiagnosticField, Energy
 from gusto.forcing import exner
+
+
+__all__ = ["KineticEnergyY", "CompressibleKineticEnergyY", "EadyPotentialEnergy", "CompressibleEadyPotentialEnergy", "GeostrophicImbalance", "TrueResidualV", "SawyerEliassenU"]
 
 
 class KineticEnergyY(Energy):
@@ -17,7 +20,7 @@ class KineticEnergyY(Energy):
         """
         u = state.fields("u")
         energy = self.kinetic(u[1])
-        return self.field(state.mesh).interpolate(energy)
+        return self.field.interpolate(energy)
 
 
 class CompressibleKineticEnergyY(Energy):
@@ -30,7 +33,7 @@ class CompressibleKineticEnergyY(Energy):
         u = state.fields("u")
         rho = state.fields("rho")
         energy = self.kinetic(u[1], rho)
-        return self.field(state.mesh).interpolate(energy)
+        return self.field.interpolate(energy)
 
 
 class EadyPotentialEnergy(Energy):
@@ -42,7 +45,7 @@ class EadyPotentialEnergy(Energy):
         bbar = state.fields("bbar")
         H = state.parameters.H
         potential = -(z-H/2)*(b-bbar)
-        return self.field(state.mesh).interpolate(potential)
+        return self.field.interpolate(potential)
 
 
 class CompressibleEadyPotentialEnergy(Energy):
@@ -60,19 +63,14 @@ class CompressibleEadyPotentialEnergy(Energy):
         Pi = exner(theta, rho, state)
 
         potential = rho*(g*z + cv*Pi*theta - cp*Pi0*theta)
-        return self.field(state.mesh).interpolate(potential)
+        return self.field.interpolate(potential)
 
 
 class GeostrophicImbalance(DiagnosticField):
     name = "GeostrophicImbalance"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
-
-    def setup_solver(self, state):
+    def setup(self, state):
+        super(GeostrophicImbalance, self).setup(state)
         u = state.fields("u")
         b = state.fields("b")
         p = state.fields("p")
@@ -84,9 +82,8 @@ class GeostrophicImbalance(DiagnosticField):
         a = inner(w, v)*dx
         L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
 
-        bc = ("0.", "0.", "0.")
-        bcs = [DirichletBC(Vu, Expression(bc), "bottom"),
-               DirichletBC(Vu, Expression(bc), "top")]
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
 
         self.imbalance = Function(Vu)
         imbalanceproblem = LinearVariationalProblem(a, L, self.imbalance, bcs=bcs)
@@ -94,27 +91,17 @@ class GeostrophicImbalance(DiagnosticField):
             imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        try:
-            getattr(self, "imbalance_solver")
-        except AttributeError:
-            self.setup_solver(state)
-        finally:
-            f = state.parameters.f
-            self.imbalance_solver.solve()
-            geostrophic_imbalance = self.imbalance[0]/f
-            return self.field(state.mesh).interpolate(geostrophic_imbalance)
+        f = state.parameters.f
+        self.imbalance_solver.solve()
+        geostrophic_imbalance = self.imbalance[0]/f
+        return self.field.interpolate(geostrophic_imbalance)
 
 
 class TrueResidualV(DiagnosticField):
     name = "TrueResidualV"
 
-    def field(self, mesh):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(FunctionSpace(mesh, "DG", 0), name=self.name)
-        return self._field
-
-    def setup_solver(self, state):
+    def setup(self, state):
+        super(TrueResidualV, self).setup(state)
         unew, pnew, bnew = state.xn.split()
         uold, pold, bold = state.xb.split()
         ubar = 0.5*(unew+uold)
@@ -137,26 +124,19 @@ class TrueResidualV(DiagnosticField):
             vtresproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        try:
-            getattr(self, "v_residual_solver")
-        except AttributeError:
-            self.setup_solver(state)
-        finally:
-            self.v_residual_solver.solve()
-            v_residual = self.vtres
-            return self.field(state.mesh).interpolate(v_residual)
+        self.v_residual_solver.solve()
+        v_residual = self.vtres
+        return self.field.interpolate(v_residual)
 
 
 class SawyerEliassenU(DiagnosticField):
     name = "SawyerEliassenU"
 
-    def field(self, state):
-        if hasattr(self, "_field"):
-            return self._field
-        self._field = Function(state.spaces("HDiv"), name=self.name)
-        return self._field
+    def setup(self, state):
 
-    def setup_solver(self, state):
+        space = state.spaces("HDiv")
+        super(SawyerEliassenU, self).setup(state, space=space)
+
         u = state.fields("u")
         b = state.fields("b")
         v = inner(u, as_vector([0., 1., 0.]))
@@ -196,8 +176,8 @@ class SawyerEliassenU(DiagnosticField):
         dbdy = state.parameters.dbdy
         x, y, z = SpatialCoordinate(state.mesh)
 
-        bcs = [DirichletBC(V0, Expression("0."), "bottom"),
-               DirichletBC(V0, Expression("0."), "top")]
+        bcs = [DirichletBC(V0, 0., "bottom"),
+               DirichletBC(V0, 0., "top")]
 
         Mat = as_matrix([[b.dx(2), 0., -f*self.v_v0.dx(2)],
                          [0., 0., 0.],
@@ -251,14 +231,9 @@ class SawyerEliassenU(DiagnosticField):
             ugproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        try:
-            getattr(self, "sawyer_eliassen_u_solver")
-        except AttributeError:
-            self.setup_solver(state)
-        finally:
-            self.project_b_solver.solve()
-            self.project_v_solver.solve()
-            self.stream_function_solver.solve()
-            self.sawyer_eliassen_u_solver.solve()
-            sawyer_eliassen_u = self.u
-            return self.field(state).project(sawyer_eliassen_u)
+        self.project_b_solver.solve()
+        self.project_v_solver.solve()
+        self.stream_function_solver.solve()
+        self.sawyer_eliassen_u_solver.solve()
+        sawyer_eliassen_u = self.u
+        return self.field.project(sawyer_eliassen_u)

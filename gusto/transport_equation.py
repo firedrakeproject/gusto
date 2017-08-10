@@ -6,6 +6,9 @@ from firedrake import Function, TestFunction, TrialFunction, \
     curl, BrokenElement, FunctionSpace
 
 
+__all__ = ["LinearAdvection", "AdvectionEquation", "EmbeddedDGAdvection", "SUPGAdvection", "VectorInvariant", "EulerPoincare"]
+
+
 class TransportEquation(object, metaclass=ABCMeta):
     """
     Base class for transport equations in Gusto.

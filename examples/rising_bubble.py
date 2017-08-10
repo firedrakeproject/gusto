@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, Constant, pi, cos, Function, sqrt, conditional
 import sys
 
 dt = 1.
@@ -44,23 +44,29 @@ Vt = theta0.function_space()
 Vr = rho0.function_space()
 
 # Isentropic background state
-Tsurf = 300.
-thetab = Constant(Tsurf)
+Tsurf = Constant(300.)
 
-theta_b = Function(Vt).interpolate(thetab)
+theta_b = Function(Vt).interpolate(Tsurf)
 rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
 x = SpatialCoordinate(mesh)
-theta_pert = Function(Vt).interpolate(Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2)) > rc ? 0.0 : 0.25*(1. + cos((pi/rc)*(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))", xc=500., zc=350., rc=250.))
+xc = 500.
+zc = 350.
+rc = 250.
+r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
 theta0.interpolate(theta_b + theta_pert)
 rho0.interpolate(rho_b)
 
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
@@ -79,31 +85,7 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-schur_params = {'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': True,
-                'ksp_max_it': 100,
-                'ksp_gmres_restart': 50,
-                'pc_fieldsplit_schur_fact_type': 'FULL',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
-                'fieldsplit_0_pc_type': 'bjacobi',
-                'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": True,
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_pc_gamg_sym_graph': True,
-                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-
-linear_solver = CompressibleSolver(state, params=schur_params)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

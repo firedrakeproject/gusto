@@ -4,6 +4,9 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
+__all__ = ["Timestepper", "AdvectionTimestepper"]
+
+
 class BaseTimestepper(object, metaclass=ABCMeta):
     """
     Base timestepping class for Gusto
@@ -81,6 +84,7 @@ class Timestepper(BaseTimestepper):
 
     def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
         state = self.state
+        state.setup_diagnostics()
 
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
@@ -178,6 +182,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
     def run(self, t, tmax, x_end=None):
         state = self.state
+        state.setup_diagnostics()
 
         dt = state.timestepping.dt
         state.xnp1.assign(state.xn)

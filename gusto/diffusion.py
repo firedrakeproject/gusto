@@ -4,6 +4,9 @@ from firedrake import TestFunction, TrialFunction, \
     FacetNormal, LinearVariationalProblem, LinearVariationalSolver, action
 
 
+__all__ = ["InteriorPenalty"]
+
+
 class Diffusion(object, metaclass=ABCMeta):
     """
     Base class for diffusion schemes for gusto.

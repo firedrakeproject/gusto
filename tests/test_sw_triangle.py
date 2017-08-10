@@ -1,6 +1,7 @@
+from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
+    FunctionSpace, Function
 from math import pi
 import json
 import pytest
@@ -13,12 +14,11 @@ def setup_sw(dirname, euler_poincare):
     R = 6371220.
     H = 5960.
     day = 24.*60.*60.
-    u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    mesh.init_cell_orientations(x)
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
@@ -37,15 +37,12 @@ def setup_sw(dirname, euler_poincare):
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
-    x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R = Constant(R)
+    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
-    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis expression
+    Omega = parameters.Omega
+    g = parameters.g
+    Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    # Coriolis
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", Function(V))
@@ -53,7 +50,8 @@ def setup_sw(dirname, euler_poincare):
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0),
+                      ('D', D0)])
 
     if euler_poincare:
         ueqn = EulerPoincare(state, u0.function_space())

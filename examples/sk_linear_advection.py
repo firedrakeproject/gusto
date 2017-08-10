@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import Expression, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, sin
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
+    SpatialCoordinate, exp, sin, Function, FunctionSpace
 import numpy as np
 import sys
 
@@ -63,15 +63,17 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
 W_DG1 = FunctionSpace(mesh, "DG", 1)
-x = Function(W_DG1).interpolate(Expression("x[0]"))
 a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 # Set up advection schemes
 rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
@@ -82,31 +84,7 @@ advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
 advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
 # Set up linear solver
-schur_params = {'pc_type': 'fieldsplit',
-                'pc_fieldsplit_type': 'schur',
-                'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': True,
-                'ksp_max_it': 100,
-                'ksp_gmres_restart': 50,
-                'pc_fieldsplit_schur_fact_type': 'FULL',
-                'pc_fieldsplit_schur_precondition': 'selfp',
-                'fieldsplit_0_ksp_type': 'richardson',
-                'fieldsplit_0_ksp_max_it': 5,
-                'fieldsplit_0_pc_type': 'bjacobi',
-                'fieldsplit_0_sub_pc_type': 'ilu',
-                'fieldsplit_1_ksp_type': 'richardson',
-                'fieldsplit_1_ksp_max_it': 5,
-                "fieldsplit_1_ksp_monitor_true_residual": True,
-                'fieldsplit_1_pc_type': 'gamg',
-                'fieldsplit_1_pc_gamg_sym_graph': True,
-                'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
-                'fieldsplit_1_mg_levels_ksp_chebyshev_esteig_random': True,
-                'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-
-linear_solver = CompressibleSolver(state, params=schur_params)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, linear=True)
