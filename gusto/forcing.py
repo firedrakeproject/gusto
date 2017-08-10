@@ -151,11 +151,8 @@ class CompressibleForcing(Forcing):
 
     def gravity_term(self):
 
-        if self.state.geopotential_form:
-            L = div(self.test)*self.state.Phi*dx
-        else:
-            g = self.state.parameters.g
-            L = -g*inner(self.test, self.state.k)*dx
+        g = self.state.parameters.g
+        L = -g*inner(self.test, self.state.k)*dx
 
         return L
 
