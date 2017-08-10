@@ -326,7 +326,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     w_sat3 = param.w_sat3
     w_sat4 = param.w_sat4
     g = param.g
-    
+
     warning("default quadrature degree most likely not sufficient for this degree element")
     quadrature_degree = (5, 5)
 
