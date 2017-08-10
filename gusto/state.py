@@ -8,9 +8,8 @@ from gusto.diagnostics import Diagnostics, Perturbation, \
 from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
     interval, Function, Mesh, functionspaceimpl,\
-    File, SpatialCoordinate, sqrt, Constant, inner, \
-    dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
+    File, dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
+    FILE_CREATE, FILE_READ
 import numpy as np
 
 
@@ -71,13 +70,7 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg geopotential_form: if True use the geopotential form for the
-    gravitational forcing term. Defaults to False.
-    :arg Coriolis: (optional) Coriolis function.
-    :arg sponge_function: (optional) Function specifying a sponge layer.
-    :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
-    :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
@@ -85,24 +78,16 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
-                 Coriolis=None, sponge_function=None,
-                 geopotential_form=False,
-                 timestepping=None,
                  output=None,
-                 parameters=None,
                  diagnostics=None,
                  fieldlist=None,
                  diagnostic_fields=None):
 
-        self.Omega = Coriolis
-        self.mu = sponge_function
-        self.geopotential_form = geopotential_form
-        self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
             self.output = output
-        self.parameters = parameters
+
         if fieldlist is None:
             raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
         else:
@@ -129,39 +114,6 @@ class State(object):
         self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         self.dumpfile = None
-
-        # figure out if we're on a sphere
-        try:
-            self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
-        except AttributeError:
-            self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
-
-        #  build the vertical normal and define perp for 2d geometries
-        dim = mesh.topological_dimension()
-        if self.on_sphere:
-            x = SpatialCoordinate(mesh)
-            R = sqrt(inner(x, x))
-            self.k = interpolate(x/R, mesh.coordinates.function_space())
-            if dim == 2:
-                outward_normals = CellNormal(mesh)
-                self.perp = lambda u: cross(outward_normals, u)
-        else:
-            kvec = [0.0]*dim
-            kvec[dim-1] = 1.0
-            self.k = Constant(kvec)
-            if dim == 2:
-                self.perp = lambda u: as_vector([-u[1], u[0]])
-
-        #  build the geopotential
-        if geopotential_form:
-            V = FunctionSpace(mesh, "CG", 1)
-            if self.on_sphere:
-                x, y, z = SpatialCoordinate(mesh)
-                self.Phi = Function(V).interpolate(sqrt(x**2 + y**2 + z**2))
-            else:
-                x, z = SpatialCoordinate(mesh)
-                self.Phi = Function(V).interpolate(z)
-            self.Phi *= parameters.g
 
     def setup_diagnostics(self):
         # add special case diagnostic fields

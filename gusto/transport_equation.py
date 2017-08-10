@@ -236,7 +236,7 @@ class SUPGAdvection(AdvectionEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+    def __init__(self, state, V, dt=None, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -254,7 +254,6 @@ class SUPGAdvection(AdvectionEquation):
             raise ValueError("are you very sure you don't need surface terms?")
 
         # set default SUPG parameters
-        dt = state.timestepping.dt
         supg_params = supg_params.copy() if supg_params else {}
         supg_params.setdefault('ax', dt/sqrt(15.))
         supg_params.setdefault('ay', dt/sqrt(15.))

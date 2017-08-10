@@ -15,21 +15,16 @@ def setup_sk(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
-    parameters = CompressibleParameters()
-    diagnostic_fields = [CourantNumber()]
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
+    model = CompressibleEulerModel(mesh,
+                                   timestepping=timestepping,
+                                   output=output)
 
     # Initial conditions
+    state = model.state
+    parameters = model.parameters
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
@@ -53,7 +48,7 @@ def setup_sk(dirname):
     rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b)
+    compressible_hydrostatic_balance(state, parameters, theta_b, rho_b)
 
     a = 5.0e3
     deltaTheta = 1.0e-2
@@ -68,42 +63,20 @@ def setup_sk(dirname):
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-
-    # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
-
+    model.setup()
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          compressible_forcing)
+    stepper = Timestepper(model)
 
     return stepper, 10*dt
 
 
-def run_sk_linear(dirname):
+def run_sk(dirname):
 
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0., tmax=tmax)
-    import os
-    os.system('mkdir sk_nonlinear/bk')
-    os.system('mv sk_nonlinear/field_output* sk_nonlinear/bk')
-    stepper, tmax = setup_sk(dirname)
-    # should pick up from the end of the previous run.
-    dt = stepper.state.timestepping.dt
-    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
 
 
 def test_sk(tmpdir):
 
     dirname = str(tmpdir)
-    run_sk_linear(dirname)
+    run_sk(dirname)

@@ -92,7 +92,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     p0.project(pprime)
 
 
-def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
+def compressible_hydrostatic_balance(state, parameters, theta0, rho0, pi0=None,
                                      top=False, pi_boundary=Constant(1.0),
                                      solve_for_rho=False,
                                      params=None):
@@ -118,7 +118,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     n = FacetNormal(state.mesh)
 
-    cp = state.parameters.cp
+    cp = parameters.cp
 
     alhs = (
         (cp*inner(v, dv) - cp*div(dv*theta0)*pi)*dx
@@ -133,12 +133,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bstring = "top"
 
     arhs = -cp*inner(dv, n)*theta0*pi_boundary*bmeasure
-    if state.geopotential_form:
-        Phi = state.Phi
-        arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
-    else:
-        g = state.parameters.g
-        arhs -= g*inner(dv, state.k)*dx
+    g = parameters.g
+    arhs -= g*inner(dv, state.k)*dx
 
     bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
 
@@ -172,9 +168,9 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     if pi0 is not None:
         pi0.assign(Pi)
 
-    kappa = state.parameters.kappa
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
+    kappa = parameters.kappa
+    R_d = parameters.R_d
+    p_0 = parameters.p_0
 
     if solve_for_rho:
         w1 = Function(W)

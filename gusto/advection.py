@@ -31,23 +31,21 @@ class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
-    :arg state: :class:`.State` object.
     :arg field: field to be advected
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None):
+    def __init__(self, field, dt, equation=None, solver_params=None):
 
         if equation is not None:
 
-            self.state = state
             self.field = field
+            self.dt = dt
             self.equation = equation
             # get ubar from the equation class
             self.ubar = self.equation.ubar
-            self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
             if solver_params is None:
@@ -196,7 +194,7 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+    def __init__(self, field, dt, equation, theta=0.5, solver_params=None):
 
         if not solver_params:
             # theta method leads to asymmetric matrix, per lhs function below,
@@ -205,7 +203,7 @@ class ThetaMethod(Advection):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+        super(ThetaMethod, self).__init__(field, dt, equation, solver_params)
 
         self.theta = theta
 

@@ -25,10 +25,12 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, parameters, beta, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.parameters = parameters
+        self.beta = beta
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -90,7 +92,8 @@ class CompressibleSolver(TimesteppingSolver):
                                        'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+    def __init__(self, state, parameters, beta, quadrature_degree=None,
+                 solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         if quadrature_degree is not None:
@@ -101,14 +104,12 @@ class CompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, parameters, beta, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
-        cp = state.parameters.cp
-        mu = state.mu
+        beta = self.beta
+        cp = self.parameters.cp
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
@@ -126,9 +127,9 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = exner(thetabar, rhobar, state)
-        pibar_rho = exner_rho(thetabar, rhobar, state)
-        pibar_theta = exner_theta(thetabar, rhobar, state)
+        pibar = exner(thetabar, rhobar, self.parameters)
+        pibar_rho = exner_rho(thetabar, rhobar, self.parameters)
+        pibar_theta = exner_theta(thetabar, rhobar, self.parameters)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
@@ -162,7 +163,8 @@ class CompressibleSolver(TimesteppingSolver):
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
-        if mu is not None:
+        if hasattr(state, "mu"):
+            mu = state.mu
             eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -247,16 +249,15 @@ class IncompressibleSolver(TimesteppingSolver):
                          'pc_factor_mat_solver_package': 'mumps'}
     }
 
-    def __init__(self, state, L, solver_parameters=None,
+    def __init__(self, state, parameters, beta, L, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.L = L
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, parameters, beta, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
+        beta = self.beta
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vb = state.spaces("HDiv_v")
@@ -376,9 +377,9 @@ class ShallowWaterSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         state = self.state
-        H = state.parameters.H
-        g = state.parameters.g
-        beta = state.timestepping.dt*state.timestepping.alpha
+        H = self.parameters.H
+        g = self.parameters.g
+        beta = self.beta
 
         # Split up the rhs vector (symbolically)
         u_in, D_in = split(state.xrhs)
