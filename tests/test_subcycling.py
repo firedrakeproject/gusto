@@ -35,8 +35,8 @@ def setup_gaussian(dirname):
     ueqn = EmbeddedDGAdvection(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", SSPRK3(state, u0, ueqn, subcycles=4)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=4)))
+    advected_fields.append(("u", SSPRK3(state, u0, ueqn, subcycles=2)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
 
     linear_solver = ShallowWaterSolver(state)
 
