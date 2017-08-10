@@ -193,9 +193,9 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         dv, dpi = TestFunctions(W)
         pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
         F = (
-            (cp*inner(v, dv) - cp*div(dv*theta_rho)*pi)*dx
+            (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
             + dpi*div(theta0*v)*dx
-            + cp*inner(dv, n)*theta_rho*pi_boundary*bmeasure
+            + cp*inner(dv, n)*theta*pi_boundary*bmeasure
         )
         if state.geopotential_form:
             F += - div(dv)*Phi*dx + inner(dv, n)*Phi*bmeasure
