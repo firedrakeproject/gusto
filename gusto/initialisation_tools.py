@@ -327,7 +327,9 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     w_sat4 = param.w_sat4
     g = param.g
 
-    warning("default quadrature degree most likely not sufficient for this degree element")
+    VDG = state.spaces("DG")
+    if any(deg > 2 for deg in VDG.ufl_element().degree()):
+        warning("default quadrature degree most likely not sufficient for this degree element")
     quadrature_degree = (5, 5)
 
     params = {'ksp_type': 'preonly',
