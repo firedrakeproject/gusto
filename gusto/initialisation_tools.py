@@ -108,7 +108,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     it at the bottom.
     :arg pi_boundary: a field or expression to use as boundary data for pi on
     the top or bottom as specified.
-    :arg moisture: the initial total water mixing ratio field.
+    :arg water_t: the initial total water mixing ratio field.
     """
 
     # Calculate hydrostatic Pi
@@ -122,15 +122,15 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     cp = state.parameters.cp
 
-    # introduce density potential temperature
-    theta_rho = theta0
+    # add effect of density of water upon theta
+    theta = theta0
 
     if water_t is not None:
-        theta_rho = theta0 / (1 + water_t)
+        theta = theta0 / (1 + water_t)
 
     alhs = (
-        (cp*inner(v, dv) - cp*div(dv*theta_rho)*pi)*dx
-        + dpi*div(theta_rho*v)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
+        + dpi*div(theta*v)*dx
     )
 
     if top:
@@ -140,7 +140,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    arhs = -cp*inner(dv, n)*theta_rho*pi_boundary*bmeasure
+    arhs = -cp*inner(dv, n)*theta*pi_boundary*bmeasure
     if state.geopotential_form:
         Phi = state.Phi
         arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
