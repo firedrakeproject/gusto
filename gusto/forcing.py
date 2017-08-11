@@ -22,7 +22,7 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
         self.state = state
         if linear:
             self.euler_poincare = False
@@ -46,6 +46,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.sponge = state.mu is not None
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
+        self.moisture = moisture
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
@@ -140,12 +141,23 @@ class CompressibleForcing(Forcing):
         u0, rho0, theta0 = split(self.x0)
         cp = self.state.parameters.cp
         n = FacetNormal(self.state.mesh)
+        Vtheta = self.state.spaces("HDiv_v")
+
+        # introduce new theta so it can be changed by moisture
+        theta = theta0
+
+        # add effect of density of water upon theta
+        if self.moisture is not None:
+            water_t = Function(Vtheta).assign(0.0)
+            for water in self.moisture:
+                water_t += self.state.fields(water)
+            theta = theta / (1 + water_t)
 
         pi = exner(theta0, rho0, self.state)
 
         L = (
-            + cp*div(theta0*self.test)*pi*dx
-            - cp*jump(self.test*theta0, n)*avg(pi)*dS_v
+            + cp*div(theta*self.test)*pi*dx
+            - cp*jump(self.test*theta, n)*avg(pi)*dS_v
         )
         return L
 
@@ -158,6 +170,55 @@ class CompressibleForcing(Forcing):
             L = -g*inner(self.test, self.state.k)*dx
 
         return L
+
+    def theta_forcing(self):
+
+        cv = self.state.parameters.cv
+        cp = self.state.parameters.cp
+        c_vv = self.state.parameters.c_vv
+        c_pv = self.state.parameters.c_pv
+        c_pl = self.state.parameters.c_pl
+        R_d = self.state.parameters.R_d
+        R_v = self.state.parameters.R_v
+
+        u0, _, theta0 = split(self.x0)
+        water_v = self.state.fields('water_v')
+        water_c = self.state.fields('water_c')
+
+        c_vml = cv + water_v * c_vv + water_c * c_pl
+        c_pml = cp + water_v * c_pv + water_c * c_pl
+        R_m = R_d + water_v * R_v
+
+        L = -theta0 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u0)
+
+        return self.scaling * L
+
+    def _build_forcing_solvers(self):
+
+        super(CompressibleForcing, self)._build_forcing_solvers()
+        # build forcing for theta equation
+        if self.moisture is not None:
+            _, _, theta0 = split(self.x0)
+            Vt = self.state.spaces("HDiv_v")
+            p = TrialFunction(Vt)
+            q = TestFunction(Vt)
+            self.thetaF = Function(Vt)
+
+            a = p * q * dx
+            L = self.theta_forcing()
+            L = q * L * dx
+
+            theta_problem = LinearVariationalProblem(a, L, self.thetaF)
+
+            self.theta_solver = LinearVariationalSolver(theta_problem)
+
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+
+        super(CompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
+        if self.moisture is not None:
+            self.theta_solver.solve()
+            _, _, theta_out = x_out.split()
+            theta_out += self.thetaF
 
 
 def exner(theta, rho, state):
