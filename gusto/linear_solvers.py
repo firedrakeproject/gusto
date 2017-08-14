@@ -10,7 +10,8 @@ from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver"]
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
+           "HybridisedCompressibleSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -247,8 +248,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     the vertical direction
     :arg params (optional): solver parameters
     """
+    solver_parameters = {'ksp_type': 'gmres',
+                         'pc_type': 'lu'}
 
-    def __init__(self, state, quadrature_degree=None, params=None):
+    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+                 overwrite_solver_parameters=False, moisture=None):
+        self.moisture = moisture
 
         self.state = state
 
@@ -260,10 +265,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        self.params = params
-
-        # setup the solver
-        self._setup_solver()
+        super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
@@ -302,7 +304,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than pi') in the vertical
         # component of the gradient
@@ -314,7 +316,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
@@ -327,11 +329,11 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         rbareqn = (l0('+') - avg(rhobar))*dl('+')*(dS_vp + dS_hp) + \
                   (l0 - rhobar)*dl*ds_vp + \
                   (l0 - rhobar)*dl*ds_tbp
-        rhobar_prob = LinearVariationalProblem(lhs(rbareqn),rhs(rbareqn),rhobar_tr)
+        rhobar_prob = LinearVariationalProblem(lhs(rbareqn), rhs(rbareqn), rhobar_tr)
         self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
-                                                     solver_parameters={'ksp_type':'preonly',
-                                                                        'pc_type':'bjacobi',
-                                                                        'pc_sub_type':'lu'})
+                                                     solver_parameters={'ksp_type': 'preonly',
+                                                                        'pc_type': 'bjacobi',
+                                                                        'pc_sub_type': 'lu'})
 
         Aeqn = (
             inner(w, (u - u_in))*dx
@@ -341,7 +343,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             + beta*inner(phi*u, n)*rhobar_tr*(dS_v + dS_h)
         )
         if mu is not None:
-            Aeqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
         Aop = Tensor(lhs(Aeqn))
         Arhs = rhs(Aeqn)
 
@@ -351,12 +353,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         dl = dl('+')
         l0 = l0('+')
 
-        K = Tensor(beta*cp*inner(thetabar*w,n)*l0*(dS_vp + dS_hp)
-                   + beta*cp*inner(thetabar*w,n)*l0*ds_vp
-                   + beta*cp*inner(thetabar*w,n)*l0*ds_tbp)
-        L = Tensor(dl*inner(u,n)*(dS_vp + dS_hp)
-                   + dl*inner(u,n)*ds_vp
-                   + dl*inner(u,n)*ds_tbp)
+        K = Tensor(beta*cp*inner(thetabar*w, n)*l0*(dS_vp + dS_hp)
+                   + beta*cp*inner(thetabar*w, n)*l0*ds_vp
+                   + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
+        L = Tensor(dl*inner(u, n)*(dS_vp + dS_hp)
+                   + dl*inner(u, n)*ds_vp
+                   + dl*inner(u, n)*ds_tbp)
 
         #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
         # reduced eqns for l0
@@ -366,7 +368,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.R = Function(M)
 
         # Set up the LinearSolver for the system of Lagrange multipliers
-        self.lSolver = LinearSolver(S, solver_parameters=self.params)
+        self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters)
         # a place to keep the solution
         self.lambdar = Function(Vtrace)
 
@@ -375,9 +377,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Reconstruction of broken u and rho
         self.ASolver = LinearSolver(assemble(Aop),
-                                    solver_parameters={'ksp_type':'preonly',
-                                                       'pc_type':'bjacobi',
-                                                       'pc_sub_type':'lu'},
+                                    solver_parameters={'ksp_type': 'preonly',
+                                                       'pc_type': 'bjacobi',
+                                                       'pc_sub_type': 'lu'},
                                     options_prefix='urhoreconstruction')
         # Rhs for broken u and rho reconstruction
         self.Rurhoexp = -K*self.lambdar + Tensor(Arhs)
@@ -386,9 +388,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         self.u_hdiv = Function(Vu)
         self.u_projector = Projector(u, self.u_hdiv,
-                                     solver_parameters={'ksp_type':'cg',
-                                                        'pc_type':'bjacobi',
-                                                        'pc_sub_type':'ilu'})
+                                     solver_parameters={'ksp_type': 'cg',
+                                                        'pc_type': 'bjacobi',
+                                                        'pc_sub_type': 'ilu'})
 
         # Reconstruction of theta
         theta = TrialFunction(Vtheta)
@@ -398,15 +400,15 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         u = self.u_hdiv
         theta_eqn = gamma*(theta - theta_in +
-                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
                                                  self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters={'ksp_type':'cg',
-                                                                       'pc_type':'bjacobi',
-                                                                       'pc_sub_type':'ilu'},
+                                                    solver_parameters={'ksp_type': 'cg',
+                                                                       'pc_type': 'bjacobi',
+                                                                       'pc_sub_type': 'ilu'},
                                                     options_prefix='thetabacksubstitution')
 
     def solve(self):
