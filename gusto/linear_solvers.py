@@ -68,6 +68,7 @@ class CompressibleSolver(TimesteppingSolver):
     :arg overwrite_solver_parameters: boolean, if True use only the
     solver_parameters that have been passed in, if False then update
     the default solver parameters with the solver_parameters passed in.
+    :arg moisture (optional): list of names of moisture fields.
     """
 
     solver_parameters = {
@@ -91,7 +92,9 @@ class CompressibleSolver(TimesteppingSolver):
     }
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
-                 overwrite_solver_parameters=False):
+                 overwrite_solver_parameters=False, moisture=None):
+
+        self.moisture = moisture
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -149,6 +152,14 @@ class CompressibleSolver(TimesteppingSolver):
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
+
+        # add effect of density of water upon theta
+        if self.moisture is not None:
+            water_t = Function(Vtheta).assign(0.0)
+            for water in self.moisture:
+                water_t += self.state.fields(water)
+            theta = theta / (1 + water_t)
+            thetabar = thetabar / (1 + water_t)
 
         eqn = (
             inner(w, (u - u_in))*dx
