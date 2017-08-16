@@ -5,7 +5,7 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     dot, dS, Constant, warning, as_vector, SpatialCoordinate
 
 
-__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "NoForcing", "exner", "exner_rho", "exner_theta"]
+__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
 
 
 class Forcing(object, metaclass=ABCMeta):
@@ -163,11 +163,8 @@ class CompressibleForcing(Forcing):
 
     def gravity_term(self):
 
-        if self.state.geopotential_form:
-            L = div(self.test)*self.state.Phi*dx
-        else:
-            g = self.state.parameters.g
-            L = -g*inner(self.test, self.state.k)*dx
+        g = self.state.parameters.g
+        L = -g*inner(self.test, self.state.k)*dx
 
         return L
 
@@ -413,12 +410,3 @@ class ShallowWaterForcing(Forcing):
 
         L = g*div(self.test)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
-
-
-class NoForcing(Forcing):
-
-    def _build_forcing_solver(self):
-        pass
-
-    def apply(self, scale, x_in, x_nl, x_out, **kwargs):
-        x_out.assign(x_in)

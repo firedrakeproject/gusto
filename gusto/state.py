@@ -71,8 +71,6 @@ class State(object):
     "RT": The Raviart-Thomas family (default, recommended for quads)
     "BDM": The BDM family
     "BDFM": The BDFM family
-    :arg geopotential_form: if True use the geopotential form for the
-    gravitational forcing term. Defaults to False.
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
     :arg timestepping: class containing timestepping parameters
@@ -86,7 +84,6 @@ class State(object):
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
                  Coriolis=None, sponge_function=None,
-                 geopotential_form=False,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -96,7 +93,6 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
-        self.geopotential_form = geopotential_form
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -151,17 +147,6 @@ class State(object):
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
-
-        #  build the geopotential
-        if geopotential_form:
-            V = FunctionSpace(mesh, "CG", 1)
-            if self.on_sphere:
-                x, y, z = SpatialCoordinate(mesh)
-                self.Phi = Function(V).interpolate(sqrt(x**2 + y**2 + z**2))
-            else:
-                x, z = SpatialCoordinate(mesh)
-                self.Phi = Function(V).interpolate(z)
-            self.Phi *= parameters.g
 
     def setup_diagnostics(self):
         # add special case diagnostic fields

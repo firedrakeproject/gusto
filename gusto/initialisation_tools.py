@@ -141,12 +141,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bstring = "top"
 
     arhs = -cp*inner(dv, n)*theta*pi_boundary*bmeasure
-    if state.geopotential_form:
-        Phi = state.Phi
-        arhs += div(dv)*Phi*dx - inner(dv, n)*Phi*bmeasure
-    else:
-        g = state.parameters.g
-        arhs -= g*inner(dv, state.k)*dx
+    g = state.parameters.g
+    arhs -= g*inner(dv, state.k)*dx
 
     bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
 
@@ -196,10 +192,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
             + dpi*div(theta0*v)*dx
             + cp*inner(dv, n)*theta*pi_boundary*bmeasure
         )
-        if state.geopotential_form:
-            F += - div(dv)*Phi*dx + inner(dv, n)*Phi*bmeasure
-        else:
-            F += g*inner(dv, state.k)*dx
+        F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
