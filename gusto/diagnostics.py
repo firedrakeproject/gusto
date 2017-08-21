@@ -1,12 +1,12 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, exp
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy"]
 
 
 class Diagnostics(object):
@@ -211,6 +211,66 @@ class ExnerPi(DiagnosticField):
         theta = state.fields(self.theta_name)
         Pi = exner(theta, rho, state)
         return self.field.interpolate(Pi)
+
+
+class Theta_e(DiagnosticField):
+    name = "Theta_e"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Theta_e, self).setup(state, space=space)
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cp = X.cp
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        p = p_0 * (R_d * theta * rho / p_0) ** (1.0 / (1.0 - kappa))
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+        w_c = state.fields('water_c')
+        w_t = w_c + w_v
+
+        return self.field.interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
+
+
+class InternalEnergy(DiagnosticField):
+    name = "InternalEnergy"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(InternalEnergy, self).setup(state, space=space)
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cv = X.cv
+        c_vv = X.c_vv
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        w_c = state.fields('water_c')
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+
+        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pv * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
 
 
 class Sum(DiagnosticField):
