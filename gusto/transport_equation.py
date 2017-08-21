@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod
+macfrom abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
@@ -152,12 +152,10 @@ class AdvectionEquation(TransportEquation):
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
-        print("JEMMA1:", vector_manifold)
         if vector_manifold:
             self.vector_manifold = True
         else:
             self.vector_manifold = False
-        print("JEMMA2:", self.vector_manifold)
 
     def advection_term(self, q):
 
