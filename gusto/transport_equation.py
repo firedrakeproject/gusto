@@ -27,7 +27,7 @@ class TransportEquation(object, metaclass=ABCMeta):
                         linear solver.
     """
 
-    def __init__(self, state, V, ibp="once", solver_params=None):
+    def __init__(self, state, V, *, ibp="once", solver_params=None):
         self.state = state
         self.V = V
         self.ibp = ibp
@@ -98,7 +98,7 @@ class LinearAdvection(TransportEquation):
     """
 
     def __init__(self, state, V, qbar, ibp=None, equation_form="advective", solver_params=None):
-        super(LinearAdvection, self).__init__(state, V, ibp, solver_params)
+        super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
@@ -145,17 +145,19 @@ class AdvectionEquation(TransportEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="once", equation_form="advective",
+    def __init__(self, state, V, *, ibp="once", equation_form="advective",
                  vector_manifold=False, solver_params=None):
-        super(AdvectionEquation, self).__init__(state, V, ibp, solver_params)
+        super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
+        print("JEMMA1:", vector_manifold)
         if vector_manifold:
             self.vector_manifold = True
         else:
             self.vector_manifold = False
+        print("JEMMA2:", self.vector_manifold)
 
     def advection_term(self, q):
 
@@ -218,7 +220,11 @@ class EmbeddedDGAdvection(AdvectionEquation):
         else:
             self.space = Vdg
 
-        super(EmbeddedDGAdvection, self).__init__(state, self.space, ibp, equation_form, solver_params)
+        super().__init__(state=state,
+                         V=self.space,
+                         ibp=ibp,
+                         equation_form=equation_form,
+                         solver_params=solver_params)
 
 
 class SUPGAdvection(AdvectionEquation):
@@ -260,7 +266,9 @@ class SUPGAdvection(AdvectionEquation):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(SUPGAdvection, self).__init__(state, V, ibp, equation_form, solver_params)
+        super().__init__(state=state, V=V, ibp=ibp,
+                         equation_form=equation_form,
+                         solver_params=solver_params)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp == "once":
@@ -326,8 +334,9 @@ class VectorInvariant(TransportEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="once", solver_params=None):
-        super(VectorInvariant, self).__init__(state, V, ibp, solver_params)
+    def __init__(self, state, V, *, ibp="once", solver_params=None):
+        super().__init__(state=state, V=V, ibp=ibp,
+                         solver_params=solver_params)
 
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
 
@@ -396,6 +405,6 @@ class EulerPoincare(VectorInvariant):
     """
 
     def advection_term(self, q):
-        L = super(EulerPoincare, self).advection_term(q)
+        L = super().advection_term(q)
         L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L
