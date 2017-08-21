@@ -1,4 +1,4 @@
-macfrom abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
@@ -135,13 +135,13 @@ class AdvectionEquation(TransportEquation):
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
-    :arg vector_manifold: Boolean. If true adds extra terms that are needed for
-    advecting vector equations on manifolds.
     :arg equation_form: (optional) string, can take the values 'continuity',
                         which means the equation is in continuity form
                         L(q) = div(u*q), or 'advective', which means the
                         equation is in advective form L(q) = u dot grad(q).
                         Default is "advective"
+    :arg vector_manifold: Boolean. If true adds extra terms that are needed for
+    advecting vector equations on manifolds.
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
@@ -202,6 +202,8 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         L(q) = div(u*q), or 'advective', which means the
                         equation is in advective form L(q) = u dot grad(q).
                         Default is "advective"
+    :arg vector_manifold: Boolean. If true adds extra terms that are needed for
+    advecting vector equations on manifolds.
     :arg Vdg: (optional) :class:`.FunctionSpace object. The embedding function
               space. Defaults to None which means that a broken space is
               constructed for you.
@@ -209,7 +211,7 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         linear solver.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", Vdg=None, solver_params=None):
+    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None):
 
         if Vdg is None:
             # Create broken space, functions and projector
@@ -222,6 +224,7 @@ class EmbeddedDGAdvection(AdvectionEquation):
                          V=self.space,
                          ibp=ibp,
                          equation_form=equation_form,
+                         vector_manifold=vector_manifold,
                          solver_params=solver_params)
 
 
