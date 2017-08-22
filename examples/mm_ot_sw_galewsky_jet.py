@@ -166,6 +166,7 @@ def initialise_fn():
         D0 += D_pert
     pv(state)
 
+
 pv.setup(state)
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
