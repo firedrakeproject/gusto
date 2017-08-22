@@ -36,22 +36,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.mesh_generator = mesh_generator
         self.dt = state.timestepping.dt
 
-        # list of fields that are advected as part of the nonlinear iteration
-        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
-
         if state.timestepping.move_mesh:
             self.X0 = Function(state.mesh.coordinates)
             self.X1 = Function(state.mesh.coordinates)
             self.Advection = MovingMeshAdvectionStep(
-                state, fieldlist,
+                state,
                 state.xn, state.xnp1,
-                advection_dict, state.timestepping.alpha,
+                advected_fields, state.timestepping.alpha,
                 self.X0, self.X1)
         else:
             self.Advection = AdvectionStep(
-                state, fieldlist,
+                state,
                 state.xn, state.xnp1,
-                advection_dict, state.timestepping.alpha)
+                advected_fields, state.timestepping.alpha)
 
     def _apply_bcs(self):
         """
@@ -269,17 +266,13 @@ class AdvectionTimestepper(BaseTimestepper):
             with timed_stage("Dump output"):
                 state.dump(t)
 
-            with timed_stage("Dump output"):
-                state.dump(t)
-
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
 
 
 class AdvectionStep(object):
-    def __init__(self, state, fieldlist, xn, xnp1, advected_fields, alpha):
+    def __init__(self, state, xn, xnp1, advected_fields, alpha):
         self.state = state
-        self.fieldlist = fieldlist
         self.xn = xn
         self.xnp1 = xnp1
         self.advected_fields = advected_fields
@@ -311,10 +304,10 @@ class AdvectionStep(object):
 
 
 class MovingMeshAdvectionStep(AdvectionStep):
-    def __init__(self, state, fieldlist, xn, xnp1,
+    def __init__(self, state, xn, xnp1,
                  advected_fields, alpha, X0, X1):
         super(MovingMeshAdvectionStep, self).__init__(
-            state, fieldlist, xn, xnp1, advected_fields, alpha)
+            state, xn, xnp1, advected_fields, alpha)
 
         x_mid = Function(state.xstar.function_space())
         self.x_mid = {name: func for (name, func) in
