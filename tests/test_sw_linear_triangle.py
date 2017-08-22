@@ -3,7 +3,7 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
     FunctionSpace, Function
 from math import pi
-import json
+from netCDF4 import Dataset
 
 
 def setup_sw(dirname):
@@ -78,10 +78,15 @@ def run_sw(dirname):
 def test_sw_linear(tmpdir):
     dirname = str(tmpdir)
     run_sw(dirname)
-    with open(path.join(dirname, "sw_linear_w2/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
+    filename = path.join(dirname, "sw_linear_w2/diagnostics.nc")
+    data = Dataset(filename, "r")
+
+    Derr = data.groups["D_error"]
+    D = data.groups["D"]
+    Dl2 = Derr["l2"][-1]/D["l2"][0]
+    uerr = data.groups["u_error"]
+    u = data.groups["u"]
+    ul2 = uerr["l2"][-1]/u["l2"][0]
 
     assert Dl2 < 3.e-3
     assert ul2 < 6.e-2

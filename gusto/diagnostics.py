@@ -11,6 +11,8 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
 
 class Diagnostics(object):
 
+    available_diagnostics = ["min", "max", "rms", "l2", "total"]
+
     def __init__(self, *fields):
 
         self.fields = list(fields)
@@ -56,7 +58,10 @@ void maxify(double *a, double *b) {
 
     @staticmethod
     def total(f):
-        return assemble(f * dx)
+        if len(f.ufl_shape) == 0:
+            return assemble(f * dx)
+        else:
+            pass
 
 
 class DiagnosticField(object, metaclass=ABCMeta):

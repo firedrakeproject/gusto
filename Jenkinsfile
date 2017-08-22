@@ -31,6 +31,7 @@ pipeline {
                 timestamps {
                     sh '''
 . build/firedrake/bin/activate
+python -m pip install -r requirements.txt
 python -m pip install -e .
 '''
                 }
@@ -51,8 +52,6 @@ make lint
                 timestamps {
                     sh '''
 . build/firedrake/bin/activate
-export PYOP2_CACHE_DIR=${VIRTUAL_ENV}/pyop2_cache
-export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=${VIRTUAL_ENV}/tsfc_cache
 python $(which firedrake-clean)
 python -m pytest -n 4 -v tests
 '''

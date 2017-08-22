@@ -51,6 +51,9 @@ class OutputParameters(Configuration):
     steady_state_error_fields = []
     #: List of fields for computing perturbations
     perturbation_fields = []
+    #: List of ordered pairs (name, points) where name is the field
+    # name and points is the points at which to dump them
+    point_data = []
 
 
 class CompressibleParameters(Configuration):
