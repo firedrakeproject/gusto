@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 import numpy as np
 from firedrake import Function, VectorFunctionSpace, SpatialCoordinate, Mesh, \
     FunctionSpace, TensorFunctionSpace, dx, assemble, Constant, split, \
