@@ -3,7 +3,7 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
     FunctionSpace, Function
 from math import pi
-import json
+from netCDF4 import Dataset
 import pytest
 
 
@@ -85,10 +85,15 @@ def test_sw_setup(tmpdir, euler_poincare):
 
     dirname = str(tmpdir)
     run_sw(dirname, euler_poincare=euler_poincare)
-    with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
+    filename = path.join(dirname, "sw/diagnostics.nc")
+    data = Dataset(filename, "r")
+
+    Derr = data.groups["D_error"]
+    D = data.groups["D"]
+    Dl2 = Derr["l2"][-1]/D["l2"][0]
+    uerr = data.groups["u_error"]
+    u = data.groups["u"]
+    ul2 = uerr["l2"][-1]/u["l2"][0]
 
     assert Dl2 < 5.e-4
     assert ul2 < 5.e-3

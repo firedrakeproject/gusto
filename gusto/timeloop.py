@@ -82,7 +82,7 @@ class Timestepper(BaseTimestepper):
 
         state.xb.assign(state.xn)
 
-    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
+    def run(self, t, tmax, pickup=False):
         state = self.state
         state.setup_diagnostics()
 
@@ -104,13 +104,15 @@ class Timestepper(BaseTimestepper):
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, diagnostic_everydump, pickup)
+            t = state.dump(t, pickup)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print("STEP", t, dt)
 
             t += dt
+            state.t.assign(t)
+
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
@@ -164,9 +166,8 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, diagnostic_everydump, pickup=False)
+                state.dump(t, pickup=False)
 
-        state.diagnostic_dump()
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
@@ -211,8 +212,6 @@ class AdvectionTimestepper(BaseTimestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t)
-
-        state.diagnostic_dump()
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}

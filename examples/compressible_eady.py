@@ -204,4 +204,4 @@ stepper = Timestepper(state, advected_fields, linear_solver, forcing)
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax)
