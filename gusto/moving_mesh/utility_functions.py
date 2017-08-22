@@ -2,6 +2,9 @@ from __future__ import absolute_import
 import numpy as np
 
 
+__all__ = ["spherical_logarithm"]
+
+
 def spherical_logarithm(X0, X1, v, R):
     """
     Find vector function v such that X1 = exp(v)X0 on

@@ -8,6 +8,9 @@ from firedrake import FunctionSpace, VectorFunctionSpace, TensorFunctionSpace, \
     RW, READ, Mesh
 
 
+__all__ = ["MonitorFunction"]
+
+
 class MonitorFunction(object):
     """
     Base class for monitor function generation
