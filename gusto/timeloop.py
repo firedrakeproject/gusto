@@ -119,17 +119,9 @@ class Timestepper(BaseTimestepper):
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
         # list of fields that are passively advected (and possibly diffused)
-<<<<<<< HEAD
-        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
-||||||| merged common ancestors
-        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
-        # list of fields that are advected as part of the nonlinear iteration
-        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
-=======
         passive_advection = [(name, scheme) for name, scheme in self.advected_fields if name not in state.fieldlist]
         # list of fields that are advected as part of the nonlinear iteration
         active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
->>>>>>> master
 
         dt = self.dt
         alpha = state.timestepping.alpha
