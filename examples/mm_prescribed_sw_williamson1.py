@@ -1,4 +1,5 @@
 from math import pi
+import sys
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector, parameters
