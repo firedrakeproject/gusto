@@ -33,6 +33,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.advected_fields = ()
         else:
             self.advected_fields = tuple(advected_fields)
+
         self.mesh_generator = mesh_generator
         self.dt = state.timestepping.dt
 
@@ -88,7 +89,12 @@ class Timestepper(BaseTimestepper):
     def __init__(self, state, advected_fields, linear_solver, forcing,
                  diffused_fields=None, physics_list=None, mesh_generator=None):
 
-        super(Timestepper, self).__init__(state, advected_fields, mesh_generator)
+        # list of fields that are advected as part of the nonlinear iteration
+        active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
+        # list of fields that are passively advected (and possibly diffused)
+        self.passive_advection = [(name, scheme) for name, scheme in advected_fields if name not in state.fieldlist]
+
+        super(Timestepper, self).__init__(state, active_advection, mesh_generator)
         self.linear_solver = linear_solver
         self.forcing = forcing
         if diffused_fields is None:
@@ -115,10 +121,6 @@ class Timestepper(BaseTimestepper):
                         zip(state.fieldlist, state.xstar.split())}
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
-        # list of fields that are passively advected (and possibly diffused)
-        passive_advection = [(name, scheme) for name, scheme in self.advected_fields if name not in state.fieldlist]
-        # list of fields that are advected as part of the nonlinear iteration
-        active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
 
         dt = self.dt
         alpha = state.timestepping.alpha
@@ -177,10 +179,13 @@ class Timestepper(BaseTimestepper):
 
             self._apply_bcs()
 
-            for name, advection in passive_advection:
+            alpha = self.state.timestepping.alpha
+            un = state.xn.split()[0]
+            unp1 = state.xnp1.split()[0]
+            for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
                 # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                advection.update_ubar((1 - alpha)*un + alpha*unp1)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
@@ -216,10 +221,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.setup_diagnostics()
 
         dt = self.dt
-        xn_fields = {name: func for (name, func) in
-                     zip(state.fieldlist, state.xn.split())}
-        xnp1_fields = {name: func for (name, func) in
-                       zip(state.fieldlist, state.xnp1.split())}
+        xn_fields = {field.name(): field for field in state.fields if field.name() in [y[0] for y in self.advected_fields]}
 
         with timed_stage("Dump output"):
             state.setup_dump()
@@ -252,12 +254,7 @@ class AdvectionTimestepper(BaseTimestepper):
             # At the moment, this is automagically moving the mesh (if
             # appropriate), which is not ideal
             with timed_stage("Advection"):
-                self.Advection.apply(xn_fields, xnp1_fields)
-
-            # technically the above advection could be done "in place",
-            # but writing into a new field and assigning back is more
-            # robust to future changes
-            state.xn.assign(state.xnp1)
+                self.Advection.apply(xn_fields, xn_fields)
 
             with timed_stage("Physics"):
                 for physics in self.physics_list:
