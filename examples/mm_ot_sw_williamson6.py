@@ -89,14 +89,14 @@ f.interpolate(fexpr)  # Coriolis frequency (1/s)
 u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
 D0.interpolate(Dexpr)
 
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0), ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["D"] = SSPRK3(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -115,7 +115,7 @@ mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 
 mesh_generator.get_first_mesh(initialise_fn)
 
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing, mesh_generator=mesh_generator)
 
 stepper.run(t=0, tmax=tmax)

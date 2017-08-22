@@ -23,7 +23,7 @@ fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 
-for ref_level, dt in ref_dt.iteritems():
+for ref_level, dt in ref_dt.items():
 
     dirname = "mm_ot_sw_W2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
@@ -66,16 +66,16 @@ for ref_level, dt in ref_dt.iteritems():
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0), ('D', D0)])
 
     ueqn = EulerPoincare(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
     state.uexpr = uexpr
 
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["D"] = SSPRK3(state, D0, Deqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     linear_solver = ShallowWaterSolver(state)
 
@@ -92,7 +92,7 @@ for ref_level, dt in ref_dt.iteritems():
     mesh_generator.get_first_mesh(initialise_fn)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           sw_forcing, mesh_generator=mesh_generator)
 
     stepper.run(t=0, tmax=tmax)

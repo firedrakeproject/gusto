@@ -4,13 +4,17 @@ from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
     Constant, as_vector, parameters
 
 parameters["pyop2_options"]["lazy_evaluation"] = False
-# setup resolution and timestepping parameters for convergence test
-# ref_dt = {3:3000., 4:1500., 5:750., 6:375}
-ref_dt = {3: 1000.}
+
+day = 24.*60.*60.
+if '--running-tests' in sys.argv:
+    ref_dt = {3: 1000.}
+    tmax = 3000.
+else:
+    ref_dt = {3: 1000.}
+    tmax = 12*day
 
 # setup shallow water parameters
 R = 6371220.
-day = 24.*60.*60.
 u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 # setup input that doesn't change with ref level or dt
@@ -19,7 +23,7 @@ parameters = ShallowWaterParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-for ref_level, dt in ref_dt.iteritems():
+for ref_level, dt in ref_dt.items():
 
     dirname = "mm_presc_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
@@ -49,7 +53,7 @@ for ref_level, dt in ref_dt.iteritems():
     u0.project(uexpr)
     Dexpr = Expression("R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0)) < rc ? (h0/2.0)*(1 + cos(pi*R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0))/rc)) : 0.0", R=R, rc=R/3., h0=1000., x0=0.0, x1=-R, x2=0.0)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0), ('D', D0)])
 
     eqn_form = "continuity"
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
@@ -58,9 +62,8 @@ for ref_level, dt in ref_dt.iteritems():
     dt = state.timestepping.dt
     state.uexpr = uexpr
 
-    advection_dict = {}
-    advection_dict["D"] = SSPRK3(state, D0, Deqn)
-    advection_dict["u"] = NoAdvection(state, u0)
+    advected_fields = []
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     class MeshRotator(MeshGenerator):
         def __init__(self, mesh, R, vscale, dt):
@@ -75,6 +78,6 @@ for ref_level, dt in ref_dt.iteritems():
     mesh_rotator = MeshRotator(mesh, R, vscale, dt)
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict, mesh_generator=mesh_rotator)
+    stepper = AdvectionTimestepper(state, advected_fields, mesh_generator=mesh_rotator)
 
-    stepper.run(t=0, tmax=12*day)
+    stepper.run(t=0, tmax=tmax)

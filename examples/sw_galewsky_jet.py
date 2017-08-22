@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, \
-    Constant, ge, le, exp, cos
+    Constant, ge, le, exp, cos, conditional, interpolate
 from scipy import pi
 import sys
 
@@ -134,13 +134,13 @@ if perturb:
     D_pert = Function(D0.function_space()).interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
     D0 += D_pert
 
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0), ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["D"] = SSPRK3(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -148,7 +148,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

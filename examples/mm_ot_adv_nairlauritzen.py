@@ -1,4 +1,5 @@
 from math import pi
+import sys
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Expression, Constant, parameters, \
     acos, Min, sin, cos
@@ -9,6 +10,8 @@ parameters["pyop2_options"]["lazy_evaluation"] = False
 ref_level = 3
 T = 5.0
 dt = 0.002*T
+if '--running-tests' in sys.argv:
+    T = dt
 
 R = 1.0
 
@@ -73,7 +76,7 @@ uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0), ('D', D0)])
 
 eqn_form = "advective"
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
@@ -81,9 +84,9 @@ Deqn = AdvectionEquation(state, D0.function_space(), equation_form=eqn_form)
 state.uexpr = uexpr
 state.t_const = tc
 
-advection_dict = {}
-advection_dict["D"] = SSPRK3(state, D0, Deqn)
-advection_dict["u"] = NoAdvection(state, u0)
+advected_fields = []
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+advected_fields.append(("u", NoAdvection(state, u0)))
 
 
 def initialise_fn():
@@ -97,6 +100,6 @@ mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 mesh_generator.get_first_mesh(initialise_fn)
 
 # build time stepper
-stepper = AdvectionTimestepper(state, advection_dict, mesh_generator=mesh_generator)
+stepper = AdvectionTimestepper(state, advected_fields, mesh_generator=mesh_generator)
 
 stepper.run(t=0, tmax=T)
