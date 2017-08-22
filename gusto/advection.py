@@ -1,9 +1,11 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector
 from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
+
+
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
 
 
 def embedded_dg(original_apply):
@@ -25,7 +27,7 @@ def embedded_dg(original_apply):
     return get_apply
 
 
-class Advection(object):
+class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
@@ -35,7 +37,6 @@ class Advection(object):
     that field satisfies
     :arg solver_params: solver_parameters
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, field, equation=None, solver_params=None):
 

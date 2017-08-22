@@ -1,7 +1,9 @@
+from os import path
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression
-import json
+    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, sqrt, \
+    conditional, cos
+from netCDF4 import Dataset
 from math import pi
 
 # This setup creates a bubble of water vapour that is advected
@@ -56,10 +58,9 @@ def setup_condens(dirname):
     water_c0 = state.fields("water_c", Vt)
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate initial rho
@@ -67,14 +68,14 @@ def setup_condens(dirname):
                                      solve_for_rho=True)
 
     # set up water_v
-    w_expr = Function(Vt).interpolate(
-        Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
-                   "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
-                   "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
-                   xc=500., zc=350., rc=250.))
+    xc = 500.
+    zc = 350.
+    rc = 250.
+    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+    w_expr = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
     # set up velocity field
-    u_max = Constant(10.0)
+    u_max = 10.0
 
     psi_expr = ((-u_max * L / pi) *
                 sin(2 * pi * x[0] / L) *
@@ -86,9 +87,13 @@ def setup_condens(dirname):
     rho0.interpolate(rho_b)
     water_v0.interpolate(w_expr)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'water_v': water_v0, 'water_c': water_c0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise([('u', u0),
+                      ('rho', rho0),
+                      ('theta', theta0),
+                      ('water_v', water_v0),
+                      ('water_c', water_c0)])
+    state.set_reference_profiles([('rho', rho_b),
+                                  ('theta', theta_b)])
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
@@ -97,17 +102,17 @@ def setup_condens(dirname):
                              equation_form="advective")
 
     # build advection dictionary
-    advection_dict = {}
-    advection_dict["u"] = NoAdvection(state, u0, None)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
-    advection_dict["water_v"] = SSPRK3(state, water_v0, thetaeqn)
-    advection_dict["water_c"] = SSPRK3(state, water_c0, thetaeqn)
+    advected_fields = []
+    advected_fields.append(("u", NoAdvection(state, u0, None)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advected_fields.append(("water_v", SSPRK3(state, water_v0, thetaeqn)))
+    advected_fields.append(("water_c", SSPRK3(state, water_c0, thetaeqn)))
 
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict, physics_list=physics_list)
+    stepper = AdvectionTimestepper(state, advected_fields, physics_list=physics_list)
 
     return stepper, 5.0
 
@@ -122,11 +127,12 @@ def test_condens_setup(tmpdir):
 
     dirname = str(tmpdir)
     run_condens(dirname)
-    with open(path.join(dirname, "condens/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
+    filename = path.join(dirname, "condens/diagnostics.nc")
+    data = Dataset(filename, "r")
 
-    water_t_0 = data["water_v_plus_water_c"]["total"][0]
-    water_t_T = data["water_v_plus_water_c"]["total"][-1]
+    water = data.groups["water_v_plus_water_c"]
+    total = water.variables["total"]
+    water_t_0 = total[0]
+    water_t_T = total[-1]
 
     assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12

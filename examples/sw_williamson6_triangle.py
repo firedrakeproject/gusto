@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, cos, sin, pi
+from firedrake import IcosahedralSphereMesh, cos, sin, SpatialCoordinate, \
+    FunctionSpace
 import sys
 
 dt = 900.
@@ -23,8 +23,8 @@ else:
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)
@@ -47,17 +47,15 @@ state = State(mesh, horizontal_degree=1,
 # Initial/current conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-Rc = Constant(R)
-omega = Constant(7.848e-6)  # note lower-case, not the same as Omega
-K = Constant(7.848e-6)
-h0 = Constant(H)
-g = Constant(parameters.g)
-Omega = Constant(parameters.Omega)
+omega = 7.848e-6  # note lower-case, not the same as Omega
+K = 7.848e-6
+g = parameters.g
+Omega = parameters.Omega
 
 theta, lamda = latlon_coords(mesh)
 
-u_zonal = Rc*omega*cos(theta) + Rc*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
-u_merid = -Rc*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
+u_zonal = R*omega*cos(theta) + R*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
+u_merid = -R*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
 
 uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
@@ -74,30 +72,30 @@ def Ctheta(theta):
     return 0.25*(K**2)*(cos(theta)**8)*(5*cos(theta)**2 - 6)
 
 
-Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
+Dexpr = H + (R**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
 u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
 
 if perturb:
-    x0, y0, z0 = SpatialCoordinate(mesh)
     thetac = (40/180.)*pi  # 40 deg latitude
     lamdac = (50/360.)*2*pi  # 50 deg longitude
-    xc = Rc*cos(thetac)*cos(lamdac)
-    yc = Rc*cos(thetac)*sin(lamdac)
-    zc = Rc*sin(thetac)
-    Dpert = (x0*xc + y0*yc + z0*zc)/(40.*Rc**2)
+    xc = R*cos(thetac)*cos(lamdac)
+    yc = R*cos(thetac)*sin(lamdac)
+    zc = R*sin(thetac)
+    Dpert = (x[0]*xc + x[1]*yc + x[2]*zc)/(40.*R**2)
     D0.interpolate(Dexpr + Dpert)
 else:
     D0.interpolate(Dexpr)
 
-state.initialise({'u': u0, 'D': D0})
+state.initialise([('u', u0),
+                  ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["D"] = SSPRK3(state, D0, Deqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
@@ -105,7 +103,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

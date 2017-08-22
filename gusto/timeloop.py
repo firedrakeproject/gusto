@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
@@ -8,18 +7,20 @@ from gusto.moving_mesh.utility_functions import spherical_logarithm
 from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver
 
 
-class BaseTimestepper(object):
+__all__ = ["Timestepper", "AdvectionTimestepper"]
+
+
+class BaseTimestepper(object, metaclass=ABCMeta):
     """
     Base timestepping class for Gusto
 
     :arg state: a :class:`.State` object
-    :arg advection_dict a dictionary with entries fieldname: scheme, where
-        fieldname is the name of the field to be advection and scheme is an
-        :class:`.AdvectionScheme` object
+    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to advect, and the
+        :class:`~.Advection` to use.
     """
-    __metaclass__ = ABCMeta
 
-    def __init__(self, state, advection_dict, mesh_generator=None):
+    def __init__(self, state, advected_fields, mesh_generator=None):
         # TODO: decide on consistent way of doing this. Ideally just
         # use mesh_generator, but seems tricky in other places.
         if state.timestepping.move_mesh:
@@ -28,7 +29,10 @@ class BaseTimestepper(object):
             assert state.timestepping.move_mesh
 
         self.state = state
-        self.advection_dict = advection_dict
+        if advected_fields is None:
+            self.advected_fields = ()
+        else:
+            self.advected_fields = tuple(advected_fields)
         self.mesh_generator = mesh_generator
         self.dt = state.timestepping.dt
 
@@ -74,22 +78,26 @@ class Timestepper(BaseTimestepper):
     scheme for the dynamical core.
 
     :arg state: a :class:`.State` object
-    :arg advection_dict a dictionary with entries fieldname: scheme, where
-        fieldname is the name of the field to be advection and scheme is an
-        :class:`.AdvectionScheme` object
+    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to advect, and the
+        :class:`~.Advection` to use.
+    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advection_dict, linear_solver, forcing,
-                 diffusion_dict=None, physics_list=None, mesh_generator=None):
+    def __init__(self, state, advected_fields, linear_solver, forcing,
+                 diffused_fields=None, physics_list=None, mesh_generator=None):
 
-        super(Timestepper, self).__init__(state, advection_dict, mesh_generator)
+        super(Timestepper, self).__init__(state, advected_fields, mesh_generator)
         self.linear_solver = linear_solver
         self.forcing = forcing
-        self.diffusion_dict = {}
-        if diffusion_dict is not None:
-            self.diffusion_dict.update(diffusion_dict)
+        if diffused_fields is None:
+            self.diffused_fields = ()
+        else:
+            self.diffused_fields = tuple(diffused_fields)
         if physics_list is not None:
             self.physics_list = physics_list
         else:
@@ -102,15 +110,26 @@ class Timestepper(BaseTimestepper):
 
         state.xb.assign(state.xn)
 
-    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
+    def run(self, t, tmax, pickup=False):
         state = self.state
+        state.setup_diagnostics()
 
         xstar_fields = {name: func for (name, func) in
                         zip(state.fieldlist, state.xstar.split())}
         xp_fields = {name: func for (name, func) in
                      zip(state.fieldlist, state.xp.split())}
         # list of fields that are passively advected (and possibly diffused)
+<<<<<<< HEAD
         passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
+||||||| merged common ancestors
+        passive_fieldlist = [name for name in self.advection_dict.keys() if name not in state.fieldlist]
+        # list of fields that are advected as part of the nonlinear iteration
+        fieldlist = [name for name in self.advection_dict.keys() if name in state.fieldlist]
+=======
+        passive_advection = [(name, scheme) for name, scheme in self.advected_fields if name not in state.fieldlist]
+        # list of fields that are advected as part of the nonlinear iteration
+        active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
+>>>>>>> master
 
         dt = self.dt
         alpha = state.timestepping.alpha
@@ -122,11 +141,11 @@ class Timestepper(BaseTimestepper):
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, diagnostic_everydump, pickup)
+            t = state.dump(t, pickup)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-                print "STEP", t, dt
+                print("STEP", t, dt)
 
             if state.timestepping.move_mesh:
                 # This is used as the "old mesh" domain in projections
@@ -136,11 +155,14 @@ class Timestepper(BaseTimestepper):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
 
             t += dt
-            state.xnp1.assign(state.xn)
+
+            state.t.assign(t)
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                    state.xstar, mu_alpha=mu_alpha[0])
+
+            state.xnp1.assign(state.xn)
 
             for k in range(state.timestepping.maxk):
                 # At the moment, this is automagically moving the mesh (if
@@ -166,9 +188,8 @@ class Timestepper(BaseTimestepper):
 
             self._apply_bcs()
 
-            for name in passive_fieldlist:
+            for name, advection in passive_advection:
                 field = getattr(state.fields, name)
-                advection = self.advection_dict[name]
                 # first computes ubar from state.xn and state.xnp1
                 advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
@@ -178,7 +199,7 @@ class Timestepper(BaseTimestepper):
             state.xn.assign(state.xnp1)
 
             with timed_stage("Diffusion"):
-                for name, diffusion in self.diffusion_dict.iteritems():
+                for name, diffusion in self.diffused_fields:
                     field = getattr(state.fields, name)
                     diffusion.apply(field, field)
 
@@ -187,17 +208,15 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, diagnostic_everydump, pickup=False)
+                state.dump(t, pickup=False)
 
-        state.diagnostic_dump()
-        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
+        print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advection_dict, physics_list=None, mesh_generator=None):
-
-        super(AdvectionTimestepper, self).__init__(state, advection_dict, mesh_generator)
+    def __init__(self, state, advected_fields, physics_list=None, mesh_generator=None):
+        super(AdvectionTimestepper, self).__init__(state, advected_fields, mesh_generator)
         if physics_list is not None:
             self.physics_list = physics_list
         else:
@@ -205,6 +224,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
     def run(self, t, tmax, x_end=None):
         state = self.state
+        state.setup_diagnostics()
 
         dt = self.dt
         xn_fields = {name: func for (name, func) in
@@ -218,7 +238,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-                print "STEP", t, dt
+                print("STEP", t, dt)
 
             # Horrible hacky magic: for time dependent stuff, e.g.
             # expressions for u, or forcing, stick a ufl Constant onto
@@ -257,19 +277,20 @@ class AdvectionTimestepper(BaseTimestepper):
             with timed_stage("Dump output"):
                 state.dump(t)
 
-        state.diagnostic_dump()
+            with timed_stage("Dump output"):
+                state.dump(t)
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}
 
 
 class AdvectionStep(object):
-    def __init__(self, state, fieldlist, xn, xnp1, advection_dict, alpha):
+    def __init__(self, state, fieldlist, xn, xnp1, advected_fields, alpha):
         self.state = state
         self.fieldlist = fieldlist
         self.xn = xn
         self.xnp1 = xnp1
-        self.advection_dict = advection_dict
+        self.advected_fields = advected_fields
         self.alpha = alpha
 
     def apply(self, x_in, x_out):
@@ -289,19 +310,19 @@ class AdvectionStep(object):
             unp1.assign(un)
 
         # Update ubar for each advection object
-        for field, advection in self.advection_dict.iteritems():
+        for field, advection in self.advected_fields:
             advection.update_ubar((1 - self.alpha)*un + self.alpha*unp1)
 
         # Advect fields
-        for field, advection in self.advection_dict.iteritems():
+        for field, advection in self.advected_fields:
             advection.apply(x_in[field], x_out[field])
 
 
 class MovingMeshAdvectionStep(AdvectionStep):
     def __init__(self, state, fieldlist, xn, xnp1,
-                 advection_dict, alpha, X0, X1):
+                 advected_fields, alpha, X0, X1):
         super(MovingMeshAdvectionStep, self).__init__(
-            state, fieldlist, xn, xnp1, advection_dict, alpha)
+            state, fieldlist, xn, xnp1, advected_fields, alpha)
 
         x_mid = Function(state.xstar.function_space())
         self.x_mid = {name: func for (name, func) in
@@ -317,7 +338,7 @@ class MovingMeshAdvectionStep(AdvectionStep):
     def projections(self, x_in):
         if not hasattr(self, "_projections"):
             self._projections = {}
-            for field, advection in self.advection_dict.iteritems():
+            for field, advection in self.advected_fields:
                 if isinstance(advection, NoAdvection):
                     pass
                 elif (hasattr(advection.equation, "continuity") and advection.equation.continuity) or isinstance(advection.equation, EulerPoincare):
@@ -369,7 +390,7 @@ class MovingMeshAdvectionStep(AdvectionStep):
             self.state.mesh.coordinates.assign(X1)
             unp1.project(self.state.uexpr)
 
-        for field, advection in self.advection_dict.iteritems():
+        for field, advection in self.advected_fields:
             # advect field on old mesh
             self.state.mesh.coordinates.assign(X0)
             advection.update_ubar((1 - self.alpha)*(un - self.v_V1))

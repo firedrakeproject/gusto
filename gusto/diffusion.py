@@ -1,17 +1,18 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import TestFunction, TrialFunction, \
     Function, inner, outer, grad, avg, dx, dS_h, dS_v, \
     FacetNormal, LinearVariationalProblem, LinearVariationalSolver, action
 
 
-class Diffusion(object):
+__all__ = ["InteriorPenalty"]
+
+
+class Diffusion(object, metaclass=ABCMeta):
     """
     Base class for diffusion schemes for gusto.
 
     :arg state: :class:`.State` object.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state):
         self.state = state

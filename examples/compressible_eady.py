@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import as_vector, SpatialCoordinate,\
     PeriodicRectangleMesh, ExtrudedMesh, \
-    exp, cos, sin, cosh, sinh, tanh, pi
+    exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt
 import sys
 
 day = 24.*60.*60.
@@ -53,7 +53,7 @@ timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='compressible_eady',
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['rho', 'theta'])
+                          perturbation_fields=['rho', 'theta', 'ExnerPi'])
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
@@ -67,14 +67,14 @@ diagnostics = Diagnostics(*fieldlist)
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), VelocityY(),
-                     ExnerPi(), ExnerPi_perturbation(),
+                     ExnerPi(), ExnerPi(reference=True),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
-                     Sum(CompressibleKineticEnergy(),
-                         CompressibleEadyPotentialEnergy()),
-                     Difference(CompressibleKineticEnergy(),
-                                CompressibleKineticEnergyY())]
+                     Sum("CompressibleKineticEnergy",
+                         "CompressibleEadyPotentialEnergy"),
+                     Difference("CompressibleKineticEnergy",
+                                "CompressibleKineticEnergyY")]
 
 # setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
@@ -160,10 +160,13 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
+state.initialise([('u', u0),
+                  ('rho', rho0),
+                  ('theta', theta0)])
 
 # set the background profiles
-state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+state.set_reference_profiles([('rho', rho_b),
+                              ('theta', theta_b)])
 
 ##############################################################################
 # Set up advection schemes
@@ -173,37 +176,20 @@ ueqn = AdvectionEquation(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
 
-advection_dict = {}
-advection_dict["u"] = SSPRK3(state, u0, ueqn)
-advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
+advected_fields = []
+advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
+advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
 # Set up linear solver
-linear_solver_params = {'pc_type': 'fieldsplit',
-                        'pc_fieldsplit_type': 'schur',
-                        'ksp_type': 'gmres',
-                        'ksp_monitor_true_residual': False,
-                        'ksp_max_it': 100,
-                        'ksp_gmres_restart': 50,
-                        'pc_fieldsplit_schur_fact_type': 'FULL',
-                        'pc_fieldsplit_schur_precondition': 'selfp',
-                        'fieldsplit_0_ksp_type': 'preonly',
-                        'fieldsplit_0_pc_type': 'bjacobi',
-                        'fieldsplit_0_sub_pc_type': 'ilu',
-                        'fieldsplit_1_ksp_type': 'preonly',
-                        'fieldsplit_1_pc_type': 'gamg',
+linear_solver_params = {'ksp_monitor_true_residual': False,
                         'fieldsplit_1_pc_gamg_sym_graph': True,
-                        'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                        'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                        'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                        'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                        'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+                        'fieldsplit_1_mg_levels_ksp_max_it': 5}
 
-linear_solver = CompressibleSolver(state, params=linear_solver_params)
+linear_solver = CompressibleSolver(state, solver_parameters=linear_solver_params)
 
 ##############################################################################
 # Set up forcing
@@ -213,9 +199,9 @@ forcing = CompressibleEadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+stepper = Timestepper(state, advected_fields, linear_solver, forcing)
 
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax)

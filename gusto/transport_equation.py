@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
@@ -7,7 +6,10 @@ from firedrake import Function, TestFunction, TrialFunction, \
     curl, BrokenElement, FunctionSpace
 
 
-class TransportEquation(object):
+__all__ = ["LinearAdvection", "AdvectionEquation", "EmbeddedDGAdvection", "SUPGAdvection", "VectorInvariant", "EulerPoincare"]
+
+
+class TransportEquation(object, metaclass=ABCMeta):
     """
     Base class for transport equations in Gusto.
 
@@ -24,7 +26,6 @@ class TransportEquation(object):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, V, ibp="once", solver_params=None):
         self.state = state

@@ -1,7 +1,8 @@
+from os import path
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Expression, Constant
-import json
+    Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
+from netCDF4 import Dataset
 
 
 def setup_tracer(dirname):
@@ -46,10 +47,9 @@ def setup_tracer(dirname):
     tracer0 = state.fields("tracer", Vt)
 
     # Isentropic background state
-    Tsurf = 300.
-    thetab = Constant(Tsurf)
+    Tsurf = Constant(300.)
 
-    theta_b = Function(Vt).interpolate(thetab)
+    theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
 
     # Calculate initial rho
@@ -57,19 +57,23 @@ def setup_tracer(dirname):
                                      solve_for_rho=True)
 
     # set up perturbation to theta
-    theta_pert = Function(Vt).interpolate(
-        Expression("sqrt(pow(x[0]-xc,2)+pow(x[1]-zc,2))" +
-                   "> rc ? 0.0 : 0.25*(1. + cos((pi/rc)*" +
-                   "(sqrt(pow((x[0]-xc),2)+pow((x[1]-zc),2)))))",
-                   xc=500., zc=350., rc=250.))
+    xc = 500.
+    zc = 350.
+    rc = 250.
+    x = SpatialCoordinate(mesh)
+    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
+    theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
     theta0.interpolate(theta_b + theta_pert)
     rho0.interpolate(rho_b)
     tracer0.interpolate(theta0)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0,
-                      'tracer': tracer0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise([('u', u0),
+                      ('rho', rho0),
+                      ('theta', theta0),
+                      ('tracer', tracer0)])
+    state.set_reference_profiles([('rho', rho_b),
+                                  ('theta', theta_b)])
 
     # set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -79,43 +83,19 @@ def setup_tracer(dirname):
                              equation_form="advective")
 
     # build advection dictionary
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn)
-    advection_dict["tracer"] = SSPRK3(state, tracer0, thetaeqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advected_fields.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
 
     # Set up linear solver
-    schur_params = {'pc_type': 'fieldsplit',
-                    'pc_fieldsplit_type': 'schur',
-                    'ksp_type': 'gmres',
-                    'ksp_monitor_true_residual': True,
-                    'ksp_max_it': 100,
-                    'ksp_gmres_restart': 50,
-                    'pc_fieldsplit_schur_fact_type': 'FULL',
-                    'pc_fieldsplit_schur_precondition': 'selfp',
-                    'fieldsplit_0_ksp_type': 'richardson',
-                    'fieldsplit_0_ksp_max_it': 5,
-                    'fieldsplit_0_pc_type': 'bjacobi',
-                    'fieldsplit_0_sub_pc_type': 'ilu',
-                    'fieldsplit_1_ksp_type': 'richardson',
-                    'fieldsplit_1_ksp_max_it': 5,
-                    'fieldsplit_1_ksp_monitor_true_residual': True,
-                    'fieldsplit_1_pc_type': 'gamg',
-                    'fieldsplit_1_pc_gamg_sym_graph': True,
-                    'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                    'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                    'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                    'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                    'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-
-    linear_solver = CompressibleSolver(state, params=schur_params)
+    linear_solver = CompressibleSolver(state)
 
     compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           compressible_forcing)
 
     return stepper, 100.0
@@ -131,10 +111,11 @@ def test_tracer_setup(tmpdir):
 
     dirname = str(tmpdir)
     run_tracer(dirname)
-    with open(path.join(dirname, "tracer/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
+    filename = path.join(dirname, "tracer/diagnostics.nc")
+    data = Dataset(filename, "r")
 
-    diffl2 = data["theta_minus_tracer"]["l2"][-1] / data["theta"]["l2"][0]
+    diff = data.groups["theta_minus_tracer"]
+    theta = data.groups["theta"]
+    diffl2 = diff["l2"][-1] / theta["l2"][0]
 
     assert diffl2 < 1e-5

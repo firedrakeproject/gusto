@@ -1,25 +1,15 @@
 from gusto import *
 from firedrake import as_vector,\
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    sin, SpatialCoordinate
+    sin, SpatialCoordinate, Function
 import numpy as np
 import sys
 
 dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
-    # avoid using mumps on Travis
-    linear_solver_params = {'ksp_type': 'gmres',
-                            'pc_type': 'fieldsplit',
-                            'pc_fieldsplit_type': 'additive',
-                            'fieldsplit_0_pc_type': 'lu',
-                            'fieldsplit_1_pc_type': 'lu',
-                            'fieldsplit_0_ksp_type': 'preonly',
-                            'fieldsplit_1_ksp_type': 'preonly'}
 else:
     tmax = 3600.
-    # use default linear solver parameters (i.e. mumps)
-    linear_solver_params = None
 
 ##############################################################################
 # set up mesh
@@ -104,10 +94,8 @@ bref = z*(N**2)
 b_b = Function(Vb).interpolate(bref)
 
 # setup constants
-a = Constant(5.0e3)
-deltab = Constant(1.0e-2)
-H = Constant(H)
-L = Constant(L)
+a = 5.0e3
+deltab = 1.0e-2
 b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
@@ -124,14 +112,15 @@ uinit = Function(W_VectorCG1).interpolate(as_vector([20.0, 0.0]))
 u0.project(uinit)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'b': b0})
+state.initialise([('u', u0),
+                  ('b', b0)])
 # set the background buoyancy
-state.set_reference_profiles({'b': b_b})
+state.set_reference_profiles([('b', b_b)])
 
 ##############################################################################
 # Set up advection schemes
 ##############################################################################
-# advection_dict is a dictionary containing field_name: advection class
+# advected_fields is a dictionary containing field_name: advection class
 ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
@@ -141,14 +130,14 @@ if supg:
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
-advection_dict = {}
-advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-advection_dict["b"] = SSPRK3(state, b0, beqn)
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L, params=linear_solver_params)
+linear_solver = IncompressibleSolver(state, L)
 
 ##############################################################################
 # Set up forcing
@@ -158,7 +147,7 @@ forcing = IncompressibleForcing(state)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver,
+stepper = Timestepper(state, advected_fields, linear_solver,
                       forcing)
 
 ##############################################################################

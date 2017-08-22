@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import as_vector, SpatialCoordinate, \
     PeriodicRectangleMesh, ExtrudedMesh, \
-    cos, sin, cosh, sinh, tanh, pi
+    cos, sin, cosh, sinh, tanh, pi, Function, sqrt
 import sys
 
 day = 24.*60.*60.
@@ -10,7 +10,7 @@ dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
-    # avoid using mumps on Travis
+    # don't use mumps here, testing the overwrite-solver-options functionality
     linear_solver_params = {'ksp_type': 'gmres',
                             'pc_type': 'fieldsplit',
                             'pc_fieldsplit_type': 'additive',
@@ -18,11 +18,13 @@ if '--running-tests' in sys.argv:
                             'fieldsplit_1_pc_type': 'lu',
                             'fieldsplit_0_ksp_type': 'preonly',
                             'fieldsplit_1_ksp_type': 'preonly'}
+    overwrite = True
 else:
     tmax = 30*day
     tdump = 2*hour
     # use default linear solver parameters (i.e. mumps)
     linear_solver_params = None
+    overwrite = False
 
 ##############################################################################
 # set up mesh
@@ -89,8 +91,8 @@ diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityY(),
                      KineticEnergy(), KineticEnergyY(),
                      EadyPotentialEnergy(),
-                     Sum(KineticEnergy(), EadyPotentialEnergy()),
-                     Difference(KineticEnergy(), KineticEnergyY()),
+                     Sum("KineticEnergy", "EadyPotentialEnergy"),
+                     Difference("KineticEnergy", "KineticEnergyY"),
                      GeostrophicImbalance(), TrueResidualV()]
 
 # setup state, passing in the mesh, information on the required finite element
@@ -166,10 +168,13 @@ u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # pass these initial conditions to the state.initialise method
-state.initialise({'u': u0, 'p': p0, 'b': b0})
+state.initialise([('u', u0),
+                  ('p', p0),
+                  ('b', b0)])
 
 # set the background profiles
-state.set_reference_profiles({'p': p_b, 'b': b_b})
+state.set_reference_profiles([('p', p_b),
+                              ('b', b_b)])
 
 ##############################################################################
 # Set up advection schemes
@@ -184,14 +189,14 @@ if supg:
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
-advection_dict = {}
-advection_dict["u"] = SSPRK3(state, u0, ueqn)
-advection_dict["b"] = SSPRK3(state, b0, beqn)
+advected_fields = []
+advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
+advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, 2.*L, params=linear_solver_params)
+linear_solver = IncompressibleSolver(state, 2.*L, solver_parameters=linear_solver_params, overwrite_solver_parameters=overwrite)
 
 ##############################################################################
 # Set up forcing
@@ -201,9 +206,9 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advection_dict, linear_solver, forcing)
+stepper = Timestepper(state, advected_fields, linear_solver, forcing)
 
 ##############################################################################
 # Run!
 ##############################################################################
-stepper.run(t=0, tmax=tmax, diagnostic_everydump=True)
+stepper.run(t=0, tmax=tmax)

@@ -1,8 +1,9 @@
+from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
+    FunctionSpace, Function
 from math import pi
-import json
+from netCDF4 import Dataset
 import pytest
 
 
@@ -13,37 +14,35 @@ def setup_sw(dirname, euler_poincare):
     R = 6371220.
     H = 5960.
     day = 24.*60.*60.
-    u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    x = SpatialCoordinate(mesh)
+    mesh.init_cell_orientations(x)
 
     fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
+    diagnostic_fields = [PotentialVorticity()]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
+                  diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
-    x = SpatialCoordinate(mesh)
-    u_max = Constant(u_0)
-    R = Constant(R)
+    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    h0 = Constant(H)
-    Omega = Constant(parameters.Omega)
-    g = Constant(parameters.g)
-    Dexpr = h0 - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis expression
+    Omega = parameters.Omega
+    g = parameters.g
+    Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    # Coriolis
     fexpr = 2*Omega*x[2]/R
     V = FunctionSpace(mesh, "CG", 1)
     f = state.fields("coriolis", Function(V))
@@ -51,7 +50,8 @@ def setup_sw(dirname, euler_poincare):
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise({'u': u0, 'D': D0})
+    state.initialise([('u', u0),
+                      ('D', D0)])
 
     if euler_poincare:
         ueqn = EulerPoincare(state, u0.function_space())
@@ -61,14 +61,14 @@ def setup_sw(dirname, euler_poincare):
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-    advection_dict = {}
-    advection_dict["u"] = ThetaMethod(state, u0, ueqn)
-    advection_dict["D"] = SSPRK3(state, D0, Deqn)
+    advected_fields = []
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = Timestepper(state, advection_dict, linear_solver,
+    stepper = Timestepper(state, advected_fields, linear_solver,
                           sw_forcing)
 
     return stepper, 0.25*day
@@ -85,11 +85,15 @@ def test_sw_setup(tmpdir, euler_poincare):
 
     dirname = str(tmpdir)
     run_sw(dirname, euler_poincare=euler_poincare)
-    with open(path.join(dirname, "sw/diagnostics.json"), "r") as f:
-        data = json.load(f)
-    print data.keys()
-    Dl2 = data["D_error"]["l2"][-1]/data["D"]["l2"][0]
-    ul2 = data["u_error"]["l2"][-1]/data["u"]["l2"][0]
+    filename = path.join(dirname, "sw/diagnostics.nc")
+    data = Dataset(filename, "r")
+
+    Derr = data.groups["D_error"]
+    D = data.groups["D"]
+    Dl2 = Derr["l2"][-1]/D["l2"][0]
+    uerr = data.groups["u_error"]
+    u = data.groups["u"]
+    ul2 = uerr["l2"][-1]/u["l2"][0]
 
     assert Dl2 < 5.e-4
     assert ul2 < 5.e-3

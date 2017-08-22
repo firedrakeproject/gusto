@@ -1,6 +1,8 @@
+import itertools
+from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Expression, \
-    VectorFunctionSpace, File
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,\
+    VectorFunctionSpace, File, Constant, Function, exp, as_vector
 import pytest
 
 
@@ -23,20 +25,21 @@ def setup_IPdiffusion(vector, DG):
                   output=output,
                   fieldlist=fieldlist)
 
+    x = SpatialCoordinate(mesh)
     if vector:
         if DG:
             Space = VectorFunctionSpace(mesh, "DG", 1)
         else:
             Space = state.spaces("HDiv")
         f = Function(Space, name="f")
-        fexpr = Expression(("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", "0.0"), L=L)
+        fexpr = as_vector([exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2), 0.])
     else:
         if DG:
             Space = state.spaces("DG")
         else:
             Space = state.spaces("HDiv_v")
         f = Function(Space, name='f')
-        fexpr = Expression("exp(-pow(L/2.-x[1],2) - pow(L/2.-x[0],2))", L=L)
+        fexpr = exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2)
 
     try:
         f.interpolate(fexpr)
@@ -50,14 +53,14 @@ def run(dirname, vector, DG):
 
     state, f = setup_IPdiffusion(vector, DG)
 
-    kappa = Constant(0.05)
+    kappa = 0.05
     if vector:
         kappa = Constant([[0.05, 0.], [0., 0.05]])
-    mu = Constant(5.)
+    mu = 5.
     dt = state.timestepping.dt
     tmax = 2.5
     t = 0.
-    f_diffusion = InteriorPenalty(state, f.function_space(), kappa=kappa, mu=Constant(mu))
+    f_diffusion = InteriorPenalty(state, f.function_space(), kappa=kappa, mu=mu)
     outfile = File(path.join(dirname, "IPdiffusion/field_output.pvd"))
 
     dumpcount = itertools.count()
