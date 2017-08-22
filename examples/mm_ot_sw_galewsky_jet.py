@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, \
-    Constant, ge, le, exp, cos, conditional, interpolate
+from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
+    conditional, interpolate, SpatialCoordinate
 from scipy import pi
 import sys
 
@@ -29,8 +29,7 @@ else:
     dirname = "mm_ot_sw_galewsky_jet_unperturbed"
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=4, degree=2)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+mesh.init_cell_orientations(SpatialCoordinate(mesh))
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
 output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'potential_vorticity'])

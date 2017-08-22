@@ -1,8 +1,8 @@
 from math import pi
 import sys
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, parameters
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, Constant, \
+    as_vector, parameters, acos, sin, cos, Min
 
 parameters["pyop2_options"]["lazy_evaluation"] = False
 
@@ -29,8 +29,7 @@ for ref_level, dt in ref_dt.items():
     dirname = "mm_presc_sw_W1cont_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level)
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-    mesh.init_cell_orientations(global_normal)
+    mesh.init_cell_orientations(SpatialCoordinate(mesh))
 
     timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
     output = OutputParameters(dirname=dirname, dumpfreq=12, dumplist_latlon=['D', 'u'])
@@ -52,8 +51,19 @@ for ref_level, dt in ref_dt.items():
     R0 = Constant(R)
     uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
     u0.project(uexpr)
-    Dexpr = Expression("R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0)) < rc ? (h0/2.0)*(1 + cos(pi*R*acos(fmin(((x[0]*x0 + x[1]*x1 + x[2]*x2)/(R*R)), 1.0))/rc)) : 0.0", R=R, rc=R/3., h0=1000., x0=0.0, x1=-R, x2=0.0)
+
+    lamda_c = Constant(3.0*pi/2.0)
+    theta_c = Constant(0.0)
+    rc = Constant(R/3.0)  # radius of blob
+    theta, lamda = latlon_coords(mesh)
+
+    def dist(lamda_, theta_):
+        return R0*acos(sin(theta_)*sin(theta) + cos(theta_)*cos(theta)*cos(lamda - lamda_))
+
+    r = Min(1.0, dist(lamda_c, theta_c)/rc)
+    Dexpr = 0.5*(1.0 + cos(pi*r))
     D0.interpolate(Dexpr)
+
     state.initialise([('u', u0), ('D', D0)])
 
     eqn_form = "continuity"

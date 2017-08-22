@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Expression, SpatialCoordinate, \
-    Constant, as_vector, cos, sin, asin, atan_2
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, Constant, \
+    as_vector, cos, sin, asin, atan_2
 import sys
 
 dt = 900.
@@ -17,8 +17,7 @@ H = 8000.
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
-global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-mesh.init_cell_orientations(global_normal)
+mesh.init_cell_orientations(SpatialCoordinate(mesh))
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
