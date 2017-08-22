@@ -109,7 +109,7 @@ def initialise_fn():
     state.fields("D").interpolate(Dexpr)
     pv(state)
 
-
+pv.setup(state)
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 
