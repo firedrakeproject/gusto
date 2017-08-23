@@ -1,8 +1,10 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
-    conditional, interpolate, SpatialCoordinate
+    conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
+    Function, assemble, dx
 from math import pi
 import sys
+import numpy as np
 
 day = 24.*60.*60.
 dt = 240.

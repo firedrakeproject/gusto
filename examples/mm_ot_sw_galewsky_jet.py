@@ -1,8 +1,10 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
-    conditional, interpolate, SpatialCoordinate
+    conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
+    Function, assemble, dx
 from math import pi
 import sys
+import numpy as np
 
 day = 24.*60.*60.
 dt = 480.
@@ -55,7 +57,7 @@ theta, lamda = latlon_coords(mesh)
 u_max = 80.0
 theta0 = pi/7.
 theta1 = pi/2. - theta0
-en = exp(-4./((theta1-theta0)**2))
+en = np.exp(-4./((theta1-theta0)**2))
 u_zonal_expr = (u_max/en)*exp(1/((theta - theta0)*(theta - theta1)))
 u_zonal = conditional(ge(theta, theta0), conditional(le(theta, theta1), u_zonal_expr, 0.), 0.)
 u_merid = 0.0
@@ -122,7 +124,7 @@ C = Function(D0.function_space()).assign(Constant(1.0))
 area = assemble(C*dx)
 Dmean = assemble(D0*dx)/area
 D0 -= Dmean
-D0 += parameters.H
+D0 += Constant(parameters.H)
 
 # optional perturbation
 if perturb:
