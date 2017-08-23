@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, Constant, \
-    as_vector, cos, sin, asin, atan_2, sqrt
+from firedrake import IcosahedralSphereMesh, cos, sin, SpatialCoordinate
 import sys
 
 dt = 900.
@@ -17,7 +16,8 @@ H = 8000.
 
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements)
-mesh.init_cell_orientations(SpatialCoordinate(mesh))
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
@@ -30,6 +30,7 @@ diagnostic_fields = [pv]
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
+              Coriolis=parameters.Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -37,32 +38,21 @@ state = State(mesh, horizontal_degree=1,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
-# initial conditions
+# interpolate initial conditions
+# Initial/current conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-Rc = Constant(R)
-omega = Constant(7.848e-6)  # note lower-case, not the same as Omega
-K = Constant(7.848e-6)
-h0 = Constant(H)
-g = Constant(parameters.g)
-Omega = Constant(parameters.Omega)
+omega = 7.848e-6  # note lower-case, not the same as Omega
+K = 7.848e-6
+g = parameters.g
+Omega = parameters.Omega
 
-x0, y0, z0 = SpatialCoordinate(mesh)
-x = Rc*x0/sqrt(x0*x0 + y0*y0 + z0*z0)
-y = Rc*y0/sqrt(x0*x0 + y0*y0 + z0*z0)
-z = Rc*z0/sqrt(x0*x0 + y0*y0 + z0*z0)
+theta, lamda = latlon_coords(mesh)
 
-theta = asin(z/Rc)  # latitude
-lamda = atan_2(y, x)  # longitude
+u_zonal = R*omega*cos(theta) + R*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
+u_merid = -R*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
 
-u_zonal = Rc*omega*cos(theta) + Rc*K*(cos(theta)**3)*(4*sin(theta)**2 - cos(theta)**2)*cos(4*lamda)
-u_merid = -Rc*K*4*(cos(theta)**3)*sin(theta)*sin(4*lamda)
-
-cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
-cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
-cartesian_w_expr = u_merid*cos(theta)
-
-uexpr = as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
+uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 
 
 def Atheta(theta):
@@ -77,18 +67,13 @@ def Ctheta(theta):
     return 0.25*(K**2)*(cos(theta)**8)*(5*cos(theta)**2 - 6)
 
 
-Dexpr = h0 + (Rc**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
-
-# Coriolis expression
-fexpr = 2*Omega*z/Rc
-V = FunctionSpace(mesh, "CG", 1)
-f = state.fields("coriolis", V)
-f.interpolate(fexpr)  # Coriolis frequency (1/s)
+Dexpr = H + (R**2)*(Atheta(theta) + Btheta(theta)*cos(4*lamda) + Ctheta(theta)*cos(8*lamda))/g
 
 u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 8})
 D0.interpolate(Dexpr)
 
-state.initialise([('u', u0), ('D', D0)])
+state.initialise([('u', u0),
+                  ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
