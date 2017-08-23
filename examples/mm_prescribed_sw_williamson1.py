@@ -2,7 +2,7 @@ from math import pi
 import sys
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, Constant, \
-    as_vector, parameters, acos, sin, cos, Min
+    as_vector, parameters, acos, sin, cos, Min, Function
 
 parameters["pyop2_options"]["lazy_evaluation"] = False
 

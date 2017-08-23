@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate
-from scipy import pi
+from math import pi
 import sys
 
 day = 24.*60.*60.
