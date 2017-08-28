@@ -13,7 +13,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
 import numpy as np
 
 
-__all__ = ["State"]
+__all__ = ["State", "ShallowWaterState", "CompressibleEulerState"]
 
 
 class SpaceCreator(object):
@@ -76,22 +76,19 @@ class State(object):
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
-                 family="RT",
+    def __init__(self, mesh, fieldlist,
+                 vertical_degree, horizontal_degree,
+                 family, *,
                  output=None,
                  diagnostics=None,
-                 fieldlist=None,
                  diagnostic_fields=None):
 
+        self.fieldlist = fieldlist
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
             self.output = output
 
-        if fieldlist is None:
-            raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
-        else:
-            self.fieldlist = fieldlist
         if diagnostics is not None:
             self.diagnostics = diagnostics
         else:
@@ -311,6 +308,41 @@ class State(object):
         self.xrhs = Function(W)
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
+
+
+def ShallowWaterState(mesh,
+                      fieldlist=['u', 'D'],
+                      vertical_degree=None,
+                      horizontal_degree=1,
+                      family="BDM",
+                      output=None,
+                      diagnostics=None,
+                      diagnostic_fields=None):
+    return State(mesh, fieldlist,
+                 vertical_degree, horizontal_degree, family,
+                 output=output,
+                 diagnostics=diagnostics,
+                 diagnostic_fields=diagnostic_fields)
+
+
+def CompressibleEulerState(mesh, is_3d=False,
+                           fieldlist=['u', 'rho', 'theta'],
+                           vertical_degree=1,
+                           horizontal_degree=1,
+                           family=None,
+                           output=None,
+                           diagnostics=None,
+                           diagnostic_fields=None):
+    if family is None:
+        if is_3d:
+            family = "RT"
+        else:
+            family = "CG"
+    return State(mesh, fieldlist,
+                 vertical_degree, horizontal_degree, family,
+                 output=output,
+                 diagnostics=diagnostics,
+                 diagnostic_fields=diagnostic_fields)
 
 
 def get_latlon_mesh(mesh):

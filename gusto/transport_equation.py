@@ -27,13 +27,13 @@ class TransportEquation(object, metaclass=ABCMeta):
                         linear solver.
     """
 
-    def __init__(self, state, V, ibp="once", solver_params=None):
-        self.state = state
+    def __init__(self, physical_domain, V, Vu, ibp="once", solver_params=None):
+        self.physical_domain = physical_domain
         self.V = V
         self.ibp = ibp
 
         # set up functions required for forms
-        self.ubar = Function(state.spaces("HDiv"))
+        self.ubar = Function(Vu)
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
@@ -52,11 +52,11 @@ class TransportEquation(object, metaclass=ABCMeta):
         if self.is_cg:
             self.dS = None
         else:
-            if V.extruded:
+            if physical_domain.is_extruded:
                 self.dS = (dS_h + dS_v)
             else:
                 self.dS = dS
-            self.n = FacetNormal(state.mesh)
+            self.n = FacetNormal(physical_domain.mesh)
             self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
         if solver_params:
@@ -97,8 +97,8 @@ class LinearAdvection(TransportEquation):
                         linear solver.
     """
 
-    def __init__(self, state, V, qbar, ibp=None, equation_form="advective", solver_params=None):
-        super(LinearAdvection, self).__init__(state, V, ibp, solver_params)
+    def __init__(self, physical_domain, V, Vu, qbar, ibp=None, equation_form="advective", solver_params=None):
+        super(LinearAdvection, self).__init__(physical_domain, V, Vu, ibp, solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
@@ -123,7 +123,8 @@ class LinearAdvection(TransportEquation):
             L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
                  jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
-            L = self.test*dot(self.ubar, self.state.k)*dot(self.state.k, grad(self.qbar))*dx
+            k = self.physical_domain.vertical_normal
+            L = self.test*dot(self.ubar, k)*dot(k, grad(self.qbar))*dx
         return L
 
 
@@ -143,8 +144,8 @@ class AdvectionEquation(TransportEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="once", equation_form="advective", solver_params=None):
-        super(AdvectionEquation, self).__init__(state, V, ibp, solver_params)
+    def __init__(self, physical_domain, V, Vu, ibp="once", equation_form="advective", solver_params=None):
+        super(AdvectionEquation, self).__init__(physical_domain, V, Vu, ibp, solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
@@ -194,16 +195,16 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         linear solver.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", Vdg=None, solver_params=None):
+    def __init__(self, physical_domain, V, Vu, ibp="once", equation_form="advective", Vdg=None, solver_params=None):
 
         if Vdg is None:
             # Create broken space, functions and projector
             V_elt = BrokenElement(V.ufl_element())
-            self.space = FunctionSpace(state.mesh, V_elt)
+            self.space = FunctionSpace(physical_domain.mesh, V_elt)
         else:
             self.space = Vdg
 
-        super(EmbeddedDGAdvection, self).__init__(state, self.space, ibp, equation_form, solver_params)
+        super(EmbeddedDGAdvection, self).__init__(physical_domain, self.space, Vu, ibp, equation_form, solver_params)
 
 
 class SUPGAdvection(AdvectionEquation):
@@ -236,7 +237,7 @@ class SUPGAdvection(AdvectionEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, dt=None, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+    def __init__(self, physical_domain, V, Vu, dt=None, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -245,7 +246,7 @@ class SUPGAdvection(AdvectionEquation):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(SUPGAdvection, self).__init__(state, V, ibp, equation_form, solver_params)
+        super(SUPGAdvection, self).__init__(physical_domain, V, Vu, ibp, equation_form, solver_params)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp == "once":
@@ -279,22 +280,22 @@ class SUPGAdvection(AdvectionEquation):
             raise RuntimeError("Invalid dg_direction in supg_params.")
 
         # make SUPG test function
-        if state.mesh.topological_dimension() == 2:
-            taus = [supg_params["ax"], supg_params["ay"]]
-            if supg_params["dg_direction"] == "horizontal":
-                taus[0] = 0.0
-            elif supg_params["dg_direction"] == "vertical":
-                taus[1] = 0.0
-            tau = Constant(((taus[0], 0.), (0., taus[1])))
-        elif state.mesh.topological_dimension() == 3:
+        if physical_domain.is_3d:
             taus = [supg_params["ax"], supg_params["ay"], supg_params["az"]]
             if supg_params["dg_direction"] == "horizontal":
                 taus[0] = 0.0
                 taus[1] = 0.0
             elif supg_params["dg_direction"] == "vertical":
                 taus[2] = 0.0
-
             tau = Constant(((taus[0], 0., 0.), (0., taus[1], 0.), (0., 0., taus[2])))
+        else:
+            taus = [supg_params["ax"], supg_params["ay"]]
+            if supg_params["dg_direction"] == "horizontal":
+                taus[0] = 0.0
+            elif supg_params["dg_direction"] == "vertical":
+                taus[1] = 0.0
+            tau = Constant(((taus[0], 0.), (0., taus[1])))
+
         dtest = dot(dot(self.ubar, tau), grad(self.test))
         self.test += dtest
 
@@ -310,28 +311,37 @@ class VectorInvariant(TransportEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="once", solver_params=None):
-        super(VectorInvariant, self).__init__(state, V, ibp, solver_params)
+    def __init__(self, physical_domain, V, Vu, ibp="once", solver_params=None):
+        super(VectorInvariant, self).__init__(physical_domain, V, Vu, ibp, solver_params)
 
-        self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
+        Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
 
-        if self.state.mesh.topological_dimension() == 2:
-            self.perp = state.perp
-            if V.extruded:
-                self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
-            else:
-                outward_normals = CellNormal(state.mesh)
-                self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'), q('+')) + self.Upwind('-')*cross(outward_normals('-'), q('-'))
-            self.gradperp = lambda u: state.perp(grad(u))
-        elif self.state.mesh.topological_dimension() == 3:
+        if hasattr(physical_domain, "perp"):
+            perp = physical_domain.perp
+            self.perp = perp
+
+        if physical_domain.is_3d:
+            self.is_3d = True
+            self.Upwind = Upwind
             if self.ibp == "twice":
                 raise NotImplementedError("ibp=twice is not implemented for 3d problems")
         else:
-            raise RuntimeError("topological mesh dimension must be 2 or 3")
+            self.is_3d = False
+            if physical_domain.is_extruded:
+                self.perp_u_upwind = (
+                    lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
+                )
+            elif physical_domain.on_sphere:
+                outward_normals = CellNormal(physical_domain.mesh)
+                self.perp_u_upwind = (
+                    lambda q: Upwind('+')*cross(outward_normals('+'), q('+'))
+                    + Upwind('-')*cross(outward_normals('-'), q('-'))
+                )
+            self.gradperp = lambda u: perp(grad(u))
 
     def advection_term(self, q):
 
-        if self.state.mesh.topological_dimension() == 3:
+        if self.is_3d:
             # <w,curl(u) cross ubar + grad( u.ubar)>
             # =<curl(u),ubar cross w> - <div(w), u.ubar>
             # =<u,curl(ubar cross w)> -

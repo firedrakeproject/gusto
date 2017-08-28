@@ -2,10 +2,12 @@
 Some simple tools for making model configuration nicer.
 """
 
-from firedrake import sqrt
+from firedrake import sqrt, PeriodicIntervalMesh, PeriodicRectangleMesh,\
+    ExtrudedMesh, IcosahedralSphereMesh, SpatialCoordinate,\
+    CellNormal, inner, interpolate, Constant, as_vector, cross
 
 
-__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters"]
+__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "Sphere", "VerticalSlice"]
 
 
 class Configuration(object):
@@ -112,3 +114,78 @@ class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
     theta_surf = 300.
     dthetady = theta_surf/g*EadyParameters.dbdy
     Pi0 = 0.0
+
+
+class PhysicalDomain(object):
+
+    def __init__(self, mesh, vertical_normal, *, perp=None, is_3d=False, on_sphere=True, is_extruded=True):
+        self.mesh = mesh
+        self.vertical_normal = vertical_normal
+        self.is_3d = is_3d
+        self.on_sphere = on_sphere
+        self.is_extruded = is_extruded
+        if perp is not None:
+            self.perp = perp
+
+
+def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None,
+           coriolis=None):
+
+    if mesh is None:
+        if ref_level is None or radius is None:
+            raise ValueError("Either provide a mesh, or supply the spherical radius and a reference level so that we can generate one for you.")
+        m = IcosahedralSphereMesh(radius=radius, refinement_level=ref_level,
+                                  degree=3)
+        if all([nlayers, H]):
+            mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers,
+                                extrusion_type="radial")
+            is_3d = True
+        elif any([nlayers, H]):
+            raise ValueError("Must supply both nlayers and H, or neither.")
+        else:
+            mesh = m
+            mesh.init_cell_orientations(SpatialCoordinate(mesh))
+            is_3d = False
+    else:
+        is_3d = (mesh.topological_dimension() == 3)
+
+    if is_3d:
+        perp = None
+        is_3d = True
+        is_extruded = True
+    else:
+        outward_normals = CellNormal(mesh)
+        perp = lambda u: cross(outward_normals, u)
+        is_3d = False
+        is_extruded = False
+
+    x = SpatialCoordinate(mesh)
+    R = sqrt(inner(x, x))
+    k = interpolate(x/R, mesh.coordinates.function_space())
+
+    return PhysicalDomain(mesh, k, perp=perp, is_3d=is_3d, is_extruded=is_extruded)
+
+
+def VerticalSlice(mesh=None, *, H=None, L=None, ncolumns=None, nlayers=None,
+                  is_3d=False, coriolis=None):
+    if mesh is None:
+        if all([H, L, ncolumns, nlayers]):
+            if is_3d:
+                m = PeriodicRectangleMesh(ncolumns, 1, L, 1.e5,
+                                          quadrilateral=True)
+            else:
+                m = PeriodicIntervalMesh(ncolumns, L)
+            mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+        else:
+            raise ValueError("Either provide a mesh, or supply the parameters so that we can generate one for you.")
+    else:
+        is_3d = (mesh.topological_dimension() == 3)
+
+    if is_3d:
+        k = Constant([0.0, 0.0, 1.0])
+        perp = None
+    else:
+        k = Constant([0.0, 1.0])
+        perp = lambda u: as_vector([-u[1], u[0]])
+
+    return PhysicalDomain(mesh, k, perp=perp, is_3d=is_3d, on_sphere=False)

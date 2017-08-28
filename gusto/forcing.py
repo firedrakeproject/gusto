@@ -22,7 +22,7 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, parameters, euler_poincare=True, linear=False, extra_terms=None):
+    def __init__(self, state, parameters, physical_domain=None, euler_poincare=True, linear=False, extra_terms=None):
         self.state = state
         self.parameters = parameters
         if linear:
@@ -42,11 +42,13 @@ class Forcing(object, metaclass=ABCMeta):
         self.uF = Function(self.Vu)
 
         # find out which terms we need
-        self.extruded = self.Vu.extruded
-        self.coriolis = hasattr(state, "Omega") or hasattr(state.fields, "coriolis")
-        print(self.coriolis)
-        self.sponge = hasattr(state, "mu")
-        self.topography = hasattr(state.fields, "topography")
+        self.extruded = physical_domain is not None and physical_domain.is_extruded
+        if self.extruded:
+            self.vertical_normal = physical_domain.vertical_normal
+
+        self.coriolis = hasattr(self.state, "Omega") or hasattr(self.state.fields, "coriolis")
+        self.sponge = hasattr(self.state, "mu")
+        self.topography = hasattr(self.state.fields, "topography")
         self.extra_terms = extra_terms
 
         # some constants to use for scaling terms
@@ -64,7 +66,7 @@ class Forcing(object, metaclass=ABCMeta):
 
     def sponge_term(self):
         u0 = split(self.x0)[0]
-        return self.state.mu*inner(self.test, self.state.k)*inner(u0, self.state.k)*dx
+        return self.state.mu*inner(self.test, self.vertical_normal)*inner(u0, self.vertical_normal)*dx
 
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
@@ -154,7 +156,7 @@ class CompressibleForcing(Forcing):
     def gravity_term(self):
 
         g = self.parameters.g
-        L = -g*inner(self.test, self.state.k)*dx
+        L = -g*inner(self.test, self.vertical_normal)*dx
 
         return L
 
@@ -198,7 +200,7 @@ class IncompressibleForcing(Forcing):
 
     def gravity_term(self):
         _, _, b0 = split(self.x0)
-        L = b0*inner(self.test, self.state.k)*dx
+        L = b0*inner(self.test, self.vertical_normal)*dx
         return L
 
     def _build_forcing_solvers(self):

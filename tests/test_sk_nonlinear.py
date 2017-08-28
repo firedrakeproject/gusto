@@ -1,36 +1,33 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, sin, Function, as_vector
+from firedrake import SpatialCoordinate, exp, sin, Function, as_vector
 import numpy as np
 
 
 def setup_sk(dirname):
     nlayers = 10  # horizontal layers
-    columns = 30  # number of columns
+    ncolumns = 30  # number of columns
     L = 1.e5
-    m = PeriodicIntervalMesh(columns, L)
-    dt = 6.0
-
-    # build volume mesh
     H = 1.0e4  # Height position of the model top
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    physical_domain = VerticalSlice(H=H, L=L, ncolumns=ncolumns, nlayers=nlayers)
 
+    dt = 6.0
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
 
-    model = CompressibleEulerModel(mesh,
-                                   timestepping=timestepping,
+    state = CompressibleEulerState(physical_domain.mesh, physical_domain.is_3d,
                                    output=output)
 
+    model = CompressibleEulerModel(state,
+                                   physical_domain,
+                                   timestepping=timestepping)
+
     # Initial conditions
-    state = model.state
     parameters = model.parameters
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
 
     # spaces
-    Vu = u0.function_space()
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
@@ -40,7 +37,7 @@ def setup_sk(dirname):
     N = parameters.N
 
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-    x, z = SpatialCoordinate(mesh)
+    x, z = SpatialCoordinate(physical_domain.mesh)
     Tsurf = 300.
     thetab = Tsurf*exp(N**2*z/g)
 
@@ -48,7 +45,7 @@ def setup_sk(dirname):
     rho_b = Function(Vr)
 
     # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, parameters, theta_b, rho_b)
+    compressible_hydrostatic_balance(state, parameters, physical_domain.vertical_normal, theta_b, rho_b)
 
     a = 5.0e3
     deltaTheta = 1.0e-2
@@ -63,7 +60,6 @@ def setup_sk(dirname):
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    model.setup()
     # build time stepper
     stepper = Timestepper(model)
 

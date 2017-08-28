@@ -21,7 +21,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.state = model.state
         self.timestepping = model.timestepping
-        self.mu = model.mu
+        if hasattr(model.physical_domain, "sponge_layer"):
+            self.mu_alpha = [0., self.timestepping.dt]
+        else:
+            self.mu_alpha = [None, None]
         if model.advected_fields is None:
             self.advected_fields = ()
         else:
@@ -97,10 +100,6 @@ class Timestepper(BaseTimestepper):
 
         dt = self.timestepping.dt
         alpha = self.timestepping.alpha
-        if self.mu is not None:
-            mu_alpha = [0., dt]
-        else:
-            mu_alpha = [None, None]
 
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
@@ -113,7 +112,7 @@ class Timestepper(BaseTimestepper):
             t += dt
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, mu_alpha=mu_alpha[0])
+                                   state.xstar, mu_alpha=self.mu_alpha[0])
 
             state.xnp1.assign(state.xn)
 
@@ -132,7 +131,7 @@ class Timestepper(BaseTimestepper):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha=mu_alpha[1],
+                                           state.xrhs, mu_alpha=self.mu_alpha[1],
                                            incompressible=self.incompressible)
 
                     state.xrhs -= state.xnp1

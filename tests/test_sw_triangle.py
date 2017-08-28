@@ -1,7 +1,6 @@
 from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
-    FunctionSpace, Function
+from firedrake import SpatialCoordinate, as_vector
 from math import pi
 import json
 import pytest
@@ -15,42 +14,35 @@ def setup_sw(dirname, euler_poincare):
     H = 5960.
     day = 24.*60.*60.
 
-    mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
-    x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
+    physical_domain = Sphere(radius=R, ref_level=refinements)
 
-    timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
-    parameters = {"H": H}
+
     diagnostic_fields = [PotentialVorticity()]
 
-    model = ShallowWaterModel(mesh,
-                              timestepping=timestepping,
+    state = ShallowWaterState(physical_domain.mesh,
                               output=output,
-                              parameters=parameters,
                               diagnostic_fields=diagnostic_fields)
-    state = model.state
-    # Coriolis
-    Omega = model.parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
+    advected_fields = []
     if euler_poincare:
-        field_equations = {"u": EulerPoincare(state, state.spaces("HDiv"))}
-        model.setup(field_equations=field_equations)
-    else:
-        sw_forcing = ShallowWaterForcing(state, model.parameters, euler_poincare=False)
-        model.setup(forcing=sw_forcing)
+        ueqn = EulerPoincare(state, state.spaces("HDiv"))
+        advected_fields.append(("u", ThetaMethod(state, state.fields("u"), ueqn)))
+
+    model = ShallowWaterModel(state,
+                              physical_domain,
+                              parameters=ShallowWaterParameters(H=H),
+                              timestepping=TimesteppingParameters(dt=1500.),
+                              advected_fields=advected_fields)
 
     # interpolate initial conditions
+    x = SpatialCoordinate(physical_domain.mesh)
     u0 = state.fields("u")
     D0 = state.fields("D")
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = model.parameters.g
+    Omega = model.parameters.Omega
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
 
     u0.project(uexpr)

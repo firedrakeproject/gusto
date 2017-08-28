@@ -35,7 +35,7 @@ def sphere_to_cartesian(mesh, u_zonal, u_merid):
     return as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
 
 
-def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
+def incompressible_hydrostatic_balance(state, vertical_normal, b0, p0, top=False, params=None):
 
     # get F
     Vv = state.spaces("Vv")
@@ -50,7 +50,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     bcs = [DirichletBC(Vv, 0.0, bstring)]
 
     a = inner(w, v)*dx
-    L = inner(state.k, w)*b0*dx
+    L = inner(vertical_normal, w)*b0*dx
     F = Function(Vv)
 
     solve(a == L, F, bcs=bcs)
@@ -92,7 +92,8 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     p0.project(pprime)
 
 
-def compressible_hydrostatic_balance(state, parameters, theta0, rho0, pi0=None,
+def compressible_hydrostatic_balance(state, parameters, vertical_normal,
+                                     theta0, rho0, pi0=None,
                                      top=False, pi_boundary=Constant(1.0),
                                      solve_for_rho=False,
                                      params=None):
@@ -109,6 +110,9 @@ def compressible_hydrostatic_balance(state, parameters, theta0, rho0, pi0=None,
     the top or bottom as specified.
     """
 
+    state = state
+    parameters = parameters
+    k = vertical_normal
     # Calculate hydrostatic Pi
     VDG = state.spaces("DG")
     Vv = state.spaces("Vv")
@@ -134,7 +138,7 @@ def compressible_hydrostatic_balance(state, parameters, theta0, rho0, pi0=None,
 
     arhs = -cp*inner(dv, n)*theta0*pi_boundary*bmeasure
     g = parameters.g
-    arhs -= g*inner(dv, state.k)*dx
+    arhs -= g*inner(dv, k)*dx
 
     bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
 
@@ -184,10 +188,7 @@ def compressible_hydrostatic_balance(state, parameters, theta0, rho0, pi0=None,
             + dpi*div(theta0*v)*dx
             + cp*inner(dv, n)*theta0*pi_boundary*bmeasure
         )
-        if state.geopotential_form:
-            F += - div(dv)*Phi*dx + inner(dv, n)*Phi*bmeasure
-        else:
-            F += g*inner(dv, state.k)*dx
+        F += g*inner(dv, k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
         rhosolver.solve()
@@ -206,8 +207,8 @@ def remove_initial_w(u, Vv):
     u.assign(uin)
 
 
-def eady_initial_v(state, p0, v):
-    f = state.parameters.f
+def eady_initial_v(state, parameters, p0, v):
+    f = parameters.f
     x, y, z = SpatialCoordinate(state.mesh)
 
     # get pressure gradient
@@ -234,13 +235,13 @@ def eady_initial_v(state, p0, v):
     return v
 
 
-def compressible_eady_initial_v(state, theta0, rho0, v):
-    f = state.parameters.f
-    cp = state.parameters.cp
+def compressible_eady_initial_v(state, parameters, theta0, rho0, v):
+    f = parameters.f
+    cp = parameters.cp
 
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
+    Pi_exp = exner(theta0, rho0, parameters)
     Pi = Function(Vr).interpolate(Pi_exp)
 
     # get Pi gradient
@@ -266,10 +267,10 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
     return v
 
 
-def calculate_Pi0(state, theta0, rho0):
+def calculate_Pi0(state, parameters, theta0, rho0):
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
+    Pi_exp = exner(theta0, rho0, parameters)
     Pi = Function(Vr).interpolate(Pi_exp)
     Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
