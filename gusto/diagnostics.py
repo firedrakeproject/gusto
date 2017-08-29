@@ -13,7 +13,8 @@ class Diagnostics(object):
 
     def __init__(self, *fields):
 
-        self.fields = list(fields)
+        if fields is not None:
+            self.fields = list(fields)
 
     def register(self, *fields):
 

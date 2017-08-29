@@ -29,6 +29,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.advected_fields = ()
         else:
             self.advected_fields = tuple(model.advected_fields)
+        if model.diffused_fields is None:
+            self.diffused_fields = ()
+        else:
+            self.diffused_fields = tuple(model.diffused_fields)
+        if model.physics_list is not None:
+            self.physics_list = model.physics_list
+        else:
+            self.physics_list = []
 
     def _apply_bcs(self):
         """
@@ -70,14 +78,6 @@ class Timestepper(BaseTimestepper):
         super(Timestepper, self).__init__(model)
         self.linear_solver = model.linear_solver
         self.forcing = model.forcing
-        if model.diffused_fields is None:
-            self.diffused_fields = ()
-        else:
-            self.diffused_fields = tuple(model.diffused_fields)
-        if model.physics_list is not None:
-            self.physics_list = model.physics_list
-        else:
-            self.physics_list = []
 
         if isinstance(self.linear_solver, IncompressibleSolver):
             self.incompressible = True
@@ -171,20 +171,15 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advected_fields, physics_list=None):
+    def __init__(self, model):
 
-        super(AdvectionTimestepper, self).__init__(state, advected_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
+        super(AdvectionTimestepper, self).__init__(model)
 
     def run(self, t, tmax, x_end=None):
         state = self.state
         state.setup_diagnostics()
 
         dt = self.timestepping.dt
-        state.xnp1.assign(state.xn)
 
         with timed_stage("Dump output"):
             state.setup_dump()
@@ -196,11 +191,11 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
+            un = state.fields("u")
             with timed_stage("Advection"):
                 for name, advection in self.advected_fields:
                     field = getattr(state.fields, name)
-                    # first computes ubar from state.xn and state.xnp1
-                    advection.update_ubar(state.xn, state.xnp1, self.timestepping.alpha)
+                    advection.update_ubar(un, un, 0.5)
                     # advects field
                     advection.apply(field, field)
 

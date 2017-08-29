@@ -13,7 +13,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
 import numpy as np
 
 
-__all__ = ["State", "ShallowWaterState", "CompressibleEulerState"]
+__all__ = ["State", "ShallowWaterState", "CompressibleEulerState", "AdvectionDiffusionState"]
 
 
 class SpaceCreator(object):
@@ -91,8 +91,11 @@ class State(object):
 
         if diagnostics is not None:
             self.diagnostics = diagnostics
-        else:
+        elif fieldlist is not None:
             self.diagnostics = Diagnostics(*fieldlist)
+        else:
+            self.diagnostics = Diagnostics()
+
         if diagnostic_fields is not None:
             self.diagnostic_fields = diagnostic_fields
         else:
@@ -102,13 +105,16 @@ class State(object):
         self.mesh = mesh
 
         # Build the spaces
-        self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
+        self._build_spaces(fieldlist, mesh, vertical_degree, horizontal_degree, family)
 
-        # Allocate state
-        self._allocate_state()
-        if self.output.dumplist is None:
-            self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
+        if fieldlist is not None:
+            # Allocate state
+            self._allocate_state()
+            if self.output.dumplist is None:
+                self.output.dumplist = fieldlist
+            self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
+        else:
+            self.fields = FieldCreator()
 
         self.dumpfile = None
 
@@ -197,15 +203,16 @@ class State(object):
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
             # compute diagnostics
-            diagnostic_fns = ['min', 'max', 'rms', 'l2']
-            for name in self.diagnostics.fields:
-                for fn in diagnostic_fns:
-                    d = getattr(self.diagnostics, fn)
-                    data = d(self.fields(name))
-                    self.diagnostic_data[name][fn].append(data)
-                if len(self.fields(name).ufl_shape) == 0:
-                    data = self.diagnostics.total(self.fields(name))
-                    self.diagnostic_data[name]["total"].append(data)
+            if self.diagnostics:
+                diagnostic_fns = ['min', 'max', 'rms', 'l2']
+                for name in self.diagnostics.fields:
+                    for fn in diagnostic_fns:
+                        d = getattr(self.diagnostics, fn)
+                        data = d(self.fields(name))
+                        self.diagnostic_data[name][fn].append(data)
+                    if len(self.fields(name).ufl_shape) == 0:
+                        data = self.diagnostics.total(self.fields(name))
+                        self.diagnostic_data[name]["total"].append(data)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
@@ -251,7 +258,7 @@ class State(object):
             ref = self.fields(name+'bar', field.function_space(), False)
             ref.interpolate(profile)
 
-    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
+    def _build_spaces(self, fieldlist, mesh, vertical_degree, horizontal_degree, family):
         """
         Build:
         velocity space self.V2,
@@ -284,7 +291,8 @@ class State(object):
 
             self.Vv = self.spaces("Vv", mesh, V2v_elt)
 
-            self.W = MixedFunctionSpace((V0, V1, V2))
+            if fieldlist is not None:
+                self.W = MixedFunctionSpace((V0, V1, V2))
 
         else:
             cell = mesh.ufl_cell().cellname()
@@ -293,7 +301,8 @@ class State(object):
             V0 = self.spaces("HDiv", mesh, V1_elt)
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
-            self.W = MixedFunctionSpace((V0, V1))
+            if fieldlist is not None:
+                self.W = MixedFunctionSpace((V0, V1))
 
     def _allocate_state(self):
         """
@@ -311,13 +320,13 @@ class State(object):
 
 
 def ShallowWaterState(mesh,
-                      fieldlist=['u', 'D'],
-                      vertical_degree=None,
                       horizontal_degree=1,
                       family="BDM",
                       output=None,
                       diagnostics=None,
                       diagnostic_fields=None):
+    fieldlist = ['u', 'D'],
+    vertical_degree = None
     return State(mesh, fieldlist,
                  vertical_degree, horizontal_degree, family,
                  output=output,
@@ -326,18 +335,35 @@ def ShallowWaterState(mesh,
 
 
 def CompressibleEulerState(mesh, is_3d=False,
-                           fieldlist=['u', 'rho', 'theta'],
                            vertical_degree=1,
                            horizontal_degree=1,
                            family=None,
                            output=None,
                            diagnostics=None,
                            diagnostic_fields=None):
+    fieldlist = ['u', 'rho', 'theta'],
     if family is None:
         if is_3d:
             family = "RT"
         else:
             family = "CG"
+    return State(mesh, fieldlist,
+                 vertical_degree, horizontal_degree, family,
+                 output=output,
+                 diagnostics=diagnostics,
+                 diagnostic_fields=diagnostic_fields)
+
+
+def AdvectionDiffusionState(mesh,
+                            vertical_degree=None,
+                            horizontal_degree=None,
+                            family=None,
+                            output=None,
+                            diagnostics=None,
+                            diagnostic_fields=None):
+    if not all([horizontal_degree, family]):
+        raise ValueError("You must set horizontal_degree and family so that we can build the function spaces.")
+    fieldlist = None
     return State(mesh, fieldlist,
                  vertical_degree, horizontal_degree, family,
                  output=output,
