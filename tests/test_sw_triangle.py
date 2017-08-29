@@ -24,15 +24,18 @@ def setup_sw(dirname, euler_poincare):
                               output=output,
                               diagnostic_fields=diagnostic_fields)
 
+    timestepping=TimesteppingParameters(dt=1500.)
     advected_fields = []
     if euler_poincare:
-        ueqn = EulerPoincare(state, state.spaces("HDiv"))
-        advected_fields.append(("u", ThetaMethod(state, state.fields("u"), ueqn)))
+        ueqn = EulerPoincare(physical_domain, state.spaces("HDiv"), state.spaces("HDiv"))
+        advected_fields.append(("u", ThetaMethod(state.fields("u"),
+                                                 timestepping.dt,
+                                                 ueqn)))
 
     model = ShallowWaterModel(state,
                               physical_domain,
                               parameters=ShallowWaterParameters(H=H),
-                              timestepping=TimesteppingParameters(dt=1500.),
+                              timestepping=timestepping,
                               advected_fields=advected_fields)
 
     # interpolate initial conditions
