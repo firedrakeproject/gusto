@@ -325,7 +325,7 @@ def ShallowWaterState(mesh,
                       output=None,
                       diagnostics=None,
                       diagnostic_fields=None):
-    fieldlist = ['u', 'D'],
+    fieldlist = ['u', 'D']
     vertical_degree = None
     return State(mesh, fieldlist,
                  vertical_degree, horizontal_degree, family,
@@ -341,7 +341,7 @@ def CompressibleEulerState(mesh, is_3d=False,
                            output=None,
                            diagnostics=None,
                            diagnostic_fields=None):
-    fieldlist = ['u', 'rho', 'theta'],
+    fieldlist = ['u', 'rho', 'theta']
     if family is None:
         if is_3d:
             family = "RT"
