@@ -1,9 +1,9 @@
 from firedrake import sqrt, inner, SpatialCoordinate, FunctionSpace, as_vector
-from gusto.advection import SSPRK3, ThetaMethod
+from gusto.advection import SSPRK3, ThetaMethod, ForwardEuler, NoAdvection
 from gusto.configuration import CompressibleParameters
 from gusto.forcing import ShallowWaterForcing, CompressibleForcing
 from gusto.linear_solvers import ShallowWaterSolver, CompressibleSolver
-from gusto.transport_equation import VectorInvariant, AdvectionEquation, SUPGAdvection, EulerPoincare
+from gusto.transport_equation import VectorInvariant, AdvectionEquation, SUPGAdvection, EulerPoincare, LinearAdvection
 
 
 class Model(object):
@@ -34,6 +34,7 @@ def ShallowWaterModel(state,
                       physical_domain, *,
                       parameters,
                       timestepping,
+                      linear=False,
                       is_rotating=True,
                       coriolis_parameter=None,
                       linear_solver=None,
@@ -62,23 +63,44 @@ def ShallowWaterModel(state,
     if advected_fields is None:
         advected_fields = []
     field_scheme = dict(advected_fields)
-    if "D" not in field_scheme.keys():
-        Deqn = AdvectionEquation(physical_domain, state.spaces("DG"),
-                                 state.spaces("HDiv"),
-                                 equation_form="continuity")
-        advected_fields.append(("D", SSPRK3(state.fields("D"),
-                                            timestepping.dt, Deqn)))
-    if "u" not in field_scheme.keys():
-        ueqn = VectorInvariant(physical_domain, state.spaces("HDiv"),
-                               state.spaces("HDiv"))
-        advected_fields.append(("u",
-                                ThetaMethod(state.fields("u"),
-                                            timestepping.dt, ueqn)))
+
+    if linear:
+        if "D" not in field_scheme.keys():
+            Deqn = LinearAdvection(physical_domain, state.spaces("DG"),
+                                   state.spaces("HDiv"),
+                                   qbar=parameters.H, ibp="once",
+                                   equation_form="continuity")
+            advected_fields.append(("D", ForwardEuler(state.fields("D"),
+                                                      timestepping.dt, Deqn)))
+        if "u" not in field_scheme.keys():
+            advected_fields.append(("u",
+                                    NoAdvection(state.fields("u"),
+                                                timestepping.dt, None)))
+
+    else:
+        if "D" not in field_scheme.keys():
+            Deqn = AdvectionEquation(physical_domain, state.spaces("DG"),
+                                     state.spaces("HDiv"),
+                                     equation_form="continuity")
+            advected_fields.append(("D", SSPRK3(state.fields("D"),
+                                                timestepping.dt, Deqn)))
+        if "u" not in field_scheme.keys():
+            ueqn = VectorInvariant(physical_domain, state.spaces("HDiv"),
+                                   state.spaces("HDiv"))
+            advected_fields.append(("u",
+                                    ThetaMethod(state.fields("u"),
+                                                timestepping.dt, ueqn)))
 
     if forcing is None:
         field_scheme = dict(advected_fields)
-        euler_poincare = isinstance(field_scheme["u"].equation, EulerPoincare)
-        forcing = ShallowWaterForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
+        if linear:
+            euler_poincare = False
+        else:
+            euler_poincare = isinstance(field_scheme["u"].equation,
+                                        EulerPoincare)
+        forcing = ShallowWaterForcing(state, parameters, physical_domain,
+                                      euler_poincare=euler_poincare,
+                                      linear=linear)
 
     return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
 
