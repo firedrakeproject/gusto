@@ -19,6 +19,7 @@ def setup_sk(dirname):
 
     model = CompressibleEulerModel(state,
                                    physical_domain,
+                                   is_rotating=False,
                                    timestepping=timestepping)
 
     # Initial conditions
