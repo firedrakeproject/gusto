@@ -13,7 +13,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
 import numpy as np
 
 
-__all__ = ["State", "ShallowWaterState", "CompressibleEulerState", "AdvectionDiffusionState"]
+__all__ = ["State", "ShallowWaterState", "CompressibleEulerState", "IncompressibleEulerState", "AdvectionDiffusionState"]
 
 
 class SpaceCreator(object):
@@ -342,6 +342,26 @@ def CompressibleEulerState(mesh, is_3d=False,
                            diagnostics=None,
                            diagnostic_fields=None):
     fieldlist = ['u', 'rho', 'theta']
+    if family is None:
+        if is_3d:
+            family = "RT"
+        else:
+            family = "CG"
+    return State(mesh, fieldlist,
+                 vertical_degree, horizontal_degree, family,
+                 output=output,
+                 diagnostics=diagnostics,
+                 diagnostic_fields=diagnostic_fields)
+
+
+def IncompressibleEulerState(mesh, is_3d=False,
+                            vertical_degree=1,
+                            horizontal_degree=1,
+                            family=None,
+                            output=None,
+                            diagnostics=None,
+                            diagnostic_fields=None):
+    fieldlist = ['u', 'p', 'b']
     if family is None:
         if is_3d:
             family = "RT"
