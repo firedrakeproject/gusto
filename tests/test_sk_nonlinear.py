@@ -14,7 +14,7 @@ def setup_sk(dirname):
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
 
-    state = CompressibleEulerState(physical_domain.mesh, physical_domain.is_3d,
+    state = CompressibleEulerState(physical_domain.mesh,
                                    output=output)
 
     model = CompressibleEulerModel(state,
