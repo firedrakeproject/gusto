@@ -5,26 +5,19 @@ from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh, \
 
 def setup_gw(dirname):
     nlayers = 10  # horizontal layers
-    columns = 30  # number of columns
+    ncolumns = 30  # number of columns
     L = 1.e5
-    m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
-    dt = 6.0
-
-    # build volume mesh
     H = 1.0e4  # Height position of the model top
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    physical_domain = VerticalSlice(H=H, L=L, ncolumns=ncolumns, nlayers=nlayers)
 
-    fieldlist = ['u', 'p', 'b']
-    timestepping = TimesteppingParameters(dt=dt)
+    timestepping = TimesteppingParameters(dt=6.0)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
-    parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="RTCF",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist)
+    state = IncompressibleEulerState(physical_domain.mesh,
+                                     output=output)
+
+    model = IncompressibleEulerModel(state, physical_domain, is_rotating=False,
+                                     timestepping=timestepping)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -32,30 +25,28 @@ def setup_gw(dirname):
     b0 = state.fields("b")
 
     # z.grad(bref) = N**2
-    x, y, z = SpatialCoordinate(mesh)
-    N = parameters.N
+    x, z = SpatialCoordinate(physical_domain.mesh)
+    N = model.parameters.N
     bref = z*(N**2)
 
     b_b = Function(b0.function_space()).interpolate(bref)
     b0.interpolate(b_b)
-    incompressible_hydrostatic_balance(state, b0, p0)
+    incompressible_hydrostatic_balance(state, physical_domain.vertical_normal, b0, p0)
     state.initialise([('u', u0),
                       ('p', p0),
                       ('b', b0)])
 
-    # Set up forcing
-    forcing = IncompressibleForcing(state)
-
-    return state, forcing
+    return model
 
 
 def run_gw_incompressible(dirname):
 
-    state, forcing = setup_gw(dirname)
-    dt = state.timestepping.dt
-    forcing.apply(dt, state.xn, state.xn, state.xn)
-    u = state.xn.split()[0]
-    w = Function(state.spaces("DG")).interpolate(u[2])
+    model = setup_gw(dirname)
+    dt = model.timestepping.dt
+    xn = model.state.xn
+    model.forcing.apply(dt, xn, xn, xn)
+    u = xn.split()[0]
+    w = Function(model.state.spaces("DG")).interpolate(u[1])
     return w
 
 
