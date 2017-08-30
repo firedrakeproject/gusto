@@ -9,12 +9,12 @@ def setup_model(state, physical_domain, timestepping, field_eqns, time_discretis
 
     advected_fields = []
     if time_discretisation == "ssprk":
-        for fname, equation in field_eqns.items():
+        for fname, equation in field_eqns:
             advected_fields.append((fname, SSPRK3(state.fields(fname),
                                                   timestepping.dt,
                                                   equation)))
     elif time_discretisation == "implicit_midpoint":
-        for fname, equation in field_eqns.items():
+        for fname, equation in field_eqns:
             advected_fields.append((fname, ThetaMethod(state.fields(fname),
                                                        timestepping.dt,
                                                        equation)))
@@ -33,13 +33,14 @@ def run(model, tmax, fieldlist):
 
 def check_errors(f_dict, f_end, field_eqns, tol):
     f_err = Function(f_end.function_space())
+    print(field_eqns)
     errors = {}
     for name, field in f_dict.items():
         f_err.assign(f_end - field)
         errors[name] = max(abs(f_err.dat.data.min()), abs(f_err.dat.data.max()))
     for name, err in errors.items():
         if err > tol:
-            print("Test fails for field %s with options ibp = %s, continuity = %s" % (name, field_eqns[name].ibp, field_eqns[name].continuity))
+            print("Test fails for field %s with options ibp = %s, continuity = %s" % (name, dict(field_eqns)[name].ibp, dict(field_eqns[name]).continuity))
     assert(all([err < tol for err in errors.values()]))
 
 
@@ -51,8 +52,7 @@ def test_advection_2Dsphere(tmpdir, time_discretisation, vector):
     physical_domain = Sphere(radius=1., ref_level=2)
     dirname = str(tmpdir)
     fieldlist = ["f1", "f2", "f3", "f4"]
-    dumplist = fieldlist.append("f_end")
-    output = OutputParameters(dirname=dirname, dumplist=dumplist, dumpfreq=15)
+    output = OutputParameters(dirname=dirname, dumplist=fieldlist, dumpfreq=15)
     state = AdvectionDiffusionState(physical_domain.mesh,
                                     horizontal_degree=1, family="BDM",
                                     output=output)
@@ -80,7 +80,7 @@ def test_advection_2Dsphere(tmpdir, time_discretisation, vector):
 
     # equations - we are testing both forms of the advection equation
     # (advective and continuity) and integrating by parts once and
-    # twice for each option - this give us 4 combinations.
+    # twice for each option - this gives us 4 combinations.
     eqnlist = []
     eqnlist.append(AdvectionEquation(physical_domain, fspace, uspace))
     eqnlist.append(AdvectionEquation(physical_domain, fspace, uspace, ibp="twice"))
@@ -88,7 +88,7 @@ def test_advection_2Dsphere(tmpdir, time_discretisation, vector):
     eqnlist.append(AdvectionEquation(physical_domain, fspace, uspace, ibp="twice", equation_form="continuity"))
 
     # setup the model with the above equations and the time_discretisation
-    field_eqns = {fname: eqn for (fname, eqn) in zip(fieldlist, eqnlist)}
+    field_eqns = list(zip(fieldlist, eqnlist))
     model = setup_model(state, physical_domain, timestepping, field_eqns, time_discretisation)
 
     # run the model
@@ -142,7 +142,7 @@ def test_advection_embedded_dg(tmpdir, broken):
 
     # equations - we are testing both forms of the advection equation
     # (advective and continuity) and integrating by parts once and
-    # twice for each option - this give us 4 combinations.
+    # twice for each option - this gives us 4 combinations.
     eqnlist = []
     eqnlist.append(EmbeddedDGAdvection(physical_domain, fspace, uspace, Vdg=Vdg))
     eqnlist.append(EmbeddedDGAdvection(physical_domain, fspace, uspace, ibp="twice", Vdg=Vdg))
@@ -150,7 +150,7 @@ def test_advection_embedded_dg(tmpdir, broken):
     eqnlist.append(EmbeddedDGAdvection(physical_domain, fspace, uspace, ibp="twice", equation_form="continuity", Vdg=Vdg))
 
     # setup the model with the above equations and the time_discretisation
-    field_eqns = {fname: eqn for (fname, eqn) in zip(fieldlist, eqnlist)}
+    field_eqns = list(zip(fieldlist, eqnlist))
     model = setup_model(state, physical_domain, timestepping, field_eqns, time_discretisation="ssprk")
 
     # run the model
@@ -211,7 +211,7 @@ def test_advection_supg(tmpdir, time_discretisation, dg_direction):
     eqnlist.append(SUPGAdvection(physical_domain, fspace, uspace, dt=timestepping.dt, ibp=ibp, equation_form="continuity", supg_params={"dg_direction": dg_direction}))
 
     # setup the model with the above equations and the time_discretisation
-    field_eqns = {fname: eqn for (fname, eqn) in zip(fieldlist, eqnlist)}
+    field_eqns = list(zip(fieldlist, eqnlist))
     model = setup_model(state, physical_domain, timestepping, field_eqns, time_discretisation="ssprk")
 
     # run the model
