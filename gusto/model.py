@@ -1,4 +1,4 @@
-from firedrake import sqrt, inner, SpatialCoordinate, FunctionSpace
+from firedrake import sqrt, inner, SpatialCoordinate, FunctionSpace, as_vector
 from gusto.advection import SSPRK3, ThetaMethod
 from gusto.configuration import CompressibleParameters
 from gusto.forcing import ShallowWaterForcing, CompressibleForcing
