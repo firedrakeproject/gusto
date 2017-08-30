@@ -355,14 +355,13 @@ def CompressibleEulerState(mesh, is_3d=False,
 
 
 def AdvectionDiffusionState(mesh,
+                            family,
+                            horizontal_degree,
+                            *,
                             vertical_degree=None,
-                            horizontal_degree=None,
-                            family=None,
                             output=None,
                             diagnostics=None,
                             diagnostic_fields=None):
-    if not all([horizontal_degree, family]):
-        raise ValueError("You must set horizontal_degree and family so that we can build the function spaces.")
     fieldlist = None
     return State(mesh, fieldlist,
                  vertical_degree, horizontal_degree, family,
