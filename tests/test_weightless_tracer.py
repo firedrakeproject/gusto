@@ -1,7 +1,6 @@
 from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
+from firedrake import Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
 import json
 
 
@@ -12,26 +11,16 @@ def setup_tracer(dirname):
     H = 1000.
     nlayers = int(H / 100.)
     ncolumns = int(L / 100.)
-
-    # make mesh
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-
-    fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
+    physical_domain = VerticalSlice(H=H, L=L, ncolumns=ncolumns, nlayers=nlayers)
+    timestepping = TimesteppingParameters(dt=10.0)
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq=1,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'])
-    parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=[Difference('theta', 'tracer')])
+    state = CompressibleEulerState(physical_domain.mesh,
+                                   output=output,
+                                   diagnostic_fields=[Difference('theta', 'tracer')])
 
     # declare initial fields
     u0 = state.fields("u")
@@ -50,23 +39,38 @@ def setup_tracer(dirname):
     Tsurf = Constant(300.)
 
     theta_b = Function(Vt).interpolate(Tsurf)
-    rho_b = Function(Vr)
-
-    # Calculate initial rho
-    compressible_hydrostatic_balance(state, theta_b, rho_b,
-                                     solve_for_rho=True)
 
     # set up perturbation to theta
     xc = 500.
     zc = 350.
     rc = 250.
-    x = SpatialCoordinate(mesh)
+    x = SpatialCoordinate(physical_domain.mesh)
     r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
     theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 
     theta0.interpolate(theta_b + theta_pert)
-    rho0.interpolate(rho_b)
     tracer0.interpolate(theta0)
+
+    eqn = SUPGAdvection(physical_domain, Vt, Vu,
+                        dt=timestepping.dt,
+                        supg_params={"dg_direction": "horizontal"},
+                        equation_form="advective")
+    advected_fields = [(("tracer", SSPRK3(tracer0, timestepping.dt, eqn)))]
+
+    model = CompressibleEulerModel(state,
+                                   physical_domain,
+                                   is_rotating=False,
+                                   timestepping=timestepping,
+                                   advected_fields=advected_fields)
+
+    rho_b = Function(Vr)
+
+    # Calculate initial rho
+    compressible_hydrostatic_balance(state, model.parameters,
+                                     physical_domain.vertical_normal,
+                                     theta_b, rho_b,
+                                     solve_for_rho=True)
+    rho0.interpolate(rho_b)
 
     state.initialise([('u', u0),
                       ('rho', rho0),
@@ -75,28 +79,8 @@ def setup_tracer(dirname):
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    # set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction": "horizontal"},
-                             equation_form="advective")
-
-    # build advection dictionary
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advected_fields.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
-
-    # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    compressible_forcing = CompressibleForcing(state)
-
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          compressible_forcing)
+    stepper = Timestepper(model)
 
     return stepper, 100.0
 
