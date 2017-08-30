@@ -41,7 +41,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-    @cached_property
+    @abstractproperty
     def _solvers(self):
         pass
 
