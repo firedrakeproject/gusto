@@ -31,19 +31,13 @@ class Model(object):
 
 def ShallowWaterModel(state,
                       physical_domain, *,
-                      parameters=None,
-                      timestepping=None,
+                      parameters,
+                      timestepping,
                       linear_solver=None,
                       forcing=None,
                       advected_fields=None,
                       diffused_fields=None,
                       physics_list=None):
-
-    if parameters is None:
-        raise ValueError("Default parameters cannot be set for shallow water model. You must at least provide the mean depth via the ShallowWaterParameters configuration class.")
-
-    if timestepping is None:
-        raise ValueError("Default timestepping parameters cannot be set. You must at least provide the timestep, dt, via the TimesteppingParameters configuration class.")
 
     if linear_solver is None:
         beta = timestepping.dt*timestepping.alpha
