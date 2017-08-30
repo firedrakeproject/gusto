@@ -128,8 +128,7 @@ class PhysicalDomain(object):
             self.perp = perp
 
 
-def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None,
-           coriolis=None):
+def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None):
 
     if mesh is None:
         if ref_level is None or radius is None:
@@ -167,7 +166,7 @@ def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None,
 
 
 def VerticalSlice(mesh=None, *, H=None, L=None, ncolumns=None, nlayers=None,
-                  is_3d=False, coriolis=None):
+                  is_3d=False):
     if mesh is None:
         if all([H, L, ncolumns, nlayers]):
             if is_3d:
