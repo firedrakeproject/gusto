@@ -320,7 +320,7 @@ class VectorInvariant(TransportEquation):
     def advection_term(self, q):
 
         Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
-        if self.is_3d:
+        if self.physical_domain.is_3d:
             # <w,curl(u) cross ubar + grad( u.ubar)>
             # =<curl(u),ubar cross w> - <div(w), u.ubar>
             # =<u,curl(ubar cross w)> -
