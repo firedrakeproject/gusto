@@ -355,12 +355,12 @@ def CompressibleEulerState(mesh, is_3d=False,
 
 
 def IncompressibleEulerState(mesh, is_3d=False,
-                            vertical_degree=1,
-                            horizontal_degree=1,
-                            family=None,
-                            output=None,
-                            diagnostics=None,
-                            diagnostic_fields=None):
+                             vertical_degree=1,
+                             horizontal_degree=1,
+                             family=None,
+                             output=None,
+                             diagnostics=None,
+                             diagnostic_fields=None):
     fieldlist = ['u', 'p', 'b']
     if family is None:
         if is_3d:
