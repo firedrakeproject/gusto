@@ -314,33 +314,12 @@ class VectorInvariant(TransportEquation):
     def __init__(self, physical_domain, V, Vu, ibp="once", solver_params=None):
         super(VectorInvariant, self).__init__(physical_domain, V, Vu, ibp, solver_params)
 
-        Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
-
-        if hasattr(physical_domain, "perp"):
-            perp = physical_domain.perp
-            self.perp = perp
-
-        if physical_domain.is_3d:
-            self.is_3d = True
-            self.Upwind = Upwind
-            if self.ibp == "twice":
-                raise NotImplementedError("ibp=twice is not implemented for 3d problems")
-        else:
-            self.is_3d = False
-            if physical_domain.is_extruded:
-                self.perp_u_upwind = (
-                    lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
-                )
-            elif physical_domain.on_sphere:
-                outward_normals = CellNormal(physical_domain.mesh)
-                self.perp_u_upwind = (
-                    lambda q: Upwind('+')*cross(outward_normals('+'), q('+'))
-                    + Upwind('-')*cross(outward_normals('-'), q('-'))
-                )
-            self.gradperp = lambda u: perp(grad(u))
+        if physical_domain.is_3d and ibp:
+            raise NotImplementedError("ibp=twice is not implemented for 3d problems")
 
     def advection_term(self, q):
 
+        Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
         if self.is_3d:
             # <w,curl(u) cross ubar + grad( u.ubar)>
             # =<curl(u),ubar cross w> - <div(w), u.ubar>
@@ -356,20 +335,31 @@ class VectorInvariant(TransportEquation):
             )
 
         else:
-
+            perp = self.physical_domain.perp
+            if self.physical_domain.is_extruded:
+                perp_u_upwind = (
+                    lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
+                )
+            elif self.physical_domain.on_sphere:
+                outward_normals = CellNormal(self.physical_domain.mesh)
+                perp_u_upwind = (
+                    lambda q: Upwind('+')*cross(outward_normals('+'), q('+'))
+                    + Upwind('-')*cross(outward_normals('-'), q('-'))
+                )
+            gradperp = lambda u: perp(grad(u))
             if self.ibp == "once":
                 L = (
-                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
-                    - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
-                            self.perp_u_upwind(q))*self.dS
+                    -inner(gradperp(inner(self.test, perp(self.ubar))), q)*dx
+                    - inner(jump(inner(self.test, perp(self.ubar)), self.n),
+                            perp_u_upwind(q))*self.dS
                 )
             else:
                 L = (
-                    (-inner(self.test, div(self.perp(q))*self.perp(self.ubar)))*dx
-                    - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
-                            self.perp_u_upwind(q))*self.dS
+                    (-inner(self.test, div(self.perp(q))*perp(self.ubar)))*dx
+                    - inner(jump(inner(self.test, perp(self.ubar)), self.n),
+                            perp_u_upwind(q))*self.dS
                     + jump(inner(self.test,
-                                 self.perp(self.ubar))*self.perp(q), self.n)*self.dS
+                                 perp(self.ubar))*perp(q), self.n)*self.dS
                 )
 
         L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
