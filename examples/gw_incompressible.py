@@ -41,7 +41,7 @@ if not supg:
     beqn = EmbeddedDGAdvection(state, Vb,
                                equation_form="advective")
     advected_fields.append((("b", SSPRK3(state.fields("b"),
-                                     timestepping.dt, beqn))))
+                                         timestepping.dt, beqn))))
 
 model = IncompressibleEulerModel(state, physical_domain, is_rotating=False,
                                  timestepping=timestepping,
