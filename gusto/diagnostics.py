@@ -1,5 +1,5 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
+    TestFunction, TrialFunction, CellNormal, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
@@ -70,9 +70,10 @@ class DiagnosticField(object, metaclass=ABCMeta):
         """The name of this diagnostic field"""
         pass
 
-    def setup(self, state, space=None):
+    def setup(self, model, space=None):
         if not self._initialised:
             self._initialised = True
+            state = model.state
             if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
@@ -89,28 +90,30 @@ class DiagnosticField(object, metaclass=ABCMeta):
 class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
-            super(CourantNumber, self).setup(state)
+            super(CourantNumber, self).setup(model)
             # set up area computation
-            V = state.spaces("DG0")
+            V = model.state.spaces("DG0")
             test = TestFunction(V)
             self.area = Function(V)
             assemble(test*dx, tensor=self.area)
+            # store timestep
+            self.dt = model.timestepping.dt
 
     def compute(self, state):
         u = state.fields("u")
-        dt = Constant(state.timestepping.dt)
-        return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
+        return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*self.dt)
 
 
 class VelocityX(DiagnosticField):
     name = "VelocityX"
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(VelocityX, self).setup(state, space=space)
+            super(VelocityX, self).setup(model, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -121,10 +124,11 @@ class VelocityX(DiagnosticField):
 class VelocityZ(DiagnosticField):
     name = "VelocityZ"
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(VelocityZ, self).setup(state, space=space)
+            super(VelocityZ, self).setup(model, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -135,10 +139,11 @@ class VelocityZ(DiagnosticField):
 class VelocityY(DiagnosticField):
     name = "VelocityY"
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(VelocityY, self).setup(state, space=space)
+            super(VelocityY, self).setup(model, space=space)
 
     def compute(self, state):
         u = state.fields("u")
@@ -197,10 +202,11 @@ class ExnerPi(DiagnosticField):
         else:
             return "ExnerPi"
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(ExnerPi, self).setup(state, space=space)
+            super(ExnerPi, self).setup(model, space=space)
 
     def compute(self, state):
         rho = state.fields(self.rho_name)
@@ -220,10 +226,11 @@ class Sum(DiagnosticField):
     def name(self):
         return self.field1+"_plus_"+self.field2
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.fields(self.field1).function_space()
-            super(Sum, self).setup(state, space=space)
+            super(Sum, self).setup(model, space=space)
             field_names = [f.name() for f in state.fields]
             if self.field1 not in field_names:
                 raise RuntimeError("Field called %s does not exist" % self.field1)
@@ -247,10 +254,11 @@ class Difference(DiagnosticField):
     def name(self):
         return self.field1+"_minus_"+self.field2
 
-    def setup(self, state):
+    def setup(self, model):
         if not self._initialised:
+            state = model.state
             space = state.fields(self.field1).function_space()
-            super(Difference, self).setup(state, space=space)
+            super(Difference, self).setup(model, space=space)
             field_names = [f.name() for f in state.fields]
             if self.field1 not in field_names:
                 raise RuntimeError("Field called %s does not exist" % self.field1)
@@ -294,7 +302,7 @@ class PotentialVorticity(DiagnosticField):
     """Diagnostic field for potential vorticity."""
     name = "potential_vorticity"
 
-    def setup(self, state):
+    def setup(self, model):
         """Solver for potential vorticity. Solves
         a weighted mass system to generate the
         potential vorticity from known velocity and
@@ -303,8 +311,9 @@ class PotentialVorticity(DiagnosticField):
         :arg state: The state containing model.
         """
         if not self._initialised:
+            state = model.state
             space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
-            super(PotentialVorticity, self).setup(state, space=space)
+            super(PotentialVorticity, self).setup(model, space=space)
             u = state.fields("u")
             D = state.fields("D")
             gamma = TestFunction(space)

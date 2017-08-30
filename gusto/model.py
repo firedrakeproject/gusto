@@ -17,7 +17,8 @@ class Model(object):
                  forcing,
                  advected_fields,
                  diffused_fields,
-                 physics_list):
+                 physics_list,
+                 diagnostics):
 
         self.state = state
         self.physical_domain = physical_domain
@@ -28,6 +29,28 @@ class Model(object):
         self.advected_fields = advected_fields
         self.diffused_fields = diffused_fields
         self.physics_list = physics_list
+        self.diagnostics = diagnostics
+
+        if diagnostic_fields is not None:
+            self.diagnostic_fields = diagnostic_fields
+        else:
+            self.diagnostic_fields = []
+
+        self.setup_diagnostics()
+
+    def setup_diagnostics(self):
+        # add special case diagnostic fields
+        for name in self.state.output.perturbation_fields:
+            f = Perturbation(name)
+            self.diagnostic_fields.append(f)
+
+        for name in self.state.output.steady_state_error_fields:
+            f = SteadyStateError(self, name)
+            self.diagnostic_fields.append(f)
+
+        for diagnostic in self.diagnostic_fields:
+            diagnostic.setup(self)
+            self.diagnostics.register(diagnostic.name)
 
 
 def ShallowWaterModel(state,
@@ -41,7 +64,8 @@ def ShallowWaterModel(state,
                       forcing=None,
                       advected_fields=None,
                       diffused_fields=None,
-                      physics_list=None):
+                      physics_list=None,
+                      diagnostics=None):
 
     if is_rotating:
         physical_domain.is_rotating = True
@@ -102,7 +126,10 @@ def ShallowWaterModel(state,
                                       euler_poincare=euler_poincare,
                                       linear=linear)
 
-    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
+    if diagnostics is None:
+        diagnostics = Diagnostics(*fieldlist)
+
+    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list, diagnostics)
 
 
 def CompressibleEulerModel(state,
@@ -115,7 +142,8 @@ def CompressibleEulerModel(state,
                            forcing=None,
                            advected_fields=None,
                            diffused_fields=None,
-                           physics_list=None):
+                           physics_list=None,
+                           diagnostics=None):
 
     if parameters is None:
         parameters = CompressibleParameters()
@@ -162,7 +190,10 @@ def CompressibleEulerModel(state,
         euler_poincare = isinstance(field_scheme["u"], EulerPoincare)
         forcing = CompressibleForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
 
-    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
+    if diagnostics is None:
+        diagnostics = Diagnostics(*fieldlist)
+
+    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list, diagnostics)
 
 
 def IncompressibleEulerModel(state,
@@ -175,7 +206,8 @@ def IncompressibleEulerModel(state,
                              forcing=None,
                              advected_fields=None,
                              diffused_fields=None,
-                             physics_list=None):
+                             physics_list=None,
+                             diagnostics=None):
 
     if parameters is None:
         parameters = IncompressibleParameters()
@@ -215,7 +247,10 @@ def IncompressibleEulerModel(state,
         euler_poincare = isinstance(field_scheme["u"], EulerPoincare)
         forcing = IncompressibleForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
 
-    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
+    if diagnostics is None:
+        diagnostics = Diagnostics(*fieldlist)
+
+    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list, diagnostics)
 
 
 def AdvectionDiffusionModel(state,
@@ -227,4 +262,6 @@ def AdvectionDiffusionModel(state,
     if not(advected_fields or diffused_fields):
         raise ValueError("You must provide the list of tuples of advected and/or diffused fields and schemes.")
 
-    return Model(state, physical_domain, parameters=None, timestepping=timestepping, linear_solver=None, forcing=None, advected_fields=advected_fields, diffused_fields=diffused_fields, physics_list=None)
+    diagnostics = Diagnostics()
+
+    return Model(state, physical_domain, parameters=None, timestepping=timestepping, linear_solver=None, forcing=None, advected_fields=advected_fields, diffused_fields=diffused_fields, physics_list=None, diagnostics=diagnostics)
