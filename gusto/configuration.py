@@ -7,7 +7,7 @@ from firedrake import sqrt, PeriodicIntervalMesh, PeriodicRectangleMesh,\
     CellNormal, inner, interpolate, Constant, as_vector, cross
 
 
-__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "Sphere", "VerticalSlice"]
+__all__ = ["TimesteppingParameters", "OutputParameters", "IncompressibleParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "Sphere", "VerticalSlice"]
 
 
 class Configuration(object):
@@ -55,18 +55,32 @@ class OutputParameters(Configuration):
     perturbation_fields = []
 
 
-class CompressibleParameters(Configuration):
+class PhysicalParameters(Configuration):
+    g = 9.810616
+    Omega = 7.292e-5  # rotation rate
+
+
+class StratificationParameters(Configuration):
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+
+
+class IncompressibleParameters(PhysicalParameters, StratificationParameters):
+    pass
+
+
+class CompressibleParameters(PhysicalParameters):
 
     """
     Physical parameters for Compressible Euler
     """
-    g = 9.810616
-    N = 0.01  # Brunt-Vaisala frequency (1/s)
     cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
     cv = 717.  # SHC of dry air at const. volume (J/kg/K)
+
+
+class MoistureParameters(Configuration):
     c_pl = 4186.  # SHC of liq. wat. at const. pressure (J/kg/K)
     c_pv = 1885.  # SHC of wat. vap. at const. pressure (J/kg/K)
     c_vv = 1424.  # SHC of wat. vap. at const. pressure (J/kg/K)
@@ -79,13 +93,11 @@ class CompressibleParameters(Configuration):
     w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
 
 
-class ShallowWaterParameters(Configuration):
+class ShallowWaterParameters(PhysicalParameters):
 
     """
-    Physical parameters for 3d Compressible Euler
+    Physical parameters for shallow water simulations
     """
-    g = 9.80616
-    Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
 
 
@@ -116,10 +128,24 @@ class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
     Pi0 = 0.0
 
 
+class SphericalParameters(Configuration):
+    R = 6371220.
+    H = None
+
+
+class VerticalSliceParameters(Configuration):
+    L = None
+    H = None
+    deltax = None
+    deltaz = None
+
+
 class PhysicalDomain(object):
 
-    def __init__(self, mesh, vertical_normal, *, perp=None, is_3d=False, on_sphere=True, is_extruded=True):
+    def __init__(self, mesh, domain_parameters, vertical_normal, *,
+                 perp=None, is_3d=False, on_sphere=True, is_extruded=True):
         self.mesh = mesh
+        self.domain_parameters = domain_parameters
         self.vertical_normal = vertical_normal
         self.is_3d = is_3d
         self.on_sphere = on_sphere
@@ -149,6 +175,8 @@ def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None):
     else:
         is_3d = (mesh.topological_dimension() == 3)
 
+    domain_parameters = SphericalParameters(H=H)
+
     if is_3d:
         perp = None
         is_3d = True
@@ -163,7 +191,7 @@ def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None):
     R = sqrt(inner(x, x))
     k = interpolate(x/R, mesh.coordinates.function_space())
 
-    return PhysicalDomain(mesh, k, perp=perp, is_3d=is_3d, is_extruded=is_extruded)
+    return PhysicalDomain(mesh, domain_parameters, k, perp=perp, is_3d=is_3d, is_extruded=is_extruded)
 
 
 def VerticalSlice(mesh=None, *, H=None, L=None, ncolumns=None, nlayers=None,
@@ -181,6 +209,10 @@ def VerticalSlice(mesh=None, *, H=None, L=None, ncolumns=None, nlayers=None,
     else:
         is_3d = (mesh.topological_dimension() == 3)
 
+    domain_parameters = VerticalSliceParameters(H=H, L=L,
+                                                deltax=L/ncolumns,
+                                                deltaz=H/nlayers)
+
     if is_3d:
         k = Constant([0.0, 0.0, 1.0])
         perp = None
@@ -188,4 +220,4 @@ def VerticalSlice(mesh=None, *, H=None, L=None, ncolumns=None, nlayers=None,
         k = Constant([0.0, 1.0])
         perp = lambda u: as_vector([-u[1], u[0]])
 
-    return PhysicalDomain(mesh, k, perp=perp, is_3d=is_3d, on_sphere=False)
+    return PhysicalDomain(mesh, domain_parameters, k, perp=perp, is_3d=is_3d, on_sphere=False)
