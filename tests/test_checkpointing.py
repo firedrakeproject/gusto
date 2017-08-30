@@ -64,16 +64,13 @@ def setup_sk(dirname):
     # build time stepper
     stepper = Timestepper(model)
 
-    return stepper, 10*dt
+    return stepper, 2*dt
 
 
-def run_sk(dirname):
-
-    stepper, tmax = setup_sk(dirname)
-    stepper.run(t=0., tmax=tmax)
-
-
-def test_sk(tmpdir):
+def test_checkpointing(tmpdir):
 
     dirname = str(tmpdir)
-    run_sk(dirname)
+    stepper, tmax = setup_sk(dirname)
+    stepper.run(t=0., tmax=tmax)
+    dt = stepper.timestepping.dt
+    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
