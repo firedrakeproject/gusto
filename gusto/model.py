@@ -1,8 +1,8 @@
 from firedrake import sqrt, inner, SpatialCoordinate, FunctionSpace, as_vector
 from gusto.advection import SSPRK3, ThetaMethod, ForwardEuler, NoAdvection
-from gusto.configuration import CompressibleParameters
-from gusto.forcing import ShallowWaterForcing, CompressibleForcing
-from gusto.linear_solvers import ShallowWaterSolver, CompressibleSolver
+from gusto.configuration import CompressibleParameters, IncompressibleParameters
+from gusto.forcing import ShallowWaterForcing, CompressibleForcing, IncompressibleForcing
+from gusto.linear_solvers import ShallowWaterSolver, CompressibleSolver, IncompressibleSolver
 from gusto.transport_equation import VectorInvariant, AdvectionEquation, SUPGAdvection, EulerPoincare, LinearAdvection
 
 
@@ -117,15 +117,15 @@ def CompressibleEulerModel(state,
                            diffused_fields=None,
                            physics_list=None):
 
+    if parameters is None:
+        parameters = CompressibleParameters()
+
     if is_rotating:
         physical_domain.is_rotating = True
         if rotation_vector is None:
-            physical_domain.rotation_vector = as_vector((0., 0., 0.5e-4))
+            physical_domain.rotation_vector = as_vector((0., 0., parameters.Omega))
         else:
             physical_domain.rotation_vector = rotation_vector
-
-    if parameters is None:
-        parameters = CompressibleParameters()
 
     if linear_solver is None:
         beta = timestepping.dt*timestepping.alpha
@@ -161,6 +161,59 @@ def CompressibleEulerModel(state,
         field_scheme = dict(advected_fields)
         euler_poincare = isinstance(field_scheme["u"], EulerPoincare)
         forcing = CompressibleForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
+
+    return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
+
+
+def IncompressibleEulerModel(state,
+                             physical_domain, *,
+                             is_rotating=True,
+                             rotation_vector=None,
+                             parameters=None,
+                             timestepping=None,
+                             linear_solver=None,
+                             forcing=None,
+                             advected_fields=None,
+                             diffused_fields=None,
+                             physics_list=None):
+
+    if parameters is None:
+        parameters = IncompressibleParameters()
+
+    if is_rotating:
+        physical_domain.is_rotating = True
+        if rotation_vector is None:
+            physical_domain.rotation_vector = as_vector((0., 0., parameters.Omega))
+        else:
+            physical_domain.rotation_vector = rotation_vector
+
+    if linear_solver is None:
+        beta = timestepping.dt*timestepping.alpha
+        linear_solver = IncompressibleSolver(state, parameters, beta, physical_domain.vertical_normal, physical_domain.domain_parameters.L)
+
+    if advected_fields is None:
+        advected_fields = []
+    field_scheme = dict(advected_fields)
+    if "b" not in field_scheme.keys():
+        beqn = SUPGAdvection(physical_domain, state.spaces("HDiv_v"),
+                             state.spaces("HDiv"),
+                             dt=timestepping.dt,
+                             supg_params={"dg_direction": "horizontal"},
+                             equation_form="advective")
+        advected_fields.append(("b",
+                                SSPRK3(state.fields("b"),
+                                       timestepping.dt, beqn)))
+    if "u" not in field_scheme.keys():
+        ueqn = VectorInvariant(physical_domain, state.spaces("HDiv"),
+                               state.spaces("HDiv"))
+        advected_fields.append(("u",
+                                ThetaMethod(state.fields("u"),
+                                            timestepping.dt, ueqn)))
+
+    if forcing is None:
+        field_scheme = dict(advected_fields)
+        euler_poincare = isinstance(field_scheme["u"], EulerPoincare)
+        forcing = IncompressibleForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
 
     return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
 
