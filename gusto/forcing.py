@@ -43,10 +43,8 @@ class Forcing(object, metaclass=ABCMeta):
         self.uF = Function(self.Vu)
 
         # find out which terms we need
-        self.extruded = physical_domain is not None and physical_domain.is_extruded
-
-        self.coriolis = hasattr(self.state, "Omega") or hasattr(self.state.fields, "coriolis")
-        print(self.coriolis)
+        self.extruded = physical_domain.is_extruded
+        self.coriolis = physical_domain.is_rotating
         self.sponge = hasattr(self.state, "mu")
         self.topography = hasattr(self.state.fields, "topography")
         self.extra_terms = extra_terms
@@ -62,7 +60,8 @@ class Forcing(object, metaclass=ABCMeta):
 
     def coriolis_term(self):
         u0 = split(self.x0)[0]
-        return -inner(self.test, cross(2*self.state.Omega, u0))*dx
+        Omega = self.physical_domain.rotation_vector
+        return -inner(self.test, cross(2*Omega, u0))*dx
 
     def sponge_term(self):
         u0 = split(self.x0)[0]

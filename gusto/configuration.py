@@ -126,6 +126,7 @@ class PhysicalDomain(object):
         self.is_extruded = is_extruded
         if perp is not None:
             self.perp = perp
+        self.is_rotating = None
 
 
 def Sphere(mesh=None, *, radius=None, ref_level=None, nlayers=None, H=None):

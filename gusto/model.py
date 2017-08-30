@@ -1,3 +1,4 @@
+from firedrake import sqrt, inner, SpatialCoordinate, FunctionSpace
 from gusto.advection import SSPRK3, ThetaMethod
 from gusto.configuration import CompressibleParameters
 from gusto.forcing import ShallowWaterForcing, CompressibleForcing
@@ -33,11 +34,26 @@ def ShallowWaterModel(state,
                       physical_domain, *,
                       parameters,
                       timestepping,
+                      is_rotating=True,
+                      coriolis_parameter=None,
                       linear_solver=None,
                       forcing=None,
                       advected_fields=None,
                       diffused_fields=None,
                       physics_list=None):
+
+    if is_rotating:
+        physical_domain.is_rotating = True
+        fs = FunctionSpace(physical_domain.mesh, "CG", 1)
+        f = state.fields("coriolis", fs)
+        if coriolis_parameter is None:
+            if physical_domain.on_sphere:
+                x = SpatialCoordinate(physical_domain.mesh)
+                f.interpolate(2*parameters.Omega*x[2]/sqrt(inner(x, x)))
+            else:
+                raise ValueError("There is no default Coriolis parameter for non spherical shallow water simulations.")
+        else:
+            f.interpolate(coriolis_parameter)
 
     if linear_solver is None:
         beta = timestepping.dt*timestepping.alpha
@@ -61,14 +77,16 @@ def ShallowWaterModel(state,
 
     if forcing is None:
         field_scheme = dict(advected_fields)
-        euler_poincare = isinstance(field_scheme["u"], EulerPoincare)
-        forcing = ShallowWaterForcing(state, parameters, euler_poincare=euler_poincare)
+        euler_poincare = isinstance(field_scheme["u"].equation, EulerPoincare)
+        forcing = ShallowWaterForcing(state, parameters, physical_domain, euler_poincare=euler_poincare)
 
     return Model(state, physical_domain, parameters, timestepping, linear_solver, forcing, advected_fields, diffused_fields, physics_list)
 
 
 def CompressibleEulerModel(state,
                            physical_domain, *,
+                           is_rotating=True,
+                           rotation_vector=None,
                            parameters=None,
                            timestepping=None,
                            linear_solver=None,
@@ -76,6 +94,13 @@ def CompressibleEulerModel(state,
                            advected_fields=None,
                            diffused_fields=None,
                            physics_list=None):
+
+    if is_rotating:
+        physical_domain.is_rotating = True
+        if rotation_vector is None:
+            physical_domain.rotation_vector = as_vector((0., 0., 0.5e-4))
+        else:
+            physical_domain.rotation_vector = rotation_vector
 
     if parameters is None:
         parameters = CompressibleParameters()
