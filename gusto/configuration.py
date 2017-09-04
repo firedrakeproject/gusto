@@ -71,7 +71,7 @@ class IncompressibleParameters(PhysicalParameters, StratificationParameters):
     pass
 
 
-class CompressibleParameters(PhysicalParameters):
+class CompressibleParameters(PhysicalParameters, StratificationParameters):
 
     """
     Physical parameters for Compressible Euler

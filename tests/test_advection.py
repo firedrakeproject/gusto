@@ -27,8 +27,8 @@ def setup_model(state, physical_domain, timestepping, field_eqns, time_discretis
 def run(model, tmax, fieldlist):
 
     timestepper = AdvectionTimestepper(model)
-    f_dict = timestepper.run(0, tmax, x_end=fieldlist)
-    return f_dict
+    timestepper.run(0, tmax)
+    return timestepper.state.fields
 
 
 def check_errors(f_dict, f_end, field_eqns, tol):

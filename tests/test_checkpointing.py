@@ -72,5 +72,5 @@ def test_checkpointing(tmpdir):
     dirname = str(tmpdir)
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0., tmax=tmax)
-    dt = stepper.timestepping.dt
+    dt = stepper.model.timestepping.dt
     stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
