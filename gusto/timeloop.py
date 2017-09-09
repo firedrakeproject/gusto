@@ -142,8 +142,11 @@ class Timestepper(BaseTimestepper):
                 # This is used as the "old mesh" domain in projections
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
+
+                self.mesh_generator.pre_meshgen_callback()
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
+                self.mesh_generator.post_meshgen_callback()
 
             t += dt
 
@@ -248,8 +251,11 @@ class AdvectionTimestepper(BaseTimestepper):
                 # This is used as the "old mesh" domain in projections
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
+
+                self.mesh_generator.pre_meshgen_callback()
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
+                self.mesh_generator.post_meshgen_callback()
 
             # At the moment, this is automagically moving the mesh (if
             # appropriate), which is not ideal

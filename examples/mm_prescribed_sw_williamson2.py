@@ -79,6 +79,7 @@ for ref_level, dt in ref_dt.items():
 
     class MeshRotator(MeshGenerator):
         def __init__(self, mesh, R, vscale, dt):
+            super(MeshRotator, self).__init__()
             self.coord_function = Function(mesh.coordinates)
             x = SpatialCoordinate(mesh)
             self.rotation_expr = as_vector([x[0], x[1] + Constant(vscale)*Constant(dt)*x[2]/Constant(R), x[2] - Constant(vscale)*Constant(dt)*x[1]/Constant(R)])
