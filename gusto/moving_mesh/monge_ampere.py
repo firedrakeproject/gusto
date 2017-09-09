@@ -23,13 +23,16 @@ class OptimalTransportMeshGenerator(MeshGenerator):
     defaults to 1e-4
     :arg tol: tolerance for mesh generation procedure each timestep;
     defaults to 1e-2
+    :arg pre_meshgen_callback: optional user-supplied callback function
+    that is executed each timestep before a new mesh is made
     """
 
-    def __init__(self, mesh_in, monitor, initial_tol=1e-4, tol=1e-2):
+    def __init__(self, mesh_in, monitor, initial_tol=1e-4, tol=1e-2, pre_meshgen_callback=None):
         self.mesh_in = mesh_in
         self.monitor = monitor
         self.initial_tol = initial_tol
         self.tol = tol
+        self.pre_meshgen_callback = pre_meshgen_callback
 
         cellname = mesh_in.ufl_cell().cellname()
         dim = mesh_in.geometric_dimension()
@@ -308,6 +311,10 @@ for (int i=0; i<xi.dofs; i++) {
     def get_new_mesh(self):
         # Back up the current mesh
         self.x_old.dat.data[:] = self.mesh_in.coordinates.dat.data_ro[:]
+
+        # Call user-supplied callback function
+        if self.pre_meshgen_callback:
+            self.pre_meshgen_callback()
 
         # Make monitor function
         # TODO: should I just pass in the 'coords to use' to update_monitor?

@@ -94,9 +94,13 @@ def initialise_fn():
     pv(state)
 
 
+def update_pv():
+    pv(state)
+
+
 pv.setup(state)
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
-mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
+mesh_generator = OptimalTransportMeshGenerator(mesh, monitor, pre_meshgen_callback=update_pv)
 
 mesh_generator.get_first_mesh(initialise_fn)
 
