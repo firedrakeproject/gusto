@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
-    Function, assemble, dx
+    Function, assemble, dx, FunctionSpace
 from math import pi
 import sys
 import numpy as np
@@ -31,14 +31,14 @@ else:
     dirname = "mm_ot_sw_galewsky_jet_unperturbed"
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=4, degree=2)
-mesh.init_cell_orientations(SpatialCoordinate(mesh))
+x = SpatialCoordinate(mesh)
+mesh.init_cell_orientations(x)
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'potential_vorticity'])
+output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'potential_vorticity'], Verbose=True)
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
-              Coriolis=parameters.Omega,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -136,6 +136,11 @@ if perturb:
     D_pert = Function(D0.function_space()).interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
     D0 += D_pert
 
+# set up Coriolis
+fexpr = 2*parameters.Omega*x[2]/R
+V = FunctionSpace(mesh, "CG", 1)
+state.fields("coriolis", V).interpolate(fexpr)
+
 state.initialise([('u', u0), ('D', D0)])
 
 ueqn = EulerPoincare(state, u0.function_space())
@@ -165,6 +170,7 @@ def initialise_fn():
     if perturb:
         D_pert.interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
         D0 += D_pert
+    state.fields("coriolis").interpolate(fexpr)
     pv(state)
 
 
@@ -172,9 +178,16 @@ def update_pv():
     pv(state)
 
 
+def reinterpolate_coriolis():
+    state.fields("coriolis").interpolate(fexpr)
+
+
 pv.setup(state)
 monitor = MonitorFunction(pv(state), adapt_to="gradient")
-mesh_generator = OptimalTransportMeshGenerator(mesh, monitor, pre_meshgen_callback=update_pv)
+mesh_generator = OptimalTransportMeshGenerator(mesh,
+                                               monitor,
+                                               pre_meshgen_callback=update_pv,
+                                               post_meshgen_callback=reinterpolate_coriolis)
 mesh_generator.get_first_mesh(initialise_fn)
 
 # build time stepper
