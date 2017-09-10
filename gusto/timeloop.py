@@ -146,7 +146,6 @@ class Timestepper(BaseTimestepper):
                 self.mesh_generator.pre_meshgen_callback()
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
-                self.mesh_generator.post_meshgen_callback()
 
             t += dt
 
@@ -163,6 +162,9 @@ class Timestepper(BaseTimestepper):
                 # appropriate), which is not ideal
                 with timed_stage("Advection"):
                     self.Advection.apply(xstar_fields, xp_fields)
+
+                if state.timestepping.move_mesh:
+                    self.mesh_generator.post_meshgen_callback()
 
                 state.xrhs.assign(0.)  # residual for the linear solve
 
@@ -255,12 +257,14 @@ class AdvectionTimestepper(BaseTimestepper):
                 self.mesh_generator.pre_meshgen_callback()
                 with timed_stage("Mesh generation"):
                     self.X1.assign(self.mesh_generator.get_new_mesh())
-                self.mesh_generator.post_meshgen_callback()
 
             # At the moment, this is automagically moving the mesh (if
             # appropriate), which is not ideal
             with timed_stage("Advection"):
                 self.Advection.apply(xn_fields, xn_fields)
+
+            if state.timestepping.move_mesh:
+                self.mesh_generator.post_meshgen_callback()
 
             with timed_stage("Physics"):
                 for physics in self.physics_list:
