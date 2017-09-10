@@ -17,13 +17,26 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         :class:`~.Advection` to use.
     """
 
-    def __init__(self, state, advected_fields):
+    def __init__(self, model):
 
-        self.state = state
-        if advected_fields is None:
+        self.model = model
+        self.state = self.model.state
+        if hasattr(model.physical_domain, "sponge_layer"):
+            self.mu_alpha = [0., self.timestepping.dt]
+        else:
+            self.mu_alpha = [None, None]
+        if model.advected_fields is None:
             self.advected_fields = ()
         else:
-            self.advected_fields = tuple(advected_fields)
+            self.advected_fields = tuple(model.advected_fields)
+        if model.diffused_fields is None:
+            self.diffused_fields = ()
+        else:
+            self.diffused_fields = tuple(model.diffused_fields)
+        if model.physics_list is not None:
+            self.physics_list = model.physics_list
+        else:
+            self.physics_list = []
 
     def _apply_bcs(self):
         """
@@ -40,8 +53,16 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 bc.apply(unp1)
 
     @abstractmethod
-    def run(self):
+    def setup_timeloop(self):
         pass
+
+    @abstractmethod
+    def timeloop(self):
+        pass
+
+    def run(self, t, tmax, pickup=False):
+        self.setup_timeloop(t, pickup)
+        self.timeloop(t, tmax)
 
 
 class Timestepper(BaseTimestepper):
@@ -60,54 +81,44 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None):
+    def __init__(self, model):
 
-        super(Timestepper, self).__init__(state, advected_fields)
-        self.linear_solver = linear_solver
-        self.forcing = forcing
-        if diffused_fields is None:
-            self.diffused_fields = ()
-        else:
-            self.diffused_fields = tuple(diffused_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
+        super(Timestepper, self).__init__(model)
+        self.linear_solver = model.linear_solver
+        self.forcing = model.forcing
 
         if isinstance(self.linear_solver, IncompressibleSolver):
             self.incompressible = True
         else:
             self.incompressible = False
 
+    def setup_timeloop(self, t, pickup):
+        state = self.model.state
+        state.setup_diagnostics(self.model)
+        self.xstar_fields = {name: func for (name, func) in
+                             zip(state.fieldlist, state.xstar.split())}
+        self.xp_fields = {name: func for (name, func) in
+                          zip(state.fieldlist, state.xp.split())}
+        # list of fields that are passively advected (and possibly diffused)
+        self.passive_advection = [(name, scheme) for name, scheme in self.advected_fields if name not in state.fieldlist]
+        # list of fields that are advected as part of the nonlinear iteration
+        self.active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
+
+        # first dump
+        with timed_stage("Dump output"):
+            state.output.setup_dump(state, pickup)
+            t = state.output.dump(state, t, pickup)
+
         state.xb.assign(state.xn)
 
-    def run(self, t, tmax, pickup=False):
+    def timeloop(self, t, tmax):
         state = self.state
-        state.setup_diagnostics()
 
-        xstar_fields = {name: func for (name, func) in
-                        zip(state.fieldlist, state.xstar.split())}
-        xp_fields = {name: func for (name, func) in
-                     zip(state.fieldlist, state.xp.split())}
-        # list of fields that are passively advected (and possibly diffused)
-        passive_advection = [(name, scheme) for name, scheme in self.advected_fields if name not in state.fieldlist]
-        # list of fields that are advected as part of the nonlinear iteration
-        active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
-
-        dt = state.timestepping.dt
-        alpha = state.timestepping.alpha
-        if state.mu is not None:
-            mu_alpha = [0., dt]
-        else:
-            mu_alpha = [None, None]
-
-        with timed_stage("Dump output"):
-            state.setup_dump(pickup)
-            t = state.dump(t, pickup)
+        dt = self.model.timestepping.dt
+        alpha = self.model.timestepping.alpha
 
         while t < tmax - 0.5*dt:
-            if state.output.Verbose:
+            if state.output.output_params.Verbose:
                 print("STEP", t, dt)
 
             t += dt
@@ -115,26 +126,26 @@ class Timestepper(BaseTimestepper):
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, mu_alpha=mu_alpha[0])
+                                   state.xstar, mu_alpha=self.mu_alpha[0])
 
             state.xnp1.assign(state.xn)
 
-            for k in range(state.timestepping.maxk):
+            for k in range(self.model.timestepping.maxk):
 
                 with timed_stage("Advection"):
-                    for name, advection in active_advection:
+                    for name, advection in self.active_advection:
                         # first computes ubar from state.xn and state.xnp1
-                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                        advection.update_ubar(state.xn, state.xnp1, alpha)
                         # advects a field from xstar and puts result in xp
-                        advection.apply(xstar_fields[name], xp_fields[name])
+                        advection.apply(self.xstar_fields[name], self.xp_fields[name])
 
                 state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-                for i in range(state.timestepping.maxi):
+                for i in range(self.model.timestepping.maxi):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, mu_alpha=mu_alpha[1],
+                                           state.xrhs, mu_alpha=self.mu_alpha[1],
                                            incompressible=self.incompressible)
 
                     state.xrhs -= state.xnp1
@@ -146,10 +157,10 @@ class Timestepper(BaseTimestepper):
 
             self._apply_bcs()
 
-            for name, advection in passive_advection:
+            for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
                 # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                advection.update_ubar(state.xn, state.xnp1, self.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
@@ -166,31 +177,27 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.output.dump(state, t)
 
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
 class AdvectionTimestepper(BaseTimestepper):
 
-    def __init__(self, state, advected_fields, physics_list=None):
+    def __init__(self, model):
 
-        super(AdvectionTimestepper, self).__init__(state, advected_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
+        super(AdvectionTimestepper, self).__init__(model)
 
-    def run(self, t, tmax, x_end=None):
-        state = self.state
-        state.setup_diagnostics()
-
-        dt = state.timestepping.dt
-        state.xnp1.assign(state.xn)
+    def setup_timeloop(self, t, pickup=False):
+        self.state.setup_diagnostics(self.model)
 
         with timed_stage("Dump output"):
-            state.setup_dump()
-            state.dump(t)
+            self.state.output.setup_dump(self.state)
+            self.state.output.dump(self.state, t)
+
+    def timeloop(self, t, tmax):
+        state = self.model.state
+        dt = self.model.timestepping.dt
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
@@ -198,11 +205,11 @@ class AdvectionTimestepper(BaseTimestepper):
 
             t += dt
 
+            un = state.fields("u")
             with timed_stage("Advection"):
                 for name, advection in self.advected_fields:
                     field = getattr(state.fields, name)
-                    # first computes ubar from state.xn and state.xnp1
-                    advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                    advection.update_ubar(un, un, 0.5)
                     # advects field
                     advection.apply(field, field)
 
@@ -211,7 +218,7 @@ class AdvectionTimestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t)
+                state.output.dump(state, t)
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}

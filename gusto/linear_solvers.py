@@ -4,6 +4,7 @@ from firedrake import split, LinearVariationalProblem, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
 from firedrake.solving_utils import flatten_parameters
+from firedrake.utils import cached_property
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -25,10 +26,13 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, parameters, beta,
+                 solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.parameters = parameters
+        self.beta = beta
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -37,8 +41,9 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        # setup the solver
-        self._setup_solver()
+    @abstractproperty
+    def _solvers(self):
+        pass
 
     @abstractproperty
     def solver_parameters(self):
@@ -91,11 +96,15 @@ class CompressibleSolver(TimesteppingSolver):
                                        'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+    def __init__(self, state, parameters, beta, vertical_normal,
+                 quadrature_degree=None,
+                 solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
         self.moisture = moisture
 
+        super().__init__(state, parameters, beta, solver_parameters, overwrite_solver_parameters)
+        self.k = vertical_normal
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
         else:
@@ -104,14 +113,11 @@ class CompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
-
-    def _setup_solver(self):
+    @cached_property
+    def _solvers(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
-        cp = state.parameters.cp
-        mu = state.mu
+        beta = self.beta
+        cp = self.parameters.cp
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
@@ -129,12 +135,12 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = exner(thetabar, rhobar, state)
-        pibar_rho = exner_rho(thetabar, rhobar, state)
-        pibar_theta = exner_theta(thetabar, rhobar, state)
+        pibar = exner(thetabar, rhobar, self.parameters)
+        pibar_rho = exner_rho(thetabar, rhobar, self.parameters)
+        pibar_theta = exner_theta(thetabar, rhobar, self.parameters)
 
         # Analytical (approximate) elimination of theta
-        k = state.k             # Upward pointing unit vector
+        k = self.k             # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than pi') in the vertical
@@ -173,8 +179,9 @@ class CompressibleSolver(TimesteppingSolver):
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
-        if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+        if hasattr(state, "mu"):
+            mu = state.mu
+            eqn += beta*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -189,9 +196,9 @@ class CompressibleSolver(TimesteppingSolver):
         urho_problem = LinearVariationalProblem(
             aeqn, Leqn, self.urho, bcs=bcs)
 
-        self.urho_solver = LinearVariationalSolver(urho_problem,
-                                                   solver_parameters=self.solver_parameters,
-                                                   options_prefix='ImplicitSolver')
+        urho_solver = LinearVariationalSolver(urho_problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='ImplicitSolver')
 
         # Reconstruction of theta
         theta = TrialFunction(Vtheta)
@@ -206,22 +213,24 @@ class CompressibleSolver(TimesteppingSolver):
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
                                                  self.theta)
-        self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    options_prefix='thetabacksubstitution')
+        theta_solver = LinearVariationalSolver(theta_problem,
+                                               options_prefix='thetabacksubstitution')
+        return urho_solver, theta_solver
 
     def solve(self):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
-        self.urho_solver.solve()
+        urho_solver, theta_solver = self._solvers
+        urho_solver.solve()
 
         u1, rho1 = self.urho.split()
         u, rho, theta = self.state.dy.split()
         u.assign(u1)
         rho.assign(rho1)
 
-        self.theta_solver.solve()
+        theta_solver.solve()
         theta.assign(self.theta)
 
 
@@ -258,16 +267,18 @@ class IncompressibleSolver(TimesteppingSolver):
                          'pc_factor_mat_solver_package': 'mumps'}
     }
 
-    def __init__(self, state, L, solver_parameters=None,
+    def __init__(self, state, parameters, beta, vertical_normal, L,
+                 solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.L = L
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, parameters, beta, solver_parameters, overwrite_solver_parameters)
+        self.k = vertical_normal
 
-    def _setup_solver(self):
+    @cached_property
+    def _solvers(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
+        beta = self.beta
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vb = state.spaces("HDiv_v")
@@ -285,7 +296,7 @@ class IncompressibleSolver(TimesteppingSolver):
         bbar = state.fields("bbar")
 
         # Analytical (approximate) elimination of theta
-        k = state.k             # Upward pointing unit vector
+        k = self.k             # Upward pointing unit vector
         b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
 
         # vertical projection
@@ -300,7 +311,7 @@ class IncompressibleSolver(TimesteppingSolver):
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+            eqn += beta*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -326,9 +337,9 @@ class IncompressibleSolver(TimesteppingSolver):
                                           [M.sub(0),
                                            VectorSpaceBasis(constant=True)])
 
-        self.up_solver = LinearVariationalSolver(up_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 nullspace=nullspace)
+        up_solver = LinearVariationalSolver(up_problem,
+                                            solver_parameters=self.solver_parameters,
+                                            nullspace=nullspace)
 
         # Reconstruction of b
         b = TrialFunction(Vb)
@@ -343,21 +354,23 @@ class IncompressibleSolver(TimesteppingSolver):
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
                                              self.b)
-        self.b_solver = LinearVariationalSolver(b_problem)
+        b_solver = LinearVariationalSolver(b_problem)
+        return up_solver, b_solver
 
     def solve(self):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
-        self.up_solver.solve()
+        up_solver, b_solver = self._solvers
+        up_solver.solve()
 
         u1, p1 = self.up.split()
         u, p, b = self.state.dy.split()
         u.assign(u1)
         p.assign(p1)
 
-        self.b_solver.solve()
+        b_solver.solve()
         b.assign(self.b)
 
 
@@ -385,11 +398,12 @@ class ShallowWaterSolver(TimesteppingSolver):
                                               'ksp_rtol': 1e-8}}
     }
 
-    def _setup_solver(self):
+    @cached_property
+    def _solvers(self):
         state = self.state
-        H = state.parameters.H
-        g = state.parameters.g
-        beta = state.timestepping.dt*state.timestepping.alpha
+        H = self.parameters.H
+        g = self.parameters.g
+        beta = self.beta
 
         # Split up the rhs vector (symbolically)
         u_in, D_in = split(state.xrhs)
@@ -415,13 +429,14 @@ class ShallowWaterSolver(TimesteppingSolver):
         uD_problem = LinearVariationalProblem(
             aeqn, Leqn, self.state.dy)
 
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+        return LinearVariationalSolver(uD_problem,
+                                       solver_parameters=self.solver_parameters,
+                                       options_prefix='SWimplicit')
 
     def solve(self):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
-        self.uD_solver.solve()
+        uD_solver = self._solvers
+        uD_solver.solve()

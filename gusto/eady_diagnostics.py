@@ -69,18 +69,19 @@ class CompressibleEadyPotentialEnergy(Energy):
 class GeostrophicImbalance(DiagnosticField):
     name = "GeostrophicImbalance"
 
-    def setup(self, state):
-        super(GeostrophicImbalance, self).setup(state)
+    def setup(self, model):
+        super(GeostrophicImbalance, self).setup(model)
+        state = model.state
         u = state.fields("u")
         b = state.fields("b")
         p = state.fields("p")
-        f = state.parameters.f
+        self.f = model.parameters.f
         Vu = u.function_space()
 
         v = TrialFunction(Vu)
         w = TestFunction(Vu)
         a = inner(w, v)*dx
-        L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
+        L = (div(w)*p+inner(w, as_vector([self.f*u[1], 0.0, b])))*dx
 
         bcs = [DirichletBC(Vu, 0.0, "bottom"),
                DirichletBC(Vu, 0.0, "top")]
@@ -91,24 +92,24 @@ class GeostrophicImbalance(DiagnosticField):
             imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
 
     def compute(self, state):
-        f = state.parameters.f
         self.imbalance_solver.solve()
-        geostrophic_imbalance = self.imbalance[0]/f
+        geostrophic_imbalance = self.imbalance[0]/self.f
         return self.field.interpolate(geostrophic_imbalance)
 
 
 class TrueResidualV(DiagnosticField):
     name = "TrueResidualV"
 
-    def setup(self, state):
-        super(TrueResidualV, self).setup(state)
+    def setup(self, model):
+        super(TrueResidualV, self).setup(model)
+        state = model.state
         unew, pnew, bnew = state.xn.split()
         uold, pold, bold = state.xb.split()
         ubar = 0.5*(unew+uold)
-        H = state.parameters.H
-        f = state.parameters.f
-        dbdy = state.parameters.dbdy
-        dt = state.timestepping.dt
+        H = model.parameters.H
+        f = model.parameters.f
+        dbdy = model.parameters.dbdy
+        dt = model.timestepping.dt
         x, y, z = SpatialCoordinate(state.mesh)
         V = FunctionSpace(state.mesh, "DG", 0)
 
@@ -132,10 +133,11 @@ class TrueResidualV(DiagnosticField):
 class SawyerEliassenU(DiagnosticField):
     name = "SawyerEliassenU"
 
-    def setup(self, state):
+    def setup(self, model):
 
+        state = model.state
         space = state.spaces("HDiv")
-        super(SawyerEliassenU, self).setup(state, space=space)
+        super(SawyerEliassenU, self).setup(model, space=space)
 
         u = state.fields("u")
         b = state.fields("b")
@@ -170,9 +172,9 @@ class SawyerEliassenU(DiagnosticField):
         psi = TrialFunction(V0)
         xsi = TestFunction(V0)
 
-        f = state.parameters.f
-        H = state.parameters.H
-        L = state.parameters.L
+        f = model.parameters.f
+        H = model.parameters.H
+        L = model.parameters.L
         dbdy = state.parameters.dbdy
         x, y, z = SpatialCoordinate(state.mesh)
 
@@ -193,8 +195,8 @@ class SawyerEliassenU(DiagnosticField):
             eps = Constant(0.0001)
             brennersigma = Constant(10.0)
             n = FacetNormal(state.mesh)
-            deltax = Constant(state.parameters.deltax)
-            deltaz = Constant(state.parameters.deltaz)
+            deltax = Constant(model.parameters.deltax)
+            deltaz = Constant(model.parameters.deltaz)
 
             nn = as_matrix([[sqrt(brennersigma/Constant(deltax)), 0., 0.],
                             [0., 0., 0.],

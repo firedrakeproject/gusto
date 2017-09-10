@@ -1,7 +1,6 @@
 from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
-    FunctionSpace, Function
+from firedrake import SpatialCoordinate, as_vector
 from math import pi
 from netCDF4 import Dataset
 import pytest
@@ -15,61 +14,47 @@ def setup_sw(dirname, euler_poincare):
     H = 5960.
     day = 24.*60.*60.
 
-    mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
-    x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
+    physical_domain = Sphere(radius=R, ref_level=refinements)
 
-    fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
-    parameters = ShallowWaterParameters(H=H)
+
     diagnostic_fields = [PotentialVorticity()]
 
-    state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+    state = ShallowWaterState(physical_domain.mesh,
+                              output=output,
+                              diagnostic_fields=diagnostic_fields)
+
+    timestepping = TimesteppingParameters(dt=1500.)
+    advected_fields = []
+    if euler_poincare:
+        ueqn = EulerPoincare(physical_domain, state.spaces("HDiv"), state.spaces("HDiv"))
+        advected_fields.append(("u", ThetaMethod(state.fields("u"),
+                                                 timestepping.dt,
+                                                 ueqn)))
+
+    model = ShallowWaterModel(state,
+                              physical_domain,
+                              parameters=ShallowWaterParameters(H=H),
+                              timestepping=timestepping,
+                              advected_fields=advected_fields)
 
     # interpolate initial conditions
+    x = SpatialCoordinate(physical_domain.mesh)
     u0 = state.fields("u")
     D0 = state.fields("D")
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    Omega = parameters.Omega
-    g = parameters.g
+    g = model.parameters.g
+    Omega = model.parameters.Omega
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    if euler_poincare:
-        ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
-    else:
-        ueqn = VectorInvariant(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
-
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
-
-    linear_solver = ShallowWaterSolver(state)
-
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    stepper = Timestepper(model)
 
     return stepper, 0.25*day
 

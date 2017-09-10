@@ -22,8 +22,11 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+    def __init__(self, state, parameters, physical_domain, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+
         self.state = state
+        self.parameters = parameters
+        self.physical_domain = physical_domain
         if linear:
             self.euler_poincare = False
             warning('Setting euler_poincare to False because you have set linear=True')
@@ -41,10 +44,10 @@ class Forcing(object, metaclass=ABCMeta):
         self.uF = Function(self.Vu)
 
         # find out which terms we need
-        self.extruded = self.Vu.extruded
-        self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
-        self.sponge = state.mu is not None
-        self.topography = hasattr(state.fields, "topography")
+        self.extruded = physical_domain.is_extruded
+        self.coriolis = physical_domain.is_rotating
+        self.sponge = hasattr(self.state, "mu")
+        self.topography = hasattr(self.state.fields, "topography")
         self.extra_terms = extra_terms
         self.moisture = moisture
 
@@ -59,11 +62,13 @@ class Forcing(object, metaclass=ABCMeta):
 
     def coriolis_term(self):
         u0 = split(self.x0)[0]
-        return -inner(self.test, cross(2*self.state.Omega, u0))*dx
+        Omega = self.physical_domain.rotation_vector
+        return -inner(self.test, cross(2*Omega, u0))*dx
 
     def sponge_term(self):
         u0 = split(self.x0)[0]
-        return self.state.mu*inner(self.test, self.state.k)*inner(u0, self.state.k)*dx
+        k = self.physical_domain.vertical_normal
+        return self.state.mu*inner(self.test, k)*inner(u0, k)*dx
 
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
@@ -139,7 +144,7 @@ class CompressibleForcing(Forcing):
     def pressure_gradient_term(self):
 
         u0, rho0, theta0 = split(self.x0)
-        cp = self.state.parameters.cp
+        cp = self.parameters.cp
         n = FacetNormal(self.state.mesh)
         Vtheta = self.state.spaces("HDiv_v")
 
@@ -153,7 +158,7 @@ class CompressibleForcing(Forcing):
                 water_t += self.state.fields(water)
             theta = theta / (1 + water_t)
 
-        pi = exner(theta0, rho0, self.state)
+        pi = exner(theta0, rho0, self.parameters)
 
         L = (
             + cp*div(theta*self.test)*pi*dx
@@ -163,8 +168,8 @@ class CompressibleForcing(Forcing):
 
     def gravity_term(self):
 
-        g = self.state.parameters.g
-        L = -g*inner(self.test, self.state.k)*dx
+        g = self.parameters.g
+        L = -g*inner(self.test, self.physical_domain.vertical_normal)*dx
 
         return L
 
@@ -218,29 +223,29 @@ class CompressibleForcing(Forcing):
             theta_out += self.thetaF
 
 
-def exner(theta, rho, state):
+def exner(theta, rho, parameters):
     """
     Compute the exner function.
     """
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
+    R_d = parameters.R_d
+    p_0 = parameters.p_0
+    kappa = parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
 
 
-def exner_rho(theta, rho, state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
+def exner_rho(theta, rho, parameters):
+    R_d = parameters.R_d
+    p_0 = parameters.p_0
+    kappa = parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
 
 
-def exner_theta(theta, rho, state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
+def exner_theta(theta, rho, parameters):
+    R_d = parameters.R_d
+    p_0 = parameters.p_0
+    kappa = parameters.kappa
 
     return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
 
@@ -257,7 +262,7 @@ class IncompressibleForcing(Forcing):
 
     def gravity_term(self):
         _, _, b0 = split(self.x0)
-        L = b0*inner(self.test, self.state.k)*dx
+        L = b0*inner(self.test, self.physical_domain.vertical_normal)*dx
         return L
 
     def _build_forcing_solvers(self):
@@ -294,8 +299,8 @@ class EadyForcing(IncompressibleForcing):
     def forcing_term(self):
 
         L = Forcing.forcing_term(self)
-        dbdy = self.state.parameters.dbdy
-        H = self.state.parameters.H
+        dbdy = self.parameters.dbdy
+        H = self.parameters.H
         Vp = self.state.spaces("DG")
         _, _, z = SpatialCoordinate(self.state.mesh)
         eady_exp = Function(Vp).interpolate(z-H/2.)
@@ -308,7 +313,7 @@ class EadyForcing(IncompressibleForcing):
         super(EadyForcing, self)._build_forcing_solvers()
 
         # b_forcing
-        dbdy = self.state.parameters.dbdy
+        dbdy = self.parameters.dbdy
         Vb = self.state.spaces("HDiv_v")
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
@@ -341,12 +346,12 @@ class CompressibleEadyForcing(CompressibleForcing):
 
         # L = super(EadyForcing, self).forcing_term()
         L = Forcing.forcing_term(self)
-        dthetady = self.state.parameters.dthetady
-        Pi0 = self.state.parameters.Pi0
-        cp = self.state.parameters.cp
+        dthetady = self.parameters.dthetady
+        Pi0 = self.parameters.Pi0
+        cp = self.parameters.cp
 
         _, rho0, theta0 = split(self.x0)
-        Pi = exner(theta0, rho0, self.state)
+        Pi = exner(theta0, rho0, self.parameters)
         Pi_0 = Constant(Pi0)
 
         L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0., 1., 0.]))*dx  # Eady forcing
@@ -356,7 +361,7 @@ class CompressibleEadyForcing(CompressibleForcing):
 
         super(CompressibleEadyForcing, self)._build_forcing_solvers()
         # theta_forcing
-        dthetady = self.state.parameters.dthetady
+        dthetady = self.parameters.dthetady
         Vt = self.state.spaces("HDiv_v")
         F = TrialFunction(Vt)
         gamma = TestFunction(Vt)
@@ -386,12 +391,12 @@ class ShallowWaterForcing(Forcing):
 
         f = self.state.fields("coriolis")
         u0, _ = split(self.x0)
-        L = -f*inner(self.test, self.state.perp(u0))*dx
+        L = -f*inner(self.test, self.physical_domain.perp(u0))*dx
         return L
 
     def pressure_gradient_term(self):
 
-        g = self.state.parameters.g
+        g = self.parameters.g
         u0, D0 = split(self.x0)
         n = FacetNormal(self.state.mesh)
         un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
@@ -402,7 +407,7 @@ class ShallowWaterForcing(Forcing):
         return L
 
     def topography_term(self):
-        g = self.state.parameters.g
+        g = self.parameters.g
         u0, _ = split(self.x0)
         b = self.state.fields("topography")
         n = FacetNormal(self.state.mesh)
