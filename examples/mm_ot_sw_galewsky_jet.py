@@ -190,6 +190,9 @@ mesh_generator = OptimalTransportMeshGenerator(mesh,
                                                post_meshgen_callback=reinterpolate_coriolis)
 mesh_generator.get_first_mesh(initialise_fn)
 
+state.fields("coriolis").interpolate(fexpr)
+pv(state)
+
 # build time stepper
 stepper = Timestepper(state, advected_fields, linear_solver,
                       sw_forcing, mesh_generator=mesh_generator)

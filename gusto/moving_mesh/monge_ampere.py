@@ -166,7 +166,13 @@ class OptimalTransportMeshGenerator(MeshGenerator):
                        "fieldsplit_0_ksp_type": "preonly",
                        "fieldsplit_0_mg_levels_ksp_max_it": 5,
                        "fieldsplit_0_mg_levels_pc_type": "ilu",
+                       # "fieldsplit_0_mg_levels_pc_type": "bjacobi",
+                       # "fieldsplit_0_mg_levels_sub_ksp_type": "preonly",
+                       # "fieldsplit_0_mg_levels_sub_pc_type": "ilu",
                        "fieldsplit_1_pc_type": "ilu",
+                       # "fieldsplit_1_pc_type": "bjacobi",
+                       # "fieldsplit_1_sub_ksp_type": "preonly",
+                       # "fieldsplit_1_sub_pc_type": "ilu",
                        "fieldsplit_1_ksp_type": "preonly",
                        "ksp_max_it": 100,
                        "snes_max_it": 50,
@@ -299,7 +305,7 @@ for (int i=0; i<xi.dofs; i++) {
 
         # remake mesh solver with new tolerance
         self.params["snes_rtol"] = self.tol
-        self.params["snes_linesearch_type"] = "bt"
+        # self.params["snes_linesearch_type"] = "bt"
         self.params["snes_max_it"] = 15
 
         self.mesh_solv = NonlinearVariationalSolver(self.mesh_prob,
