@@ -1,53 +1,52 @@
-from __future__ import absolute_import
 from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+<<<<<<< HEAD
+=======
+from firedrake.solving_utils import flatten_parameters
+>>>>>>> master
 
 from gusto.forcing import exner, exner_rho, exner_theta
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-class TimesteppingSolver(object):
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver"]
+
+
+class TimesteppingSolver(object, metaclass=ABCMeta):
     """
     Base class for timestepping linear solvers for Gusto.
 
     This is a dummy base class.
 
     :arg state: :class:`.State` object.
-    :arg params (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
     """
-    __metaclass__ = ABCMeta
 
-    def __init__(self, state, params=None):
+    def __init__(self, state, solver_parameters=None,
+                 overwrite_solver_parameters=False):
 
         self.state = state
 
-        if params is None:
-            self.params = {'pc_type': 'fieldsplit',
-                           'pc_fieldsplit_type': 'schur',
-                           'ksp_type': 'gmres',
-                           'ksp_max_it': 100,
-                           'ksp_gmres_restart': 50,
-                           'pc_fieldsplit_schur_fact_type': 'FULL',
-                           'pc_fieldsplit_schur_precondition': 'selfp',
-                           'fieldsplit_0_ksp_type': 'preonly',
-                           'fieldsplit_0_pc_type': 'bjacobi',
-                           'fieldsplit_0_sub_pc_type': 'ilu',
-                           'fieldsplit_1_ksp_type': 'preonly',
-                           'fieldsplit_1_pc_type': 'gamg',
-                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
-                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-        else:
-            self.params = params
+        if solver_parameters is not None:
+            if not overwrite_solver_parameters:
+                p = flatten_parameters(self.solver_parameters)
+                p.update(flatten_parameters(solver_parameters))
+                solver_parameters = p
+            self.solver_parameters = solver_parameters
 
         # setup the solver
         self._setup_solver()
+
+    @abstractproperty
+    def solver_parameters(self):
+        """Solver parameters for this solver"""
+        pass
 
     @abstractmethod
     def solve(self):
@@ -68,12 +67,37 @@ class CompressibleSolver(TimesteppingSolver):
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
     quadrature degree in the horizontal direction and q_v is that in
     the vertical direction
-    :arg params (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
+    :arg moisture (optional): list of names of moisture fields.
     """
 
-    def __init__(self, state, quadrature_degree=None, params=None):
+    solver_parameters = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {'ksp_type': 'preonly',
+                         'pc_type': 'bjacobi',
+                         'sub_pc_type': 'ilu'},
+        'fieldsplit_1': {'ksp_type': 'preonly',
+                         'pc_type': 'gamg',
+                         'mg_levels': {'ksp_type': 'chebyshev',
+                                       'ksp_chebyshev_esteig': True,
+                                       'ksp_max_it': 1,
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'}}
+    }
 
-        self.state = state
+    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+                 overwrite_solver_parameters=False, moisture=None):
+
+        self.moisture = moisture
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -83,6 +107,7 @@ class CompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
+<<<<<<< HEAD
         if params is None:
             self.params = {'pc_type': 'fieldsplit',
                            'pc_fieldsplit_type': 'schur',
@@ -110,6 +135,9 @@ class CompressibleSolver(TimesteppingSolver):
 
         # setup the solver
         self._setup_solver()
+=======
+        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+>>>>>>> master
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
@@ -140,7 +168,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        theta = -dot(k,u)*dot(k,grad(thetabar))*beta + theta_in
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than pi') in the vertical
         # component of the gradient
@@ -152,11 +180,19 @@ class CompressibleSolver(TimesteppingSolver):
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         # specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
+
+        # add effect of density of water upon theta
+        if self.moisture is not None:
+            water_t = Function(Vtheta).assign(0.0)
+            for water in self.moisture:
+                water_t += self.state.fields(water)
+            theta = theta / (1 + water_t)
+            thetabar = thetabar / (1 + water_t)
 
         eqn = (
             inner(w, (self.P(u) - u_in))*dx
@@ -165,13 +201,13 @@ class CompressibleSolver(TimesteppingSolver):
             # to remind us why (because V(w) is purely vertical.
             # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w,n)*avg(pi)*dS_vp
+            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -187,7 +223,7 @@ class CompressibleSolver(TimesteppingSolver):
             aeqn, Leqn, self.urho, bcs=bcs)
 
         self.urho_solver = LinearVariationalSolver(urho_problem,
-                                                   solver_parameters=self.params,
+                                                   solver_parameters=self.solver_parameters,
                                                    options_prefix='ImplicitSolver')
 
         # Reconstruction of theta
@@ -198,7 +234,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta = Function(Vtheta)
 
         theta_eqn = gamma*(theta - theta_in +
-                           dot(k,u)*dot(k,grad(thetabar))*beta)*dx
+                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -237,9 +273,13 @@ class IncompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg L: the width of the domain, used in the preconditioner.
-    :arg params: Solver parameters.
+    :arg solver_parameters: (optional) Solver parameters.
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
     """
 
+<<<<<<< HEAD
     def __init__(self, state, L, params=None):
 
         self.state = state
@@ -256,11 +296,25 @@ class IncompressibleSolver(TimesteppingSolver):
                            'fieldsplit_1_ksp_type':'preonly'}
         else:
             self.params = params
+=======
+    solver_parameters = {
+        'ksp_type': 'gmres',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'additive',
+        'fieldsplit_0': {'ksp_type': 'preonly',
+                         'pc_type': 'lu',
+                         'pc_factor_mat_solver_package': 'mumps'},
+        'fieldsplit_1': {'ksp_type': 'preonly',
+                         'pc_type': 'lu',
+                         'pc_factor_mat_solver_package': 'mumps'}
+    }
+
+    def __init__(self, state, L, solver_parameters=None,
+                 overwrite_solver_parameters=False):
+>>>>>>> master
 
         self.L = L
-
-        # setup the solver
-        self._setup_solver()
+        super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
@@ -284,21 +338,21 @@ class IncompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
-        b = -dot(k,u)*dot(k,grad(bbar))*beta + b_in
+        b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
 
         # vertical projection
         def V(u):
-            return k*inner(u,k)
+            return k*inner(u, k)
 
         eqn = (
             inner(w, (u - u_in))*dx
             - beta*div(w)*p*dx
-            - beta*inner(w,k)*b*dx
+            - beta*inner(w, k)*b*dx
             + phi*div(u)*dx
         )
 
         if mu is not None:
-            eqn += dt*mu*inner(w,k)*inner(u,k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -312,7 +366,7 @@ class IncompressibleSolver(TimesteppingSolver):
         # preconditioner equation
         L = self.L
         Ap = (
-            inner(w,u) + L*L*div(w)*div(u) +
+            inner(w, u) + L*L*div(w)*div(u) +
             phi*p/L/L
         )*dx
 
@@ -325,7 +379,7 @@ class IncompressibleSolver(TimesteppingSolver):
                                            VectorSpaceBasis(constant=True)])
 
         self.up_solver = LinearVariationalSolver(up_problem,
-                                                 solver_parameters=self.params,
+                                                 solver_parameters=self.solver_parameters,
                                                  nullspace=nullspace)
 
         # Reconstruction of b
@@ -336,7 +390,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in +
-                       dot(k,u)*dot(k,grad(bbar))*beta)*dx
+                       dot(k, u)*dot(k, grad(bbar))*beta)*dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
@@ -361,8 +415,29 @@ class IncompressibleSolver(TimesteppingSolver):
 
 class ShallowWaterSolver(TimesteppingSolver):
 
-    def _setup_solver(self):
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'},
+                          # Broken residual construction
+                          'hdiv_residual': {'ksp_type': 'cg',
+                                            'pc_type': 'bjacobi',
+                                            'sub_pc_type': 'ilu',
+                                            'ksp_rtol': 1e-8},
+                          # Projection step
+                          'hdiv_projection': {'ksp_type': 'cg',
+                                              'ksp_rtol': 1e-8}}
+    }
 
+    def _setup_solver(self):
         state = self.state
         H = state.parameters.H
         g = state.parameters.g
@@ -393,7 +468,7 @@ class ShallowWaterSolver(TimesteppingSolver):
             aeqn, Leqn, self.state.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.params,
+                                                 solver_parameters=self.solver_parameters,
                                                  options_prefix='SWimplicit')
 
     def solve(self):

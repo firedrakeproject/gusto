@@ -2,12 +2,17 @@
 Some simple tools for making model configuration nicer.
 """
 
+from firedrake import sqrt
+
+
+__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters"]
+
 
 class Configuration(object):
 
     def __init__(self, **kwargs):
 
-        for name, value in kwargs.iteritems():
+        for name, value in kwargs.items():
             self.__setattr__(name, value)
 
     def __setattr__(self, name, value):
@@ -46,6 +51,9 @@ class OutputParameters(Configuration):
     steady_state_error_fields = []
     #: List of fields for computing perturbations
     perturbation_fields = []
+    #: List of ordered pairs (name, points) where name is the field
+    # name and points is the points at which to dump them
+    point_data = []
 
 
 class CompressibleParameters(Configuration):
@@ -85,9 +93,25 @@ class ShallowWaterParameters(Configuration):
 class EadyParameters(Configuration):
 
     """
-    Physical parameters for nonlinear eady
+    Physical parameters for Incompressible Eady
     """
     Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
     H = None
-    geopotential = False  # use geopotential for gravity term
+    L = None
+    f = None
+    deltax = None
+    deltaz = None
+    fourthorder = False
+
+
+class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
+
+    """
+    Physical parameters for Compressible Eady
+    """
+    g = 10.
+    N = sqrt(EadyParameters.Nsq)
+    theta_surf = 300.
+    dthetady = theta_surf/g*EadyParameters.dbdy
+    Pi0 = 0.0
