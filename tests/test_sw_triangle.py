@@ -24,7 +24,7 @@ def setup_sw(dirname, euler_poincare):
     timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
-    diagnostic_fields = [PotentialVorticity()]
+    diagnostic_fields = [Vorticity(), PotentialVorticity(), Difference('vorticity', 'v_analytical'), Difference('potential_vorticity', 'pv_analytical')]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
@@ -71,6 +71,13 @@ def setup_sw(dirname, euler_poincare):
     stepper = Timestepper(state, advected_fields, linear_solver,
                           sw_forcing)
 
+    vspace = FunctionSpace(state.mesh, "CG", 3)
+    vexpr = (2*u_max/R)*x[2]/R
+    v_analytical = state.fields("v_analytical", vspace)
+    v_analytical.interpolate(vexpr)
+    pv_analytical = state.fields("pv_analytical", vspace)
+    pv_analytical.interpolate((v_analytical+f)/D0)
+
     return stepper, 0.25*day
 
 
@@ -91,9 +98,17 @@ def test_sw_setup(tmpdir, euler_poincare):
     Derr = data.groups["D_error"]
     D = data.groups["D"]
     Dl2 = Derr["l2"][-1]/D["l2"][0]
+    assert Dl2 < 5.e-4
+
     uerr = data.groups["u_error"]
     u = data.groups["u"]
     ul2 = uerr["l2"][-1]/u["l2"][0]
-
-    assert Dl2 < 5.e-4
     assert ul2 < 5.e-3
+
+    # these 2 checks are for the diagnostic field so the checks are
+    # made for values at the beginning of the run:
+    verr = data.groups["vorticity_minus_v_analytical"]
+    assert verr["max"][0] < 6.e-7
+    pverr = data.groups["potential_vorticity_minus_pv_analytical"]
+    assert pverr["max"][0] < 1.e-10
+

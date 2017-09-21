@@ -6,7 +6,7 @@ from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Vorticity"]
 
 
 class Diagnostics(object):
@@ -367,7 +367,10 @@ class PotentialVorticity(DiagnosticField):
         :arg state: The state containing model.
         """
         if not self._initialised:
-            space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
+            try:
+                space = state.spaces("CG")
+            except:
+                space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 2)
             super(PotentialVorticity, self).setup(state, space=space)
             u = state.fields("u")
             D = state.fields("D")
@@ -386,6 +389,40 @@ class PotentialVorticity(DiagnosticField):
     def compute(self, state):
         """Computes the potential vorticity by solving
         the weighted mass system.
+        """
+        self.solver.solve()
+        return self.field
+
+
+class Vorticity(DiagnosticField):
+    """Diagnostic field for vorticity."""
+    name = "vorticity"
+
+    def setup(self, state):
+        """Solver for vorticity.
+
+        :arg state: The state containing model.
+        """
+        if not self._initialised:
+            try:
+                space = state.spaces("CG")
+            except:
+                space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 2)
+            super().setup(state, space=space)
+            u = state.fields("u")
+            gamma = TestFunction(space)
+            q = TrialFunction(space)
+
+            cell_normals = CellNormal(state.mesh)
+            gradperp = lambda psi: cross(cell_normals, grad(psi))
+
+            a = q*gamma*dx
+            L = (- inner(gradperp(gamma), u))*dx
+            problem = LinearVariationalProblem(a, L, self.field)
+            self.solver = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
+
+    def compute(self, state):
+        """Computes the vorticity.
         """
         self.solver.solve()
         return self.field
