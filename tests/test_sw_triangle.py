@@ -111,4 +111,3 @@ def test_sw_setup(tmpdir, euler_poincare):
     assert verr["max"][0] < 6.e-7
     pverr = data.groups["potential_vorticity_minus_pv_analytical"]
     assert pverr["max"][0] < 1.e-10
-
