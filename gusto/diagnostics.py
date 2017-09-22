@@ -6,7 +6,7 @@ from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Vorticity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity"]
 
 
 class Diagnostics(object):
@@ -354,56 +354,19 @@ class Perturbation(Difference):
         return self.field1+"_perturbation"
 
 
-class PotentialVorticity(DiagnosticField):
-    """Diagnostic field for potential vorticity."""
-    name = "potential_vorticity"
-
-    def setup(self, state):
-        """Solver for potential vorticity. Solves
-        a weighted mass system to generate the
-        potential vorticity from known velocity and
-        depth fields.
-
-        :arg state: The state containing model.
-        """
-        if not self._initialised:
-            try:
-                space = state.spaces("CG")
-            except:
-                space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 2)
-            super(PotentialVorticity, self).setup(state, space=space)
-            u = state.fields("u")
-            D = state.fields("D")
-            gamma = TestFunction(space)
-            q = TrialFunction(space)
-            f = state.fields("coriolis")
-
-            cell_normals = CellNormal(state.mesh)
-            gradperp = lambda psi: cross(cell_normals, grad(psi))
-
-            a = q*gamma*D*dx
-            L = (gamma*f - inner(gradperp(gamma), u))*dx
-            pv_problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
-            self.solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
-
-    def compute(self, state):
-        """Computes the potential vorticity by solving
-        the weighted mass system.
-        """
-        self.solver.solve()
-        return self.field
-
-
 class Vorticity(DiagnosticField):
-    """Diagnostic field for vorticity."""
-    name = "vorticity"
+    """Base diagnostic field class for vorticity."""
 
-    def setup(self, state):
+    def setup(self, state, vorticity_type=None):
         """Solver for vorticity.
 
         :arg state: The state containing model.
+        :arg vorticity_type: must be "relative", "absolute" or "potential"
         """
         if not self._initialised:
+            vorticity_types = ["relative", "absolute", "potential"]
+            if vorticity_type not in vorticity_types:
+                raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
             except:
@@ -416,8 +379,17 @@ class Vorticity(DiagnosticField):
             cell_normals = CellNormal(state.mesh)
             gradperp = lambda psi: cross(cell_normals, grad(psi))
 
-            a = q*gamma*dx
+            if vorticity_type == "potential":
+                D = state.fields("D")
+                a = q*gamma*D*dx
+            else:
+                a = q*gamma*dx
+
             L = (- inner(gradperp(gamma), u))*dx
+            if vorticity_type != "relative":
+                f = state.fields("coriolis")
+                L += gamma*f*dx
+
             problem = LinearVariationalProblem(a, L, self.field)
             self.solver = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
@@ -426,3 +398,42 @@ class Vorticity(DiagnosticField):
         """
         self.solver.solve()
         return self.field
+
+
+class PotentialVorticity(Vorticity):
+    """Diagnostic field for potential vorticity."""
+    name = "potential_vorticity"
+
+    def setup(self, state):
+        """Solver for potential vorticity. Solves
+        a weighted mass system to generate the
+        potential vorticity from known velocity and
+        depth fields.
+
+        :arg state: The state containing model.
+        """
+        super().setup(state, vorticity_type="potential")
+
+
+class AbsoluteVorticity(Vorticity):
+    """Diagnostic field for absolute vorticity."""
+    name = "absolute_vorticity"
+
+    def setup(self, state):
+        """Solver for absolute vorticity.
+
+        :arg state: The state containing model.
+        """
+        super().setup(state, vorticity_type="absolute")
+
+
+class RelativeVorticity(Vorticity):
+    """Diagnostic field for relative vorticity."""
+    name = "relative_vorticity"
+
+    def setup(self, state):
+        """Solver for relative vorticity.
+
+        :arg state: The state containing model.
+        """
+        super().setup(state, vorticity_type="relative")

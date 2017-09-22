@@ -24,7 +24,7 @@ def setup_sw(dirname, euler_poincare):
     timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
-    diagnostic_fields = [Vorticity(), PotentialVorticity(), Difference('vorticity', 'v_analytical'), Difference('potential_vorticity', 'pv_analytical')]
+    diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(), PotentialVorticity(), Difference('relative_vorticity', 'vrel_analytical'), Difference('absolute_vorticity', 'vabs_analytical'), Difference('potential_vorticity', 'pv_analytical')]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
@@ -73,10 +73,12 @@ def setup_sw(dirname, euler_poincare):
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
-    v_analytical = state.fields("v_analytical", vspace)
-    v_analytical.interpolate(vexpr)
+    vrel_analytical = state.fields("vrel_analytical", vspace)
+    vrel_analytical.interpolate(vexpr)
+    vabs_analytical = state.fields("vabs_analytical", vspace)
+    vabs_analytical.interpolate(vexpr + f)
     pv_analytical = state.fields("pv_analytical", vspace)
-    pv_analytical.interpolate((v_analytical+f)/D0)
+    pv_analytical.interpolate((vexpr+f)/D0)
 
     return stepper, 0.25*day
 
@@ -105,9 +107,11 @@ def test_sw_setup(tmpdir, euler_poincare):
     ul2 = uerr["l2"][-1]/u["l2"][0]
     assert ul2 < 5.e-3
 
-    # these 2 checks are for the diagnostic field so the checks are
+    # these 3 checks are for the diagnostic field so the checks are
     # made for values at the beginning of the run:
-    verr = data.groups["vorticity_minus_v_analytical"]
-    assert verr["max"][0] < 6.e-7
-    pverr = data.groups["potential_vorticity_minus_pv_analytical"]
-    assert pverr["max"][0] < 1.e-10
+    vrel_err = data.groups["relative_vorticity_minus_vrel_analytical"]
+    assert vrel_err["max"][0] < 6.e-7
+    vabs_err = data.groups["absolute_vorticity_minus_vabs_analytical"]
+    assert vabs_err["max"][0] < 6.e-7
+    pv_err = data.groups["potential_vorticity_minus_pv_analytical"]
+    assert pv_err["max"][0] < 1.e-10
