@@ -370,14 +370,13 @@ class Vorticity(DiagnosticField):
             try:
                 space = state.spaces("CG")
             except:
-                space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 2)
+                dgspace = state.spaces("DG")
+                cg_degree = dgspace.ufl_element().degree() + 2
+                space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
             u = state.fields("u")
             gamma = TestFunction(space)
             q = TrialFunction(space)
-
-            cell_normals = CellNormal(state.mesh)
-            gradperp = lambda psi: cross(cell_normals, grad(psi))
 
             if vorticity_type == "potential":
                 D = state.fields("D")
@@ -385,7 +384,13 @@ class Vorticity(DiagnosticField):
             else:
                 a = q*gamma*dx
 
-            L = (- inner(gradperp(gamma), u))*dx
+            if state.on_sphere:
+                cell_normals = CellNormal(state.mesh)
+                gradperp = lambda psi: cross(cell_normals, grad(psi))
+                L = (- inner(gradperp(gamma), u))*dx
+            else:
+                raise NotImplementedError("The vorticity diagnostics have only been implemented for 2D spherical geometries.")
+
             if vorticity_type != "relative":
                 f = state.fields("coriolis")
                 L += gamma*f*dx
