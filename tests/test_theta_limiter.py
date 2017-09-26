@@ -1,6 +1,7 @@
 from gusto import *
 from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression
+    SpatialCoordinate, ExtrudedMesh, Expression, FunctionSpace, Function, \
+    conditional, sqrt
 from gusto.theta_limiter import ThetaLimiter
 import json
 from math import pi
@@ -80,21 +81,21 @@ def setup_theta_limiter(dirname):
     theta0.interpolate(theta_b + theta_pert)
     rho0.interpolate(rho_b)
 
-    state.initialise({'u': u0, 'rho': rho0, 'theta': theta0})
-    state.set_reference_profiles({'rho': rho_b, 'theta': theta_b})
+    state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
+    state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # set up advection schemes
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
-    advection_dict = {}
-    advection_dict["u"] = NoAdvection(state, u0, None)
-    advection_dict["rho"] = SSPRK3(state, rho0, rhoeqn)
-    advection_dict["theta"] = SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))
+    advected_fields = []
+    advected_fields.append(('u', NoAdvection(state, u0, None)))
+    advected_fields.append(('rho', SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))))
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advection_dict)
+    stepper = AdvectionTimestepper(state, advected_fields)
 
     return stepper, 500.0
 
