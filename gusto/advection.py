@@ -4,7 +4,6 @@ from firedrake import Function, LinearVariationalProblem, \
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC
 from gusto.transport_equation import EmbeddedDGAdvection
-from gusto.theta_limiter import ThetaLimiter
 
 
 __all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
@@ -247,7 +246,7 @@ for (int i=0; i<vrec.dofs; ++i) {
         vrec[i][0] += v_b[i][0]/weight[i][0];
         }"""
 
-        
+
 class Remapper(object):
     """
     An object for remapping from DG space back to embedded DG space.
@@ -257,19 +256,15 @@ class Remapper(object):
     """
 
     def __init__(self, x_in, x_out):
-        
+
         self.x_in = x_in
         self.x_out = x_out
         self.weight = Function(x_out.function_space())
         par_loop(_weight_kernel, dx, {"weight": (self.weight, INC)})
 
-
     def project(self):
-        
+
         self.x_out.assign(0.)
         par_loop(_average_kernel, dx, {"vrec": (self.x_out, INC),
                                        "v_b": (self.x_in, READ),
                                        "weight": (self.weight, READ)})
-        
-    
-

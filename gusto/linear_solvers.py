@@ -112,7 +112,6 @@ class CompressibleSolver(TimesteppingSolver):
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
-        K_d = state.K_d
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")

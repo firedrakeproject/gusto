@@ -1,9 +1,8 @@
 from __future__ import absolute_import, print_function, division
-from firedrake import dx, assemble, LinearSolver
+from firedrake import dx
 from firedrake.function import Function
 from firedrake.functionspace import FunctionSpace
 from firedrake.parloops import par_loop, READ, RW, INC
-from firedrake.ufl_expr import TrialFunction, TestFunction
 from firedrake.slope_limiter.limiter import Limiter
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 __all__ = ("ThetaLimiter",)
@@ -61,13 +60,13 @@ class ThetaLimiter(Limiter):
         """
 
         self.Vt = space
-        self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1) # space with only vertex DOF
+        self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOF
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
-        self.theta_hat = Function(self.Q1DG) # theta function with only vertex DOF
+        self.theta_hat = Function(self.Q1DG)  # theta function with only vertex DOF
         self.w = Function(self.Vt)
         self.result = Function(self.Vt)
         par_loop(_weight_kernel, dx, {"weight": (self.w, INC)})
-        
+
     def copy_vertex_values(self, field):
         """
         Copies the vertex values from temperature space to
@@ -102,10 +101,10 @@ class ThetaLimiter(Limiter):
 
         self.result.assign(0.)
         par_loop(_average_kernel, dx, {"vrec": (self.result, INC),
-                                            "v_b": (field, READ),
-                                            "weight": (self.w, READ)})
+                                       "v_b": (field, READ),
+                                       "weight": (self.w, READ)})
         field.assign(self.result)
-        
+
     def compute_bounds(self, field):
         """
         Blank
