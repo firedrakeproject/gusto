@@ -1,10 +1,8 @@
 from gusto import *
-from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, Expression, FunctionSpace, Function, \
+from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
+    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
     conditional, sqrt
 from gusto.theta_limiter import ThetaLimiter
-import json
-from math import pi
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
@@ -21,7 +19,7 @@ def setup_theta_limiter(dirname):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-    x,z = SpatialCoordinate(mesh)
+    x, z = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
