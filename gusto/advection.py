@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector, dx
@@ -6,6 +5,9 @@ from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.theta_limiter import ThetaLimiter
+
+
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
 
 
 def embedded_dg(original_apply):
@@ -27,7 +29,7 @@ def embedded_dg(original_apply):
     return get_apply
 
 
-class Advection(object):
+class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
@@ -37,7 +39,6 @@ class Advection(object):
     that field satisfies
     :arg solver_params: solver_parameters
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
 
@@ -68,14 +69,11 @@ class Advection(object):
             self.xdg_in = Function(equation.space)
             self.xdg_out = Function(equation.space)
             self.x_projected = Function(field.function_space())
-            parameters = {'ksp_type':'cg',
-                          'pc_type':'bjacobi',
-                          'sub_pc_type':'ilu'}
-            if isinstance(limiter, ThetaLimiter):
-                self.Projector = Remapper(self.xdg_out, self.x_projected)
-            else:
-                self.Projector = Projector(self.xdg_out, self.x_projected,
-                                           solver_parameters=parameters)
+            parameters = {'ksp_type': 'cg',
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=parameters)
             self.xdg_in = Function(fs)
         else:
             self.embedded_dg = False
@@ -114,7 +112,7 @@ class Advection(object):
         :arg x: :class:`.Function` object, the input Function.
         :arg x_out: :class:`.Function` object, the output Function.
         """
-    pass
+        pass
 
 
 class NoAdvection(Advection):
@@ -132,7 +130,6 @@ class NoAdvection(Advection):
         pass
 
     def apply(self, x_in, x_out):
-
         x_out.assign(x_in)
 
 
@@ -211,6 +208,14 @@ class ThetaMethod(Advection):
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
     def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+
+        if not solver_params:
+            # theta method leads to asymmetric matrix, per lhs function below,
+            # so don't use CG
+            solver_params = {'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
         super(ThetaMethod, self).__init__(state, field, equation, solver_params)
 
         self.theta = theta

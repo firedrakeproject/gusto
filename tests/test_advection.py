@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
-    ExtrudedMesh, Expression, SpatialCoordinate, \
-    as_vector, VectorFunctionSpace, sin
+    ExtrudedMesh, SpatialCoordinate, \
+    as_vector, VectorFunctionSpace, sin, exp, Function, FunctionSpace
 import pytest
 from math import pi
 
@@ -19,10 +19,10 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
 
         mesh = IcosahedralSphereMesh(radius=R,
                                      refinement_level=refinements, degree=3)
-        global_normal = Expression(("x[0]", "x[1]", "x[2]"))
-        mesh.init_cell_orientations(global_normal)
+        x = SpatialCoordinate(mesh)
+        mesh.init_cell_orientations(x)
 
-        fieldlist = ['u','D']
+        fieldlist = ['u', 'D']
         timestepping = TimesteppingParameters(dt=dt)
 
         state = State(mesh, horizontal_degree=1,
@@ -30,19 +30,18 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
                       timestepping=timestepping,
                       output=output,
                       fieldlist=fieldlist)
-        x = SpatialCoordinate(mesh)
         uexpr = as_vector([-x[1], x[0], 0.0])
         u0 = state.fields("u")
         u0.project(uexpr)
 
         if vector:
             space = VectorFunctionSpace(mesh, "DG", 1)
-            fexpr = Expression(("exp(-pow(x[2],2) - pow(x[1],2))", "0.0", "0.0"))
-            f_end_expr = Expression(("exp(-pow(x[2],2) - pow(x[0],2))","0","0"))
+            fexpr = as_vector([exp(-x[2]**2 - x[1]**2), 0., 0.])
+            f_end_expr = as_vector([exp(-x[2]**2 - x[0]**2), 0., 0.])
         else:
             space = state.spaces("DG")
-            fexpr = Expression("exp(-pow(x[2],2) - pow(x[1],2))")
-            f_end_expr = Expression("exp(-pow(x[2],2) - pow(x[0],2))")
+            fexpr = exp(-x[2]**2 - x[1]**2)
+            f_end_expr = exp(-x[2]**2 - x[0]**2)
         f = state.fields("f", space)
         f_end = Function(space)
 
@@ -57,7 +56,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         dt = 0.01
         tmax = 2.5
 
-        fieldlist = ['u','rho', 'theta']
+        fieldlist = ['u', 'rho', 'theta']
         timestepping = TimesteppingParameters(dt=dt)
         parameters = CompressibleParameters()
 
@@ -94,7 +93,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     # interpolate initial conditions
     f.interpolate(fexpr)
     f_end.interpolate(f_end_expr)
-    state.initialise({'u':u0, 'f':f})
+    state.initialise([('u', u0), ('f', f)])
 
     if spatial_opts is None:
         fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)
@@ -111,9 +110,8 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
     elif time_discretisation == "implicit_midpoint":
         f_advection = ThetaMethod(state, f, fequation)
 
-    advection_dict = {}
-    advection_dict["f"] = f_advection
-    timestepper = AdvectionTimestepper(state, advection_dict)
+    advected_fields = [("f", f_advection)]
+    timestepper = AdvectionTimestepper(state, advected_fields)
 
     return timestepper, tmax, f_end
 
@@ -150,7 +148,7 @@ def test_advection_embedded_dg(tmpdir, ibp, equation_form, space):
     time_discretisation = "ssprk"
     vector = False
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"embedded_dg":{"space":space}})
+    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"embedded_dg": {"space": space}})
     assert(abs(f_err.dat.data.max()) < error[geometry])
 
 
@@ -165,5 +163,5 @@ def test_advection_supg(tmpdir, time_discretisation, ibp, equation_form, vector)
     else:
         direction = "horizontal"
     dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"supg_params":{"dg_direction":direction}})
+    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"supg_params": {"dg_direction": direction}})
     assert(abs(f_err.dat.data.max()) < error[geometry])

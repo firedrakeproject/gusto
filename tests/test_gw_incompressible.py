@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh
+from firedrake import SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh, \
+    Function
 
 
 def setup_gw(dirname):
@@ -38,7 +39,9 @@ def setup_gw(dirname):
     b_b = Function(b0.function_space()).interpolate(bref)
     b0.interpolate(b_b)
     incompressible_hydrostatic_balance(state, b0, p0)
-    state.initialise({'u': u0, 'p': p0, 'b': b0})
+    state.initialise([('u', u0),
+                      ('p', p0),
+                      ('b', b0)])
 
     # Set up forcing
     forcing = IncompressibleForcing(state)

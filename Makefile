@@ -1,11 +1,13 @@
 lint:
 	@echo "    Linting gusto codebase"
-	@flake8 gusto
+	@python3 -m flake8 gusto
 	@echo "    Linting gusto examples"
-	@flake8 examples
+	@python3 -m flake8 examples
 	@echo "    Linting gusto tests"
-	@flake8 tests
+	@python3 -m flake8 tests
+	@echo "    Linting gusto plotting scripts"
+	@python3 -m flake8 plotting
 
 test:
 	@echo "    Running all tests"
-	@py.test tests $(PYTEST_ARGS)
+	@python3 -m pytest tests $(PYTEST_ARGS)
