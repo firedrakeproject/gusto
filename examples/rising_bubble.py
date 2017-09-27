@@ -11,8 +11,8 @@ else:
 
 L = 1000.
 H = 1000.
-nlayers = int(H/50.)
-ncolumns = int(L/50.)
+nlayers = int(H/10.)
+ncolumns = int(L/10.)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
