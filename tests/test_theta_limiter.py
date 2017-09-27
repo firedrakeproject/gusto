@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
     conditional, sqrt
-from gusto.theta_limiter import ThetaLimiter
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
@@ -13,8 +12,8 @@ def setup_theta_limiter(dirname):
     # declare grid shape, with length L and height H
     L = 1000.
     H = 400.
-    nlayers = int(H / 20.)
-    ncolumns = int(L / 20.)
+    nlayers = int(H / 10.)
+    ncolumns = int(L / 10.)
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -55,10 +54,6 @@ def setup_theta_limiter(dirname):
 
     theta_b = Function(Vt).interpolate(thetab)
     rho_b = Function(Vr)
-
-    # Calculate initial rho
-    # compressible_hydrostatic_balance(state, theta_b, rho_b,
-    #                                  solve_for_rho=True)
 
     # set up bubble
     xc = 200.
