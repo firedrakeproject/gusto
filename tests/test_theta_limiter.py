@@ -111,5 +111,3 @@ def test_theta_limiter_setup(tmpdir):
 
     assert max_theta[-1] <= max_theta[0]
     assert min_theta[-1] >= min_theta[0]
-
-    
