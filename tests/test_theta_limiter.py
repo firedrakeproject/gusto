@@ -1,7 +1,9 @@
+from os import path
 from gusto import *
 from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
     conditional, sqrt
+from netCDF4 import Dataset
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
@@ -10,7 +12,7 @@ from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
 def setup_theta_limiter(dirname):
 
     # declare grid shape, with length L and height H
-    L = 1000.
+    L = 400.
     H = 400.
     nlayers = int(H / 10.)
     ncolumns = int(L / 10.)
@@ -25,7 +27,7 @@ def setup_theta_limiter(dirname):
     output = OutputParameters(dirname=dirname+"/theta_limiter",
                               dumpfreq=5,
                               dumplist=['u'],
-                              perturbation_fields=['theta', 'rho'])
+                              perturbation_fields=['theta'])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -51,9 +53,7 @@ def setup_theta_limiter(dirname):
     # Isentropic background state
     Tsurf = 300.
     thetab = Constant(Tsurf)
-
     theta_b = Function(Vt).interpolate(thetab)
-    rho_b = Function(Vr)
 
     # set up bubble
     xc = 200.
@@ -65,20 +65,19 @@ def setup_theta_limiter(dirname):
                                                                   Constant(0.0)), Constant(0.0)))
 
     # set up velocity field
-    u_max = Constant(1.0)
+    u_max = Constant(10.0)
 
     psi_expr = - u_max * z
 
     psi0 = Function(Vpsi).interpolate(psi_expr)
     u0.project(gradperp(psi0))
     theta0.interpolate(theta_b + theta_pert)
-    rho0.interpolate(rho_b)
 
     state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
-    state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+    state.set_reference_profiles([('theta', theta_b)])
 
     # set up advection schemes
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
@@ -90,7 +89,7 @@ def setup_theta_limiter(dirname):
     # build time stepper
     stepper = AdvectionTimestepper(state, advected_fields)
 
-    return stepper, 500.0
+    return stepper, 40.0
 
 
 def run_theta_limiter(dirname):
@@ -103,3 +102,14 @@ def test_theta_limiter_setup(tmpdir):
 
     dirname = str(tmpdir)
     run_theta_limiter(dirname)
+    filename = path.join(dirname, "theta_limiter/diagnostics.nc")
+    data = Dataset(filename, "r")
+
+    theta = data.groups["theta"]
+    max_theta = theta.variables["max"]
+    min_theta = theta.variables["min"]
+
+    assert max_theta[-1] <= max_theta[0]
+    assert min_theta[-1] >= min_theta[0]
+
+    
