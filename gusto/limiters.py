@@ -71,7 +71,7 @@ class ThetaLimiter(object):
         Copies the vertex values from temperature space to
         Q1DG space which only has vertices.
         """
-        par_loop(_copy_to_Q1DG_loop, dx,
+        par_loop(_copy_into_Q1DG_loop, dx,
                  {"theta": (field, READ),
                   "theta_hat": (self.theta_hat, RW)})
 
