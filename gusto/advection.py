@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector, dx
+    LinearVariationalSolver, Projector
 from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
 
