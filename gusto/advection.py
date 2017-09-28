@@ -234,37 +234,3 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
-
-
-_weight_kernel = """
-for (int i=0; i<weight.dofs; ++i) {
-    weight[i][0] += 1.0;
-    }"""
-
-_average_kernel = """
-for (int i=0; i<vrec.dofs; ++i) {
-        vrec[i][0] += v_b[i][0]/weight[i][0];
-        }"""
-
-
-class Remapper(object):
-    """
-    An object for remapping from DG space back to embedded DG space.
-
-    :arg x_in: the initial field
-    :arg x_out: the field to be remapped to
-    """
-
-    def __init__(self, x_in, x_out):
-
-        self.x_in = x_in
-        self.x_out = x_out
-        self.weight = Function(x_out.function_space())
-        par_loop(_weight_kernel, dx, {"weight": (self.weight, INC)})
-
-    def project(self):
-
-        self.x_out.assign(0.)
-        par_loop(_average_kernel, dx, {"vrec": (self.x_out, INC),
-                                       "v_b": (self.x_in, READ),
-                                       "weight": (self.weight, READ)})
