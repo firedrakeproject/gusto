@@ -5,15 +5,16 @@ from firedrake.functionspace import FunctionSpace
 from firedrake.parloops import par_loop, READ, RW, INC
 from firedrake.slope_limiter.limiter import Limiter
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-__all__ = ("ThetaLimiter",)
 
-_copy_to_vertex_space_loop = """
+__all__ = ["ThetaLimiter"]
+
+_copy_into_Q1DG_loop = """
 theta_hat[0][0] = theta[0][0];
 theta_hat[1][0] = theta[1][0];
 theta_hat[2][0] = theta[3][0];
 theta_hat[3][0] = theta[4][0];
 """
-_copy_from_vertex_space_loop = """
+_copy_from_Q1DG_loop = """
 theta[0][0] = theta_hat[0][0];
 theta[1][0] = theta_hat[1][0];
 theta[3][0] = theta_hat[2][0];
@@ -42,7 +43,7 @@ for (int i=0; i<vrec.dofs; ++i) {
         }"""
 
 
-class ThetaLimiter(Limiter):
+class ThetaLimiter(object):
     """
     A vertex based limiter for fields in the DG1xCG2 space,
     i.e. temperature variables. This acts like the vertex-based
@@ -70,7 +71,7 @@ class ThetaLimiter(Limiter):
         Copies the vertex values from temperature space to
         Q1DG space which only has vertices.
         """
-        par_loop(_copy_to_vertex_space_loop, dx,
+        par_loop(_copy_to_Q1DG_loop, dx,
                  {"theta": (field, READ),
                   "theta_hat": (self.theta_hat, RW)})
 
@@ -79,7 +80,7 @@ class ThetaLimiter(Limiter):
         Copies the vertex values back from the Q1DG space to
         the original temperature space.
         """
-        par_loop(_copy_from_vertex_space_loop, dx,
+        par_loop(_copy_from_Q1DG_loop, dx,
                  {"theta": (field, RW),
                   "theta_hat": (self.theta_hat, READ)})
 
@@ -94,7 +95,7 @@ class ThetaLimiter(Limiter):
 
     def remap_to_embedded_space(self, field):
         """
-        Not entirely sure yet. Remap to embedded space?
+        Remap from DG space to embedded DG space.
         """
 
         self.result.assign(0.)
@@ -103,19 +104,9 @@ class ThetaLimiter(Limiter):
                                        "weight": (self.w, READ)})
         field.assign(self.result)
 
-    def compute_bounds(self, field):
-        """
-        Blank
-        """
-
-    def apply_limiter(self, field):
-        """
-        Blank
-        """
-
     def apply(self, field):
         """
-        Re-computes centroids and applies limiter to given field
+        The application of the limiter to the theta-space field.
         """
         assert field.function_space() == self.Vt, \
             'Given field does not belong to this objects function space'
