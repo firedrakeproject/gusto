@@ -3,7 +3,6 @@ from firedrake import dx
 from firedrake.function import Function
 from firedrake.functionspace import FunctionSpace
 from firedrake.parloops import par_loop, READ, RW, INC
-from firedrake.slope_limiter.limiter import Limiter
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 __all__ = ["ThetaLimiter"]
