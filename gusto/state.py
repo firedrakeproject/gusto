@@ -261,6 +261,7 @@ class State(object):
             f = SteadyStateError(self, name)
             self.diagnostic_fields.append(f)
 
+        self.diagnostics.setup(self)
         for diagnostic in self.diagnostic_fields:
             diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
