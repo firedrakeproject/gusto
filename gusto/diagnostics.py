@@ -17,6 +17,12 @@ class Diagnostics(object):
 
         self.fields = list(fields)
 
+    def setup(self, state):
+        # set up area computation
+        V = state.spaces("DG0", state.mesh, "DG", 0)
+        c = Function(V).assign(1.)
+        self.area = assemble(c*dx)
+
     def register(self, *fields):
 
         fset = set(self.fields)
@@ -44,12 +50,8 @@ void maxify(double *a, double *b) {
 """, "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
         return fmax.data[0]
 
-    @staticmethod
-    def rms(f):
-        V = FunctionSpace(f.function_space().mesh(), "DG", 1)
-        c = Function(V)
-        c.assign(1)
-        rms = sqrt(assemble(dot(f, f)*dx)/assemble(c*dx))
+    def rms(self, f):
+        rms = sqrt(assemble(dot(f, f)*dx)/self.area)
         return rms
 
     @staticmethod
@@ -78,7 +80,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             self._initialised = True
             if space is None:
-                space = state.spaces("DG0", state.mesh, "DG", 0)
+                space = state.spaces("DG0", state.mesh, "DQ", 0)
             self.field = state.fields(self.name, space, pickup=False)
 
     @abstractmethod
