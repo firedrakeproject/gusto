@@ -183,21 +183,21 @@ class SSPRK3(Advection):
 
         elif stage == 2:
             self.solver.solve()
+            self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
+
+        if self.limiter is not None:
+            self.limiter.apply(self.q1)
 
     @embedded_dg
     def apply(self, x_in, x_out):
 
         if self.limiter is not None:
             self.limiter.apply(x_in)
+
         self.q1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
-            if i < 2:
-                if self.limiter is not None:
-                    self.limiter.apply(self.q1)
-        x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
+        x_out.assign(self.q1)
 
 
 class ThetaMethod(Advection):
