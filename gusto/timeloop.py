@@ -60,13 +60,8 @@ class Timestepper(BaseTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-<<<<<<< HEAD
-    def __init__(self, state, advection_dict, linear_solver, forcing,
-                 diffusion_dict=None, physics_list=None):
-=======
     def __init__(self, state, advected_fields, linear_solver, forcing,
                  diffused_fields=None, physics_list=None):
->>>>>>> master
 
         super(Timestepper, self).__init__(state, advected_fields)
         self.linear_solver = linear_solver
@@ -87,11 +82,7 @@ class Timestepper(BaseTimestepper):
 
         state.xb.assign(state.xn)
 
-<<<<<<< HEAD
-    def run(self, t, tmax, diagnostic_everydump=False, pickup=False):
-=======
     def run(self, t, tmax, pickup=False):
->>>>>>> master
         state = self.state
         state.setup_diagnostics()
 
@@ -110,34 +101,24 @@ class Timestepper(BaseTimestepper):
             stage = [0., 1.]
         else:
             stage = [None, None]
-        
+
         with timed_stage("Dump output"):
             state.setup_dump(pickup)
-            t = state.dump(t, diagnostic_everydump, pickup)
+            t = state.dump(t, pickup)
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
-<<<<<<< HEAD
-                print "STEP", t, dt
-            
-            state.time.assign(t)
-=======
                 print("STEP", t, dt)
 
->>>>>>> master
+            state.parameter_update()
             t += dt
             state.t.assign(t)
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-<<<<<<< HEAD
                                    state.xstar, stage=stage[0])
-                state.xnp1.assign(state.xn)
-=======
-                                   state.xstar, mu_alpha=mu_alpha[0])
 
             state.xnp1.assign(state.xn)
->>>>>>> master
 
             for k in range(state.timestepping.maxk):
 
@@ -186,14 +167,9 @@ class Timestepper(BaseTimestepper):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, diagnostic_everydump, pickup=False)
+                state.dump(t, pickup=False)
 
-<<<<<<< HEAD
-        state.diagnostic_dump()
-        print "TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax)
-=======
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
->>>>>>> master
 
 
 class AdvectionTimestepper(BaseTimestepper):

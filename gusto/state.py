@@ -183,14 +183,8 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
-<<<<<<< HEAD
-                 Coriolis=None,
-                 sponge_function=None,
-                 hydrostatic=None,
-                 geopotential_form=False,
-=======
                  Coriolis=None, sponge_function=None,
->>>>>>> master
+                 hydrostatic=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -200,11 +194,7 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
-<<<<<<< HEAD
         self.h = hydrostatic
-        self.geopotential_form = geopotential_form
-=======
->>>>>>> master
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -256,57 +246,22 @@ class State(object):
         else:
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0
-            ivec = [0.0]*dim
-            ivec[0] = 1.0
             self.k = Constant(kvec)
-            self.i = Constant(ivec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
-
-<<<<<<< HEAD
-        #  build the geopotential
-        if geopotential_form:
-            V = FunctionSpace(mesh, "CG", 1)
-            if self.on_sphere:
-                self.Phi = Function(V).interpolate(Expression("pow(x[0]*x[0]+x[1]*x[1]+x[2]*x[2],0.5)"))
-            else:
-                self.Phi = Function(V).interpolate(Expression("x[1]"))
-            self.Phi *= parameters.g
-
-        # Store time step
-        self.time = Constant(0.)
-
-    # Project test function for hydrostatic case
-    def P(self, q):
-        if self.h is True:
-            return q - self.k*inner(q,self.k)
+        
+        # project test function for hydrostatic case
+        if self.h:
+            self.P = lambda u: u - self.k*inner(u,self.k)
         else:
-            return q
+            self.P = lambda u: u
 
-    def setup_dump(self, pickup=False):
-
-        # setup dump files
-        # check for existence of directory so as not to overwrite
-        # output files
-        self.dumpdir = path.join("results", self.output.dirname)
-        outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
-           and path.exists(self.dumpdir) and not pickup:
-            exit("results directory '%s' already exists" % self.dumpdir)
-        self.dumpcount = itertools.count()
-        self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.diagnostic_data = defaultdict(partial(defaultdict, list))
-
-        # create field dictionary
-        self.field_dict = {field.name(): field for field in self.fields}
-
-        # register any diagnostic fields to diagnostics
-        for diagnostic in self.diagnostic_fields:
-            self.diagnostics.register(diagnostic.name)
-=======
         #  Constant to hold current time
         self.t = Constant(0.0)
->>>>>>> master
+    
+    def parameter_update(self):
+        # method to update parameters if needed
+        pass
 
     def setup_diagnostics(self):
         # add special case diagnostic fields
@@ -324,9 +279,10 @@ class State(object):
 
     def setup_dump(self, pickup=False):
 
-        # setup dump files
         # check for existence of directory so as not to overwrite
         # output files
+        # setup dump files
+        # setup checkpoint files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
@@ -334,6 +290,11 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
+        self.chkpts = ["chkpt", "chkptbk"]
+        for name in self.chkpts:
+            chkpt_path = path.join(self.dumpdir, name)
+            chkpt = DumbCheckpoint(chkpt_path, mode=FILE_CREATE)
+            self.chkpts[self.chkpts.index(name)] = chkpt
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -373,12 +334,10 @@ class State(object):
                                                    self.output.dirname,
                                                    create=not pickup)
 
-    def dump(self, t=0, diagnostic_everydump=False, pickup=False):
+    def dump(self, t=0, pickup=False):
         """
         Dump output
         :arg t: the current model time (default is zero).
-        :arg diagnostic_everydump: dump diagnostics everytime dump()
-        is called.
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
@@ -398,54 +357,18 @@ class State(object):
             for field in self.diagnostic_fields:
                 field(self)
 
-<<<<<<< HEAD
-            # dump fields
-            self.dumpfile.write(*self.to_dump)
-
-            # dump fields on latlon mesh
-            if len(self.output.dumplist_latlon) > 0:
-                self.dumpfile_ll.write(*self.to_dump_latlon)
-
-            # compute diagnostics
-            diagnostic_fns = ['min', 'max', 'rms', 'l2']
-            for name in self.diagnostics.fields:
-                for fn in diagnostic_fns:
-                    d = getattr(self.diagnostics, fn)
-                    data = d(self.field_dict[name])
-                    self.diagnostic_data[name][fn].append(data)
-                if len(self.field_dict[name].ufl_shape) is 0:
-                    data = self.diagnostics.total(self.field_dict[name])
-                    self.diagnostic_data[name]["total"].append(data)
-=======
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
             # Output pointwise data
             self.pointdata_output.dump(self.fields, t)
->>>>>>> master
+            
+            # Open the checkpoint file (backup version)
+            for file in self.chkpts:
+                # Dump all the fields to a checkpoint
+                for field in self.to_pickup:
+                    file.store(field)
+                file.write_attribute("/", "time", t)
 
-            # Open the checkpointing file (backup version)
-            files = ["chkptbk", "chkpt"]
-            for file in files:
-                chkfile = path.join(self.dumpdir, file)
-                with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                    # Dump all the fields to a checkpoint
-                    for field in self.to_pickup:
-                        chk.store(field)
-                    chk.write_attribute("/", "time", t)
-
-<<<<<<< HEAD
-            if diagnostic_everydump:
-                self.diagnostic_dump()
-
-        return t
-
-    def diagnostic_dump(self):
-        """
-        Dump diagnostics dictionary
-        """
-        with open(path.join(self.dumpdir, "diagnostics.json"), "w") as f:
-            f.write(json.dumps(self.diagnostic_data, indent=4))
-=======
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
                 self.dumpfile.write(*self.to_dump)
@@ -455,7 +378,6 @@ class State(object):
                     self.dumpfile_ll.write(*self.to_dump_latlon)
 
         return t
->>>>>>> master
 
     def initialise(self, initial_conditions):
         """

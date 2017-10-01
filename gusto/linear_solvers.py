@@ -3,10 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
-<<<<<<< HEAD
-=======
 from firedrake.solving_utils import flatten_parameters
->>>>>>> master
 
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -107,37 +104,7 @@ class CompressibleSolver(TimesteppingSolver):
                 warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-<<<<<<< HEAD
-        if params is None:
-            self.params = {'pc_type': 'fieldsplit',
-                           'pc_fieldsplit_type': 'schur',
-                           'ksp_type': 'gmres',
-                           'ksp_max_it': 100,
-                           'ksp_gmres_restart': 50,
-                           'pc_fieldsplit_schur_fact_type': 'FULL',
-                           'pc_fieldsplit_schur_precondition': 'selfp',
-                           'fieldsplit_0_ksp_type': 'preonly',
-                           'fieldsplit_0_pc_type': 'bjacobi',
-                           'fieldsplit_0_sub_pc_type': 'ilu',
-                           'fieldsplit_1_ksp_type': 'preonly',
-                           'fieldsplit_1_pc_type': 'gamg',
-                           'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues': True,
-                           'fieldsplit_1_mg_levels_ksp_chebyshev_estimate_eigenvalues_random': True,
-                           'fieldsplit_1_mg_levels_ksp_max_it': 1,
-                           'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                           'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
-        else:
-            self.params = params
-        
-        # Hydrostatic projector
-        self.P = state.P
-
-        # setup the solver
-        self._setup_solver()
-=======
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
->>>>>>> master
 
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
@@ -195,7 +162,7 @@ class CompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         eqn = (
-            inner(w, (self.P(u) - u_in))*dx
+            inner(w, (state.P(u) - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
@@ -279,24 +246,6 @@ class IncompressibleSolver(TimesteppingSolver):
     the default solver parameters with the solver_parameters passed in.
     """
 
-<<<<<<< HEAD
-    def __init__(self, state, L, params=None):
-
-        self.state = state
-
-        if params is None:
-            self.params = {'ksp_type':'gmres',
-                           'pc_type':'fieldsplit',
-                           'pc_fieldsplit_type':'additive',
-                           'fieldsplit_0_pc_type':'lu',
-                           'fieldsplit_1_pc_type':'lu',
-                           'fieldsplit_0_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_1_pc_factor_mat_solver_package': 'mumps',
-                           'fieldsplit_0_ksp_type':'preonly',
-                           'fieldsplit_1_ksp_type':'preonly'}
-        else:
-            self.params = params
-=======
     solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'fieldsplit',
@@ -311,7 +260,6 @@ class IncompressibleSolver(TimesteppingSolver):
 
     def __init__(self, state, L, solver_parameters=None,
                  overwrite_solver_parameters=False):
->>>>>>> master
 
         self.L = L
         super().__init__(state, solver_parameters, overwrite_solver_parameters)

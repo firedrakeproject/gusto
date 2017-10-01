@@ -22,25 +22,13 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-<<<<<<< HEAD
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None):
-=======
     def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
->>>>>>> master
         self.state = state
         if linear:
             self.euler_poincare = False
             warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
-<<<<<<< HEAD
-        
-        # Hydrostatic projector
-        self.P = state.P
-        
-        self.extra_terms = extra_terms
-        self._build_forcing_solver()
-=======
 
         # set up functions
         self.Vu = state.spaces("HDiv")
@@ -56,13 +44,14 @@ class Forcing(object, metaclass=ABCMeta):
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
+        self.hydrostatic = state.h
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
         self.moisture = moisture
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
-        self.mu_scaling = Constant(1.)
+        self.stage = Constant(1.)
 
         self._build_forcing_solvers()
 
@@ -79,8 +68,11 @@ class Forcing(object, metaclass=ABCMeta):
 
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
-        return -0.5*div(self.test)*inner(u0, u0)*dx
->>>>>>> master
+        return -0.5*div(self.test)*inner(self.state.P(u0), u0)*dx
+    
+    def hydrostatic_term(self):
+        u0 = split(self.x0)[0]
+        return (2*self.stage-1)*inner(u0, self.state.k)*inner(self.test, self.state.k)*dx
 
     @abstractmethod
     def pressure_gradient_term(self):
@@ -102,7 +94,10 @@ class Forcing(object, metaclass=ABCMeta):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L -= self.mu_scaling*self.sponge_term()
+            L -= self.stage*self.state.timestepping.dt*self.sponge_term()
+        # hydrostatic term has no scaling factor
+        if self.hydrostatic:
+            L += self.hydrostatic_term()
         return L
 
     def _build_forcing_solvers(self):
@@ -133,9 +128,9 @@ class Forcing(object, metaclass=ABCMeta):
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
-        mu_scaling = kwargs.get("mu_alpha")
-        if mu_scaling is not None:
-            self.mu_scaling.assign(mu_scaling)
+        stage = kwargs.get("stage")
+        if stage is not None:
+            self.stage.assign(stage)
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         uF = x_out.split()[0]
@@ -168,18 +163,11 @@ class CompressibleForcing(Forcing):
 
         pi = exner(theta0, rho0, self.state)
 
-<<<<<<< HEAD
-        Omega = state.Omega
-        cp = state.parameters.cp
-        mu = state.mu
-        self.stage = Constant(1.)
-=======
         L = (
             + cp*div(theta*self.test)*pi*dx
             - cp*jump(self.test*theta, n)*avg(pi)*dS_v
         )
         return L
->>>>>>> master
 
     def gravity_term(self):
 
@@ -190,10 +178,6 @@ class CompressibleForcing(Forcing):
 
     def theta_forcing(self):
 
-<<<<<<< HEAD
-        if self.euler_poincare:
-            L -= self.scaling*0.5*div(self.P(w))*inner(self.P(u0), u0)*dx
-=======
         cv = self.state.parameters.cv
         cp = self.state.parameters.cp
         c_vv = self.state.parameters.c_vv
@@ -201,36 +185,18 @@ class CompressibleForcing(Forcing):
         c_pl = self.state.parameters.c_pl
         R_d = self.state.parameters.R_d
         R_v = self.state.parameters.R_v
->>>>>>> master
 
         u0, _, theta0 = split(self.x0)
         water_v = self.state.fields('water_v')
         water_c = self.state.fields('water_c')
 
-<<<<<<< HEAD
-        if state.h is True:
-            L += (2*self.stage-1)*inner(u0, state.k)*inner(w, state.k)*dx  # Hydrostatic term
-        
-        if mu is not None:
-            L -= self.stage*state.timestepping.dt*mu*inner(w,state.k)*inner(u0,state.k)*dx
-=======
         c_vml = cv + water_v * c_vv + water_c * c_pl
         c_pml = cp + water_v * c_pv + water_c * c_pl
         R_m = R_d + water_v * R_v
->>>>>>> master
 
         L = -theta0 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u0)
 
-<<<<<<< HEAD
-        if self.extra_terms is not None:
-            L += self.scaling*inner(w, self.extra_terms)*dx
-
-        u_forcing_problem = LinearVariationalProblem(
-            a,L,self.uF, bcs=bcs
-        )
-=======
         return self.scaling * L
->>>>>>> master
 
     def _build_forcing_solvers(self):
 
@@ -243,18 +209,9 @@ class CompressibleForcing(Forcing):
             q = TestFunction(Vt)
             self.thetaF = Function(Vt)
 
-<<<<<<< HEAD
-        self.x0.assign(x_nl)
-        self.scaling.assign(scaling)
-        if 'stage' in kwargs and kwargs['stage'] is not None:
-            self.stage.assign(kwargs['stage'])
-        
-        self.u_forcing_solver.solve()  # places forcing in self.uF
-=======
             a = p * q * dx
             L = self.theta_forcing()
             L = q * L * dx
->>>>>>> master
 
             theta_problem = LinearVariationalProblem(a, L, self.thetaF)
 
@@ -342,50 +299,7 @@ class EadyForcing(IncompressibleForcing):
     Forcing class for Eady Boussinesq equations.
     """
 
-<<<<<<< HEAD
-    def _build_forcing_solver(self):
-        """
-        Put forcing terms into the u & b equations.
-        """
-
-        state = self.state
-        self.scaling = Constant(1.)
-        Vu = state.spaces("HDiv")
-        Vp = state.spaces("DG")
-        W = state.W
-
-        dbdy = state.parameters.dbdy
-        H = state.parameters.H
-        eady_exp = Function(Vp).interpolate(Expression(("x[2]-H/2"),H=H))
-
-        self.x0 = Function(W)   # copy x to here
-
-        u0,p0,b0 = split(self.x0)
-
-        # u_forcing
-
-        F = TrialFunction(Vu)
-        w = TestFunction(Vu)
-        self.uF = Function(Vu)
-
-        Omega = state.Omega
-        mu = state.mu
-
-        a = inner(w,F)*dx
-        L = self.scaling*(
-            div(w)*p0  # pressure gradient
-            + b0*inner(w,state.k)  # gravity term
-            - dbdy*eady_exp*inner(w,as_vector([0.,1.,0.]))  # Eady forcing
-        )*dx
-
-        if self.euler_poincare:
-            L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
-
-        if Omega is not None:
-            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
-=======
     def forcing_term(self):
->>>>>>> master
 
         L = Forcing.forcing_term(self)
         dbdy = self.state.parameters.dbdy
@@ -397,17 +311,7 @@ class EadyForcing(IncompressibleForcing):
         L -= self.scaling*dbdy*eady_exp*inner(self.test, as_vector([0., 1., 0.]))*dx
         return L
 
-<<<<<<< HEAD
-        u_forcing_problem = LinearVariationalProblem(
-            a,L,self.uF, bcs=bcs
-        )
-
-        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
-
-        # b_forcing
-=======
     def _build_forcing_solvers(self):
->>>>>>> master
 
         super(EadyForcing, self)._build_forcing_solvers()
 
@@ -428,24 +332,6 @@ class EadyForcing(IncompressibleForcing):
 
         self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
 
-<<<<<<< HEAD
-        # divergence_free
-
-        Vp = state.spaces("DG")
-        p = TrialFunction(Vp)
-        q = TestFunction(Vp)
-        self.divu = Function(Vp)
-
-        a = p*q*dx
-        L = q*div(u0)*dx
-
-        divergence_problem = LinearVariationalProblem(
-            a, L, self.divu)
-
-        self.divergence_solver = LinearVariationalSolver(divergence_problem)
-
-=======
->>>>>>> master
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
         super(EadyForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
@@ -459,122 +345,7 @@ class CompressibleEadyForcing(CompressibleForcing):
     Forcing class for compressible Eady equations.
     """
 
-<<<<<<< HEAD
-class CompressibleEadyForcing(Forcing):
-    """
-    Forcing class for compressible Eady equations.
-    """
-
-    def _build_forcing_solver(self):
-        """
-        Only put forcing terms into the u equation.
-        """
-
-        state = self.state
-        self.scaling = Constant(1.)
-        Vu = state.spaces("HDiv")
-        W = state.W
-
-        self.x0 = Function(W)   # copy x to here
-
-        u0,rho0,theta0 = split(self.x0)
-
-        # u_forcing
-
-        F = TrialFunction(Vu)
-        w = TestFunction(Vu)
-        self.uF = Function(Vu)
-
-        Omega = state.Omega
-        cp = state.parameters.cp
-        mu = state.mu
-        dthetady = state.parameters.dthetady
-        Pi0 = state.parameters.Pi0
-
-        n = FacetNormal(state.mesh)
-
-        Pi = exner(theta0, rho0, state)
-        Pi_0 = Constant(Pi0)
-
-        a = inner(w,F)*dx
-        L = self.scaling*(
-            + cp*div(theta0*w)*Pi*dx  # pressure gradient [volume]
-            - cp*jump(w*theta0,n)*avg(Pi)*dS_v  # pressure gradient [surface]
-            + cp*dthetady*(Pi-Pi_0)*inner(w,as_vector([0.,1.,0.]))*dx  # Eady forcing
-        )
-
-        if state.geopotential_form:
-            Phi = state.Phi
-            L += self.scaling*div(w)*Phi*dx  # gravity term
-        else:
-            g = state.parameters.g
-            L -= self.scaling*g*inner(w,state.k)*dx  # gravity term
-
-        if self.euler_poincare:
-            L -= self.scaling*0.5*div(w)*inner(u0, u0)*dx
-
-        if Omega is not None:
-            L -= self.scaling*inner(w,cross(2*Omega,u0))*dx  # Coriolis term
-
-        if mu is not None:
-            self.mu_scaling = Constant(1.)
-            L -= self.mu_scaling*mu*inner(w,state.k)*inner(u0,state.k)*dx
-
-        bcs = [DirichletBC(Vu, 0.0, "bottom"),
-               DirichletBC(Vu, 0.0, "top")]
-
-        u_forcing_problem = LinearVariationalProblem(
-            a,L,self.uF, bcs=bcs
-        )
-
-        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
-
-        # theta_forcing
-
-        Vt = state.spaces("HDiv_v")
-
-        F = TrialFunction(Vt)
-        gamma = TestFunction(Vt)
-        self.thetaF = Function(Vt)
-
-        a = gamma*F*dx
-        L = -gamma*self.scaling*(dthetady*inner(u0,as_vector([0.,1.,0.])))*dx
-
-        theta_forcing_problem = LinearVariationalProblem(
-            a,L,self.thetaF
-        )
-
-        self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)
-
-    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
-
-        self.x0.assign(x_nl)
-        self.scaling.assign(scaling)
-        if 'mu_alpha' in kwargs and kwargs['mu_alpha'] is not None:
-            self.mu_scaling.assign(kwargs['mu_alpha'])
-        self.u_forcing_solver.solve()  # places forcing in self.uF
-        self.theta_forcing_solver.solve()  # places forcing in self.thetaF
-
-        u_out, _, theta_out = x_out.split()
-
-        x_out.assign(x_in)
-        u_out += self.uF
-        theta_out += self.thetaF
-
-
-class ShallowWaterForcing(Forcing):
-
-    def _build_forcing_solver(self):
-
-        state = self.state
-        g = state.parameters.g
-        f = state.fields("coriolis")
-
-        Vu = state.spaces("HDiv")
-        W = state.W
-=======
     def forcing_term(self):
->>>>>>> master
 
         # L = super(EadyForcing, self).forcing_term()
         L = Forcing.forcing_term(self)
