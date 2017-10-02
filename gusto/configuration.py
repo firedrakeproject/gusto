@@ -43,6 +43,7 @@ class OutputParameters(Configuration):
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []
+    dump_diagnostics = True
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.

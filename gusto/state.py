@@ -302,19 +302,21 @@ class State(object):
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
-        diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+        if self.output.dump_diagnostics:
+            diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+            self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
+                                                       self.diagnostics,
+                                                       self.output.dirname,
+                                                       create=not pickup)
 
-        pointdata_filename = self.dumpdir+"/point_data.nc"
+        if len(self.output.point_data) > 0:
+            pointdata_filename = self.dumpdir+"/point_data.nc"
 
-        self.pointdata_output = PointDataOutput(pointdata_filename,
-                                                self.output.point_data,
-                                                self.output.dirname,
-                                                self.fields,
-                                                create=not pickup)
-        self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
-                                                   self.diagnostics,
-                                                   self.output.dirname,
-                                                   create=not pickup)
+            self.pointdata_output = PointDataOutput(pointdata_filename,
+                                                    self.output.point_data,
+                                                    self.output.dirname,
+                                                    self.fields,
+                                                    create=not pickup)
 
     def dump(self, t=0, pickup=False):
         """
@@ -335,14 +337,17 @@ class State(object):
 
         else:
 
-            # Compute diagnostic fields
-            for field in self.diagnostic_fields:
-                field(self)
+            if self.output.dump_diagnostics:
+                # Compute diagnostic fields
+                for field in self.diagnostic_fields:
+                    field(self)
 
-            # Output diagnostic data
-            self.diagnostic_output.dump(self, t)
-            # Output pointwise data
-            self.pointdata_output.dump(self.fields, t)
+                # Output diagnostic data
+                self.diagnostic_output.dump(self, t)
+
+            if len(self.output.point_data) > 0:
+                # Output pointwise data
+                self.pointdata_output.dump(self.fields, t)
 
             # Open the checkpointing file (backup version)
             files = ["chkptbk", "chkpt"]
