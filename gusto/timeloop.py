@@ -168,6 +168,9 @@ class Timestepper(BaseTimestepper):
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
+        for chk in state.chkpts:
+            chk.close()
+
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
@@ -212,6 +215,9 @@ class AdvectionTimestepper(BaseTimestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t)
+    
+        for chk in self.chkpts:
+            chk.close()
 
         if x_end is not None:
             return {field: getattr(state.fields, field) for field in x_end}

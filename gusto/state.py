@@ -278,11 +278,10 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.chkpts = ["chkpt", "chkptbk"]
-        for name in self.chkpts:
-            chkpt_path = path.join(self.dumpdir, name)
-            chkpt = DumbCheckpoint(chkpt_path, mode=FILE_CREATE)
-            self.chkpts[self.chkpts.index(name)] = chkpt
+        self.chkpts = []
+        for name in ["chkpt", "chkptbk"]:
+            fullpath = path.join(self.dumpdir, name)
+            self.chkpts.append(DumbCheckpoint(fullpath, mode=FILE_CREATE))
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -351,11 +350,11 @@ class State(object):
             self.pointdata_output.dump(self.fields, t)
 
             # Open the checkpointing file (backup version)
-            for file in self.chkpts:
+            for chk in self.chkpts:
                 # Dump all the fields to a checkpoint
                 for field in self.to_pickup:
-                    file.store(field)
-                file.write_attribute("/", "time", t)
+                    chk.store(field)
+                chk.write_attribute("/", "time", t)
             
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
