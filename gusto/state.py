@@ -355,7 +355,7 @@ class State(object):
                 for field in self.to_pickup:
                     chk.store(field)
                 chk.write_attribute("/", "time", t)
-            
+
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
                 self.dumpfile.write(*self.to_dump)

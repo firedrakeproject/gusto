@@ -215,7 +215,7 @@ class AdvectionTimestepper(BaseTimestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t)
-    
+
         for chk in self.chkpts:
             chk.close()
 
