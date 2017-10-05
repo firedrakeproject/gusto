@@ -326,14 +326,15 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
         if pickup:
-            # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
-            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                # Recover all the fields from the checkpoint
-                for field in self.to_pickup:
-                    chk.load(field)
-                t = chk.read_attribute("/", "time")
-                next(self.dumpcount)
+            if self.output.checkpoint:
+                # Open the checkpointing file for writing
+                chkfile = path.join(self.dumpdir, "chkpt")
+                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                    # Recover all the fields from the checkpoint
+                    for field in self.to_pickup:
+                        chk.load(field)
+                    t = chk.read_attribute("/", "time")
+                    next(self.dumpcount)
 
         else:
 
@@ -350,14 +351,15 @@ class State(object):
                 self.pointdata_output.dump(self.fields, t)
 
             # Open the checkpointing file (backup version)
-            #files = ["chkptbk", "chkpt"]
-            #for file in files:
-            #    chkfile = path.join(self.dumpdir, file)
-            #    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-            #        # Dump all the fields to a checkpoint
-            #        for field in self.to_pickup:
-            #            chk.store(field)
-            #        chk.write_attribute("/", "time", t)
+            if self.output.checkpoint:
+                files = ["chkptbk", "chkpt"]
+                for file in files:
+                    chkfile = path.join(self.dumpdir, file)
+                    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                        # Dump all the fields to a checkpoint
+                        for field in self.to_pickup:
+                            chk.store(field)
+                        chk.write_attribute("/", "time", t)
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
