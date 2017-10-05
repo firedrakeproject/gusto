@@ -189,7 +189,7 @@ class AdvectionTimestepper(BaseTimestepper):
         state.xnp1.assign(state.xn)
 
         with timed_stage("Dump output"):
-            state.setup_dump()
+            state.setup_dump(tmax)
             state.dump(t)
 
         while t < tmax - 0.5*dt:
