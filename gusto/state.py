@@ -55,7 +55,7 @@ class FieldCreator(object):
 
 
 class PointDataOutput(object):
-    def __init__(self, filename, field_points, description,
+    def __init__(self, filename, ndt, field_points, description,
                  field_creator, create=True):
         """Create a dump file that stores fields evaluated at points.
 
@@ -67,6 +67,7 @@ class PointDataOutput(object):
         :kwarg create: If False, assume that filename already exists
         """
         # Overwrite on creation.
+        self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
         if not create:
@@ -77,9 +78,9 @@ class PointDataOutput(object):
             # FIXME add versioning information.
             dataset.source = "Output from Gusto model"
             # Appendable dimension, timesteps in the model
-            dataset.createDimension("time", None)
+            dataset.createDimension("time", ndt)
 
-            var = dataset.createVariable("time", np.float64, ("time", ))
+            var = dataset.createVariable("time", np.float64, ("time"))
             var.units = "seconds"
             # Now create the variable group for each field
             for field_name, points in field_points:
@@ -101,15 +102,16 @@ class PointDataOutput(object):
             fields.
         :arg t: Simulation time at which dump occurs.
         """
+        self.dump_count += 1
         with Dataset(self.filename, "a") as dataset:
             # Add new time index
-            idx = dataset.dimensions["time"].size
-            dataset.variables["time"][idx:idx + 1] = t
+            # idx = dataset.dimensions["time"].size
+            # dataset.variables["time"][idx:idx + 1] = t
             for field_name, points in self.field_points:
                 vals = np.asarray(field_creator(field_name).at(points))
                 group = dataset.groups[field_name]
                 var = group.variables[field_name]
-                var[idx, :] = vals
+                var[self.dump_count, :] = vals
 
 
 class DiagnosticsOutput(object):
@@ -265,7 +267,7 @@ class State(object):
             diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, pickup=False):
+    def setup_dump(self, tmax, pickup=False):
 
         # setup dump files
         # check for existence of directory so as not to overwrite
@@ -312,7 +314,9 @@ class State(object):
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
 
-            self.pointdata_output = PointDataOutput(pointdata_filename,
+            ndt = int(tmax/self.timestepping.dt)
+            print(ndt)
+            self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     self.fields,

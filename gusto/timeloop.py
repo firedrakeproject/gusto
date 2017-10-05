@@ -103,7 +103,7 @@ class Timestepper(BaseTimestepper):
             mu_alpha = [None, None]
 
         with timed_stage("Dump output"):
-            state.setup_dump(pickup)
+            state.setup_dump(tmax, pickup)
             t = state.dump(t, pickup)
 
         while t < tmax - 0.5*dt:
