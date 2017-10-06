@@ -58,6 +58,16 @@ class ThetaLimiter(object):
         """
 
         self.Vt = space
+        # check this is the right space
+        if self.Vt.ufl_element().degree()[0] is not 1:
+            raise RuntimeError('This is not the right limiter for this space.')
+        if self.Vt.ufl_element().degree()[1] is not 2:
+            raise RuntimeError('This is not the right limiter for this space.')
+        if self.Vt.ufl_element()._element.sobolev_space()[0].name is not 'L2':
+            raise RuntimeError('This is not the right limiter for this space.')
+        if self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
+            raise RuntimeError('This is not the right limiter for this space.')
+
         self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOF
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
         self.theta_hat = Function(self.Q1DG)  # theta function with only vertex DOF
