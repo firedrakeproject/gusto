@@ -21,6 +21,7 @@ class Plot1DProfile(Plotting):
                 self.times.append(self.time[i])
             print("Profile will be plotted for times %s :" % [str(t) for t in self.times])
         else:
+            time_entries = [i for i in range(len(self.time))]
             self.times = self.time
 
         # get points
@@ -28,7 +29,7 @@ class Plot1DProfile(Plotting):
 
         # check that user has fixed the values of all other dimensions
         if len(val) != points.shape[1]-1:
-            raise ValueError("You can must fix the values of exactly %s dimensions." % str(points.shape[1]-1))
+            raise ValueError("You must fix the values of exactly %s dimensions." % str(points.shape[1]-1))
 
         # find out which points satisfy requirements
         self.px = []
@@ -43,7 +44,8 @@ class Plot1DProfile(Plotting):
             raise RuntimeError("No points match your requirements")
 
         # field values
-        self.f = self.field[:, idx]
+        self.f = self.field[time_entries, idx]
+
 
     def plot(self, same_plot):
 
@@ -53,7 +55,7 @@ class Plot1DProfile(Plotting):
                 plt.show()
 
         if same_plot:
-                plt.show()
+            plt.show()
 
 
 if __name__ == "__main__":
