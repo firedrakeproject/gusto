@@ -102,16 +102,16 @@ class PointDataOutput(object):
             fields.
         :arg t: Simulation time at which dump occurs.
         """
-        self.dump_count += 1
         with Dataset(self.filename, "a") as dataset:
             # Add new time index
             # idx = dataset.dimensions["time"].size
-            # dataset.variables["time"][idx:idx + 1] = t
+            dataset.variables["time"][self.dump_count] = t
             for field_name, points in self.field_points:
                 vals = np.asarray(field_creator(field_name).at(points))
                 group = dataset.groups[field_name]
                 var = group.variables[field_name]
                 var[self.dump_count, :] = vals
+        self.dump_count += 1
 
 
 class DiagnosticsOutput(object):
