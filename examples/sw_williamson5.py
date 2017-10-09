@@ -30,7 +30,7 @@ for ref_level, dt in ref_dt.items():
     mesh.init_cell_orientations(x)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D'])
+    output = OutputParameters(dirname=dirname, dumplist_latlon=['D'], dumpfreq=100)
     diagnostic_fields = [Sum('D', 'topography')]
 
     state = State(mesh, horizontal_degree=1,
@@ -75,7 +75,7 @@ for ref_level, dt in ref_dt.items():
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    ueqn = EulerPoincare(state, u0.function_space())
+    ueqn = AdvectionEquation(state, u0.function_space(), vector_manifold=True)
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
@@ -84,7 +84,7 @@ for ref_level, dt in ref_dt.items():
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
+    sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = Timestepper(state, advected_fields, linear_solver,
