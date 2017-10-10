@@ -78,7 +78,7 @@ class PointDataOutput(object):
             # FIXME add versioning information.
             dataset.source = "Output from Gusto model"
             # Appendable dimension, timesteps in the model
-            dataset.createDimension("time", ndt)
+            dataset.createDimension("time", ndt+1)
 
             var = dataset.createVariable("time", np.float64, ("time"))
             var.units = "seconds"
