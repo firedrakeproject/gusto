@@ -58,19 +58,22 @@ class ThetaLimiter(object):
         """
 
         self.Vt = space
-        # check this is the right space
-        if self.Vt.ufl_element().degree()[0] is not 1:
-            raise RuntimeError('This is not the right limiter for this space.')
-        if self.Vt.ufl_element().degree()[1] is not 2:
-            raise RuntimeError('This is not the right limiter for this space.')
-        if self.Vt.ufl_element()._element.sobolev_space()[0].name is not 'L2':
-            raise RuntimeError('This is not the right limiter for this space.')
-        if self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
-            raise RuntimeError('This is not the right limiter for this space.')
+        # check this is the right space, only currently working for 2D extruded mesh
+        if self.Vt.extruded and self.Vt.mesh().topological_dimension is 2:
+            # check that horizontal degree is 1 and vertical degree is 2
+            if self.Vt.ufl_element().degree()[0] is not 1 or \
+               self.Vt.ufl_element().degree()[1] is not 2:
+                raise ValueError('This is not the right limiter for this space.')
+            # check that continuity of the spaces is correct
+            if self.Vt.ufl_element()._element.sobolev_space()[0].name is not 'L2' or \
+               self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
+                raise ValueError('This is not the right limiter for this space.')
+        else:
+            print('This limiter may not work for the space you are using.')
 
-        self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOF
+        self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOFs
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
-        self.theta_hat = Function(self.Q1DG)  # theta function with only vertex DOF
+        self.theta_hat = Function(self.Q1DG)  # theta function with only vertex DOFs
         self.w = Function(self.Vt)
         self.result = Function(self.Vt)
         par_loop(_weight_kernel, dx, {"weight": (self.w, INC)})
