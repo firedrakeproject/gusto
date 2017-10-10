@@ -104,7 +104,6 @@ class PointDataOutput(object):
         """
         with Dataset(self.filename, "a") as dataset:
             # Add new time index
-            # idx = dataset.dimensions["time"].size
             dataset.variables["time"][self.dump_count] = t
             for field_name, points in self.field_points:
                 vals = np.asarray(field_creator(field_name).at(points))
