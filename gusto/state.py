@@ -314,7 +314,6 @@ class State(object):
             pointdata_filename = self.dumpdir+"/point_data.nc"
 
             ndt = int(tmax/self.timestepping.dt)
-            print(ndt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
