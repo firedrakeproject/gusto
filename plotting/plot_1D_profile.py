@@ -46,7 +46,6 @@ class Plot1DProfile(Plotting):
         # field values
         self.f = self.field[time_entries, idx]
 
-
     def plot(self, same_plot):
 
         for i in range(len(self.times)):
