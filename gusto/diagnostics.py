@@ -46,11 +46,8 @@ void maxify(double *a, double *b) {
 
     @staticmethod
     def rms(f):
-        V = FunctionSpace(f.function_space().mesh(), "DG", 1)
-        c = Function(V)
-        c.assign(1)
-        rms = sqrt(assemble(dot(f, f)*dx)/assemble(c*dx))
-        return rms
+        area = assemble(1*dx(domain=f.ufl_domain()))
+        return sqrt(assemble(dot(f, f)*dx)/area)
 
     @staticmethod
     def l2(f):
