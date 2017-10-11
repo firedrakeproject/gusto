@@ -4,7 +4,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
-__all__ = ["Timestepper", "AdvectionTimestepper"]
+__all__ = ["Timestepper", "AdvectionDiffusion"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -17,13 +17,22 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         :class:`~.Advection` to use.
     """
 
-    def __init__(self, state, advected_fields):
+    def __init__(self, state, advected_fields=None, diffused_fields=None,
+                 physics_list=None):
 
         self.state = state
         if advected_fields is None:
             self.advected_fields = ()
         else:
             self.advected_fields = tuple(advected_fields)
+        if diffused_fields is None:
+            self.diffused_fields = ()
+        else:
+            self.diffused_fields = tuple(diffused_fields)
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
     def _apply_bcs(self):
         """
@@ -63,17 +72,9 @@ class Timestepper(BaseTimestepper):
     def __init__(self, state, advected_fields, linear_solver, forcing,
                  diffused_fields=None, physics_list=None):
 
-        super(Timestepper, self).__init__(state, advected_fields)
+        super().__init__(state, advected_fields, diffused_fields, physics_list)
         self.linear_solver = linear_solver
         self.forcing = forcing
-        if diffused_fields is None:
-            self.diffused_fields = ()
-        else:
-            self.diffused_fields = tuple(diffused_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
 
         if isinstance(self.linear_solver, IncompressibleSolver):
             self.incompressible = True
@@ -171,15 +172,7 @@ class Timestepper(BaseTimestepper):
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
-class AdvectionTimestepper(BaseTimestepper):
-
-    def __init__(self, state, advected_fields, physics_list=None):
-
-        super(AdvectionTimestepper, self).__init__(state, advected_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
+class AdvectionDiffusion(BaseTimestepper):
 
     def run(self, t, tmax, x_end=None):
         state = self.state

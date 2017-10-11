@@ -111,7 +111,7 @@ def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, 
         f_advection = ThetaMethod(state, f, fequation)
 
     advected_fields = [("f", f_advection)]
-    timestepper = AdvectionTimestepper(state, advected_fields)
+    timestepper = AdvectionDiffusion(state, advected_fields)
 
     return timestepper, tmax, f_end
 
