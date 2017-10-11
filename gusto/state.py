@@ -352,7 +352,8 @@ class State(object):
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
             # Create second backup file
-            copyfile(path.join(self.dumpdir,"chkpt.h5"), path.join(self.dumpdir,"chkptbk.h5"))
+            copyfile(path.join(self.dumpdir, "chkpt.h5"),
+                     path.join(self.dumpdir, "chkptbk.h5"))
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
