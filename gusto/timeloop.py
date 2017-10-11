@@ -174,7 +174,7 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionDiffusion(BaseTimestepper):
 
-    def run(self, t, tmax, x_end=None):
+    def run(self, t, tmax):
         state = self.state
         state.setup_diagnostics()
 
@@ -205,6 +205,3 @@ class AdvectionDiffusion(BaseTimestepper):
 
             with timed_stage("Dump output"):
                 state.dump(t)
-
-        if x_end is not None:
-            return {field: getattr(state.fields, field) for field in x_end}
