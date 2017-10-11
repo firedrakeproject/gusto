@@ -21,7 +21,7 @@ H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 points_x = np.linspace(0., L, 100)
-points_z = [0.]
+points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 
 fieldlist = ['u', 'rho', 'theta']
