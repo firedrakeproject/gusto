@@ -1,4 +1,5 @@
 from os import path
+from shutil import copyfile
 import itertools
 from netCDF4 import Dataset
 import time
@@ -270,7 +271,7 @@ class State(object):
         # check for existence of directory so as not to overwrite
         # output files
         # setup dump files
-        # setup checkpoint files
+        # setup checkpoint file
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
@@ -278,10 +279,7 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.chkpts = []
-        for name in ["chkpt", "chkptbk"]:
-            fullpath = path.join(self.dumpdir, name)
-            self.chkpts.append(DumbCheckpoint(fullpath, mode=FILE_CREATE))
+        self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -349,12 +347,12 @@ class State(object):
             # Output pointwise data
             self.pointdata_output.dump(self.fields, t)
 
-            # Open the checkpointing file (backup version)
-            for chk in self.chkpts:
-                # Dump all the fields to a checkpoint
-                for field in self.to_pickup:
-                    chk.store(field)
-                chk.write_attribute("/", "time", t)
+            # Dump all the fields to the checkpointing file (backup version)
+            for field in self.to_pickup:
+                self.chkpt.store(field)
+            self.chkpt.write_attribute("/", "time", t)
+            # Create second backup file
+            copyfile(path.join(self.dumpdir,"chkpt.h5"), path.join(self.dumpdir,"chkptbk.h5"))
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
