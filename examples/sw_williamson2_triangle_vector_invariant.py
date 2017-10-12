@@ -63,7 +63,7 @@ for ref_level, dt in ref_dt.items():
                       ('D', D0)])
 
     # ueqn = EulerPoincare(state, u0.function_space())
-    ueqn = AdvectionEquation(state, u0.function_space(), vector_manifold=True)
+    ueqn = AdvectionEquation(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
@@ -72,7 +72,7 @@ for ref_level, dt in ref_dt.items():
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
+    sw_forcing = ShallowWaterForcing(state)
 
     # build time stepper
     stepper = Timestepper(state, advected_fields, linear_solver,
