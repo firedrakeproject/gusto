@@ -280,7 +280,8 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+        if self.output.checkpoint and not pickup:
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -340,6 +341,8 @@ class State(object):
                         chk.load(field)
                     t = chk.read_attribute("/", "time")
                     next(self.dumpcount)
+                # Setup new checkpoint
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
         else:
 
@@ -355,26 +358,14 @@ class State(object):
                 # Output pointwise data
                 self.pointdata_output.dump(self.fields, t)
 
-<<<<<<< HEAD
             # Dump all the fields to the checkpointing file (backup version)
-            for field in self.to_pickup:
-                self.chkpt.store(field)
-            self.chkpt.write_attribute("/", "time", t)
-            # Create second backup file
-            copyfile(path.join(self.dumpdir, "chkpt.h5"),
-                     path.join(self.dumpdir, "chkptbk.h5"))
-=======
-            # Open the checkpointing file (backup version)
             if self.output.checkpoint:
-                files = ["chkptbk", "chkpt"]
-                for file in files:
-                    chkfile = path.join(self.dumpdir, file)
-                    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                        # Dump all the fields to a checkpoint
-                        for field in self.to_pickup:
-                            chk.store(field)
-                        chk.write_attribute("/", "time", t)
->>>>>>> master
+                for field in self.to_pickup:
+                    self.chkpt.store(field)
+                self.chkpt.write_attribute("/", "time", t)
+                # Create second backup file
+                copyfile(path.join(self.dumpdir, "chkpt.h5"),
+                         path.join(self.dumpdir, "chkptbk.h5"))
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
