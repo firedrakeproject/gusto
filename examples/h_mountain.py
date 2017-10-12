@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 15000.
 
-res = 2
+res = 10
 nlayers = res*20 # horizontal layers
 columns = res*12 # number of columns
 L = 240000.

@@ -407,11 +407,6 @@ class EulerPoincare(VectorInvariant):
     """
 
     def advection_term(self, q):
-<<<<<<< HEAD
-        L = super(EulerPoincare, self).advection_term(q)
-        L -= 0.5*div(self.test)*inner(self.P(q), self.ubar)*dx
-=======
         L = super().advection_term(q)
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
->>>>>>> master
+        L -= 0.5*div(self.test)*inner(self.P(q), self.ubar)*dx
         return L

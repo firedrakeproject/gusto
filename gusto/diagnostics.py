@@ -297,13 +297,12 @@ class HydrostaticImbalance(DiagnosticField):
             bcs = [DirichletBC(space, 0.0, "bottom"),
                    DirichletBC(space, 0.0, "top")]
 
-            self.imbalance = Function(space)
-            imbalanceproblem = LinearVariationalProblem(a,L, self.imbalance, bcs=bcs)
+            imbalanceproblem = LinearVariationalProblem(a,L, self.field, bcs=bcs)
             self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
 
     def compute(self, state):
         self.imbalance_solver.solve()
-        return self.field(state).interpolate(self.imbalance[1])
+        return self.field[1]
 
 
 class Sum(DiagnosticField):
