@@ -64,9 +64,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     def nonlinear_timestep(self):
         pass
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, tmax, pickup=False, **kwargs):
 
-        t = self.setup_timeloop(t, tmax, pickup)
+        t = self.setup_timeloop(t, tmax, pickup, **kwargs)
 
         state = self.state
         dt = state.timestepping.dt
@@ -136,7 +136,9 @@ class NonlinearTimestepper(BaseTimestepper):
 
 class ImplicitMidpoint(NonlinearTimestepper):
 
-    def setup_timeloop(self, t, tmax, pickup):
+    def setup_timeloop(self, t, tmax, pickup, **kwargs):
+        self.maxk = kwargs.get("maxk", 4)
+
         t = super().setup_timeloop(t, tmax, pickup)
 
         self.xn_fields = {name: func for (name, func) in
@@ -149,7 +151,7 @@ class ImplicitMidpoint(NonlinearTimestepper):
         state = self.state
 
         state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
-        for k in range(state.timestepping.maxk):
+        for k in range(self.maxk):
 
             for name, advection in self.active_advection:
                 # first computes ubar from state.xn and state.xnp1
@@ -181,7 +183,10 @@ class Timestepper(NonlinearTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def setup_timeloop(self, t, tmax, pickup):
+    def setup_timeloop(self, t, tmax, pickup, **kwargs):
+        self.maxi = kwargs.get("maxi", 1)
+        self.maxk = kwargs.get("maxk", 4)
+
         t = super().setup_timeloop(t, tmax, pickup)
 
         self.xstar_fields = {name: func for (name, func) in
@@ -199,7 +204,7 @@ class Timestepper(NonlinearTimestepper):
             self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                state.xstar, mu_alpha=self.mu_alpha[0])
 
-        for k in range(state.timestepping.maxk):
+        for k in range(self.maxk):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
@@ -210,7 +215,7 @@ class Timestepper(NonlinearTimestepper):
 
             state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-            for i in range(state.timestepping.maxi):
+            for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
