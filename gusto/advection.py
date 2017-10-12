@@ -38,7 +38,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None):
+    def __init__(self, state, field, equation=None, *, forcing=None, solver_params=None):
 
         if equation is not None:
 
@@ -55,6 +55,10 @@ class Advection(object, metaclass=ABCMeta):
             else:
                 self.solver_parameters = solver_params
 
+        if forcing is not None:
+            self.xbar = forcing.x0
+            self.forcing_term = forcing.forcing_term
+
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
         # equation class and we can get the correct function space from
@@ -62,8 +66,8 @@ class Advection(object, metaclass=ABCMeta):
         if isinstance(equation, EmbeddedDGAdvection):
             self.embedded_dg = True
             fs = equation.space
-            self.xdg_in = Function(equation.space)
-            self.xdg_out = Function(equation.space)
+            self.xdg_in = Function(fs)
+            self.xdg_out = Function(fs)
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
@@ -85,12 +89,17 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        r = self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        if hasattr(self, "forcing_term"):
+            r += self.dt*self.forcing_term()
+        return r
 
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
         unp1 = xnp1.split()[0]
         self.ubar.assign(un + alpha*(unp1-un))
+        if hasattr(self, "xbar"):
+            self.xbar.assign(xn + alpha*(xnp1-xn))
 
     @cached_property
     def solver(self):
@@ -138,11 +147,11 @@ class ForwardEuler(Advection):
 
     @cached_property
     def lhs(self):
-        return super(ForwardEuler, self).lhs
+        return super().lhs
 
     @cached_property
     def rhs(self):
-        return super(ForwardEuler, self).rhs
+        return super().rhs
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -163,11 +172,11 @@ class SSPRK3(Advection):
 
     @cached_property
     def lhs(self):
-        return super(SSPRK3, self).lhs
+        return super().lhs
 
     @cached_property
     def rhs(self):
-        return super(SSPRK3, self).rhs
+        return super().rhs
 
     def solve_stage(self, x_in, stage):
 
@@ -205,7 +214,7 @@ class ThetaMethod(Advection):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+        super().__init__(state, field, equation, solver_params=solver_params)
 
         self.theta = theta
 

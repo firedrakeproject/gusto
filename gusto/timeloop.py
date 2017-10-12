@@ -4,7 +4,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
-__all__ = ["Timestepper", "AdvectionDiffusion"]
+__all__ = ["Timestepper", "ImplicitMidpoint", "AdvectionDiffusion"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -108,7 +108,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
 
 class NonlinearTimestepper(BaseTimestepper):
-    def __init__(self, state, advected_fields, linear_solver, forcing,
+    def __init__(self, state, advected_fields, linear_solver, forcing=None,
                  diffused_fields=None, physics_list=None):
 
         super().__init__(state, advected_fields, diffused_fields, physics_list)
@@ -134,6 +134,37 @@ class NonlinearTimestepper(BaseTimestepper):
                 self.advected_fields if name not in self.state.fieldlist]
 
 
+class ImplicitMidpoint(NonlinearTimestepper):
+
+    def setup_timeloop(self, t, tmax, pickup):
+        t = super().setup_timeloop(t, tmax, pickup)
+
+        self.xn_fields = {name: func for (name, func) in
+                          zip(self.state.fieldlist, self.state.xn.split())}
+        self.xrhs_fields = {name: func for (name, func) in
+                            zip(self.state.fieldlist, self.state.xrhs.split())}
+        return t
+
+    def nonlinear_timestep(self):
+        state = self.state
+
+        state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+        for k in range(state.timestepping.maxk):
+
+            for name, advection in self.active_advection:
+                # first computes ubar from state.xn and state.xnp1
+                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
+                # advects a field from xn and puts result in xp
+                advection.apply(self.xn_fields[name], self.xrhs_fields[name])
+
+            state.xrhs -= state.xnp1
+
+            with timed_stage("Implicit solve"):
+                self.linear_solver.solve()  # solves linear system and places result in state.dy
+
+            state.xnp1 += state.dy
+
+
 class Timestepper(NonlinearTimestepper):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
@@ -150,16 +181,14 @@ class Timestepper(NonlinearTimestepper):
     :arg forcing: a :class:`.Forcing` object
     """
 
-    def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None):
-
-        super().__init__(state, advected_fields, linear_solver, forcing,
-                         diffused_fields, physics_list)
+    def setup_timeloop(self, t, tmax, pickup):
+        t = super().setup_timeloop(t, tmax, pickup)
 
         self.xstar_fields = {name: func for (name, func) in
-                             zip(state.fieldlist, state.xstar.split())}
+                             zip(self.state.fieldlist, self.state.xstar.split())}
         self.xp_fields = {name: func for (name, func) in
-                          zip(state.fieldlist, state.xp.split())}
+                          zip(self.state.fieldlist, self.state.xp.split())}
+        return t
 
     def nonlinear_timestep(self):
         state = self.state
