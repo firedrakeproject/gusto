@@ -55,14 +55,14 @@ class Advection(object, metaclass=ABCMeta):
             else:
                 self.solver_parameters = solver_params
 
+        self.bcs = []
         if forcing is not None:
             self.xbar = forcing.x0
             self.forcing_term = forcing.forcing_term
             fs = equation.V
-            self.bcs = [DirichletBC(fs, 0.0, "bottom"),
-                        DirichletBC(fs, 0.0, "top")]
-        else:
-            self.bcs = []
+            if fs.extruded:
+                self.bcs = [DirichletBC(fs, 0.0, "bottom"),
+                            DirichletBC(fs, 0.0, "top")]
 
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
