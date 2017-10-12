@@ -276,35 +276,35 @@ class InternalEnergy(DiagnosticField):
 
 class HydrostaticImbalance(DiagnosticField):
     name = "HydrostaticImbalance"
-    
+
     def setup(self, state):
-        super(HydrostaticImbalance, self).setup(state)
-        rho = state.fields("rho")
-        rhobar = state.fields("rhobar")
-        theta = state.fields("theta")
-        thetabar = state.fields("thetabar")
-        pi = exner(theta, rho, state)
-        pibar = exner(thetabar, rhobar, state)
-        
-        cp = Constant(state.parameters.cp)
-        n = FacetNormal(state.mesh)
-        
-        Vv = state.spaces("Vv")
-        F = TrialFunction(Vv)
-        w = TestFunction(Vv)
-        a = inner(w,F)*dx
-        L = (- cp*div(Chi*(theta-thetabar)*w)*pibar*dx
-             + cp*jump(Chi*(theta-thetabar)*w,n)*avg(pibar)*dS_v
-             - cp*div(Chi*thetabar*w)*(pi-pibar)*dx
-             + cp*jump(Chi*thetabar*w,n)*avg(pi-pibar)*dS_v
-             )
-            
-        bcs = [DirichletBC(Vv, 0.0, "bottom"),
-               DirichletBC(Vv, 0.0, "top")]
-             
-        self.imbalance = Function(Vv)
-        imbalanceproblem = LinearVariationalProblem(a,L, self.imbalance, bcs=bcs)
-        self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
+        if not self._initialised:
+            space = state.spaces("Vv")
+            super(HydrostaticImbalance, self).setup(state, space=space)
+            rho = state.fields("rho")
+            rhobar = state.fields("rhobar")
+            theta = state.fields("theta")
+            thetabar = state.fields("thetabar")
+            pi = exner(theta, rho, state)
+            pibar = exner(thetabar, rhobar, state)
+
+            cp = Constant(state.parameters.cp)
+            n = FacetNormal(state.mesh)
+
+            F = TrialFunction(space)
+            w = TestFunction(space)
+            a = inner(w,F)*dx
+            L = (- cp*div((theta-thetabar)*w)*pibar*dx
+                 + cp*jump((theta-thetabar)*w,n)*avg(pibar)*dS_v
+                 - cp*div(thetabar*w)*(pi-pibar)*dx
+                 + cp*jump(thetabar*w,n)*avg(pi-pibar)*dS_v)
+
+            bcs = [DirichletBC(space, 0.0, "bottom"),
+                   DirichletBC(space, 0.0, "top")]
+
+            self.imbalance = Function(space)
+            imbalanceproblem = LinearVariationalProblem(a,L, self.imbalance, bcs=bcs)
+            self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
 
     def compute(self, state):
         self.imbalance_solver.solve()

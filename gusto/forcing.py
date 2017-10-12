@@ -69,7 +69,7 @@ class Forcing(object, metaclass=ABCMeta):
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
         return -0.5*div(self.test)*inner(self.state.P(u0), u0)*dx
-    
+
     def hydrostatic_term(self):
         u0 = split(self.x0)[0]
         return (2*self.stage-1)*inner(u0, self.state.k)*inner(self.test, self.state.k)*dx

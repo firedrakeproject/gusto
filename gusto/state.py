@@ -249,7 +249,7 @@ class State(object):
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
-        
+
         # project test function for hydrostatic case
         if self.h:
             self.P = lambda u: u - self.k*inner(u,self.k)
@@ -258,7 +258,7 @@ class State(object):
 
         #  Constant to hold current time
         self.t = Constant(0.0)
-    
+
     def parameter_update(self):
         # method to update parameters if needed
         pass

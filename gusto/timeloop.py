@@ -97,6 +97,7 @@ class Timestepper(BaseTimestepper):
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
+        # Sponge and hydrostatic terms depend on forcing stage
         if state.mu or state.h is not None:
             stage = [0., 1.]
         else:

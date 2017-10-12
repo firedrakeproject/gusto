@@ -10,14 +10,14 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 15000.
 
-res = 1
+res = 2
 nlayers = res*20 # horizontal layers
-columns = res*12  # number of columns
+columns = res*12 # number of columns
 L = 240000.
 m = PeriodicIntervalMesh(columns, L)
 
 # build volume mesh
-H = 50000.  # Height position of the model top
+H = 50000. # Height position of the model top
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
@@ -48,7 +48,7 @@ timestepping = TimesteppingParameters(dt=dt, alpha=1.0)
 output = OutputParameters(dirname='h_mountain_smootherz', dumpfreq=30, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber(), VelocityZ()]
+diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
@@ -165,8 +165,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 lu_params = {'pc_type':'lu',
              'ksp_type':'preonly',
              'pc_factor_mat_solver_package':'mumps',
-             'mat_type':'aij' #, 'ksp_converged_reason':True
-            }
+             'mat_type':'aij'}
 
 linear_solver = CompressibleSolver(state, solver_parameters=lu_params)
 
