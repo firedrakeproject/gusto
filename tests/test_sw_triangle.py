@@ -7,7 +7,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def setup_sw(dirname, euler_poincare):
+def setup_sw(dirname, euler_poincare, timestepper):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -57,19 +57,25 @@ def setup_sw(dirname, euler_poincare):
         ueqn = EulerPoincare(state, u0.function_space())
         sw_forcing = ShallowWaterForcing(state)
     else:
-        ueqn = VectorInvariant(state, u0.function_space())
+        ueqn = VectorInvariant(state, state.spaces("HDiv"))
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    if timestepper == "implicit_midpoint":
+        advected_fields.append(("u", SSPRK3(state, u0, ueqn, forcing=sw_forcing)))
+    else:
+        advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    if timestepper == "implicit_midpoint":
+        stepper = ImplicitMidpoint(state, advected_fields, linear_solver)
+    else:
+        stepper = Timestepper(state, advected_fields, linear_solver,
+                              sw_forcing)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
@@ -83,19 +89,24 @@ def setup_sw(dirname, euler_poincare):
     return stepper, 0.25*day
 
 
-def run_sw(dirname, euler_poincare):
+def run_sw(dirname, euler_poincare, timestepper=None):
 
-    stepper, tmax = setup_sw(dirname, euler_poincare)
+    stepper, tmax = setup_sw(dirname, euler_poincare, timestepper)
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("euler_poincare", [True, False])
-def test_sw_setup(tmpdir, euler_poincare):
+def check_vorticity(data):
+    # these 3 checks are for the diagnostic field so the checks are
+    # made for values at the beginning of the run:
+    vrel_err = data.groups["relative_vorticity_minus_vrel_analytical"]
+    assert vrel_err["max"][0] < 6.e-7
+    vabs_err = data.groups["absolute_vorticity_minus_vabs_analytical"]
+    assert vabs_err["max"][0] < 6.e-7
+    pv_err = data.groups["potential_vorticity_minus_pv_analytical"]
+    assert pv_err["max"][0] < 1.e-10
 
-    dirname = str(tmpdir)
-    run_sw(dirname, euler_poincare=euler_poincare)
-    filename = path.join(dirname, "sw/diagnostics.nc")
-    data = Dataset(filename, "r")
+    
+def check_output(data):
 
     Derr = data.groups["D_error"]
     D = data.groups["D"]
@@ -107,11 +118,24 @@ def test_sw_setup(tmpdir, euler_poincare):
     ul2 = uerr["l2"][-1]/u["l2"][0]
     assert ul2 < 5.e-3
 
-    # these 3 checks are for the diagnostic field so the checks are
-    # made for values at the beginning of the run:
-    vrel_err = data.groups["relative_vorticity_minus_vrel_analytical"]
-    assert vrel_err["max"][0] < 6.e-7
-    vabs_err = data.groups["absolute_vorticity_minus_vabs_analytical"]
-    assert vabs_err["max"][0] < 6.e-7
-    pv_err = data.groups["potential_vorticity_minus_pv_analytical"]
-    assert pv_err["max"][0] < 1.e-10
+
+@pytest.mark.parametrize("euler_poincare", [True, False])
+def test_sw_setup(tmpdir, euler_poincare):
+
+    dirname = str(tmpdir)
+    run_sw(dirname, euler_poincare=euler_poincare)
+    filename = path.join(dirname, "sw/diagnostics.nc")
+    data = Dataset(filename, "r")
+    check_vorticity(data)
+    check_output(data)
+
+
+def test_sw_implicit_midpoint(tmpdir):
+
+    dirname = str(tmpdir)
+    run_sw(dirname, euler_poincare=False, timestepper="implicit_midpoint")
+    filename = path.join(dirname, "sw/diagnostics.nc")
+    data = Dataset(filename, "r")
+    check_output(data)
+    
+
