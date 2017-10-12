@@ -107,7 +107,34 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
-class Timestepper(BaseTimestepper):
+class NonlinearTimestepper(BaseTimestepper):
+    def __init__(self, state, advected_fields, linear_solver, forcing,
+                 diffused_fields=None, physics_list=None):
+
+        super().__init__(state, advected_fields, diffused_fields, physics_list)
+        self.linear_solver = linear_solver
+        self.forcing = forcing
+
+        if isinstance(self.linear_solver, IncompressibleSolver):
+            self.incompressible = True
+        else:
+            self.incompressible = False
+
+        if state.mu is not None:
+            self.mu_alpha = [0., state.timestepping.dt]
+        else:
+            self.mu_alpha = [None, None]
+
+        # list of fields that are advected as part of the nonlinear iteration
+        self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
+
+    @property
+    def passive_advection(self):
+        return [(name, scheme) for name, scheme in
+                self.advected_fields if name not in self.state.fieldlist]
+
+
+class Timestepper(NonlinearTimestepper):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
     scheme for the dynamical core.
@@ -126,34 +153,13 @@ class Timestepper(BaseTimestepper):
     def __init__(self, state, advected_fields, linear_solver, forcing,
                  diffused_fields=None, physics_list=None):
 
-        super().__init__(state, advected_fields, diffused_fields, physics_list)
-        self.linear_solver = linear_solver
-        self.forcing = forcing
-
-        if isinstance(self.linear_solver, IncompressibleSolver):
-            self.incompressible = True
-        else:
-            self.incompressible = False
-
-        if state.mu is not None:
-            self.mu_alpha = [0., state.timestepping.dt]
-        else:
-            self.mu_alpha = [None, None]
+        super().__init__(state, advected_fields, linear_solver, forcing,
+                         diffused_fields, physics_list)
 
         self.xstar_fields = {name: func for (name, func) in
                              zip(state.fieldlist, state.xstar.split())}
         self.xp_fields = {name: func for (name, func) in
                           zip(state.fieldlist, state.xp.split())}
-
-        # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
-
-        state.xb.assign(state.xn)
-
-    @property
-    def passive_advection(self):
-        return [(name, scheme) for name, scheme in
-                self.advected_fields if name not in self.state.fieldlist]
 
     def nonlinear_timestep(self):
         state = self.state
