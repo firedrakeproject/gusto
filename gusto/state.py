@@ -55,7 +55,7 @@ class FieldCreator(object):
 
 
 class PointDataOutput(object):
-    def __init__(self, filename, field_points, description,
+    def __init__(self, filename, ndt, field_points, description,
                  field_creator, create=True):
         """Create a dump file that stores fields evaluated at points.
 
@@ -67,6 +67,7 @@ class PointDataOutput(object):
         :kwarg create: If False, assume that filename already exists
         """
         # Overwrite on creation.
+        self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
         if not create:
@@ -77,9 +78,9 @@ class PointDataOutput(object):
             # FIXME add versioning information.
             dataset.source = "Output from Gusto model"
             # Appendable dimension, timesteps in the model
-            dataset.createDimension("time", None)
+            dataset.createDimension("time", ndt+1)
 
-            var = dataset.createVariable("time", np.float64, ("time", ))
+            var = dataset.createVariable("time", np.float64, ("time"))
             var.units = "seconds"
             # Now create the variable group for each field
             for field_name, points in field_points:
@@ -103,13 +104,13 @@ class PointDataOutput(object):
         """
         with Dataset(self.filename, "a") as dataset:
             # Add new time index
-            idx = dataset.dimensions["time"].size
-            dataset.variables["time"][idx:idx + 1] = t
+            dataset.variables["time"][self.dump_count] = t
             for field_name, points in self.field_points:
                 vals = np.asarray(field_creator(field_name).at(points))
                 group = dataset.groups[field_name]
                 var = group.variables[field_name]
-                var[idx, :] = vals
+                var[self.dump_count, :] = vals
+        self.dump_count += 1
 
 
 class DiagnosticsOutput(object):
@@ -277,12 +278,11 @@ class State(object):
             diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, pickup=False):
+    def setup_dump(self, tmax, pickup=False):
 
         # check for existence of directory so as not to overwrite
-        # output files
-        # setup dump files
         # setup checkpoint files
+        # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
@@ -290,11 +290,6 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        self.chkpts = ["chkpt", "chkptbk"]
-        for name in self.chkpts:
-            chkpt_path = path.join(self.dumpdir, name)
-            chkpt = DumbCheckpoint(chkpt_path, mode=FILE_CREATE)
-            self.chkpts[self.chkpts.index(name)] = chkpt
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -320,19 +315,22 @@ class State(object):
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
-        diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+        if self.output.dump_diagnostics:
+            diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+            self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
+                                                       self.diagnostics,
+                                                       self.output.dirname,
+                                                       create=not pickup)
 
-        pointdata_filename = self.dumpdir+"/point_data.nc"
+        if len(self.output.point_data) > 0:
+            pointdata_filename = self.dumpdir+"/point_data.nc"
 
-        self.pointdata_output = PointDataOutput(pointdata_filename,
-                                                self.output.point_data,
-                                                self.output.dirname,
-                                                self.fields,
-                                                create=not pickup)
-        self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
-                                                   self.diagnostics,
-                                                   self.output.dirname,
-                                                   create=not pickup)
+            ndt = int(tmax/self.timestepping.dt)
+            self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
+                                                    self.output.point_data,
+                                                    self.output.dirname,
+                                                    self.fields,
+                                                    create=not pickup)
 
     def dump(self, t=0, pickup=False):
         """
@@ -342,32 +340,40 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
         if pickup:
-            # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
-            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                # Recover all the fields from the checkpoint
-                for field in self.to_pickup:
-                    chk.load(field)
-                t = chk.read_attribute("/", "time")
-                next(self.dumpcount)
+            if self.output.checkpoint:
+                # Open the checkpointing file for writing
+                chkfile = path.join(self.dumpdir, "chkpt")
+                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                    # Recover all the fields from the checkpoint
+                    for field in self.to_pickup:
+                        chk.load(field)
+                    t = chk.read_attribute("/", "time")
+                    next(self.dumpcount)
 
         else:
 
-            # Compute diagnostic fields
-            for field in self.diagnostic_fields:
-                field(self)
+            if self.output.dump_diagnostics:
+                # Compute diagnostic fields
+                for field in self.diagnostic_fields:
+                    field(self)
 
-            # Output diagnostic data
-            self.diagnostic_output.dump(self, t)
-            # Output pointwise data
-            self.pointdata_output.dump(self.fields, t)
-            
-            # Open the checkpoint file (backup version)
-            for file in self.chkpts:
-                # Dump all the fields to a checkpoint
-                for field in self.to_pickup:
-                    file.store(field)
-                file.write_attribute("/", "time", t)
+                # Output diagnostic data
+                self.diagnostic_output.dump(self, t)
+
+            if len(self.output.point_data) > 0:
+                # Output pointwise data
+                self.pointdata_output.dump(self.fields, t)
+
+            # Open the checkpointing file (backup version)
+            if self.output.checkpoint:
+                files = ["chkptbk", "chkpt"]
+                for file in files:
+                    chkfile = path.join(self.dumpdir, file)
+                    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
+                        # Dump all the fields to a checkpoint
+                        for field in self.to_pickup:
+                            chk.store(field)
+                        chk.write_attribute("/", "time", t)
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
