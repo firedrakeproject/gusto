@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector
+    LinearVariationalSolver, Projector, DirichletBC
 from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
 
@@ -58,6 +58,11 @@ class Advection(object, metaclass=ABCMeta):
         if forcing is not None:
             self.xbar = forcing.x0
             self.forcing_term = forcing.forcing_term
+            fs = equation.V
+            self.bcs = [DirichletBC(fs, 0.0, "bottom"),
+                        DirichletBC(fs, 0.0, "top")]
+        else:
+            self.bcs = []
 
         # check to see if we are using an embedded DG method - is we are then
         # the projector and output function will have been set up in the
@@ -104,7 +109,7 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
+        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
         return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
