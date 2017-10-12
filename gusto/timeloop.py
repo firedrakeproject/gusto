@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
@@ -33,6 +33,11 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.physics_list = physics_list
         else:
             self.physics_list = []
+
+    @abstractproperty
+    def passive_advection(self):
+        """list of fields that are passively advected (and possibly diffused)"""
+        pass
 
     def _apply_bcs(self):
         """
@@ -140,12 +145,15 @@ class Timestepper(BaseTimestepper):
         self.xp_fields = {name: func for (name, func) in
                           zip(state.fieldlist, state.xp.split())}
 
-        # list of fields that are passively advected (and possibly diffused)
-        self.passive_advection = [(name, scheme) for name, scheme in advected_fields if name not in state.fieldlist]
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
 
         state.xb.assign(state.xn)
+
+    @property
+    def passive_advection(self):
+        return [(name, scheme) for name, scheme in
+                self.advected_fields if name not in self.state.fieldlist]
 
     def nonlinear_timestep(self):
         state = self.state
@@ -186,15 +194,12 @@ class Timestepper(BaseTimestepper):
 
 class AdvectionDiffusion(BaseTimestepper):
 
-    def __init__(self, state, advected_fields=None,
-                 diffused_fields=None, physics_list=None):
-
-        super().__init__(state, advected_fields, diffused_fields, physics_list)
-        # list of fields that are passively advected (and possibly diffused)
-        if advected_fields is not None:
-            self.passive_advection = advected_fields
+    @property
+    def passive_advection(self):
+        if self.advected_fields is not None:
+            return self.advected_fields
         else:
-            self.passive_advection = []
+            return []
 
     def nonlinear_timestep(self):
         pass
