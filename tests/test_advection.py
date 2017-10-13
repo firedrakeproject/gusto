@@ -120,7 +120,7 @@ def test_advection_dg(geometry, time_discretisation, ibp,
                                   ibp=ibp, equation_form=equation_form)
     f_end = run(state, time_discretisation, fequation, tmax)
     f_err -= f_end
-    assert(abs(f_end.dat.data.max()) < error)
+    assert(abs(f_err.dat.data.max()) < error)
 
 
 @pytest.mark.parametrize("geometry", ["slice"])
