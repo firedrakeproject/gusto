@@ -87,7 +87,7 @@ def setup_theta_limiter(dirname):
     advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))))
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advected_fields)
+    stepper = AdvectionDiffusion(state, advected_fields)
 
     return stepper, 40.0
 
