@@ -13,7 +13,7 @@ def state(tmpdir, geometry):
     if geometry == "sphere":
         mesh = IcosahedralSphereMesh(radius=1,
                                      refinement_level=3,
-                                     degree=3)
+                                     degree=1)
         x = SpatialCoordinate(mesh)
         mesh.init_cell_orientations(x)
         family = "BDM"
@@ -132,13 +132,21 @@ def test_advection_embedded_dg(geometry, time_discretisation, ibp,
                                equation_form, space, error,
                                state, f_init, tmax, f_end):
 
-    if "space" == "Broken":
-        fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form)
-    elif "space" == "DG":
-        fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form, Vdg=space)
+    f_space = state.spaces("HDiv_v")
+    f = state.fields("f", f_space)
+    f.interpolate(f_init)
+    f_err = Function(f.function_space()).interpolate(f_end)
+
+    if space == "Broken":
+        fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp,
+                                        equation_form=equation_form)
+    elif space == "DG":
+        fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp,
+                                        equation_form=equation_form,
+                                        Vdg=state.spaces("DG"))
     f = run(state, time_discretisation, fequation, tmax)
-    f_end -= f
-    assert(abs(f_end.dat.data.max()) < error)
+    f_err -= f
+    assert(abs(f_err.dat.data.max()) < error)
 
 
 @pytest.mark.parametrize("geometry", ["slice"])
