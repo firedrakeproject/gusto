@@ -105,8 +105,12 @@ def test_advection_dg(geometry, time_discretisation, ibp,
 
     if vector:
         f_space = VectorFunctionSpace(state.mesh, "DG", 1)
-        fexpr = as_vector([f_init, 0., 0.])
-        f_end_expr = as_vector([f_end, 0., 0.])
+        fexpr = [0.]*state.mesh.geometric_dimension()
+        fexpr[0] = f_init
+        fexpr = as_vector(fexpr)
+        f_end_expr = [0.]*state.mesh.geometric_dimension()
+        f_end_expr[0] = f_end
+        f_end_expr = as_vector(f_end_expr)
     else:
         f_space = state.spaces("DG")
         fexpr = f_init
@@ -152,9 +156,8 @@ def test_advection_embedded_dg(geometry, time_discretisation, ibp,
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
 @pytest.mark.parametrize("ibp", [None, "twice"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("vector", [False, True])
 def test_advection_supg(geometry, time_discretisation, ibp, equation_form,
-                        vector, error, state, f_init, tmax, f_end):
+                        error, state, f_init, tmax, f_end):
 
     if ibp is None:
         f_space = FunctionSpace(state.mesh, "CG", 1)
