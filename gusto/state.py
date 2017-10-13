@@ -280,8 +280,8 @@ class State(object):
 
     def setup_dump(self, tmax, pickup=False):
 
+        # setup dump files
         # check for existence of directory so as not to overwrite
-        # setup checkpoint files
         # output files
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
