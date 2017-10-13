@@ -102,6 +102,7 @@ def run(state, time_discretisation, fequation, tmax):
 def test_advection_dg(geometry, time_discretisation, ibp,
                       equation_form, vector, error, state,
                       f_init, tmax, f_end):
+
     if "vector":
         if geometry == "slice":
             pytest.skip("broken")
@@ -154,17 +155,24 @@ def test_advection_embedded_dg(geometry, time_discretisation, ibp,
 @pytest.mark.parametrize("ibp", [None, "twice"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("vector", [False, True])
-def test_advection_supg(geometry, time_discretisation, ibp, equation_form, vector, error, state):
+def test_advection_supg(geometry, time_discretisation, ibp, equation_form,
+                        vector, error, state, f_init, tmax, f_end):
 
     if ibp is None:
-        space = FunctionSpace(mesh, "CG", 1)
+        f_space = FunctionSpace(state.mesh, "CG", 1)
+        f = state.fields("f", f_space)
+        f.interpolate(f_init)
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp,
                                   equation_form=equation_form)
     else:
-        space = state.spaces("HDiv_v")
+        f_space = state.spaces("HDiv_v")
+        f = state.fields("f", f_space)
+        f.interpolate(f_init)
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp,
                                   equation_form=equation_form,
                                   supg_params={"dg_direction": "horizontal"})
 
-    f_err = run(dirname)
+    f_err = Function(f.function_space()).interpolate(f_end)
+    f = run(state, time_discretisation, fequation, tmax)
+    f_err -= f
     assert(abs(f_err.dat.data.max()) < error)
