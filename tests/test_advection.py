@@ -5,6 +5,7 @@ from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
 import pytest
 from math import pi
 
+
 @pytest.fixture
 def state(tmpdir, geometry):
     output = OutputParameters(dirname=str(tmpdir), dumplist=["f"], dumpfreq=15)
@@ -44,6 +45,7 @@ def state(tmpdir, geometry):
     u0.project(uexpr)
     return state
 
+
 @pytest.fixture
 def f_init(geometry, state):
     x = SpatialCoordinate(state.mesh)
@@ -52,6 +54,7 @@ def f_init(geometry, state):
     if geometry == "slice":
         fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
     return fexpr
+
 
 @pytest.fixture
 def f_end(geometry, state):
@@ -62,23 +65,26 @@ def f_end(geometry, state):
         fexpr = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
     return fexpr
 
+
 @pytest.fixture
 def tmax(geometry):
     return {"slice": 2.5,
             "sphere": pi/2}[geometry]
+
 
 @pytest.fixture
 def error(geometry):
     return {"slice": 7e-2,
             "sphere": 2.5e-2}[geometry]
 
+
 def run(state, time_discretisation, fequation, tmax):
 
     f = state.fields("f")
     if time_discretisation == "ssprk":
-        f_advection =  SSPRK3(state, f, fequation)
+        f_advection = SSPRK3(state, f, fequation)
     elif time_discretisation == "implicit_midpoint":
-        f_advection =  ThetaMethod(state, f, fequation)
+        f_advection = ThetaMethod(state, f, fequation)
 
     advected_fields = [("f", f_advection)]
     timestepper = AdvectionTimestepper(state, advected_fields)
@@ -135,12 +141,13 @@ def test_advection_embedded_dg(geometry, time_discretisation, ibp,
     assert(abs(f_end.dat.data.max()) < error)
 
 
+@pytest.mark.parametrize("geometry", ["slice"])
 @pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
 @pytest.mark.parametrize("ibp", [None, "twice"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("vector", [False, True])
-def test_advection_supg(tmpdir, time_discretisation, ibp, equation_form, vector, error, state):
-    geometry = "slice"
+def test_advection_supg(geometry, time_discretisation, ibp, equation_form, vector, error, state):
+
     if ibp is None:
         space = FunctionSpace(mesh, "CG", 1)
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp,
@@ -149,7 +156,7 @@ def test_advection_supg(tmpdir, time_discretisation, ibp, equation_form, vector,
         space = state.spaces("HDiv_v")
         fequation = SUPGAdvection(state, f.function_space(), ibp=ibp,
                                   equation_form=equation_form,
-                                  supg_params={"dg_direction"="horizontal"})
+                                  supg_params={"dg_direction": "horizontal"})
 
     f_err = run(dirname)
     assert(abs(f_err.dat.data.max()) < error)
