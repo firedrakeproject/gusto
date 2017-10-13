@@ -23,8 +23,8 @@ def state(tmpdir, geometry):
         uexpr = as_vector([-x[1], x[0], 0.0])
 
     if geometry == "slice":
-        m = PeriodicIntervalMesh(25, 1.)
-        mesh = ExtrudedMesh(m, layers=25, layer_height=1./25.)
+        m = PeriodicIntervalMesh(15, 1.)
+        mesh = ExtrudedMesh(m, layers=15, layer_height=1./15.)
         family = "CG"
         vertical_degree = 1
         fieldlist = ["u", "rho", "theta"]
@@ -103,9 +103,7 @@ def test_advection_dg(geometry, time_discretisation, ibp,
                       equation_form, vector, error, state,
                       f_init, tmax, f_end):
 
-    if "vector":
-        if geometry == "slice":
-            pytest.skip("broken")
+    if vector:
         f_space = VectorFunctionSpace(state.mesh, "DG", 1)
         fexpr = as_vector([f_init, 0., 0.])
         f_end_expr = as_vector([f_end, 0., 0.])
