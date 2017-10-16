@@ -41,7 +41,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
+    def __init__(self, state, field, equation=None, *, solver_params=None, limiter=None):
 
         if equation is not None:
 
@@ -140,8 +140,8 @@ class NoAdvection(Advection):
 
 class ExplicitAdvection(Advection):
 
-    def __init__(self, state, field, equation=None, subcycles=None, solver_params=None):
-        super().__init__(state, field, equation, solver_params)
+    def __init__(self, state, field, equation=None, *, subcycles=None, solver_params=None, limiter=None):
+        super().__init__(state, field, equation, solver_params=solver_params, limiter=limiter)
         if subcycles is not None:
             self.dt = self.dt/subcycles
             self.ncycles = subcycles
