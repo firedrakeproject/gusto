@@ -64,7 +64,7 @@ for ref_level, dt in ref_dt.items():
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    ueqn = EmbeddedDGAdvection(state, u0.function_space())
+    ueqn = AdvectionEquation(state, u0.function_space(), vector_manifold=True)
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", SSPRK3(state, u0, ueqn, subcycles=4)))
@@ -73,7 +73,7 @@ for ref_level, dt in ref_dt.items():
     linear_solver = ShallowWaterSolver(state)
 
     # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
+    sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = Timestepper(state, advected_fields, linear_solver,

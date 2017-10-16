@@ -1,15 +1,17 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, exp
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity"]
 
 
 class Diagnostics(object):
+
+    available_diagnostics = ["min", "max", "rms", "l2", "total"]
 
     def __init__(self, *fields):
 
@@ -44,11 +46,8 @@ void maxify(double *a, double *b) {
 
     @staticmethod
     def rms(f):
-        V = FunctionSpace(f.function_space().mesh(), "DG", 1)
-        c = Function(V)
-        c.assign(1)
-        rms = sqrt(assemble(dot(f, f)*dx)/assemble(c*dx))
-        return rms
+        area = assemble(1*dx(domain=f.ufl_domain()))
+        return sqrt(assemble(dot(f, f)*dx)/area)
 
     @staticmethod
     def l2(f):
@@ -56,7 +55,10 @@ void maxify(double *a, double *b) {
 
     @staticmethod
     def total(f):
-        return assemble(f * dx)
+        if len(f.ufl_shape) == 0:
+            return assemble(f * dx)
+        else:
+            pass
 
 
 class DiagnosticField(object, metaclass=ABCMeta):
@@ -208,6 +210,66 @@ class ExnerPi(DiagnosticField):
         return self.field.interpolate(Pi)
 
 
+class Theta_e(DiagnosticField):
+    name = "Theta_e"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Theta_e, self).setup(state, space=space)
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cp = X.cp
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        p = p_0 * (R_d * theta * rho / p_0) ** (1.0 / (1.0 - kappa))
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+        w_c = state.fields('water_c')
+        w_t = w_c + w_v
+
+        return self.field.interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
+
+
+class InternalEnergy(DiagnosticField):
+    name = "InternalEnergy"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(InternalEnergy, self).setup(state, space=space)
+
+    def compute(self, state):
+        X = state.parameters
+        p_0 = X.p_0
+        R_v = X.R_v
+        R_d = X.R_d
+        cv = X.cv
+        c_vv = X.c_vv
+        c_pl = X.c_pl
+        c_pv = X.c_pv
+        L_v0 = X.L_v0
+        T_0 = X.T_0
+        kappa = X.kappa
+
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        w_c = state.fields('water_c')
+        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+
+        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pv * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+
+
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
@@ -289,7 +351,58 @@ class Perturbation(Difference):
         return self.field1+"_perturbation"
 
 
-class PotentialVorticity(DiagnosticField):
+class Vorticity(DiagnosticField):
+    """Base diagnostic field class for vorticity."""
+
+    def setup(self, state, vorticity_type=None):
+        """Solver for vorticity.
+
+        :arg state: The state containing model.
+        :arg vorticity_type: must be "relative", "absolute" or "potential"
+        """
+        if not self._initialised:
+            vorticity_types = ["relative", "absolute", "potential"]
+            if vorticity_type not in vorticity_types:
+                raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
+            try:
+                space = state.spaces("CG")
+            except:
+                dgspace = state.spaces("DG")
+                cg_degree = dgspace.ufl_element().degree() + 2
+                space = FunctionSpace(state.mesh, "CG", cg_degree)
+            super().setup(state, space=space)
+            u = state.fields("u")
+            gamma = TestFunction(space)
+            q = TrialFunction(space)
+
+            if vorticity_type == "potential":
+                D = state.fields("D")
+                a = q*gamma*D*dx
+            else:
+                a = q*gamma*dx
+
+            if state.on_sphere:
+                cell_normals = CellNormal(state.mesh)
+                gradperp = lambda psi: cross(cell_normals, grad(psi))
+                L = (- inner(gradperp(gamma), u))*dx
+            else:
+                raise NotImplementedError("The vorticity diagnostics have only been implemented for 2D spherical geometries.")
+
+            if vorticity_type != "relative":
+                f = state.fields("coriolis")
+                L += gamma*f*dx
+
+            problem = LinearVariationalProblem(a, L, self.field)
+            self.solver = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
+
+    def compute(self, state):
+        """Computes the vorticity.
+        """
+        self.solver.solve()
+        return self.field
+
+
+class PotentialVorticity(Vorticity):
     """Diagnostic field for potential vorticity."""
     name = "potential_vorticity"
 
@@ -301,26 +414,28 @@ class PotentialVorticity(DiagnosticField):
 
         :arg state: The state containing model.
         """
-        if not self._initialised:
-            space = FunctionSpace(state.mesh, "CG", state.W[-1].ufl_element().degree() + 1)
-            super(PotentialVorticity, self).setup(state, space=space)
-            u = state.fields("u")
-            D = state.fields("D")
-            gamma = TestFunction(space)
-            q = TrialFunction(space)
-            f = state.fields("coriolis")
+        super().setup(state, vorticity_type="potential")
 
-            cell_normals = CellNormal(state.mesh)
-            gradperp = lambda psi: cross(cell_normals, grad(psi))
 
-            a = q*gamma*D*dx
-            L = (gamma*f - inner(gradperp(gamma), u))*dx
-            pv_problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
-            self.solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
+class AbsoluteVorticity(Vorticity):
+    """Diagnostic field for absolute vorticity."""
+    name = "absolute_vorticity"
 
-    def compute(self, state):
-        """Computes the potential vorticity by solving
-        the weighted mass system.
+    def setup(self, state):
+        """Solver for absolute vorticity.
+
+        :arg state: The state containing model.
         """
-        self.solver.solve()
-        return self.field
+        super().setup(state, vorticity_type="absolute")
+
+
+class RelativeVorticity(Vorticity):
+    """Diagnostic field for relative vorticity."""
+    name = "relative_vorticity"
+
+    def setup(self, state):
+        """Solver for relative vorticity.
+
+        :arg state: The state containing model.
+        """
+        super().setup(state, vorticity_type="relative")

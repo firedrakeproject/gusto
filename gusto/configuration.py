@@ -43,6 +43,8 @@ class OutputParameters(Configuration):
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []
+    dump_diagnostics = True
+    checkpoint = False
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
@@ -51,6 +53,9 @@ class OutputParameters(Configuration):
     steady_state_error_fields = []
     #: List of fields for computing perturbations
     perturbation_fields = []
+    #: List of ordered pairs (name, points) where name is the field
+    # name and points is the points at which to dump them
+    point_data = []
 
 
 class CompressibleParameters(Configuration):

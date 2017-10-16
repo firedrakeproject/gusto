@@ -41,7 +41,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None):
+    def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
 
         if equation is not None:
 
@@ -58,7 +58,9 @@ class Advection(object, metaclass=ABCMeta):
             else:
                 self.solver_parameters = solver_params
 
-        # check to see if we are using an embedded DG method - is we are then
+            self.limiter = limiter
+
+        # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
         # equation class and we can get the correct function space from
         # the output function.
@@ -227,13 +229,20 @@ class SSPRK3(ExplicitAdvection):
 
         elif stage == 2:
             self.solver.solve()
+            self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
+
+        if self.limiter is not None:
+            self.limiter.apply(self.q1)
 
     def apply_cycle(self, x_in, x_out):
+
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
 
         self.q1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
-        x_out.assign((1./3.)*x_in + (2./3.)*self.dq)
+        x_out.assign(self.q1)
 
 
 class ThetaMethod(Advection):

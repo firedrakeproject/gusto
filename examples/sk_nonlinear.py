@@ -1,4 +1,5 @@
 from gusto import *
+import itertools
 from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
     ExtrudedMesh, exp, sin, Function
 import numpy as np
@@ -19,9 +20,15 @@ m = PeriodicIntervalMesh(columns, L)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
+points_x = np.linspace(0., L, 100)
+points_z = [H/2.]
+points = np.array([p for p in itertools.product(points_x, points_z)])
+
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'],
+                          perturbation_fields=['theta', 'rho'],
+                          point_data=[('theta_perturbation', points)])
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
