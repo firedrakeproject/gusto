@@ -11,13 +11,13 @@ else:
     tmax = 15000.
 
 res = 10
-nlayers = res*20 # horizontal layers
-columns = res*12 # number of columns
+nlayers = res*20  # horizontal layers
+columns = res*12  # number of columns
 L = 240000.
 m = PeriodicIntervalMesh(columns, L)
 
 # build volume mesh
-H = 50000. # Height position of the model top
+H = 50000.  # Height position of the model top
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
@@ -67,6 +67,7 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
 def implicit_first_step():
     if state.t.dat.data_ro[0] == dt:
         state.timestepping.alpha = 0.5
+
 
 state.parameter_update = implicit_first_step
 
@@ -162,10 +163,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-lu_params = {'pc_type':'lu',
-             'ksp_type':'preonly',
-             'pc_factor_mat_solver_package':'mumps',
-             'mat_type':'aij'}
+lu_params = {'pc_type': 'lu',
+             'ksp_type': 'preonly',
+             'pc_factor_mat_solver_package': 'mumps',
+             'mat_type': 'aij'}
 
 linear_solver = CompressibleSolver(state, solver_parameters=lu_params)
 
