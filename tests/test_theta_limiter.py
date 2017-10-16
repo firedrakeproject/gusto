@@ -75,7 +75,6 @@ def setup_theta_limiter(dirname):
     state.set_reference_profiles([('theta', theta_b)])
 
     # set up advection schemes
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
