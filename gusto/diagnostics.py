@@ -8,6 +8,7 @@ import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity"]
 
+
 class Diagnostics(object):
 
     available_diagnostics = ["min", "max", "rms", "l2", "total"]
@@ -288,16 +289,16 @@ class HydrostaticImbalance(DiagnosticField):
 
             F = TrialFunction(space)
             w = TestFunction(space)
-            a = inner(w,F)*dx
+            a = inner(w, F)*dx
             L = (- cp*div((theta-thetabar)*w)*pibar*dx
-                 + cp*jump((theta-thetabar)*w,n)*avg(pibar)*dS_v
+                 + cp*jump((theta-thetabar)*w, n)*avg(pibar)*dS_v
                  - cp*div(thetabar*w)*(pi-pibar)*dx
-                 + cp*jump(thetabar*w,n)*avg(pi-pibar)*dS_v)
+                 + cp*jump(thetabar*w, n)*avg(pi-pibar)*dS_v)
 
             bcs = [DirichletBC(space, 0.0, "bottom"),
                    DirichletBC(space, 0.0, "top")]
 
-            imbalanceproblem = LinearVariationalProblem(a,L, self.field, bcs=bcs)
+            imbalanceproblem = LinearVariationalProblem(a, L, self.field, bcs=bcs)
             self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
 
     def compute(self, state):

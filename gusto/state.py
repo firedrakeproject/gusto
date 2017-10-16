@@ -253,7 +253,7 @@ class State(object):
 
         # project test function for hydrostatic case
         if self.h:
-            self.P = lambda u: u - self.k*inner(u,self.k)
+            self.P = lambda u: u - self.k*inner(u, self.k)
         else:
             self.P = lambda u: u
 
