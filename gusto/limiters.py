@@ -54,7 +54,7 @@ class ThetaLimiter(object):
         """
         Initialise limiter
 
-        :param space : FunctionSpace instance, must use broken elements, e.g. thetaeqn.space
+        :param space : equation, as we need the broken space attached to it
         """
 
         self.Vt = equation.space
