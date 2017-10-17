@@ -106,7 +106,7 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=0.5, params=params)
 
 
-def min(f):
+def minimum(f):
     fmin = op2.Global(1, [1000], dtype=float)
     op2.par_loop(op2.Kernel("""
 void minify(double *a, double *b) {
@@ -116,9 +116,9 @@ void minify(double *a, double *b) {
     return fmin.data[0]
 
 
-p0 = min(Pi)
+p0 = minimum(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
-p1 = min(Pi)
+p1 = minimum(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha

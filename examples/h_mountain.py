@@ -61,16 +61,6 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
-
-# Off-centring parameter is set to alpha=1.0 for first time step
-# to omit spurious orography waves, then alpha=0.5
-def implicit_first_step():
-    if state.t.dat.data_ro[0] == dt:
-        state.timestepping.alpha = 0.5
-
-
-state.parameter_update = implicit_first_step
-
 # Initial conditions
 u0 = state.fields("u")
 rho0 = state.fields("rho")
@@ -120,7 +110,7 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=0.5, params=params)
 
 
-def min(f):
+def minimum(f):
     fmin = op2.Global(1, [1000], dtype=float)
     op2.par_loop(op2.Kernel("""
         void minify(double *a, double *b) {
@@ -130,9 +120,9 @@ def min(f):
     return fmin.data[0]
 
 
-p0 = min(Pi)
+p0 = minimum(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
-p1 = min(Pi)
+p1 = minimum(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
@@ -174,7 +164,14 @@ linear_solver = CompressibleSolver(state, solver_parameters=lu_params)
 compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
+# Off-centring parameter is set to alpha=1.0 for first time step
+# to omit spurious orography waves, then alpha=0.5
+def implicit_first_step(state):
+    if state.t.dat.data_ro[0] > state.timestepping.dt/2.:
+        state.timestepping.alpha = 0.5
+
+
 stepper = Timestepper(state, advected_fields, linear_solver,
-                      compressible_forcing)
+                      compressible_forcing, parameter_update=implicit_first_step)
 
 stepper.run(t=0, tmax=tmax)

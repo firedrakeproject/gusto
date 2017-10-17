@@ -195,7 +195,7 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
-        self.h = hydrostatic
+        self.hydrostatic = hydrostatic
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -252,20 +252,18 @@ class State(object):
                 self.perp = lambda u: as_vector([-u[1], u[0]])
 
         # project test function for hydrostatic case
-        if self.h:
-            self.P = lambda u: u - self.k*inner(u, self.k)
+        if self.hydrostatic:
+            self.h_project = lambda u: u - self.k*inner(u, self.k)
         else:
-            self.P = lambda u: u
+            self.h_project = lambda u: u
 
         #  Constant to hold current time
         self.t = Constant(0.0)
 
-    def parameter_update(self):
-        # method to update parameters if needed
-        pass
-
     def setup_diagnostics(self):
-        # add special case diagnostic fields
+        """
+        Add special case diagnostic fields
+        """
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
             self.diagnostic_fields.append(f)
@@ -279,10 +277,15 @@ class State(object):
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, tmax, pickup=False):
-
-        # setup dump files
-        # check for existence of directory so as not to overwrite
-        # output files
+        """
+        Setup dump files
+        Check for existence of directory so as not to overwrite
+        output files
+        
+        :arg tmax: model stop time
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk. (default is False).
+        """
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \

@@ -58,10 +58,12 @@ class Timestepper(BaseTimestepper):
         :class:`~.Diffusion` to use.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
+    :arg parameter_update: optional Function to update time-dependent
+        parameters. Needs to take state as argument
     """
 
     def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None):
+                 diffused_fields=None, physics_list=None, parameter_update=None):
 
         super(Timestepper, self).__init__(state, advected_fields)
         self.linear_solver = linear_solver
@@ -74,6 +76,10 @@ class Timestepper(BaseTimestepper):
             self.physics_list = physics_list
         else:
             self.physics_list = []
+        if parameter_update is not None:
+            self.parameter_update = parameter_update
+        else:
+            self.parameter_update = lambda state: None
 
         if isinstance(self.linear_solver, IncompressibleSolver):
             self.incompressible = True
@@ -97,11 +103,6 @@ class Timestepper(BaseTimestepper):
 
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
-        # Sponge and hydrostatic terms depend on forcing stage
-        if state.mu or state.h is not None:
-            stage = [0., 1.]
-        else:
-            stage = [None, None]
 
         with timed_stage("Dump output"):
             state.setup_dump(tmax, pickup)
@@ -111,13 +112,13 @@ class Timestepper(BaseTimestepper):
             if state.output.Verbose:
                 print("STEP", t, dt)
 
-            state.parameter_update()
+            self.parameter_update(self.state)
             t += dt
             state.t.assign(t)
 
             with timed_stage("Apply forcing terms"):
                 self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, stage=stage[0])
+                                   state.xstar, implicit=False)
 
             state.xnp1.assign(state.xn)
 
@@ -136,7 +137,7 @@ class Timestepper(BaseTimestepper):
 
                     with timed_stage("Apply forcing terms"):
                         self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, stage=stage[1],
+                                           state.xrhs, implicit=True,
                                            incompressible=self.incompressible)
 
                     state.xrhs -= state.xnp1

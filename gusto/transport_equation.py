@@ -340,7 +340,6 @@ class VectorInvariant(TransportEquation):
                          solver_params=solver_params)
 
         self.Upwind = 0.5*(sign(dot(self.ubar, self.n))+1)
-        self.P = self.state.P
 
         if self.state.mesh.topological_dimension() == 2:
             self.perp = state.perp
@@ -367,8 +366,8 @@ class VectorInvariant(TransportEquation):
             both = lambda u: 2*avg(u)
 
             L = (
-                inner(self.P(q), curl(cross(self.ubar, self.test)))*dx
-                - inner(both(self.Upwind*self.P(q)),
+                inner(q, curl(cross(self.ubar, self.test)))*dx
+                - inner(both(self.Upwind*q),
                         both(cross(self.n, cross(self.ubar, self.test))))*self.dS
             )
 
@@ -376,9 +375,9 @@ class VectorInvariant(TransportEquation):
 
             if self.ibp == "once":
                 L = (
-                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), self.P(q))*dx
+                    -inner(self.gradperp(inner(self.test, self.perp(self.ubar))), q)*dx
                     - inner(jump(inner(self.test, self.perp(self.ubar)), self.n),
-                            self.perp_u_upwind(self.P(q)))*self.dS
+                            self.perp_u_upwind(q))*self.dS
                 )
             else:
                 L = (
@@ -389,7 +388,7 @@ class VectorInvariant(TransportEquation):
                                  self.perp(self.ubar))*self.perp(q), self.n)*self.dS
                 )
 
-        L -= 0.5*div(self.test)*inner(self.P(q), self.ubar)*dx
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
 
         return L
 
@@ -408,5 +407,5 @@ class EulerPoincare(VectorInvariant):
 
     def advection_term(self, q):
         L = super().advection_term(q)
-        L -= 0.5*div(self.test)*inner(self.P(q), self.ubar)*dx
+        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L
