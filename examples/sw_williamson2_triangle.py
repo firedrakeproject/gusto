@@ -10,7 +10,8 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 3000., 4: 1500., 5: 750., 6: 375.}
+    #ref_dt = {3: 3000., 4: 1500., 5: 750., 6: 375.}
+    ref_dt = {3: 3000.}#, 4: 1500., 5: 750., 6: 375.}
     tmax = 5*day
 
 # setup shallow water parameters
@@ -20,7 +21,6 @@ H = 5960.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.items():
 
@@ -33,13 +33,14 @@ for ref_level, dt in ref_dt.items():
 
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    diagnostic_fields = [RelativeVorticity(), ShallowWaterKineticEnergy(), ShallowWaterPotentialEnergy(), ShallowWaterPotentialEnstrophy()]
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
+                  diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
