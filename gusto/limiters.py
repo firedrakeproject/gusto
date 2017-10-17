@@ -50,14 +50,14 @@ class ThetaLimiter(object):
     the central nodes to prevent new maxima or minima forming.
     """
 
-    def __init__(self, space):
+    def __init__(self, equation):
         """
         Initialise limiter
 
         :param space : FunctionSpace instance, must use broken elements, e.g. thetaeqn.space
         """
 
-        self.Vt = space
+        self.Vt = equation.space
         # check this is the right space, only currently working for 2D extruded mesh
         if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
             # check that horizontal degree is 1 and vertical degree is 2
