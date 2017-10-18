@@ -1,5 +1,4 @@
 from os import path
-from shutil import copyfile
 import itertools
 from netCDF4 import Dataset
 import time
@@ -363,10 +362,6 @@ class State(object):
                 for field in self.to_pickup:
                     self.chkpt.store(field)
                 self.chkpt.write_attribute("/", "time", t)
-                # Create second backup file
-                chkpath = path.join(self.dumpdir, "chkpt.h5")
-                chkbkpath = path.join(self.dumpdir, "chkptbk.h5")
-                copyfile(chkpath, chkbkpath)
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields
