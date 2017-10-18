@@ -281,7 +281,7 @@ class State(object):
         Setup dump files
         Check for existence of directory so as not to overwrite
         output files
-        
+
         :arg tmax: model stop time
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
