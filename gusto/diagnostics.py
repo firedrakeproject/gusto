@@ -6,7 +6,7 @@ from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
 
 
 class Diagnostics(object):
@@ -149,12 +149,12 @@ class VelocityY(DiagnosticField):
 
 class Energy(DiagnosticField):
 
-    def kinetic(self, u, rho=None):
+    def kinetic(self, u, factor=None):
         """
         Computes 0.5*dot(u, u) with an option to multiply rho
         """
-        if rho is not None:
-            energy = 0.5*rho*dot(u, u)
+        if factor is not None:
+            energy = 0.5*factor*dot(u, u)
         else:
             energy = 0.5*dot(u, u)
         return energy
@@ -167,6 +167,37 @@ class KineticEnergy(Energy):
         u = state.fields("u")
         energy = self.kinetic(u)
         return self.field.interpolate(energy)
+
+
+class ShallowWaterKineticEnergy(Energy):
+    name = "ShallowWaterKineticEnergy"
+
+    def compute(self, state):
+        u = state.fields("u")
+        D = state.fields("D")
+        energy = self.kinetic(u, D)
+        return self.field.interpolate(energy)
+
+
+class ShallowWaterPotentialEnergy(Energy):
+    name = "ShallowWaterPotentialEnergy"
+
+    def compute(self, state):
+        g = state.parameters.g
+        D = state.fields("D")
+        energy = 0.5*g*D**2
+        return self.field.interpolate(energy)
+
+
+class ShallowWaterPotentialEnstrophy(DiagnosticField):
+    name = "ShallowWaterPotentialEnstrophy"
+
+    def compute(self, state):
+        zeta = state.fields("relative_vorticity")
+        D = state.fields("D")
+        f = state.fields("coriolis")
+        enstrophy = 0.5*(zeta + f)**2/D
+        return self.field.interpolate(enstrophy)
 
 
 class CompressibleKineticEnergy(Energy):
