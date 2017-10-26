@@ -190,13 +190,32 @@ class ShallowWaterPotentialEnergy(Energy):
 
 
 class ShallowWaterPotentialEnstrophy(DiagnosticField):
-    name = "ShallowWaterPotentialEnstrophy"
+
+    def __init__(self, base_field_name="PotentialVorticity"):
+        super().__init__()
+        self.base_field_name = base_field_name
+
+    @property
+    def name(self):
+        base_name = "SWPotentialEnstrophy"
+        return "_from_".join((base_name, self.base_field_name))
 
     def compute(self, state):
-        zeta = state.fields("relative_vorticity")
-        D = state.fields("D")
-        f = state.fields("coriolis")
-        enstrophy = 0.5*(zeta + f)**2/D
+        if self.base_field_name == "PotentialVorticity":
+            pv = state.fields("PotentialVorticity")
+            D = state.fields("D")
+            enstrophy = 0.5*pv**2*D
+        elif self.base_field_name == "RelativeVorticity":
+            zeta = state.fields("RelativeVorticity")
+            D = state.fields("D")
+            f = state.fields("coriolis")
+            enstrophy = 0.5*(zeta + f)**2/D
+        elif self.base_field_name == "AbsoluteVorticity":
+            zeta_abs = state.fields("AbsoluteVorticity")
+            D = state.fields("D")
+            enstrophy = 0.5*(zeta_abs)**2/D
+        else:
+            raise ValueError("Don't know how to compute enstrophy with base_field_name=%s; base_field_name should be %s or %s." % (self.base_field_name, "RelativeVorticity", "AbsoluteVorticity", "PotentialVorticity"))
         return self.field.interpolate(enstrophy)
 
 
@@ -435,7 +454,7 @@ class Vorticity(DiagnosticField):
 
 class PotentialVorticity(Vorticity):
     """Diagnostic field for potential vorticity."""
-    name = "potential_vorticity"
+    name = "PotentialVorticity"
 
     def setup(self, state):
         """Solver for potential vorticity. Solves
@@ -450,7 +469,7 @@ class PotentialVorticity(Vorticity):
 
 class AbsoluteVorticity(Vorticity):
     """Diagnostic field for absolute vorticity."""
-    name = "absolute_vorticity"
+    name = "AbsoluteVorticity"
 
     def setup(self, state):
         """Solver for absolute vorticity.
@@ -462,7 +481,7 @@ class AbsoluteVorticity(Vorticity):
 
 class RelativeVorticity(Vorticity):
     """Diagnostic field for relative vorticity."""
-    name = "relative_vorticity"
+    name = "RelativeVorticity"
 
     def setup(self, state):
         """Solver for relative vorticity.
