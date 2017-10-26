@@ -23,7 +23,7 @@ def setup_theta_limiter(dirname):
     x, z = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
+    timestepping = TimesteppingParameters(dt=1.0)
     output = OutputParameters(dirname=dirname+"/theta_limiter",
                               dumpfreq=5,
                               dumplist=['u'],

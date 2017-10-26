@@ -25,7 +25,7 @@ def setup_condens(dirname):
     x = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
+    timestepping = TimesteppingParameters(dt=1.0)
     output = OutputParameters(dirname=dirname+"/condens",
                               dumpfreq=1,
                               dumplist=['u'],

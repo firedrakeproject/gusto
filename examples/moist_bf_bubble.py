@@ -23,7 +23,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
+timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
