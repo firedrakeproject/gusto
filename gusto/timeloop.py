@@ -15,6 +15,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
+    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
+    :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
     def __init__(self, state, advected_fields=None, diffused_fields=None,
@@ -54,6 +58,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 bc.apply(unp1)
 
     def setup_timeloop(self, t, tmax, pickup):
+        """
+        Setup the timeloop by setting up diagnostics, dumping the fields and
+        picking up from a previous run, if required
+        """
         self.state.setup_diagnostics()
         with timed_stage("Dump output"):
             self.state.setup_dump(tmax, pickup)
@@ -62,9 +70,17 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
     @abstractmethod
     def semi_implicit_step(self):
+        """
+        Implement the semi implicit step for the timestepping scheme.
+        """
         pass
 
     def run(self, t, tmax, pickup=False):
+        """
+        This is the timeloop. After completing the semi implicit step
+        any passively advected fields are updated, implicit diffusion and
+        physics updates are applied (if required).
+        """
 
         t = self.setup_timeloop(t, tmax, pickup)
 
@@ -109,18 +125,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
 class CrankNicolson(BaseTimestepper):
     """
-    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
-    scheme for the dynamical core.
+    This class implements a Crank-Nicolson discretisation, with Strang
+    splitting and auxilliary semi-Lagrangian advection.
 
     :arg state: a :class:`.State` object
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
     :arg diffused_fields: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
+    :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
     def __init__(self, state, advected_fields, linear_solver, forcing,
@@ -152,6 +169,10 @@ class CrankNicolson(BaseTimestepper):
 
     @property
     def passive_advection(self):
+        """
+        Advected fields that are not part of the semi implicit step are
+        passively advected
+        """
         return [(name, scheme) for name, scheme in
                 self.advected_fields if name not in self.state.fieldlist]
 
@@ -193,9 +214,16 @@ class CrankNicolson(BaseTimestepper):
 
 
 class AdvectionDiffusion(BaseTimestepper):
+    """
+    This class implements a timestepper for the advection-diffusion equations.
+    No semi implicit step is required.
+    """
 
     @property
     def passive_advection(self):
+        """
+        All advected fields are passively advected
+        """
         if self.advected_fields is not None:
             return self.advected_fields
         else:
