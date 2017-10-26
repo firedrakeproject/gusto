@@ -38,7 +38,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, *. forcing=None, solver_params=None, limiter=None):
+    def __init__(self, state, field, equation=None, *, forcing=None, solver_params=None, limiter=None):
 
         if equation is not None:
 
@@ -64,7 +64,7 @@ class Advection(object, metaclass=ABCMeta):
                 self.bcs = [DirichletBC(fs, 0.0, "bottom"),
                             DirichletBC(fs, 0.0, "top")]
 
-            self.limiter = limiter
+        self.limiter = limiter
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the

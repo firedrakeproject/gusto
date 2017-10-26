@@ -4,7 +4,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
-__all__ = ["Timestepper", "ImplicitMidpoint", "AdvectionDiffusion"]
+__all__ = ["CrankNicolson", "ImplicitMidpoint", "AdvectionDiffusion"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -15,6 +15,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
+    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
+    :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
     def __init__(self, state, advected_fields=None, diffused_fields=None,
@@ -54,6 +58,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 bc.apply(unp1)
 
     def setup_timeloop(self, t, tmax, pickup):
+        """
+        Setup the timeloop by setting up diagnostics, dumping the fields and
+        picking up from a previous run, if required
+        """
         self.state.setup_diagnostics()
         with timed_stage("Dump output"):
             self.state.setup_dump(tmax, pickup)
@@ -61,10 +69,18 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         return t
 
     @abstractmethod
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
+        """
+        Implement the semi implicit step for the timestepping scheme.
+        """
         pass
 
     def run(self, t, tmax, pickup=False, **kwargs):
+        """
+        This is the timeloop. After completing the semi implicit step
+        any passively advected fields are updated, implicit diffusion and
+        physics updates are applied (if required).
+        """
 
         t = self.setup_timeloop(t, tmax, pickup, **kwargs)
 
@@ -80,7 +96,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             state.xnp1.assign(state.xn)
 
-            self.nonlinear_timestep()
+            self.semi_implicit_step()
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
@@ -108,6 +124,20 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
 
 class NonlinearTimestepper(BaseTimestepper):
+    """
+    This is a base class for nonlinear timestepping schemes.
+
+    :arg state: a :class:`.State` object
+    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to advect, and the
+        :class:`~.Advection` to use.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
+    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
+    :arg physics_list: optional list of classes that implement `physics` schemes
+    """
     def __init__(self, state, advected_fields, linear_solver, forcing=None,
                  diffused_fields=None, physics_list=None):
 
@@ -130,6 +160,10 @@ class NonlinearTimestepper(BaseTimestepper):
 
     @property
     def passive_advection(self):
+        """
+        Advected fields that are not part of the semi implicit step are
+        passively advected
+        """
         return [(name, scheme) for name, scheme in
                 self.advected_fields if name not in self.state.fieldlist]
 
@@ -147,7 +181,7 @@ class ImplicitMidpoint(NonlinearTimestepper):
                             zip(self.state.fieldlist, self.state.xrhs.split())}
         return t
 
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         state = self.state
 
         state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
@@ -167,20 +201,21 @@ class ImplicitMidpoint(NonlinearTimestepper):
             state.xnp1 += state.dy
 
 
-class Timestepper(NonlinearTimestepper):
+class CrankNicolson(NonlinearTimestepper):
     """
-    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
-    scheme for the dynamical core.
+    This class implements a Crank-Nicolson discretisation, with Strang
+    splitting and auxilliary semi-Lagrangian advection.
 
     :arg state: a :class:`.State` object
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
     :arg diffused_fields: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
+    :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
     def setup_timeloop(self, t, tmax, pickup, **kwargs):
@@ -195,7 +230,7 @@ class Timestepper(NonlinearTimestepper):
                           zip(self.state.fieldlist, self.state.xp.split())}
         return t
 
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         state = self.state
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -233,13 +268,20 @@ class Timestepper(NonlinearTimestepper):
 
 
 class AdvectionDiffusion(BaseTimestepper):
+    """
+    This class implements a timestepper for the advection-diffusion equations.
+    No semi implicit step is required.
+    """
 
     @property
     def passive_advection(self):
+        """
+        All advected fields are passively advected
+        """
         if self.advected_fields is not None:
             return self.advected_fields
         else:
             return []
 
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         pass
