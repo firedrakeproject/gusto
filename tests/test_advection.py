@@ -8,6 +8,11 @@ from math import pi
 
 @pytest.fixture
 def state(tmpdir, geometry):
+    """
+    returns an instance of the State class, having set up either spherical
+    geometry or 2D vertical slice geometry
+    """
+
     output = OutputParameters(dirname=str(tmpdir), dumplist=["f"], dumpfreq=15)
 
     if geometry == "sphere":
@@ -48,6 +53,9 @@ def state(tmpdir, geometry):
 
 @pytest.fixture
 def f_init(geometry, state):
+    """
+    returns an expression for the initial condition
+    """
     x = SpatialCoordinate(state.mesh)
     if geometry == "sphere":
         fexpr = exp(-x[2]**2 - x[1]**2)
@@ -58,6 +66,9 @@ def f_init(geometry, state):
 
 @pytest.fixture
 def f_end(geometry, state):
+    """
+    returns an expression for the expected final state
+    """
     x = SpatialCoordinate(state.mesh)
     if geometry == "sphere":
         fexpr = exp(-x[2]**2 - x[0]**2)
@@ -74,6 +85,9 @@ def tmax(geometry):
 
 @pytest.fixture
 def error(geometry):
+    """
+    returns the max expected error (based on past runs)
+    """
     return {"slice": 7e-2,
             "sphere": 2.5e-2}[geometry]
 
@@ -95,7 +109,10 @@ def check_errors(ans, error, end_fields, field_names):
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 def test_advection_dg(geometry, error, state,
                       f_init, tmax, f_end):
-
+    """
+    This tests the DG advection discretisation for both scalar and vector
+    fields in 2D slice and spherical geometry.
+    """
     # set up function spaces
     fspace = state.spaces("DG")
     vspace = VectorFunctionSpace(state.mesh, "DG", 1)
@@ -155,7 +172,10 @@ def test_advection_dg(geometry, error, state,
 
 @pytest.mark.parametrize("geometry", ["slice"])
 def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
-
+    """
+    This tests the embedded DG advection scheme for scalar fields
+    in slice geometry.
+    """
     fspace = state.spaces("HDiv_v")
     f_end = Function(fspace).interpolate(f_end)
 
@@ -184,7 +204,10 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
 
 @pytest.mark.parametrize("geometry", ["slice"])
 def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
-
+    """
+    This tests the embedded DG advection scheme for scalar and vector fields
+    in slice geometry.
+    """
     s = "_"
     advected_fields = []
 
