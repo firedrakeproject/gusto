@@ -366,7 +366,7 @@ class Vorticity(DiagnosticField):
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
-            except:
+            except AttributeError:
                 dgspace = state.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)
