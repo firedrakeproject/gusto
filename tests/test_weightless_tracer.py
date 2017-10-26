@@ -95,8 +95,8 @@ def setup_tracer(dirname):
     compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          compressible_forcing)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            compressible_forcing)
 
     return stepper, 100.0
 

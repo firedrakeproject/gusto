@@ -91,7 +91,7 @@ linear_solver = CompressibleSolver(state)
 compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      compressible_forcing)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)

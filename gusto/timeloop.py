@@ -4,7 +4,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
 
-__all__ = ["Timestepper", "AdvectionDiffusion"]
+__all__ = ["CrankNicolson", "AdvectionDiffusion"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -61,7 +61,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         return t
 
     @abstractmethod
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         pass
 
     def run(self, t, tmax, pickup=False):
@@ -80,7 +80,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             state.xnp1.assign(state.xn)
 
-            self.nonlinear_timestep()
+            self.semi_implicit_step()
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
@@ -107,7 +107,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
-class Timestepper(BaseTimestepper):
+class CrankNicolson(BaseTimestepper):
     """
     Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
     scheme for the dynamical core.
@@ -155,7 +155,7 @@ class Timestepper(BaseTimestepper):
         return [(name, scheme) for name, scheme in
                 self.advected_fields if name not in self.state.fieldlist]
 
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         state = self.state
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
@@ -201,5 +201,5 @@ class AdvectionDiffusion(BaseTimestepper):
         else:
             return []
 
-    def nonlinear_timestep(self):
+    def semi_implicit_step(self):
         pass
