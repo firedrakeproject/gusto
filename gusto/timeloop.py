@@ -123,9 +123,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
 
 
-class NonlinearTimestepper(BaseTimestepper):
+class SemiImplicitTimestepper(BaseTimestepper):
     """
-    This is a base class for nonlinear timestepping schemes.
+    This is a base class for semi-implicit timestepping schemes.
 
     :arg state: a :class:`.State` object
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
