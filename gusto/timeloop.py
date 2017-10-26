@@ -168,7 +168,21 @@ class SemiImplicitTimestepper(BaseTimestepper):
                 self.advected_fields if name not in self.state.fieldlist]
 
 
-class ImplicitMidpoint(NonlinearTimestepper):
+class ImplicitMidpoint(SemiImplicitTimestepper):
+    """
+    This class implements an implicit midpoint timestepper.
+
+    :arg state: a :class:`.State` object
+    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to advect, and the
+        :class:`~.Advection` to use.
+    :arg linear_solver: a :class:`.TimesteppingSolver` object
+    :arg forcing: a :class:`.Forcing` object
+    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
+    :arg physics_list: optional list of classes that implement `physics` schemes
+    """
 
     def setup_timeloop(self, t, tmax, pickup, **kwargs):
         self.maxk = kwargs.get("maxk", 4)
@@ -201,7 +215,7 @@ class ImplicitMidpoint(NonlinearTimestepper):
             state.xnp1 += state.dy
 
 
-class CrankNicolson(NonlinearTimestepper):
+class CrankNicolson(SemiImplicitTimestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
     splitting and auxilliary semi-Lagrangian advection.
