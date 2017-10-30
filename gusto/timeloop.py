@@ -3,7 +3,6 @@ from pyop2.profiling import timed_stage
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
 
-
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
 
 
@@ -88,8 +87,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
-            if state.output.Verbose:
-                print("STEP", t, dt)
+            state.logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
 
             t += dt
             state.t.assign(t)
@@ -120,7 +118,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
-        print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
+        state.logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
 class CrankNicolson(BaseTimestepper):

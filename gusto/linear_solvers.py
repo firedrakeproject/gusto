@@ -2,7 +2,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+    Function, MixedVectorSpaceBasis, VectorSpaceBasis
 from firedrake.solving_utils import flatten_parameters
 
 from gusto.forcing import exner, exner_rho, exner_theta
@@ -104,7 +104,7 @@ class CompressibleSolver(TimesteppingSolver):
         else:
             dgspace = state.spaces("DG")
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                warning("default quadrature degree most likely not sufficient for this degree element")
+                state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)

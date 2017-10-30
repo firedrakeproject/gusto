@@ -50,7 +50,7 @@ class ThetaLimiter(object):
     the central nodes to prevent new maxima or minima forming.
     """
 
-    def __init__(self, equation):
+    def __init__(self, state, equation):
         """
         Initialise limiter
 
@@ -70,7 +70,7 @@ class ThetaLimiter(object):
                self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
                 raise ValueError('This is not the right limiter for this space.')
         else:
-            print('This limiter may not work for the space you are using.')
+            state.logger.warning('This limiter may not work for the space you are using.')
 
         self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOFs
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)

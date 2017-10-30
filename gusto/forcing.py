@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    dot, dS, Constant, warning, as_vector, SpatialCoordinate
+    dot, dS, Constant, as_vector, SpatialCoordinate
 
 
 __all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
@@ -26,7 +26,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.state = state
         if linear:
             self.euler_poincare = False
-            warning('Setting euler_poincare to False because you have set linear=True')
+            state.logger.info('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
 
