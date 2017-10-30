@@ -253,8 +253,14 @@ class State(object):
         self.t = Constant(0.0)
 
         logger = logging.getLogger("gusto")
-        if output.Verbose:
+        if output.log_level == "debug":
             logger.setLevel(logging.DEBUG)
+        elif output.log_level == "info":
+            logger.setLevel(logging.INFO)
+        elif output.log_level == "warning":
+            logger.setLevel(logging.WARNING)
+        else:
+            raise ValueError("log_level must be one of: %s, %s, %s, not %s" % ("info", "debug", "warning", output.log_level))
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
         if self.mesh.comm.rank == 0:

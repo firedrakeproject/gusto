@@ -39,7 +39,7 @@ class OutputParameters(Configuration):
     Output parameters for Gusto
     """
 
-    Verbose = False
+    log_level = "warning"
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []

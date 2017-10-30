@@ -67,7 +67,7 @@ class TransportEquation(object, metaclass=ABCMeta):
             self.solver_parameters = {'ksp_type': 'cg',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
-        if state.output.Verbose:
+        if state.output.log_level == "debug":
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
     def mass_term(self, q):
