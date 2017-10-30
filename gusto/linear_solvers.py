@@ -37,6 +37,9 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
+        if state.output.Verbose:
+            self.solver_parameters["ksp_monitor_true_residual"] = True
+
         # setup the solver
         self._setup_solver()
 

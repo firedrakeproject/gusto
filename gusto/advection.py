@@ -35,10 +35,11 @@ class Advection(object, metaclass=ABCMeta):
     :arg field: field to be advected
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
-    :arg solver_params: solver_parameters
+    :arg solver_parameters: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
+    def __init__(self, state, field, equation=None, solver_parameters=None,
+                 limiter=None):
 
         if equation is not None:
 
@@ -50,10 +51,12 @@ class Advection(object, metaclass=ABCMeta):
             self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
-            if solver_params is None:
+            if solver_parameters is None:
                 self.solver_parameters = equation.solver_parameters
             else:
-                self.solver_parameters = solver_params
+                self.solver_parameters = solver_parameters
+                if state.output.Verbose:
+                    self.solver_parameters["ksp_monitor_true_residual"] = True
 
             self.limiter = limiter
 
@@ -205,16 +208,16 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+    def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
 
-        if not solver_params:
+        if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
-            solver_params = {'ksp_type': 'gmres',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'}
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+        super(ThetaMethod, self).__init__(state, field, equation, solver_parameters)
 
         self.theta = theta
 
