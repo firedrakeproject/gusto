@@ -259,7 +259,8 @@ class ThetaMethod(Advection):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+        super(ThetaMethod, self).__init__(state, field, equation,
+                                          solver_params=solver_params)
 
         self.theta = theta
 

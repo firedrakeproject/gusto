@@ -60,7 +60,6 @@ class ThetaLimiter(object):
         self.Vt = equation.space
         # check this is the right space, only currently working for 2D extruded mesh
         if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
->>>>>>> acaaf1b281408011b267ef667d13e393ecb56c25
             # check that horizontal degree is 1 and vertical degree is 2
             if self.Vt.ufl_element().degree()[0] is not 1 or \
                self.Vt.ufl_element().degree()[1] is not 2:
