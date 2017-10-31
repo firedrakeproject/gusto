@@ -18,7 +18,7 @@ def embedded_dg(original_apply):
             def new_apply(self, x_in, x_out):
                 try:
                     self.xdg_in.interpolate(x_in)
-                except:
+                except NotImplementedError:
                     self.xdg_in.project(x_in)
                 original_apply(self, self.xdg_in, self.xdg_out)
                 self.Projector.project()
