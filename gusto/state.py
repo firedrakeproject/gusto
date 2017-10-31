@@ -220,7 +220,7 @@ class State(object):
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
         # Allocate state
-        self._allocate_state()
+        self.xn = Function(self.W)
         if self.output.dumplist is None:
             self.output.dumplist = fieldlist
         self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
@@ -438,20 +438,6 @@ class State(object):
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
             self.W = MixedFunctionSpace((V0, V1))
-
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
-
-        W = self.W
-        self.xn = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.xb = Function(W)  # store the old state for diagnostics
-        self.dy = Function(W)
 
 
 def get_latlon_mesh(mesh):

@@ -103,7 +103,8 @@ class TrueResidualV(DiagnosticField):
     def setup(self, state):
         super(TrueResidualV, self).setup(state)
         unew, pnew, bnew = state.xn.split()
-        uold, pold, bold = state.xb.split()
+        self.xold = Function(state.W).assign(state.xn)
+        uold, pold, bold = self.xold.split()
         ubar = 0.5*(unew+uold)
         H = state.parameters.H
         f = state.parameters.f
@@ -126,6 +127,7 @@ class TrueResidualV(DiagnosticField):
     def compute(self, state):
         self.v_residual_solver.solve()
         v_residual = self.vtres
+        self.xold.assign(state.xn)
         return self.field.interpolate(v_residual)
 
 
