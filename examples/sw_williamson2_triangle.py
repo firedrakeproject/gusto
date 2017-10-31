@@ -20,7 +20,6 @@ H = 5960.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.items():
 
@@ -33,14 +32,16 @@ for ref_level, dt in ref_dt.items():
 
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
-    diagnostic_fields = [CourantNumber()]
+    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+                         ShallowWaterKineticEnergy(),
+                         ShallowWaterPotentialEnergy(),
+                         ShallowWaterPotentialEnstrophy()]
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
                   diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
@@ -76,7 +77,7 @@ for ref_level, dt in ref_dt.items():
     sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            sw_forcing)
 
     stepper.run(t=0, tmax=tmax)

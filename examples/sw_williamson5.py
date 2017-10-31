@@ -87,7 +87,7 @@ for ref_level, dt in ref_dt.items():
     sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            sw_forcing)
 
     stepper.run(t=0, tmax=tmax)

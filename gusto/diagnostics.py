@@ -6,7 +6,7 @@ from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
 
 
 class Diagnostics(object):
@@ -149,12 +149,12 @@ class VelocityY(DiagnosticField):
 
 class Energy(DiagnosticField):
 
-    def kinetic(self, u, rho=None):
+    def kinetic(self, u, factor=None):
         """
         Computes 0.5*dot(u, u) with an option to multiply rho
         """
-        if rho is not None:
-            energy = 0.5*rho*dot(u, u)
+        if factor is not None:
+            energy = 0.5*factor*dot(u, u)
         else:
             energy = 0.5*dot(u, u)
         return energy
@@ -167,6 +167,56 @@ class KineticEnergy(Energy):
         u = state.fields("u")
         energy = self.kinetic(u)
         return self.field.interpolate(energy)
+
+
+class ShallowWaterKineticEnergy(Energy):
+    name = "ShallowWaterKineticEnergy"
+
+    def compute(self, state):
+        u = state.fields("u")
+        D = state.fields("D")
+        energy = self.kinetic(u, D)
+        return self.field.interpolate(energy)
+
+
+class ShallowWaterPotentialEnergy(Energy):
+    name = "ShallowWaterPotentialEnergy"
+
+    def compute(self, state):
+        g = state.parameters.g
+        D = state.fields("D")
+        energy = 0.5*g*D**2
+        return self.field.interpolate(energy)
+
+
+class ShallowWaterPotentialEnstrophy(DiagnosticField):
+
+    def __init__(self, base_field_name="PotentialVorticity"):
+        super().__init__()
+        self.base_field_name = base_field_name
+
+    @property
+    def name(self):
+        base_name = "SWPotentialEnstrophy"
+        return "_from_".join((base_name, self.base_field_name))
+
+    def compute(self, state):
+        if self.base_field_name == "PotentialVorticity":
+            pv = state.fields("PotentialVorticity")
+            D = state.fields("D")
+            enstrophy = 0.5*pv**2*D
+        elif self.base_field_name == "RelativeVorticity":
+            zeta = state.fields("RelativeVorticity")
+            D = state.fields("D")
+            f = state.fields("coriolis")
+            enstrophy = 0.5*(zeta + f)**2/D
+        elif self.base_field_name == "AbsoluteVorticity":
+            zeta_abs = state.fields("AbsoluteVorticity")
+            D = state.fields("D")
+            enstrophy = 0.5*(zeta_abs)**2/D
+        else:
+            raise ValueError("Don't know how to compute enstrophy with base_field_name=%s; base_field_name should be %s or %s." % (self.base_field_name, "RelativeVorticity", "AbsoluteVorticity", "PotentialVorticity"))
+        return self.field.interpolate(enstrophy)
 
 
 class CompressibleKineticEnergy(Energy):
@@ -366,7 +416,7 @@ class Vorticity(DiagnosticField):
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
-            except:
+            except AttributeError:
                 dgspace = state.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)
@@ -404,7 +454,7 @@ class Vorticity(DiagnosticField):
 
 class PotentialVorticity(Vorticity):
     """Diagnostic field for potential vorticity."""
-    name = "potential_vorticity"
+    name = "PotentialVorticity"
 
     def setup(self, state):
         """Solver for potential vorticity. Solves
@@ -419,7 +469,7 @@ class PotentialVorticity(Vorticity):
 
 class AbsoluteVorticity(Vorticity):
     """Diagnostic field for absolute vorticity."""
-    name = "absolute_vorticity"
+    name = "AbsoluteVorticity"
 
     def setup(self, state):
         """Solver for absolute vorticity.
@@ -431,7 +481,7 @@ class AbsoluteVorticity(Vorticity):
 
 class RelativeVorticity(Vorticity):
     """Diagnostic field for relative vorticity."""
-    name = "relative_vorticity"
+    name = "RelativeVorticity"
 
     def setup(self, state):
         """Solver for relative vorticity.
