@@ -16,6 +16,9 @@ def embedded_dg(original_apply):
     def get_apply(self, x_in, x_out):
         if self.embedded_dg:
             def new_apply(self, x_in, x_out):
+                # try to interpolate to x_in but revert to projection
+                # if interpolation is not implemented for this
+                # function space
                 try:
                     self.xdg_in.interpolate(x_in)
                 except NotImplementedError:
@@ -39,6 +42,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg solver_params: solver_parameters
+    :arg limiter: :class:`.Limiter` object.
     """
 
     def __init__(self, state, field, equation=None, *, solver_params=None, limiter=None):
@@ -131,17 +135,28 @@ class NoAdvection(Advection):
     def update_ubar(self, xn, xnp1, alpha):
         pass
 
-    def apply_cycle(self, x_in, x_out):
-        pass
-
     def apply(self, x_in, x_out):
         x_out.assign(x_in)
 
 
 class ExplicitAdvection(Advection):
+    """
+    Base class for explicit advection schemes.
+
+    :arg state: :class:`.State` object.
+    :arg field: field to be advected
+    :arg equation: :class:`.Equation` object, specifying the equation
+    that field satisfies
+    :arg subcycles: (optional) integer specifying number of subcycles to perform
+    :arg solver_params: solver_parameters
+    :arg limiter: :class:`.Limiter` object.
+    """
 
     def __init__(self, state, field, equation=None, *, subcycles=None, solver_params=None, limiter=None):
         super().__init__(state, field, equation, solver_params=solver_params, limiter=limiter)
+
+        # if user has specified a number of subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
         if subcycles is not None:
             self.dt = self.dt/subcycles
             self.ncycles = subcycles
