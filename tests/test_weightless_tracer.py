@@ -18,7 +18,7 @@ def setup_tracer(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
+    timestepping = TimesteppingParameters(dt=10.0)
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq=1,
                               dumplist=['u'],

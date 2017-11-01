@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector
+    LinearVariationalSolver, Projector, DirichletBC
 from firedrake.utils import cached_property
 from gusto.transport_equation import EmbeddedDGAdvection
 
@@ -38,7 +38,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg solver_params: solver_parameters
     """
 
-    def __init__(self, state, field, equation=None, solver_params=None, limiter=None):
+    def __init__(self, state, field, equation=None, *, forcing=None, solver_params=None, limiter=None):
 
         if equation is not None:
 
@@ -55,7 +55,16 @@ class Advection(object, metaclass=ABCMeta):
             else:
                 self.solver_parameters = solver_params
 
-            self.limiter = limiter
+        self.bcs = []
+        if forcing is not None:
+            self.xbar = forcing.x0
+            self.forcing_term = forcing.forcing_term
+            fs = equation.V
+            if fs.extruded:
+                self.bcs = [DirichletBC(fs, 0.0, "bottom"),
+                            DirichletBC(fs, 0.0, "top")]
+
+        self.limiter = limiter
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
@@ -64,8 +73,8 @@ class Advection(object, metaclass=ABCMeta):
         if isinstance(equation, EmbeddedDGAdvection):
             self.embedded_dg = True
             fs = equation.space
-            self.xdg_in = Function(equation.space)
-            self.xdg_out = Function(equation.space)
+            self.xdg_in = Function(fs)
+            self.xdg_out = Function(fs)
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
@@ -87,17 +96,26 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        r = self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        if hasattr(self, "forcing_term"):
+            r += self.dt*self.forcing_term()
+        return r
 
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
         unp1 = xnp1.split()[0]
         self.ubar.assign(un + alpha*(unp1-un))
+        if hasattr(self, "xbar"):
+            self.xbar.assign(xn + alpha*(xnp1-xn))
+
+    def update_xbar(self, xn, xnp1, alpha):
+        self.xbar.assign(xn + alpha*(xnp1-xn))
+        self.ubar = self.xbar.split()[0]
 
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
+        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
         return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -140,11 +158,11 @@ class ForwardEuler(Advection):
 
     @cached_property
     def lhs(self):
-        return super(ForwardEuler, self).lhs
+        return super().lhs
 
     @cached_property
     def rhs(self):
-        return super(ForwardEuler, self).rhs
+        return super().rhs
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -165,11 +183,11 @@ class SSPRK3(Advection):
 
     @cached_property
     def lhs(self):
-        return super(SSPRK3, self).lhs
+        return super().lhs
 
     @cached_property
     def rhs(self):
-        return super(SSPRK3, self).rhs
+        return super().rhs
 
     def solve_stage(self, x_in, stage):
 
@@ -214,7 +232,7 @@ class ThetaMethod(Advection):
                              'pc_type': 'bjacobi',
                              'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation, solver_params)
+        super().__init__(state, field, equation, solver_params=solver_params)
 
         self.theta = theta
 

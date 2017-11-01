@@ -29,6 +29,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.xrhs = Function(state.W)
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -117,7 +118,7 @@ class CompressibleSolver(TimesteppingSolver):
         Vrho = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
-        u_in, rho_in, theta_in = split(state.xrhs)
+        u_in, rho_in, theta_in = split(self.xrhs)
 
         # Build the reduced function space for u,rho
         M = MixedFunctionSpace((Vu, Vrho))
@@ -209,15 +210,16 @@ class CompressibleSolver(TimesteppingSolver):
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     options_prefix='thetabacksubstitution')
 
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
+        self.xrhs.assign(xrhs)
         self.urho_solver.solve()
 
         u1, rho1 = self.urho.split()
-        u, rho, theta = self.state.dy.split()
+        u, rho, theta = dy.split()
         u.assign(u1)
         rho.assign(rho1)
 
@@ -274,7 +276,7 @@ class IncompressibleSolver(TimesteppingSolver):
         Vp = state.spaces("DG")
 
         # Split up the rhs vector (symbolically)
-        u_in, p_in, b_in = split(state.xrhs)
+        u_in, p_in, b_in = split(self.xrhs)
 
         # Build the reduced function space for u,p
         M = MixedFunctionSpace((Vu, Vp))
@@ -345,15 +347,16 @@ class IncompressibleSolver(TimesteppingSolver):
                                              self.b)
         self.b_solver = LinearVariationalSolver(b_problem)
 
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
+        self.xrhs.assign(xrhs)
         self.up_solver.solve()
 
         u1, p1 = self.up.split()
-        u, p, b = self.state.dy.split()
+        u, p, b = dy.split()
         u.assign(u1)
         p.assign(p1)
 
@@ -392,7 +395,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         beta = state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        u_in, D_in = split(self.xrhs)
 
         W = state.W
         w, phi = TestFunctions(W)
@@ -413,15 +416,17 @@ class ShallowWaterSolver(TimesteppingSolver):
 
         # Solver for u, D
         uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
+            aeqn, Leqn, self.uD)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
                                                  options_prefix='SWimplicit')
 
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
+        self.xrhs.assign(xrhs)
         self.uD_solver.solve()
+        dy.assign(self.uD)

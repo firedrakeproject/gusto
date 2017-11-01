@@ -219,13 +219,17 @@ class State(object):
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
-        # Allocate state
-        self._allocate_state()
+        # Create function on mixed function space to hold field values
+        # at current time level
+        self.xn = Function(self.W)
+
+        # If user hasn't specified which fields to dump, assume they
+        # would like all prognostic fields
         if self.output.dumplist is None:
             self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
-        self.dumpfile = None
+        # set up fields
+        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         # figure out if we're on a sphere
         try:
@@ -438,20 +442,6 @@ class State(object):
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
             self.W = MixedFunctionSpace((V0, V1))
-
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
-
-        W = self.W
-        self.xn = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.xb = Function(W)  # store the old state for diagnostics
-        self.dy = Function(W)
 
 
 def get_latlon_mesh(mesh):

@@ -29,8 +29,6 @@ class TimesteppingParameters(Configuration):
     """
     dt = None
     alpha = 0.5
-    maxk = 4
-    maxi = 1
 
 
 class OutputParameters(Configuration):
