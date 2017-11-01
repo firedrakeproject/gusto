@@ -223,7 +223,6 @@ class ImplicitMidpoint(SemiImplicitTimestepper):
                         advection.update_xbar(state.xn, self.xnp1, state.timestepping.alpha)
                     else:
                         advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
-                        
                     # advects a field from xn and puts result in xrhs
                     advection.apply(self.xn_fields[name], self.xrhs_fields[name])
 
