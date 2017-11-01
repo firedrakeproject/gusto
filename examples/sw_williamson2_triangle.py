@@ -69,7 +69,7 @@ for ref_level, dt in ref_dt.items():
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=4)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
 
     linear_solver = ShallowWaterSolver(state)
 
