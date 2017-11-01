@@ -217,8 +217,13 @@ class ImplicitMidpoint(SemiImplicitTimestepper):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
-                    # first computes ubar from state.xn and xnp1
-                    advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
+                    # update xbar for evaluating forcing terms and
+                    # advecting velocity, or just update ubar
+                    if hasattr(advection, "forcing"):
+                        advection.update_xbar(state.xn, self.xnp1, state.timestepping.alpha)
+                    else:
+                        advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
+                        
                     # advects a field from xn and puts result in xrhs
                     advection.apply(self.xn_fields[name], self.xrhs_fields[name])
 

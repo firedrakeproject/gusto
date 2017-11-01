@@ -108,6 +108,10 @@ class Advection(object, metaclass=ABCMeta):
         if hasattr(self, "xbar"):
             self.xbar.assign(xn + alpha*(xnp1-xn))
 
+    def update_xbar(self, xn, xnp1, alpha):
+        self.xbar.assign(xn + alpha*(xnp1-xn))
+        self.ubar = self.xbar.split()[0]
+
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
