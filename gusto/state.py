@@ -219,13 +219,17 @@ class State(object):
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
-        # Allocate state
+        # Create function on mixed function space to hold field values
+        # at current time level
         self.xn = Function(self.W)
+
+        # If user hasn't specified which fields to dump, assume they
+        # would like all prognostic fields
         if self.output.dumplist is None:
             self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
-        self.dumpfile = None
+        # set up fields
+        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         # figure out if we're on a sphere
         try:
