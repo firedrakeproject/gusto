@@ -25,15 +25,21 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                  physics_list=None):
 
         self.state = state
+
+        # create function on the mixed function space to hold values
+        # at n+1 time level
         self.xnp1 = Function(state.W)
+
         if advected_fields is None:
             self.advected_fields = ()
         else:
             self.advected_fields = tuple(advected_fields)
+
         if diffused_fields is None:
             self.diffused_fields = ()
         else:
             self.diffused_fields = tuple(diffused_fields)
+
         if physics_list is not None:
             self.physics_list = physics_list
         else:
@@ -101,7 +107,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
+                # first computes ubar from state.xn and xnp1
                 advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
@@ -158,6 +164,8 @@ class SemiImplicitTimestepper(BaseTimestepper):
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
 
+        # create functions on the mixed function space to hold values
+        # of the residual and the update
         self.xrhs = Function(state.W)
         self.dy = Function(state.W)
 
@@ -192,6 +200,7 @@ class ImplicitMidpoint(SemiImplicitTimestepper):
 
         t = super().setup_timeloop(t, tmax, pickup)
 
+        # set up dictionaries to access the xn and xrhs functions separately
         self.xn_fields = {name: func for (name, func) in
                           zip(self.state.fieldlist, self.state.xn.split())}
         self.xrhs_fields = {name: func for (name, func) in
@@ -201,20 +210,22 @@ class ImplicitMidpoint(SemiImplicitTimestepper):
     def semi_implicit_step(self):
         state = self.state
 
-        self.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+        # xrhs is the residual which goes in the linear solve
+        self.xrhs.assign(0.)
+
         for k in range(self.maxk):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
-                    # first computes ubar from state.xn and state.xnp1
+                    # first computes ubar from state.xn and xnp1
                     advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
-                    # advects a field from xn and puts result in xp
+                    # advects a field from xn and puts result in xrhs
                     advection.apply(self.xn_fields[name], self.xrhs_fields[name])
 
             self.xrhs -= self.xnp1
 
             with timed_stage("Implicit solve"):
-                # solves linear system and places result in state.dy
+                # solves linear system and places result in dy
                 self.linear_solver.solve(self.xrhs, self.dy)
 
             self.xnp1 += self.dy
@@ -243,10 +254,14 @@ class CrankNicolson(SemiImplicitTimestepper):
 
         t = super().setup_timeloop(t, tmax, pickup)
 
+        # create functions on the mixed function space to hold values
+        # of fields after first forcing update and advection update
         self.xstar = Function(self.state.W)
+        self.xp = Function(self.state.W)
+
+        # create dictionaries to access functions separately
         self.xstar_fields = {name: func for (name, func) in
                              zip(self.state.fieldlist, self.xstar.split())}
-        self.xp = Function(self.state.W)
         self.xp_fields = {name: func for (name, func) in
                           zip(self.state.fieldlist, self.xp.split())}
         return t
@@ -264,12 +279,13 @@ class CrankNicolson(SemiImplicitTimestepper):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
-                    # first computes ubar from state.xn and state.xnp1
+                    # first computes ubar from state.xn and xnp1
                     advection.update_ubar(state.xn, self.xnp1, alpha)
                     # advects a field from xstar and puts result in xp
                     advection.apply(self.xstar_fields[name], self.xp_fields[name])
 
-            self.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+            # xrhs is the residual which goes in the linear solve
+            self.xrhs.assign(0.)
 
             for i in range(self.maxi):
 
@@ -281,7 +297,7 @@ class CrankNicolson(SemiImplicitTimestepper):
                 self.xrhs -= self.xnp1
 
                 with timed_stage("Implicit solve"):
-                    # solves linear system and places result in state.dy
+                    # solves linear system and places result in dy
                     self.linear_solver.solve(self.xrhs, self.dy)
 
                 self.xnp1 += self.dy
