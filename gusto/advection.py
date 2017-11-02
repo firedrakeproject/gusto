@@ -151,12 +151,14 @@ class ExplicitAdvection(Advection):
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg subcycles: (optional) integer specifying number of subcycles to perform
-    :arg solver_params: solver_parameters
+    :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation=None, *, subcycles=None, solver_params=None, limiter=None):
-        super().__init__(state, field, equation, solver_params=solver_params, limiter=limiter)
+    def __init__(self, state, field, equation=None, *, subcycles=None,
+                 solver_parameters=None, limiter=None):
+        super().__init__(state, field, equation,
+                         solver_parameters=solver_parameters, limiter=limiter)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
