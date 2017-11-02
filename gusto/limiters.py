@@ -50,21 +50,22 @@ class ThetaLimiter(object):
     the central nodes to prevent new maxima or minima forming.
     """
 
-    def __init__(self, space):
+    def __init__(self, equation):
         """
         Initialise limiter
 
-        :param space : FunctionSpace instance
+        :param space : equation, as we need the broken space attached to it
         """
 
-        self.Vt = space
+        self.Vt = equation.space
         # check this is the right space, only currently working for 2D extruded mesh
-        if self.Vt.extruded and self.Vt.mesh().topological_dimension is 2:
+        if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
             # check that horizontal degree is 1 and vertical degree is 2
             if self.Vt.ufl_element().degree()[0] is not 1 or \
                self.Vt.ufl_element().degree()[1] is not 2:
                 raise ValueError('This is not the right limiter for this space.')
             # check that continuity of the spaces is correct
+            # this will fail if the space does not use broken elements
             if self.Vt.ufl_element()._element.sobolev_space()[0].name is not 'L2' or \
                self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
                 raise ValueError('This is not the right limiter for this space.')

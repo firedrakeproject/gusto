@@ -5,163 +5,294 @@ from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
 import pytest
 from math import pi
 
-error = {"slice": 7e-2, "sphere": 2.5e-2}
 
+@pytest.fixture
+def state(tmpdir, geometry):
+    """
+    returns an instance of the State class, having set up either spherical
+    geometry or 2D vertical slice geometry
+    """
 
-def setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts=None):
+    output = OutputParameters(dirname=str(tmpdir), dumplist=["f"], dumpfreq=15)
 
-    output = OutputParameters(dirname=dirname, dumplist=["f"], dumpfreq=15)
     if geometry == "sphere":
-        refinements = 3  # number of horizontal cells = 20*(4^refinements)
-        R = 1.
-        dt = pi/3*0.01
-        tmax = pi/2.
-
-        mesh = IcosahedralSphereMesh(radius=R,
-                                     refinement_level=refinements, degree=3)
+        mesh = IcosahedralSphereMesh(radius=1,
+                                     refinement_level=3,
+                                     degree=1)
         x = SpatialCoordinate(mesh)
         mesh.init_cell_orientations(x)
-
-        fieldlist = ['u', 'D']
-        timestepping = TimesteppingParameters(dt=dt)
-
-        state = State(mesh, horizontal_degree=1,
-                      family="BDM",
-                      timestepping=timestepping,
-                      output=output,
-                      fieldlist=fieldlist)
+        family = "BDM"
+        vertical_degree = None
+        fieldlist = ["u", "D"]
+        dt = pi/3. * 0.01
         uexpr = as_vector([-x[1], x[0], 0.0])
-        u0 = state.fields("u")
-        u0.project(uexpr)
 
-        if vector:
-            space = VectorFunctionSpace(mesh, "DG", 1)
-            fexpr = as_vector([exp(-x[2]**2 - x[1]**2), 0., 0.])
-            f_end_expr = as_vector([exp(-x[2]**2 - x[0]**2), 0., 0.])
-        else:
-            space = state.spaces("DG")
-            fexpr = exp(-x[2]**2 - x[1]**2)
-            f_end_expr = exp(-x[2]**2 - x[0]**2)
-        f = state.fields("f", space)
-        f_end = Function(space)
-
-    elif geometry == "slice":
-        nlayers = 25  # horizontal layers
-        columns = 25  # number of columns
-        L = 1.0
-        m = PeriodicIntervalMesh(columns, L)
-
-        H = 1.0  # Height position of the model top
-        mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    if geometry == "slice":
+        m = PeriodicIntervalMesh(15, 1.)
+        mesh = ExtrudedMesh(m, layers=15, layer_height=1./15.)
+        family = "CG"
+        vertical_degree = 1
+        fieldlist = ["u", "rho", "theta"]
         dt = 0.01
-        tmax = 2.5
-
-        fieldlist = ['u', 'rho', 'theta']
-        timestepping = TimesteppingParameters(dt=dt)
-        parameters = CompressibleParameters()
-
-        state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                      family="CG",
-                      timestepping=timestepping,
-                      output=output,
-                      parameters=parameters,
-                      fieldlist=fieldlist)
-
-        uexpr = as_vector([1.0, 0.0])
-        u0 = state.fields("u")
-        u0.project(uexpr)
-
-        if spatial_opts is not None:
-            if "supg_params" in spatial_opts:
-                # if the direction list is empty we are testing SUPG for a
-                # continuous space, else we are testing the hybrid SUPG /
-                # DG upwind scheme for the theta space
-                if spatial_opts["supg_params"]["dg_direction"] is None:
-                    space = FunctionSpace(mesh, "CG", 1)
-                else:
-                    space = state.spaces("HDiv_v")
-            elif "embedded_dg" in spatial_opts:
-                space = state.spaces("HDiv_v")
-        else:
-            space = state.spaces("DG")
-        f = state.fields("f", space)
         x = SpatialCoordinate(mesh)
+        uexpr = as_vector([1.0, 0.0])
+
+    timestepping = TimesteppingParameters(dt=dt)
+    state = State(mesh,
+                  vertical_degree=vertical_degree,
+                  horizontal_degree=1,
+                  family=family,
+                  timestepping=timestepping,
+                  output=output,
+                  fieldlist=fieldlist)
+
+    u0 = state.fields("u")
+    u0.project(uexpr)
+    return state
+
+
+@pytest.fixture
+def f_init(geometry, state):
+    """
+    returns an expression for the initial condition
+    """
+    x = SpatialCoordinate(state.mesh)
+    if geometry == "sphere":
+        fexpr = exp(-x[2]**2 - x[1]**2)
+    if geometry == "slice":
         fexpr = sin(2*pi*x[0])*sin(2*pi*x[1])
-        f_end = Function(space)
-        f_end_expr = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
-
-    # interpolate initial conditions
-    f.interpolate(fexpr)
-    f_end.interpolate(f_end_expr)
-    state.initialise([('u', u0), ('f', f)])
-
-    if spatial_opts is None:
-        fequation = AdvectionEquation(state, f.function_space(), ibp=ibp, equation_form=equation_form)
-    elif "supg_params" in spatial_opts:
-        fequation = SUPGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form, supg_params=spatial_opts["supg_params"])
-    elif "embedded_dg" in spatial_opts:
-        if spatial_opts["embedded_dg"]["space"] == "Broken":
-            fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form)
-        elif spatial_opts["embedded_dg"]["space"] == "DG":
-            fequation = EmbeddedDGAdvection(state, f.function_space(), ibp=ibp, equation_form=equation_form, Vdg=space)
-
-    if time_discretisation == "ssprk":
-        f_advection = SSPRK3(state, f, fequation)
-    elif time_discretisation == "implicit_midpoint":
-        f_advection = ThetaMethod(state, f, fequation)
-
-    advected_fields = [("f", f_advection)]
-    timestepper = AdvectionTimestepper(state, advected_fields)
-
-    return timestepper, tmax, f_end
+    return fexpr
 
 
-def run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts=None):
+@pytest.fixture
+def f_end(geometry, state):
+    """
+    returns an expression for the expected final state
+    """
+    x = SpatialCoordinate(state.mesh)
+    if geometry == "sphere":
+        fexpr = exp(-x[2]**2 - x[0]**2)
+    if geometry == "slice":
+        fexpr = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
+    return fexpr
 
-    timestepper, tmax, f_end = setup_advection(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts=spatial_opts)
 
-    f_dict = timestepper.run(0, tmax, x_end=["f"])
-    f = f_dict["f"]
+@pytest.fixture
+def tmax(geometry):
+    return {"slice": 2.5,
+            "sphere": pi/2}[geometry]
 
-    f_err = Function(f.function_space()).assign(f_end - f)
-    return f_err
+
+@pytest.fixture
+def error(geometry):
+    """
+    returns the max expected error (based on past runs)
+    """
+    return {"slice": 7e-2,
+            "sphere": 2.5e-2}[geometry]
+
+
+def run(state, advected_fields, tmax):
+
+    timestepper = AdvectionDiffusion(state, advected_fields)
+    timestepper.run(0, tmax)
+    return timestepper.state.fields
+
+
+def check_errors(ans, error, end_fields, field_names):
+    for fname in field_names:
+        f = end_fields(fname)
+        f -= ans
+        assert(abs(f.dat.data.max()) < error)
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
-@pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp", ["once", "twice"])
-@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("vector", [False, True])
-def test_advection_dg(tmpdir, geometry, time_discretisation, ibp, equation_form, vector):
+def test_advection_dg(geometry, error, state,
+                      f_init, tmax, f_end):
+    """
+    This tests the DG advection discretisation for both scalar and vector
+    fields in 2D slice and spherical geometry.
+    """
+    # set up function spaces
+    fspace = state.spaces("DG")
+    vspace = VectorFunctionSpace(state.mesh, "DG", 1)
 
-    dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector)
-    assert(abs(f_err.dat.data.max()) < error[geometry])
+    # expression for vector initial and final conditions
+    vec_expr = [0.]*state.mesh.geometric_dimension()
+    vec_expr[0] = f_init
+    vec_expr = as_vector(vec_expr)
+    vec_end_expr = [0.]*state.mesh.geometric_dimension()
+    vec_end_expr[0] = f_end
+    vec_end_expr = as_vector(vec_end_expr)
+
+    # functions containing expected values at tmax
+    f_end = Function(fspace).interpolate(f_end)
+    vec_end = Function(vspace).interpolate(vec_end_expr)
+
+    s = "_"
+    advected_fields = []
+
+    # setup scalar fields
+    scalar_fields = []
+    for ibp in ["once", "twice"]:
+        for equation_form in ["advective", "continuity"]:
+            for time_discretisation in ["ssprk", "im"]:
+                # create functions and initialise them
+                fname = s.join(("f", ibp, equation_form, time_discretisation))
+                f = state.fields(fname, fspace)
+                f.interpolate(f_init)
+                scalar_fields.append(fname)
+                eqn = AdvectionEquation(state, fspace, ibp=ibp, equation_form=equation_form)
+                if time_discretisation == "ssprk":
+                    advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                elif time_discretisation == "im":
+                    advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    # setup vector fields
+    vector_fields = []
+    for ibp in ["once", "twice"]:
+        for equation_form in ["advective", "continuity"]:
+            for time_discretisation in ["ssprk", "im"]:
+                # create functions and initialise them
+                fname = s.join(("vecf", ibp, equation_form, time_discretisation))
+                f = state.fields(fname, vspace)
+                f.interpolate(vec_expr)
+                vector_fields.append(fname)
+                eqn = AdvectionEquation(state, vspace, ibp=ibp, equation_form=equation_form)
+                if time_discretisation == "ssprk":
+                    advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                elif time_discretisation == "im":
+                    advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    end_fields = run(state, advected_fields, tmax)
+
+    check_errors(f_end, error, end_fields, scalar_fields)
+    check_errors(vec_end, error, end_fields, vector_fields)
 
 
-@pytest.mark.parametrize("ibp", ["once", "twice"])
-@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("space", ["Broken", "DG"])
-def test_advection_embedded_dg(tmpdir, ibp, equation_form, space):
+@pytest.mark.parametrize("geometry", ["slice"])
+def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
+    """
+    This tests the embedded DG advection scheme for scalar fields
+    in slice geometry.
+    """
+    fspace = state.spaces("HDiv_v")
+    f_end = Function(fspace).interpolate(f_end)
 
-    geometry = "slice"
-    time_discretisation = "ssprk"
-    vector = False
-    dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"embedded_dg": {"space": space}})
-    assert(abs(f_err.dat.data.max()) < error[geometry])
+    s = "_"
+    advected_fields = []
+
+    # setup scalar fields
+    scalar_fields = []
+    for ibp in ["once", "twice"]:
+        for equation_form in ["advective", "continuity"]:
+            for broken in [True, False]:
+                # create functions and initialise them
+                fname = s.join(("f", ibp, equation_form, str(broken)))
+                f = state.fields(fname, fspace)
+                f.interpolate(f_init)
+                scalar_fields.append(fname)
+                if broken:
+                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form)
+                else:
+                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, Vdg=state.spaces("DG"))
+                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+
+    end_fields = run(state, advected_fields, tmax)
+    check_errors(f_end, error, end_fields, scalar_fields)
 
 
-@pytest.mark.parametrize("time_discretisation", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("ibp", [None, "twice"])
-@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("vector", [False, True])
-def test_advection_supg(tmpdir, time_discretisation, ibp, equation_form, vector):
-    geometry = "slice"
-    if ibp is None:
-        direction = None
-    else:
-        direction = "horizontal"
-    dirname = str(tmpdir)
-    f_err = run(dirname, geometry, time_discretisation, ibp, equation_form, vector, spatial_opts={"supg_params": {"dg_direction": direction}})
-    assert(abs(f_err.dat.data.max()) < error[geometry])
+@pytest.mark.parametrize("geometry", ["slice"])
+def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
+    """
+    This tests the embedded DG advection scheme for scalar and vector fields
+    in slice geometry.
+    """
+    s = "_"
+    advected_fields = []
+
+    cgspace = FunctionSpace(state.mesh, "CG", 1)
+    fspace = state.spaces("HDiv_v")
+    vcgspace = VectorFunctionSpace(state.mesh, "CG", 1)
+    vspace = state.spaces("HDiv")
+
+    # expression for vector initial and final conditions
+    vec_expr = [0.]*state.mesh.geometric_dimension()
+    vec_expr[0] = f_init
+    vec_expr = as_vector(vec_expr)
+    vec_end_expr = [0.]*state.mesh.geometric_dimension()
+    vec_end_expr[0] = f_end
+    vec_end_expr = as_vector(vec_end_expr)
+
+    cg_end = Function(cgspace).interpolate(f_end)
+    hdiv_v_end = Function(fspace).interpolate(f_end)
+    vcg_end = Function(vcgspace).interpolate(vec_end_expr)
+    hdiv_end = Function(vspace).project(vec_end_expr)
+
+    # setup cg scalar fields
+    cg_scalar_fields = []
+    for equation_form in ["advective", "continuity"]:
+        for time_discretisation in ["ssprk", "im"]:
+            # create functions and initialise them
+            fname = s.join(("f", equation_form, time_discretisation))
+            f = state.fields(fname, cgspace)
+            f.interpolate(f_init)
+            cg_scalar_fields.append(fname)
+            eqn = SUPGAdvection(state, cgspace, equation_form=equation_form)
+            if time_discretisation == "ssprk":
+                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+            elif time_discretisation == "im":
+                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    # setup cg vector fields
+    cg_vector_fields = []
+    for equation_form in ["advective", "continuity"]:
+        for time_discretisation in ["ssprk", "im"]:
+            # create functions and initialise them
+            fname = s.join(("fvec", equation_form, time_discretisation))
+            f = state.fields(fname, vcgspace)
+            f.interpolate(vec_expr)
+            cg_vector_fields.append(fname)
+            eqn = SUPGAdvection(state, vcgspace, equation_form=equation_form)
+            if time_discretisation == "ssprk":
+                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+            elif time_discretisation == "im":
+                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    # setup HDiv_v fields
+    hdiv_v_fields = []
+    ibp = "twice"
+    for equation_form in ["advective", "continuity"]:
+        for time_discretisation in ["ssprk", "im"]:
+            # create functions and initialise them
+            fname = s.join(("f", ibp, equation_form, time_discretisation))
+            f = state.fields(fname, fspace)
+            f.interpolate(f_init)
+            hdiv_v_fields.append(fname)
+            eqn = SUPGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, supg_params={"dg_direction": "horizontal"})
+            if time_discretisation == "ssprk":
+                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+            elif time_discretisation == "im":
+                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    # setup HDiv fields
+    hdiv_fields = []
+    ibp = "twice"
+    for equation_form in ["advective", "continuity"]:
+        for time_discretisation in ["ssprk", "im"]:
+            # create functions and initialise them
+            fname = s.join(("fvec", ibp, equation_form, time_discretisation))
+            f = state.fields(fname, vspace)
+            f.project(vec_expr)
+            hdiv_fields.append(fname)
+            eqn = SUPGAdvection(state, vspace, ibp=ibp, equation_form=equation_form, supg_params={"dg_direction": "horizontal"})
+            if time_discretisation == "ssprk":
+                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+            elif time_discretisation == "im":
+                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+
+    end_fields = run(state, advected_fields, tmax)
+    check_errors(cg_end, error, end_fields, cg_scalar_fields)
+    check_errors(hdiv_v_end, error, end_fields, hdiv_v_fields)
+    check_errors(vcg_end, error, end_fields, cg_vector_fields)
+    check_errors(hdiv_end, error, end_fields, hdiv_fields)
