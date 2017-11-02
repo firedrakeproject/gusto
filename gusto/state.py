@@ -12,6 +12,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
 import logging
+from gusto.configuration import logger
 
 __all__ = ["State"]
 
@@ -252,7 +253,7 @@ class State(object):
         #  Constant to hold current time
         self.t = Constant(0.0)
 
-        logger = logging.getLogger("gusto")
+        # setup logger
         if output.log_level == "debug":
             logger.setLevel(logging.DEBUG)
         elif output.log_level == "info":
@@ -272,7 +273,6 @@ class State(object):
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
-        self.logger = logger
 
     def setup_diagnostics(self):
         # add special case diagnostic fields

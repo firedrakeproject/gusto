@@ -80,7 +80,7 @@ def setup_theta_limiter(dirname):
     # build advection dictionary
     advected_fields = []
     advected_fields.append(('u', NoAdvection(state, u0, None)))
-    advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(state, thetaeqn))))
+    advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn))))
 
     # build time stepper
     stepper = AdvectionDiffusion(state, advected_fields)

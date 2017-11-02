@@ -1,11 +1,13 @@
 """
 Some simple tools for making model configuration nicer.
 """
-
+import logging
 from firedrake import sqrt
 
 
-__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters"]
+__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger"]
+
+logger = logging.getLogger("gusto")
 
 
 class Configuration(object):
