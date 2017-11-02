@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 3000., 4: 1500., 5: 750., 6: 375.}
+    ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
     tmax = 5*day
 
 # setup shallow water parameters
@@ -65,12 +65,11 @@ for ref_level, dt in ref_dt.items():
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    # ueqn = EulerPoincare(state, u0.function_space())
-    ueqn = AdvectionEquation(state, u0.function_space(), vector_manifold=True)
+    ueqn = VectorInvariant(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
 
     linear_solver = ShallowWaterSolver(state)
 
