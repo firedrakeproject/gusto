@@ -11,6 +11,7 @@ __all__ = ["Condensation", "Fallout"]
 class Physics(object, metaclass=ABCMeta):
     """
     Base class for physics processes for Gusto.
+
     :arg state: :class:`.State` object.
     """
 
@@ -32,6 +33,7 @@ class Condensation(Physics):
     into liquid water and evaporation of liquid
     water into water vapour, with the associated
     latent heat changes.
+
     :arg state: :class:`.State.` object.
     """
 
@@ -112,6 +114,7 @@ class Condensation(Physics):
 class Fallout(Physics):
     """
     The fallout process of hydrometeors.
+
     :arg state :class: `.State.` object.
     """
 
