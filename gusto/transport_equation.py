@@ -15,6 +15,7 @@ class TransportEquation(object, metaclass=ABCMeta):
     Base class for transport equations in Gusto.
 
     The equation is assumed to be in the form:
+
     q_t + L(q) = 0
 
     where q is the (scalar or vector) field to be solved for.
