@@ -442,6 +442,7 @@ class Vorticity(DiagnosticField):
 
     def setup(self, state, vorticity_type=None):
         """Solver for vorticity.
+
         :arg state: The state containing model.
         :arg vorticity_type: must be "relative", "absolute" or "potential"
         """
@@ -496,6 +497,7 @@ class PotentialVorticity(Vorticity):
         a weighted mass system to generate the
         potential vorticity from known velocity and
         depth fields.
+
         :arg state: The state containing model.
         """
         super().setup(state, vorticity_type="potential")
@@ -507,6 +509,7 @@ class AbsoluteVorticity(Vorticity):
 
     def setup(self, state):
         """Solver for absolute vorticity.
+
         :arg state: The state containing model.
         """
         super().setup(state, vorticity_type="absolute")
@@ -518,6 +521,7 @@ class RelativeVorticity(Vorticity):
 
     def setup(self, state):
         """Solver for relative vorticity.
+
         :arg state: The state containing model.
         """
         super().setup(state, vorticity_type="relative")
