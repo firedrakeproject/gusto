@@ -13,9 +13,12 @@ __all__ = ["LinearAdvection", "AdvectionEquation", "EmbeddedDGAdvection", "SUPGA
 class TransportEquation(object, metaclass=ABCMeta):
     """
     Base class for transport equations in Gusto.
+
     The equation is assumed to be in the form:
     q_t + L(q) = 0
+
     where q is the (scalar or vector) field to be solved for.
+
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
@@ -79,6 +82,7 @@ class TransportEquation(object, metaclass=ABCMeta):
 class LinearAdvection(TransportEquation):
     """
     Class for linear transport equation.
+
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg qbar: The reference function that the equation has been linearised
@@ -129,6 +133,7 @@ class LinearAdvection(TransportEquation):
 class AdvectionEquation(TransportEquation):
     """
     Class for discretisation of the transport equation.
+
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
@@ -198,6 +203,7 @@ class AdvectionEquation(TransportEquation):
 class EmbeddedDGAdvection(AdvectionEquation):
     """
     Class for the transport equation, using an embedded DG advection scheme.
+
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: (optional) string, stands for 'integrate by parts' and can take
@@ -237,6 +243,7 @@ class EmbeddedDGAdvection(AdvectionEquation):
 class SUPGAdvection(AdvectionEquation):
     """
     Class for the transport equation.
+
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
@@ -333,6 +340,7 @@ class SUPGAdvection(AdvectionEquation):
 class VectorInvariant(TransportEquation):
     """
     Class defining the vector invariant form of the vector advection equation.
+
     :arg state: :class:`.State` object.
     :arg V: Function space
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
@@ -401,6 +409,7 @@ class VectorInvariant(TransportEquation):
 class EulerPoincare(VectorInvariant):
     """
     Class defining the Euler-Poincare form of the vector advection equation.
+
     :arg state: :class:`.State` object.
     :arg V: Function space
     :arg ibp: string, stands for 'integrate by parts' and can take the value
