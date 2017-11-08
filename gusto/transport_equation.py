@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
+    ds, ds_v, ds_t, ds_b, \
     outer, sign, cross, CellNormal, sqrt, Constant, \
     curl, BrokenElement, FunctionSpace
 
@@ -12,13 +13,9 @@ __all__ = ["LinearAdvection", "AdvectionEquation", "EmbeddedDGAdvection", "SUPGA
 class TransportEquation(object, metaclass=ABCMeta):
     """
     Base class for transport equations in Gusto.
-
     The equation is assumed to be in the form:
-
     q_t + L(q) = 0
-
     where q is the (scalar or vector) field to be solved for.
-
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
@@ -51,11 +48,14 @@ class TransportEquation(object, metaclass=ABCMeta):
         # n and un
         if self.is_cg:
             self.dS = None
+            self.ds = None
         else:
             if V.extruded:
                 self.dS = (dS_h + dS_v)
+                self.ds = (ds_b + ds_t + ds_v)
             else:
                 self.dS = dS
+                self.ds = ds
             self.n = FacetNormal(state.mesh)
             self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
@@ -79,7 +79,6 @@ class TransportEquation(object, metaclass=ABCMeta):
 class LinearAdvection(TransportEquation):
     """
     Class for linear transport equation.
-
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg qbar: The reference function that the equation has been linearised
@@ -130,7 +129,6 @@ class LinearAdvection(TransportEquation):
 class AdvectionEquation(TransportEquation):
     """
     Class for discretisation of the transport equation.
-
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: string, stands for 'integrate by parts' and can take the value
@@ -146,7 +144,7 @@ class AdvectionEquation(TransportEquation):
                         linear solver.
     """
     def __init__(self, state, V, *, ibp="once", equation_form="advective",
-                 vector_manifold=False, solver_params=None):
+                 vector_manifold=False, solver_params=None, outflow=False):
         super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
@@ -156,6 +154,10 @@ class AdvectionEquation(TransportEquation):
             self.vector_manifold = True
         else:
             self.vector_manifold = False
+        if outflow:
+            self.outflow = True
+        else:
+            self.outflow = False
 
     def advection_term(self, q):
 
@@ -178,6 +180,10 @@ class AdvectionEquation(TransportEquation):
                             dot(self.ubar('+'), self.n('+'))*q('+'))
                       + inner(self.test('-'),
                               dot(self.ubar('-'), self.n('-'))*q('-')))*self.dS
+
+        if self.outflow and self.ibp is not None:
+            L += self.test*self.un*q*self.ds
+
         if self.vector_manifold:
             un = self.un
             w = self.test
@@ -192,7 +198,6 @@ class AdvectionEquation(TransportEquation):
 class EmbeddedDGAdvection(AdvectionEquation):
     """
     Class for the transport equation, using an embedded DG advection scheme.
-
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: (optional) string, stands for 'integrate by parts' and can take
@@ -211,7 +216,7 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         linear solver.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None):
+    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None, outflow=False):
 
         if Vdg is None:
             # Create broken space, functions and projector
@@ -225,13 +230,13 @@ class EmbeddedDGAdvection(AdvectionEquation):
                          ibp=ibp,
                          equation_form=equation_form,
                          vector_manifold=vector_manifold,
-                         solver_params=solver_params)
+                         solver_params=solver_params,
+                         outflow=outflow)
 
 
 class SUPGAdvection(AdvectionEquation):
     """
     Class for the transport equation.
-
     :arg state: :class:`.State` object.
     :arg V: :class:`.FunctionSpace object. The function space that q lives in.
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
@@ -258,7 +263,7 @@ class SUPGAdvection(AdvectionEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+    def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None, outflow=False):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -269,7 +274,8 @@ class SUPGAdvection(AdvectionEquation):
 
         super().__init__(state=state, V=V, ibp=ibp,
                          equation_form=equation_form,
-                         solver_params=solver_params)
+                         solver_params=solver_params,
+                         outflow=outflow)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp == "once":
@@ -327,7 +333,6 @@ class SUPGAdvection(AdvectionEquation):
 class VectorInvariant(TransportEquation):
     """
     Class defining the vector invariant form of the vector advection equation.
-
     :arg state: :class:`.State` object.
     :arg V: Function space
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
@@ -396,7 +401,6 @@ class VectorInvariant(TransportEquation):
 class EulerPoincare(VectorInvariant):
     """
     Class defining the Euler-Poincare form of the vector advection equation.
-
     :arg state: :class:`.State` object.
     :arg V: Function space
     :arg ibp: string, stands for 'integrate by parts' and can take the value
