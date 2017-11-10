@@ -179,6 +179,8 @@ class OptimalTransportMeshGenerator(MeshGenerator):
                        "ksp_gmres_restart": 100,
                        "snes_rtol": initial_tol,
                        "snes_linesearch_type": "l2",
+                       "snes_linesearch_maxstep": 1.05,
+                       "snes_linesearch_damping": 0.8,
                        # "ksp_monitor": True,
                        # "snes_monitor": True,
                        # "snes_linesearch_monitor": True,
