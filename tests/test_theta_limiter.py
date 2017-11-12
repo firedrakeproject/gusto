@@ -39,13 +39,11 @@ def setup_theta_limiter(dirname):
 
     # declare initial fields
     u0 = state.fields("u")
-    rho0 = state.fields("rho")
     theta0 = state.fields("theta")
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
     Vt = theta0.function_space()
-    Vr = rho0.function_space()
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
@@ -73,21 +71,19 @@ def setup_theta_limiter(dirname):
     u0.project(gradperp(psi0))
     theta0.interpolate(theta_b + theta_pert)
 
-    state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
+    state.initialise([('u', u0), ('theta', theta0)])
     state.set_reference_profiles([('theta', theta_b)])
 
     # set up advection schemes
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
     # build advection dictionary
     advected_fields = []
     advected_fields.append(('u', NoAdvection(state, u0, None)))
-    advected_fields.append(('rho', SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn.space))))
+    advected_fields.append(('theta', SSPRK3(state, theta0, thetaeqn, limiter=ThetaLimiter(thetaeqn))))
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advected_fields)
+    stepper = AdvectionDiffusion(state, advected_fields)
 
     return stepper, 40.0
 

@@ -346,11 +346,11 @@ class VectorInvariant(TransportEquation):
 
         if self.state.mesh.topological_dimension() == 2:
             self.perp = state.perp
-            if V.extruded:
-                self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
-            else:
+            if state.on_sphere:
                 outward_normals = CellNormal(state.mesh)
                 self.perp_u_upwind = lambda q: self.Upwind('+')*cross(outward_normals('+'), q('+')) + self.Upwind('-')*cross(outward_normals('-'), q('-'))
+            else:
+                self.perp_u_upwind = lambda q: self.Upwind('+')*state.perp(q('+')) + self.Upwind('-')*state.perp(q('-'))
             self.gradperp = lambda u: state.perp(grad(u))
         elif self.state.mesh.topological_dimension() == 3:
             if self.ibp == "twice":

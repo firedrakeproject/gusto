@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 3000., 4: 1500., 5: 750., 6: 375.}
+    ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
     tmax = 5*day
 
 # setup shallow water parameters
@@ -20,7 +20,6 @@ H = 5960.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.items():
 
@@ -33,13 +32,17 @@ for ref_level, dt in ref_dt.items():
 
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+                         ShallowWaterKineticEnergy(),
+                         ShallowWaterPotentialEnergy(),
+                         ShallowWaterPotentialEnstrophy()]
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
+                  diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
@@ -62,12 +65,11 @@ for ref_level, dt in ref_dt.items():
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    # ueqn = EulerPoincare(state, u0.function_space())
-    ueqn = AdvectionEquation(state, u0.function_space(), vector_manifold=True)
+    ueqn = VectorInvariant(state, u0.function_space())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
 
     linear_solver = ShallowWaterSolver(state)
 
@@ -75,7 +77,7 @@ for ref_level, dt in ref_dt.items():
     sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            sw_forcing)
 
     stepper.run(t=0, tmax=tmax)
