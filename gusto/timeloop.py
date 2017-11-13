@@ -165,10 +165,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.semi_implicit_step()
 
-            alpha = state.timestepping.alpha
-            un = state.xn.split()[0]
-            unp1 = state.xnp1.split()[0]
-
             with timed_stage("PassiveAdvection"):
                 if hasattr(self, "PassiveAdvection"):
                     self.PassiveAdvection.apply(self.passive_fields,

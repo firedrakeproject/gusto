@@ -148,6 +148,6 @@ sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
-                       sw_forcing)
+                        sw_forcing)
 
 stepper.run(t=0, tmax=tmax)
