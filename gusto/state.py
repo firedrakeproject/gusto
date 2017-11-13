@@ -11,8 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
-import logging
-from gusto.configuration import logger
+from gusto.configuration import logger, set_log_handler
 
 __all__ = ["State"]
 
@@ -254,20 +253,8 @@ class State(object):
         self.t = Constant(0.0)
 
         # setup logger
-        if output.log_level == "debug":
-            logger.setLevel(logging.DEBUG)
-        elif output.log_level == "info":
-            logger.setLevel(logging.INFO)
-        elif output.log_level == "warning":
-            logger.setLevel(logging.WARNING)
-        else:
-            raise ValueError("log_level must be one of: %s, %s, %s, not %s" % ("info", "debug", "warning", output.log_level))
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
-        if self.mesh.comm.rank == 0:
-            logger.addHandler(handler)
-        else:
-            logger.addHandler(logging.NullHandler())
+        logger.setLevel(output.log_level)
+        set_log_handler(mesh.comm)
         logger.info("Timestepping parameters that take non-default values:")
         logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
         if parameters is not None:
