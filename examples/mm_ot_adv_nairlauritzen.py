@@ -18,7 +18,6 @@ R = 1.0
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 dirname = "mm_ot_NLadv_ref%s_dt%s" % (ref_level, dt)
@@ -35,7 +34,6 @@ state = State(mesh, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               diagnostic_fields=diagnostic_fields,
               fieldlist=fieldlist)
 
@@ -99,6 +97,6 @@ mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
 mesh_generator.get_first_mesh(initialise_fn)
 
 # build time stepper
-stepper = AdvectionTimestepper(state, advected_fields, mesh_generator=mesh_generator)
+stepper = AdvectionDiffusion(state, advected_fields, mesh_generator=mesh_generator)
 
 stepper.run(t=0, tmax=T)

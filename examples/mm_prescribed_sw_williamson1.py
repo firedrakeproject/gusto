@@ -21,7 +21,6 @@ u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 for ref_level, dt in ref_dt.items():
@@ -39,7 +38,6 @@ for ref_level, dt in ref_dt.items():
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
                   diagnostic_fields=diagnostic_fields,
                   fieldlist=fieldlist)
 
@@ -90,6 +88,6 @@ for ref_level, dt in ref_dt.items():
     mesh_rotator = MeshRotator(mesh, R, vscale, dt)
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advected_fields, mesh_generator=mesh_rotator)
+    stepper = AdvectionDiffusion(state, advected_fields, mesh_generator=mesh_rotator)
 
     stepper.run(t=0, tmax=tmax)

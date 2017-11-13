@@ -19,7 +19,6 @@ R = 1.0
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 dirname = "NLadv_ref%s_dt%s" % (ref_level, dt)
@@ -36,7 +35,6 @@ state = State(mesh, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               diagnostic_fields=diagnostic_fields,
               fieldlist=fieldlist)
 
@@ -89,6 +87,6 @@ advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 advected_fields.append(("u", NoAdvection(state, u0)))
 
 # build time stepper
-stepper = AdvectionTimestepper(state, advected_fields)
+stepper = AdvectionDiffusion(state, advected_fields)
 
 stepper.run(t=0, tmax=T)

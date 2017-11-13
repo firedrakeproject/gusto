@@ -20,7 +20,6 @@ H = 10000.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [PotentialVorticity()]
 
 perturb = True
@@ -33,7 +32,7 @@ mesh = IcosahedralSphereMesh(radius=R,
 mesh.init_cell_orientations(SpatialCoordinate(mesh))
 
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname=dirname, dumplist_latlon=['D', "potential_vorticity"])
+output = OutputParameters(dirname=dirname, dumplist_latlon=['D', "PotentialVorticity"])
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
@@ -41,7 +40,6 @@ state = State(mesh, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
@@ -149,7 +147,7 @@ linear_solver = ShallowWaterSolver(state)
 sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      sw_forcing)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                       sw_forcing)
 
 stepper.run(t=0, tmax=tmax)

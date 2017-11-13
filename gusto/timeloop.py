@@ -51,24 +51,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.mesh_generator = mesh_generator
         self.dt = state.timestepping.dt
 
-        if state.timestepping.move_mesh:
-            self.X0 = Function(state.mesh.coordinates)
-            self.X1 = Function(state.mesh.coordinates)
-            self.Advection = MovingMeshAdvectionStep(
-                state,
-                state.xn, state.xnp1,
-                advected_fields, state.timestepping.alpha,
-                self.X0, self.X1)
-        else:
-            self.Advection = AdvectionStep(
-                state,
-                state.xn, state.xnp1,
-                advected_fields, state.timestepping.alpha)
-
-
     @abstractproperty
     def passive_advection(self):
         """list of fields that are passively advected (and possibly diffused)"""
+        pass
+
+    @abstractproperty
+    def active_advection(self):
+        """list of fields that are advected during the semi-implicit step"""
         pass
 
     def _apply_bcs(self):
@@ -90,10 +80,41 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         Setup the timeloop by setting up diagnostics, dumping the fields and
         picking up from a previous run, if required
         """
-        self.state.setup_diagnostics()
+        state = self.state
+        state.setup_diagnostics()
         with timed_stage("Dump output"):
-            self.state.setup_dump(tmax, pickup)
-            t = self.state.dump(t, pickup)
+            state.setup_dump(tmax, pickup)
+            t = state.dump(t, pickup)
+
+        self.passive_fields = {}
+        for name, _ in self.passive_advection:
+            self.passive_fields[name] = getattr(state.fields, name)
+
+        if state.timestepping.move_mesh:
+            self.X0 = Function(state.mesh.coordinates)
+            self.X1 = Function(state.mesh.coordinates)
+            self.Advection = MovingMeshAdvectionStep(
+                state,
+                state.xn, state.xnp1,
+                self.active_advection, state.timestepping.alpha,
+                self.X0, self.X1)
+            if len(self.passive_advection) > 0:
+                self.PassiveAdvection = MovingMeshAdvectionStep(
+                    state,
+                    state.xn, state.xnp1,
+                    self.passive_advection, state.timestepping.alpha,
+                    self.X0, self.X1)
+        else:
+            self.Advection = AdvectionStep(
+                state,
+                state.xn, state.xnp1,
+                self.active_advection, state.timestepping.alpha)
+            if len(self.passive_advection) > 0:
+                self.PassiveAdvection = AdvectionStep(
+                    state,
+                    state.xn, state.xnp1,
+                    self.passive_advection, state.timestepping.alpha)
+
         return t
 
     @abstractmethod
@@ -144,12 +165,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.semi_implicit_step()
 
-            for name, advection in self.passive_advection:
-                field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar((1 - alpha)*un + alpha*unp1)
-                # advects a field from xn and puts result in xnp1
-                advection.apply(field, field)
+            alpha = state.timestepping.alpha
+            un = state.xn.split()[0]
+            unp1 = state.xnp1.split()[0]
+
+            with timed_stage("PassiveAdvection"):
+                if hasattr(self, "PassiveAdvection"):
+                    self.PassiveAdvection.apply(self.passive_fields,
+                                                self.passive_fields)
 
             state.xb.assign(state.xn)
             state.xn.assign(state.xnp1)
@@ -204,17 +227,21 @@ class CrankNicolson(BaseTimestepper):
         else:
             self.mu_alpha = [None, None]
 
-        dt = state.timestepping.dt
-        state.xnp1.assign(state.xn)
         self.xstar_fields = {name: func for (name, func) in
                              zip(state.fieldlist, state.xstar.split())}
         self.xp_fields = {name: func for (name, func) in
                           zip(state.fieldlist, state.xp.split())}
 
-        # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
-
         state.xb.assign(state.xn)
+
+    @property
+    def active_advection(self):
+        """
+        Advected fields that are not part of the semi implicit step are
+        passively advected
+        """
+        return [(name, scheme) for name, scheme in
+                self.advected_fields if name in self.state.fieldlist]
 
     @property
     def passive_advection(self):
@@ -236,9 +263,6 @@ class CrankNicolson(BaseTimestepper):
 
         for k in range(state.timestepping.maxk):
 
-            # since advection velocity ubar is calculated from xn and xnp1
-            state.xnp1.assign(state.xn)
-
             if state.timestepping.move_mesh:
                 # This is used as the "old mesh" domain in projections
                 state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
@@ -251,7 +275,7 @@ class CrankNicolson(BaseTimestepper):
             # At the moment, this is automagically moving the mesh (if
             # appropriate), which is not ideal
             with timed_stage("Advection"):
-                self.Advection.apply(xn_fields, xn_fields)
+                self.Advection.apply(self.xstar_fields, self.xp_fields)
 
             if state.timestepping.move_mesh:
                 self.mesh_generator.post_meshgen_callback()
@@ -280,6 +304,14 @@ class AdvectionDiffusion(BaseTimestepper):
     This class implements a timestepper for the advection-diffusion equations.
     No semi implicit step is required.
     """
+
+    @property
+    def active_advection(self):
+        """
+        Advected fields that are not part of the semi implicit step are
+        passively advected
+        """
+        return []
 
     @property
     def passive_advection(self):

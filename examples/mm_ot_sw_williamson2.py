@@ -21,7 +21,6 @@ u_0 = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.items():
 
@@ -38,7 +37,6 @@ for ref_level, dt in ref_dt.items():
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
                   fieldlist=fieldlist)
 
     # interpolate initial conditions
@@ -91,7 +89,7 @@ for ref_level, dt in ref_dt.items():
     mesh_generator.get_first_mesh(initialise_fn)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing, mesh_generator=mesh_generator)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            sw_forcing, mesh_generator=mesh_generator)
 
     stepper.run(t=0, tmax=tmax)

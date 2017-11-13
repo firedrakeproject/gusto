@@ -22,9 +22,8 @@ mesh.init_cell_orientations(x)
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
 dirname = "mm_ot_sw_W6_ref%s" % refinements
-output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'potential_vorticity'])
+output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'])
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 pv = PotentialVorticity()
 diagnostic_fields = [pv]
 
@@ -34,7 +33,6 @@ state = State(mesh, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
@@ -104,7 +102,7 @@ mesh_generator = OptimalTransportMeshGenerator(mesh, monitor, pre_meshgen_callba
 
 mesh_generator.get_first_mesh(initialise_fn)
 
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      sw_forcing, mesh_generator=mesh_generator)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        sw_forcing, mesh_generator=mesh_generator)
 
 stepper.run(t=0, tmax=tmax)

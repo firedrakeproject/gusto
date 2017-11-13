@@ -20,7 +20,6 @@ H = 10000.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 pv = PotentialVorticity()
 diagnostic_fields = [pv]
 
@@ -35,14 +34,13 @@ x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'potential_vorticity'], Verbose=True)
+output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'], Verbose=True)
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
@@ -194,7 +192,7 @@ state.fields("coriolis").interpolate(fexpr)
 pv(state)
 
 # build time stepper
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      sw_forcing, mesh_generator=mesh_generator)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        sw_forcing, mesh_generator=mesh_generator)
 
 stepper.run(t=0, tmax=tmax)
