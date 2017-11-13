@@ -3,6 +3,7 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     dot, dS, Constant, as_vector, SpatialCoordinate
+from gusto.configuration import logger
 
 
 __all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
@@ -26,7 +27,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.state = state
         if linear:
             self.euler_poincare = False
-            state.logger.info('Setting euler_poincare to False because you have set linear=True')
+            logger.info('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
 
