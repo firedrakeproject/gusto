@@ -82,102 +82,21 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         physics updates are applied (if required).
         """
 
-<<<<<<< HEAD
-class Timestepper(BaseTimestepper):
-    """
-    Build a timestepper to implement an "auxiliary semi-Lagrangian" timestepping
-    scheme for the dynamical core.
-
-    :arg state: a :class:`.State` object
-    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
-    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
-    :arg parameter_update: optional Function to update time-dependent
-        parameters. Needs to take state as argument
-    """
-
-    def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None, parameter_update=None):
-
-        super(Timestepper, self).__init__(state, advected_fields)
-        self.linear_solver = linear_solver
-        self.forcing = forcing
-        if diffused_fields is None:
-            self.diffused_fields = ()
-        else:
-            self.diffused_fields = tuple(diffused_fields)
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
-        if parameter_update is not None:
-            self.parameter_update = parameter_update
-        else:
-            self.parameter_update = lambda state: None
-
-        if isinstance(self.linear_solver, IncompressibleSolver):
-            self.incompressible = True
-        else:
-            self.incompressible = False
-
-        state.xb.assign(state.xn)
-=======
         t = self.setup_timeloop(t, tmax, pickup)
->>>>>>> master
 
         state = self.state
         dt = state.timestepping.dt
-<<<<<<< HEAD
-        alpha = state.timestepping.alpha
-
-        with timed_stage("Dump output"):
-            state.setup_dump(tmax, pickup)
-            t = state.dump(t, pickup)
-=======
->>>>>>> master
 
         while t < tmax - 0.5*dt:
             if state.output.Verbose:
                 print("STEP", t, dt)
 
-            self.parameter_update(self.state)
             t += dt
             state.t.assign(t)
 
-<<<<<<< HEAD
-            with timed_stage("Apply forcing terms"):
-                self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                                   state.xstar, implicit=False)
-
-            state.xnp1.assign(state.xn)
-
-            for k in range(state.timestepping.maxk):
-
-                with timed_stage("Advection"):
-                    for name, advection in active_advection:
-                        # first computes ubar from state.xn and state.xnp1
-                        advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                        # advects a field from xstar and puts result in xp
-                        advection.apply(xstar_fields[name], xp_fields[name])
-
-                state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
-
-                for i in range(state.timestepping.maxi):
-
-                    with timed_stage("Apply forcing terms"):
-                        self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                           state.xrhs, implicit=True,
-                                           incompressible=self.incompressible)
-=======
             state.xnp1.assign(state.xn)
 
             self.semi_implicit_step()
->>>>>>> master
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
@@ -233,11 +152,6 @@ class CrankNicolson(BaseTimestepper):
         else:
             self.incompressible = False
 
-        if state.mu is not None:
-            self.mu_alpha = [0., state.timestepping.dt]
-        else:
-            self.mu_alpha = [None, None]
-
         self.xstar_fields = {name: func for (name, func) in
                              zip(state.fieldlist, state.xstar.split())}
         self.xp_fields = {name: func for (name, func) in
@@ -264,7 +178,7 @@ class CrankNicolson(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               state.xstar, mu_alpha=self.mu_alpha[0])
+                               state.xstar, implicit=False)
 
         for k in range(state.timestepping.maxk):
 
@@ -281,7 +195,7 @@ class CrankNicolson(BaseTimestepper):
 
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                       state.xrhs, mu_alpha=self.mu_alpha[1],
+                                       state.xrhs, implicit=True,
                                        incompressible=self.incompressible)
 
                 state.xrhs -= state.xnp1

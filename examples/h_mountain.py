@@ -44,7 +44,7 @@ mubar = 0.3/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, alpha=1.0)
+timestepping = TimesteppingParameters(dt=dt, alpha=0.51)
 output = OutputParameters(dirname='h_mountain_smootherz', dumpfreq=30, dumplist=['u'], perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
@@ -163,16 +163,8 @@ linear_solver = CompressibleSolver(state, solver_parameters=lu_params)
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-
 # build time stepper
-# Off-centring parameter is set to alpha=1.0 for first time step
-# to omit spurious orography waves, then alpha=0.5
-def implicit_first_step(state):
-    if state.t.dat.data_ro[0] > state.timestepping.dt/2.:
-        state.timestepping.alpha = 0.5
-
-
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      compressible_forcing, parameter_update=implicit_first_step)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)
