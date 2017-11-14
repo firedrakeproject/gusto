@@ -16,7 +16,13 @@ def embedded_dg(original_apply):
     def get_apply(self, x_in, x_out):
         if self.embedded_dg:
             def new_apply(self, x_in, x_out):
-                self.xdg_in.interpolate(x_in)
+                # try to interpolate to x_in but revert to projection
+                # if interpolation is not implemented for this
+                # function space
+                try:
+                    self.xdg_in.interpolate(x_in)
+                except NotImplementedError:
+                    self.xdg_in.project(x_in)
                 original_apply(self, self.xdg_in, self.xdg_out)
                 self.Projector.project()
                 x_out.assign(self.x_projected)
@@ -36,6 +42,7 @@ class Advection(object, metaclass=ABCMeta):
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg solver_params: solver_parameters
+    :arg limiter: :class:`.Limiter` object.
     """
 
     def __init__(self, state, field, equation=None, *, forcing=None, solver_params=None, limiter=None):
@@ -87,6 +94,7 @@ class Advection(object, metaclass=ABCMeta):
             fs = field.function_space()
 
         # setup required functions
+        self.fs = fs
         self.dq = Function(fs)
         self.q1 = Function(fs)
 
@@ -149,7 +157,60 @@ class NoAdvection(Advection):
         x_out.assign(x_in)
 
 
-class ForwardEuler(Advection):
+class ExplicitAdvection(Advection):
+    """
+    Base class for explicit advection schemes.
+
+    :arg state: :class:`.State` object.
+    :arg field: field to be advected
+    :arg equation: :class:`.Equation` object, specifying the equation
+    that field satisfies
+    :arg subcycles: (optional) integer specifying number of subcycles to perform
+    :arg solver_params: solver_parameters
+    :arg limiter: :class:`.Limiter` object.
+    """
+
+    def __init__(self, state, field, equation=None, *, subcycles=None, solver_params=None, limiter=None):
+        super().__init__(state, field, equation, solver_params=solver_params, limiter=limiter)
+
+        # if user has specified a number of subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
+        if subcycles is not None:
+            self.dt = self.dt/subcycles
+            self.ncycles = subcycles
+        else:
+            self.dt = self.dt
+            self.ncycles = 1
+        self.x = [Function(self.fs)]*(self.ncycles+1)
+
+    @abstractmethod
+    def apply_cycle(self, x_in, x_out):
+        """
+        Function takes x as input, computes L(x) as defined by the equation,
+        and returns x_out as output.
+
+        :arg x: :class:`.Function` object, the input Function.
+        :arg x_out: :class:`.Function` object, the output Function.
+        """
+        pass
+
+    @embedded_dg
+    def apply(self, x_in, x_out):
+        """
+        Function takes x as input, computes L(x) as defined by the equation,
+        and returns x_out as output.
+
+        :arg x: :class:`.Function` object, the input Function.
+        :arg x_out: :class:`.Function` object, the output Function.
+        """
+        self.x[0].assign(x_in)
+        for i in range(self.ncycles):
+            self.apply_cycle(self.x[i], self.x[i+1])
+            self.x[i].assign(self.x[i+1])
+        x_out.assign(self.x[self.ncycles-1])
+
+
+class ForwardEuler(ExplicitAdvection):
     """
     Class to implement the forward Euler timestepping scheme:
     y_(n+1) = y_n + dt*L(y_n)
@@ -164,13 +225,13 @@ class ForwardEuler(Advection):
     def rhs(self):
         return super().rhs
 
-    def apply(self, x_in, x_out):
+    def apply_cycle(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
 
 
-class SSPRK3(Advection):
+class SSPRK3(ExplicitAdvection):
     """
     Class to implement the Strongly Structure Preserving Runge Kutta 3-stage
     timestepping method:
@@ -206,8 +267,7 @@ class SSPRK3(Advection):
         if self.limiter is not None:
             self.limiter.apply(self.q1)
 
-    @embedded_dg
-    def apply(self, x_in, x_out):
+    def apply_cycle(self, x_in, x_out):
 
         if self.limiter is not None:
             self.limiter.apply(x_in)
