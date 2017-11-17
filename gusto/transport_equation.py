@@ -4,6 +4,7 @@ from firedrake import Function, TestFunction, TrialFunction, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
     outer, sign, cross, CellNormal, sqrt, Constant, \
     curl, BrokenElement, FunctionSpace
+from gusto.configuration import DEBUG
 
 
 __all__ = ["LinearAdvection", "AdvectionEquation", "EmbeddedDGAdvection", "SUPGAdvection", "VectorInvariant", "EulerPoincare"]
@@ -67,6 +68,8 @@ class TransportEquation(object, metaclass=ABCMeta):
             self.solver_parameters = {'ksp_type': 'cg',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
+        if state.output.log_level == DEBUG:
+            self.solver_parameters["ksp_monitor_true_residual"] = True
 
     def mass_term(self, q):
         return inner(self.test, q)*dx

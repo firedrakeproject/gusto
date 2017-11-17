@@ -11,7 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
-
+from gusto.configuration import logger, set_log_handler
 
 __all__ = ["State"]
 
@@ -251,6 +251,15 @@ class State(object):
 
         #  Constant to hold current time
         self.t = Constant(0.0)
+
+        # setup logger
+        logger.setLevel(output.log_level)
+        set_log_handler(mesh.comm)
+        logger.info("Timestepping parameters that take non-default values:")
+        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
+        if parameters is not None:
+            logger.info("Physical parameters that take non-default values:")
+            logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
 
     def setup_diagnostics(self):
         # add special case diagnostic fields
