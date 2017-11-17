@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector
 from firedrake.utils import cached_property
+from gusto.configuration import DEBUG
 from gusto.transport_equation import EmbeddedDGAdvection
 
 
@@ -62,7 +63,7 @@ class Advection(object, metaclass=ABCMeta):
                 self.solver_parameters = equation.solver_parameters
             else:
                 self.solver_parameters = solver_parameters
-                if state.output.log_level == "debug":
+                if state.output.log_level == DEBUG:
                     self.solver_parameters["ksp_monitor_true_residual"] = True
 
             self.limiter = limiter

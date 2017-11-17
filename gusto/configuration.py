@@ -51,7 +51,7 @@ class OutputParameters(Configuration):
     Output parameters for Gusto
     """
 
-    #: log_level for logger, can be "debug", "info" or "warning". Take
+    #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
     #: default value "warning"
     log_level = WARNING
     dumpfreq = 1

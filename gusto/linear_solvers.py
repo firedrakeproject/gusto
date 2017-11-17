@@ -5,6 +5,7 @@ from firedrake import split, LinearVariationalProblem, \
     Function, MixedVectorSpaceBasis, VectorSpaceBasis
 from firedrake.solving_utils import flatten_parameters
 
+from gusto.configuration import DEBUG
 from gusto.forcing import exner, exner_rho, exner_theta
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -37,7 +38,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        if state.output.log_level == "debug":
+        if state.output.log_level == DEBUG:
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
