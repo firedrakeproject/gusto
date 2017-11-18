@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
+from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC, Function
 
@@ -95,8 +96,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
-            if state.output.Verbose:
-                print("STEP", t, dt)
+            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
 
             t += dt
             state.t.assign(t)
@@ -126,7 +126,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
-        print("TIMELOOP complete. t= " + str(t) + " tmax=" + str(tmax))
+        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
 class SemiImplicitTimestepper(BaseTimestepper):

@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
     LinearVariationalSolver, Projector, DirichletBC
 from firedrake.utils import cached_property
+from gusto.configuration import DEBUG
 from gusto.transport_equation import EmbeddedDGAdvection
 
 
@@ -41,11 +42,12 @@ class Advection(object, metaclass=ABCMeta):
     :arg field: field to be advected
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
-    :arg solver_params: solver_parameters
+    :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation=None, *, forcing=None, solver_params=None, limiter=None):
+    def __init__(self, state, field, equation=None, *, forcing=None,
+                 solver_parameters=None, limiter=None):
 
         if equation is not None:
 
@@ -57,10 +59,12 @@ class Advection(object, metaclass=ABCMeta):
             self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
-            if solver_params is None:
+            if solver_parameters is None:
                 self.solver_parameters = equation.solver_parameters
             else:
-                self.solver_parameters = solver_params
+                self.solver_parameters = solver_parameters
+                if state.output.log_level == DEBUG:
+                    self.solver_parameters["ksp_monitor_true_residual"] = True
 
         self.bcs = []
         if forcing is not None:
@@ -166,12 +170,14 @@ class ExplicitAdvection(Advection):
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg subcycles: (optional) integer specifying number of subcycles to perform
-    :arg solver_params: solver_parameters
+    :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation=None, *, subcycles=None, solver_params=None, limiter=None):
-        super().__init__(state, field, equation, solver_params=solver_params, limiter=limiter)
+    def __init__(self, state, field, equation=None, *, subcycles=None,
+                 solver_parameters=None, limiter=None):
+        super().__init__(state, field, equation,
+                         solver_parameters=solver_parameters, limiter=limiter)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -283,16 +289,17 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_params=None):
+    def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
 
-        if not solver_params:
+        if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
-            solver_params = {'ksp_type': 'gmres',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'}
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
 
-        super().__init__(state, field, equation, solver_params=solver_params)
+        super().__init__(state, field, equation,
+                         solver_parameters=solver_parameters)
 
         self.theta = theta
 
