@@ -2,7 +2,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    dot, dS, Constant, warning, as_vector, SpatialCoordinate
+    dot, dS, Constant, as_vector, SpatialCoordinate
+from gusto.configuration import logger, DEBUG
 
 
 __all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
@@ -26,7 +27,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.state = state
         if linear:
             self.euler_poincare = False
-            warning('Setting euler_poincare to False because you have set linear=True')
+            logger.warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
 
@@ -113,7 +114,14 @@ class Forcing(object, metaclass=ABCMeta):
             a, L, self.uF, bcs=bcs
         )
 
-        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.u_forcing_solver = LinearVariationalSolver(
+            u_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="UForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
         """
@@ -215,7 +223,14 @@ class CompressibleForcing(Forcing):
 
             theta_problem = LinearVariationalProblem(a, L, self.thetaF)
 
-            self.theta_solver = LinearVariationalSolver(theta_problem)
+            solver_parameters = {}
+            if self.state.output.log_level == DEBUG:
+                solver_parameters["ksp_monitor_true_residual"] = True
+            self.theta_solver = LinearVariationalSolver(
+                theta_problem,
+                solver_parameters=solver_parameters,
+                option_prefix="ThetaForcingSolver"
+            )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -283,7 +298,14 @@ class IncompressibleForcing(Forcing):
         divergence_problem = LinearVariationalProblem(
             a, L, self.divu)
 
-        self.divergence_solver = LinearVariationalSolver(divergence_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.divergence_solver = LinearVariationalSolver(
+            divergence_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="DivergenceSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -330,7 +352,14 @@ class EadyForcing(IncompressibleForcing):
             a, L, self.bF
         )
 
-        self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.b_forcing_solver = LinearVariationalSolver(
+            b_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="BForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -378,7 +407,14 @@ class CompressibleEadyForcing(CompressibleForcing):
             a, L, self.thetaF
         )
 
-        self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.theta_forcing_solver = LinearVariationalSolver(
+            theta_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="ThetaForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 

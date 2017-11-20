@@ -1,4 +1,5 @@
 from __future__ import absolute_import, print_function, division
+from gusto.configuration import logger
 from firedrake import dx
 from firedrake.function import Function
 from firedrake.functionspace import FunctionSpace
@@ -70,7 +71,7 @@ class ThetaLimiter(object):
                self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
                 raise ValueError('This is not the right limiter for this space.')
         else:
-            print('This limiter may not work for the space you are using.')
+            logger.warning('This limiter may not work for the space you are using.')
 
         self.Q1DG = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOFs
         self.vertex_limiter = VertexBasedLimiter(self.Q1DG)
