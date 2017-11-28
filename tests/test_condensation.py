@@ -112,7 +112,7 @@ def setup_condens(dirname):
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = AdvectionTimestepper(state, advected_fields, physics_list=physics_list)
+    stepper = AdvectionDiffusion(state, advected_fields, physics_list=physics_list)
 
     return stepper, 5.0
 

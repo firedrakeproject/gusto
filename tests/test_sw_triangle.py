@@ -24,7 +24,21 @@ def setup_sw(dirname, euler_poincare):
     timestepping = TimesteppingParameters(dt=1500.)
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
-    diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(), PotentialVorticity(), Difference('relative_vorticity', 'vrel_analytical'), Difference('absolute_vorticity', 'vabs_analytical'), Difference('potential_vorticity', 'pv_analytical')]
+    diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
+                         PotentialVorticity(),
+                         ShallowWaterPotentialEnstrophy('RelativeVorticity'),
+                         ShallowWaterPotentialEnstrophy('AbsoluteVorticity'),
+                         ShallowWaterPotentialEnstrophy('PotentialVorticity'),
+                         Difference('RelativeVorticity',
+                                    'AnalyticalRelativeVorticity'),
+                         Difference('AbsoluteVorticity',
+                                    'AnalyticalAbsoluteVorticity'),
+                         Difference('PotentialVorticity',
+                                    'AnalyticalPotentialVorticity'),
+                         Difference('SWPotentialEnstrophy_from_PotentialVorticity',
+                                    'SWPotentialEnstrophy_from_RelativeVorticity'),
+                         Difference('SWPotentialEnstrophy_from_PotentialVorticity',
+                                    'SWPotentialEnstrophy_from_AbsoluteVorticity')]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
@@ -68,16 +82,16 @@ def setup_sw(dirname, euler_poincare):
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          sw_forcing)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            sw_forcing)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
-    vrel_analytical = state.fields("vrel_analytical", vspace)
+    vrel_analytical = state.fields("AnalyticalRelativeVorticity", vspace)
     vrel_analytical.interpolate(vexpr)
-    vabs_analytical = state.fields("vabs_analytical", vspace)
+    vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", vspace)
     vabs_analytical.interpolate(vexpr + f)
-    pv_analytical = state.fields("pv_analytical", vspace)
+    pv_analytical = state.fields("AnalyticalPotentialVorticity", vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
     return stepper, 0.25*day
@@ -109,9 +123,20 @@ def test_sw_setup(tmpdir, euler_poincare):
 
     # these 3 checks are for the diagnostic field so the checks are
     # made for values at the beginning of the run:
-    vrel_err = data.groups["relative_vorticity_minus_vrel_analytical"]
+    vrel_err = data.groups["RelativeVorticity_minus_AnalyticalRelativeVorticity"]
     assert vrel_err["max"][0] < 6.e-7
-    vabs_err = data.groups["absolute_vorticity_minus_vabs_analytical"]
+
+    vabs_err = data.groups["AbsoluteVorticity_minus_AnalyticalAbsoluteVorticity"]
     assert vabs_err["max"][0] < 6.e-7
-    pv_err = data.groups["potential_vorticity_minus_pv_analytical"]
+
+    pv_err = data.groups["PotentialVorticity_minus_AnalyticalPotentialVorticity"]
     assert pv_err["max"][0] < 1.e-10
+
+    # these 2 checks confirm that the potential enstrophy is the same
+    # when it is calculated using the pv field, the relative vorticity
+    # field or the absolute vorticity field
+    enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_RelativeVorticity"]
+    assert enstrophy_diff["max"][-1] < 1.e-15
+
+    enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_AbsoluteVorticity"]
+    assert enstrophy_diff["max"][-1] < 1.e-15

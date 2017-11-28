@@ -206,7 +206,7 @@ forcing = EadyForcing(state, euler_poincare=False)
 ##############################################################################
 # build time stepper
 ##############################################################################
-stepper = Timestepper(state, advected_fields, linear_solver, forcing)
+stepper = CrankNicolson(state, advected_fields, linear_solver, forcing)
 
 ##############################################################################
 # Run!

@@ -108,7 +108,7 @@ for delta, dt in res_dt.items():
                                                  mu=Constant(10./delta)))]
 
     # build time stepper
-    stepper = Timestepper(state, advected_fields, linear_solver,
-                          compressible_forcing, diffused_fields)
+    stepper = CrankNicolson(state, advected_fields, linear_solver,
+                            compressible_forcing, diffused_fields)
 
     stepper.run(t=0, tmax=tmax)

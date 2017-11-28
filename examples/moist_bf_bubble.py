@@ -164,8 +164,8 @@ if diffusion:
 physics_list = [Condensation(state)]
 
 # build time stepper
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      compressible_forcing, physics_list=physics_list,
-                      diffused_fields=diffused_fields)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        compressible_forcing, physics_list=physics_list,
+                        diffused_fields=diffused_fields)
 
 stepper.run(t=0, tmax=tmax)

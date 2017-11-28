@@ -101,7 +101,7 @@ balanced_pg = as_vector((0., 1.0e-4*20, 0.))
 compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
 
 # build time stepper
-stepper = Timestepper(state, advected_fields, linear_solver,
-                      compressible_forcing)
+stepper = CrankNicolson(state, advected_fields, linear_solver,
+                        compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)
