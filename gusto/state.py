@@ -11,7 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
-
+from gusto.configuration import logger, set_log_handler
 
 __all__ = ["State"]
 
@@ -252,6 +252,15 @@ class State(object):
         #  Constant to hold current time
         self.t = Constant(0.0)
 
+        # setup logger
+        logger.setLevel(output.log_level)
+        set_log_handler(mesh.comm)
+        logger.info("Timestepping parameters that take non-default values:")
+        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
+        if parameters is not None:
+            logger.info("Physical parameters that take non-default values:")
+            logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+
     def setup_diagnostics(self):
         # add special case diagnostic fields
         for name in self.output.perturbation_fields:
@@ -267,11 +276,15 @@ class State(object):
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, tmax, pickup=False):
-
-        # check for existence of directory so as not to overwrite
-        # output files
-        # setup dump files
-        # setup checkpoint file
+        """
+        Setup dump files
+        Check for existence of directory so as not to overwrite
+        output files
+        Setup checkpoint file
+        :arg tmax: model stop time
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk. (default is False).
+        """
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
