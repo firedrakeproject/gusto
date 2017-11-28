@@ -355,7 +355,8 @@ class State(object):
                     next(self.dumpcount)
                 # Setup new checkpoint
                 self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
-
+            else:
+                Raise NotImplementedError("Must set checkpoint True if pickup")
         else:
 
             if self.output.dump_diagnostics:
