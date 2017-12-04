@@ -23,7 +23,7 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+    def __init__(self, state, *, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
         self.state = state
         if linear:
             self.euler_poincare = False
@@ -52,6 +52,8 @@ class Forcing(object, metaclass=ABCMeta):
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
         self.mu_scaling = Constant(1.)
+        if euler_poincare:
+            self.ke_scale = Constant(-0.5)
 
         self._build_forcing_solvers()
 
@@ -66,9 +68,9 @@ class Forcing(object, metaclass=ABCMeta):
         u0 = split(self.x0)[0]
         return self.state.mu*inner(self.test, self.state.k)*inner(u0, self.state.k)*dx
 
-    def euler_poincare_term(self):
+    def kinetic_energy_term(self):
         u0 = split(self.x0)[0]
-        return -0.5*div(self.test)*inner(u0, u0)*dx
+        return self.ke_scale*div(self.test)*inner(u0, u0)*dx
 
     @abstractmethod
     def pressure_gradient_term(self):
@@ -80,10 +82,12 @@ class Forcing(object, metaclass=ABCMeta):
             L += self.gravity_term()
         if self.coriolis:
             L += self.coriolis_term()
-        if self.euler_poincare:
-            L += self.euler_poincare_term()
+        if self.euler_poincare or self.pv_flux is not None:
+            L += self.kinetic_energy_term()
         if self.topography:
             L += self.topography_term()
+        if self.pv_flux is not None:
+            L += self.pv_flux_term()
         if self.extra_terms is not None:
             L += inner(self.test, self.extra_terms)*dx
         # scale L
@@ -115,7 +119,7 @@ class Forcing(object, metaclass=ABCMeta):
             options_prefix="UForcingSolver"
         )
 
-    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+    def apply(self, scaling, x_nl, x_out, x_in=None, **kwargs):
         """
         Function takes x as input, computes F(x_nl) and returns
         x_out = x + scale*F(x_nl)
@@ -135,8 +139,11 @@ class Forcing(object, metaclass=ABCMeta):
 
         uF = x_out.split()[0]
 
-        x_out.assign(x_in)
-        uF += self.uF
+        if x_in is not None:
+            x_out.assign(x_in)
+            uF += self.uF
+        else:
+            uF.assign(self.uF)
 
 
 class CompressibleForcing(Forcing):
@@ -418,6 +425,14 @@ class CompressibleEadyForcing(CompressibleForcing):
 
 class ShallowWaterForcing(Forcing):
 
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, mass_flux=None, pv_flux=None):
+        self.mass_flux = mass_flux
+        self.pv_flux = pv_flux
+        if pv_flux is not None:
+            self.ke_scale = Constant(0.5)
+        super().__init__(state, euler_poincare=euler_poincare,
+                         linear=linear, extra_terms=extra_terms)
+
     def coriolis_term(self):
 
         f = self.state.fields("coriolis")
@@ -446,3 +461,36 @@ class ShallowWaterForcing(Forcing):
 
         L = g*div(self.test)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
+
+    def pv_flux_term(self):
+        dx0 = dx('everywhere', metadata = {'quadrature_degree': 6, 'representation': 'quadrature'})
+        L = -inner(self.test, self.state.perp(self.pv_flux))*dx0
+        return L
+
+    def mass_flux_term(self):
+        Vdg = self.state.spaces("DG")
+        phi = TestFunction(Vdg)
+        L = -phi*div(self.mass_flux)*dx
+        return L
+
+    def _build_forcing_solvers(self):
+        super()._build_forcing_solvers()
+        Vdg = self.state.spaces("DG")
+        phi = TestFunction(Vdg)
+        D_ = TrialFunction(Vdg)
+        self.DF = Function(Vdg)
+        a = phi*D_*dx
+        L = self.scaling*self.mass_flux_term()
+        D_forcing_problem = LinearVariationalProblem(a, L, self.DF)
+        self.D_forcing_solver = LinearVariationalSolver(D_forcing_problem)
+
+    def apply(self, scaling, x_nl, x_out, x_in=None, **kwargs):
+        super().apply(scaling, x_nl, x_out, x_in, **kwargs)
+        if self.mass_flux is not None:
+            self.D_forcing_solver.solve()
+            _, D_out = x_out.split()
+            if x_in is not None:
+                D_out.assign(x_in.split()[1])
+                D_out += self.DF
+            else:
+                D_out.assign(self.DF)

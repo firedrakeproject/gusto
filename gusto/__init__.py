@@ -3,6 +3,7 @@ from gusto.configuration import *   # noqa
 from gusto.diagnostics import *     # noqa
 from gusto.diffusion import *     # noqa
 from gusto.eady_diagnostics import *     # noqa
+from gusto.flux import *         # noqa
 from gusto.forcing import *         # noqa
 from gusto.initialisation_tools import *  # noqa
 from gusto.limiters import *  # noqa

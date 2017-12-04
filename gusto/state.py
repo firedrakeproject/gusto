@@ -445,9 +445,9 @@ class State(object):
 
         else:
             cell = mesh.ufl_cell().cellname()
-            V1_elt = FiniteElement(family, cell, horizontal_degree+1)
+            self.V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
-            V0 = self.spaces("HDiv", mesh, V1_elt)
+            V0 = self.spaces("HDiv", mesh, self.V1_elt)
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
             self.W = MixedFunctionSpace((V0, V1))

@@ -47,7 +47,7 @@ class Advection(object, metaclass=ABCMeta):
     """
 
     def __init__(self, state, field, equation=None, *, forcing=None,
-                 solver_parameters=None, limiter=None):
+                 solver_parameters=None, limiter=None, flux=None):
 
         if equation is not None:
 
@@ -76,6 +76,7 @@ class Advection(object, metaclass=ABCMeta):
                             DirichletBC(fs, 0.0, "top")]
 
         self.limiter = limiter
+        self.flux = flux
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
@@ -175,9 +176,9 @@ class ExplicitAdvection(Advection):
     """
 
     def __init__(self, state, field, equation=None, *, forcing=None,
-                 subcycles=None, solver_parameters=None, limiter=None):
+                 subcycles=None, solver_parameters=None, limiter=None, flux=None):
         super().__init__(state, field, equation, forcing=forcing,
-                         solver_parameters=solver_parameters, limiter=limiter)
+                         solver_parameters=solver_parameters, limiter=limiter, flux=flux)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -260,14 +261,17 @@ class SSPRK3(ExplicitAdvection):
 
         if stage == 0:
             self.solver.solve()
+            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign(self.dq)
 
         elif stage == 1:
             self.solver.solve()
+            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign(0.75*x_in + 0.25*self.dq)
 
         elif stage == 2:
             self.solver.solve()
+            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
 
         if self.limiter is not None:
