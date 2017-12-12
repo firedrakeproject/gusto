@@ -396,6 +396,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         state = self.state
         H = state.parameters.H
         g = state.parameters.g
+        f = state.fields("coriolis")
         beta = state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
@@ -406,7 +407,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         u, D = TrialFunctions(W)
 
         eqn = (
-            inner(w, u) - beta*g*div(w)*D
+            inner(w, u) + beta*(f*inner(w, state.perp(u)) - g*div(w)*D)
             - inner(w, u_in)
             + phi*D + beta*H*phi*div(u)
             - phi*D_in

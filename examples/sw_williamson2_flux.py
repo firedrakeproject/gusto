@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
-    FunctionSpace, Constant, assemble, dx
+    FunctionSpace
 from math import pi
 import sys
 
@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt =  {3: 3000.}  #  {3: 3000.} # , 4: 1500., 5: 750., 6: 375.}
+    ref_dt = {3: 3000.}  # 4: 1500., 5: 750., 6: 375.}
     tmax = 5.*day
 
 # setup shallow water parameters
@@ -63,25 +63,18 @@ for ref_level, dt in ref_dt.items():
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    temp = Function(D0.function_space()).assign(1.0)
-    H = Constant(assemble(D0*dx)/assemble(temp*dx))
 
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    ueqn = VectorInvariant(state, u0.function_space())
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-
-    mass_flux = MassFlux(state)
-    pv_flux = PVFlux(state)
-    advected_fields = []
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn, flux=mass_flux)))
+    mass_flux = MassFluxReconstruction(state)
+    pv_flux = PVFluxTaylorGalerkin(state, mass_flux)
 
     linear_solver = ShallowWaterSolver(state)
 
-    forcing = ShallowWaterForcing(state, euler_poincare=False, mass_flux=mass_flux.Flux, pv_flux=pv_flux.Q)
+    forcing = ShallowWaterForcing(state, euler_poincare=False, mass_flux=mass_flux.flux, pv_flux=pv_flux.flux)
 
     # build time stepper
-    stepper = FluxForm(state, advected_fields, linear_solver, forcing, mass_flux, pv_flux)
+    stepper = FluxForm(state, linear_solver, forcing, fluxes=[mass_flux, pv_flux])
 
     stepper.run(t=0, tmax=tmax)

@@ -82,12 +82,10 @@ class Forcing(object, metaclass=ABCMeta):
             L += self.gravity_term()
         if self.coriolis:
             L += self.coriolis_term()
-        if self.euler_poincare or self.pv_flux is not None:
+        if self.euler_poincare:
             L += self.kinetic_energy_term()
         if self.topography:
             L += self.topography_term()
-        if self.pv_flux is not None:
-            L += self.pv_flux_term()
         if self.extra_terms is not None:
             L += inner(self.test, self.extra_terms)*dx
         # scale L
@@ -463,7 +461,7 @@ class ShallowWaterForcing(Forcing):
         return L
 
     def pv_flux_term(self):
-        dx0 = dx('everywhere', metadata = {'quadrature_degree': 6, 'representation': 'quadrature'})
+        dx0 = dx('everywhere', metadata={'quadrature_degree': 6, 'representation': 'quadrature'})
         L = -inner(self.test, self.state.perp(self.pv_flux))*dx0
         return L
 
@@ -473,16 +471,34 @@ class ShallowWaterForcing(Forcing):
         L = -phi*div(self.mass_flux)*dx
         return L
 
+    def forcing_term(self):
+        if self.pv_flux:
+            L = (
+                self.pressure_gradient_term()
+                + self.kinetic_energy_term()
+                + self.pv_flux_term()
+            )
+            if self.topography:
+                L += self.topography_term()
+            if self.extra_terms is not None:
+                L += inner(self.test, self.extra_terms)*dx
+            # scale L
+            L = self.scaling * L
+        else:
+            L = super().forcing_term()
+        return L
+
     def _build_forcing_solvers(self):
         super()._build_forcing_solvers()
-        Vdg = self.state.spaces("DG")
-        phi = TestFunction(Vdg)
-        D_ = TrialFunction(Vdg)
-        self.DF = Function(Vdg)
-        a = phi*D_*dx
-        L = self.scaling*self.mass_flux_term()
-        D_forcing_problem = LinearVariationalProblem(a, L, self.DF)
-        self.D_forcing_solver = LinearVariationalSolver(D_forcing_problem)
+        if self.mass_flux is not None:
+            Vdg = self.state.spaces("DG")
+            phi = TestFunction(Vdg)
+            D_ = TrialFunction(Vdg)
+            self.DF = Function(Vdg)
+            a = phi*D_*dx
+            L = self.scaling*self.mass_flux_term()
+            D_forcing_problem = LinearVariationalProblem(a, L, self.DF)
+            self.D_forcing_solver = LinearVariationalSolver(D_forcing_problem)
 
     def apply(self, scaling, x_nl, x_out, x_in=None, **kwargs):
         super().apply(scaling, x_nl, x_out, x_in, **kwargs)

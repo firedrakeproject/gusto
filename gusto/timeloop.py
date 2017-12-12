@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC, Function, TestFunctions, TrialFunctions, LinearVariationalProblem, LinearVariationalSolver, inner, dx, div
+from firedrake import DirichletBC, Function
 
 
 __all__ = ["CrankNicolson", "ImplicitMidpoint", "AdvectionDiffusion", "FluxForm"]
@@ -76,6 +76,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             t = self.state.dump(t, pickup)
         return t
 
+    def ubar(self):
+        un = self.state.xn.split()[0]
+        unp1 = self.xnp1.split()[0]
+        alpha = self.state.timestepping.alpha
+        return (1 - alpha)*un + alpha*unp1
+
     @abstractmethod
     def semi_implicit_step(self):
         """
@@ -103,13 +109,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             state.t.assign(t)
 
             self.xnp1.assign(state.xn)
-
             self.semi_implicit_step()
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
                 # first computes ubar from state.xn and xnp1
-                advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
+                advection.update_ubar(self.ubar())
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
@@ -163,7 +168,8 @@ class SemiImplicitTimestepper(BaseTimestepper):
             self.mu_alpha = [None, None]
 
         # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
+        if advected_fields is not None:
+            self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
 
         # create functions on the mixed function space to hold values
         # of the residual and the update
@@ -223,7 +229,7 @@ class ImplicitMidpoint(SemiImplicitTimestepper):
                     if hasattr(advection, "forcing"):
                         advection.update_xbar(state.xn, self.xnp1, state.timestepping.alpha)
                     else:
-                        advection.update_ubar(state.xn, self.xnp1, state.timestepping.alpha)
+                        advection.update_ubar(self.ubar())
                     # advects a field from xn and puts result in xrhs
                     advection.apply(self.xn_fields[name], self.xrhs_fields[name])
 
@@ -277,15 +283,15 @@ class CrankNicolson(SemiImplicitTimestepper):
         alpha = state.timestepping.alpha
 
         with timed_stage("Apply forcing terms"):
-            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               self.xstar, mu_alpha=self.mu_alpha[0])
+            self.forcing.apply((1-alpha)*dt, state.xn, self.xstar,
+                               state.xn, mu_alpha=self.mu_alpha[0])
 
         for k in range(self.maxk):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
                     # first computes ubar from state.xn and xnp1
-                    advection.update_ubar(state.xn, self.xnp1, alpha)
+                    advection.update_ubar(self.ubar())
                     # advects a field from xstar and puts result in xp
                     advection.apply(self.xstar_fields[name], self.xp_fields[name])
 
@@ -295,8 +301,8 @@ class CrankNicolson(SemiImplicitTimestepper):
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
-                    self.forcing.apply(alpha*dt, self.xp, self.xnp1,
-                                       self.xrhs, mu_alpha=self.mu_alpha[1],
+                    self.forcing.apply(alpha*dt, self.xnp1, self.xrhs,
+                                       self.xp, mu_alpha=self.mu_alpha[1],
                                        incompressible=self.incompressible)
 
                 self.xrhs -= self.xnp1
@@ -312,13 +318,11 @@ class CrankNicolson(SemiImplicitTimestepper):
 
 class FluxForm(SemiImplicitTimestepper):
 
-    def __init__(self, state, advected_fields, linear_solver, forcing, mass_flux, pv_flux):
-        super().__init__(state, advected_fields, linear_solver, forcing, diffused_fields=None, physics_list=None)
-        self.MassFlux = mass_flux.Flux
-        self.pv_flux_solver = pv_flux
-        self.pv_flux = pv_flux.Q
-        self.ubar = Function(state.spaces("HDiv"))
-        self.Dbar = Function(state.spaces("DG"))
+    def __init__(self, state, linear_solver, forcing, fluxes):
+        super().__init__(state, advected_fields=None,
+                         linear_solver=linear_solver, forcing=forcing,
+                         diffused_fields=None, physics_list=None)
+        self.fluxes = fluxes
 
     def setup_timeloop(self, t, tmax, pickup, **kwargs):
         self.maxk = kwargs.get("maxk", 4)
@@ -332,60 +336,28 @@ class FluxForm(SemiImplicitTimestepper):
 
         self.xF = Function(self.state.W)
         self.xbar = Function(self.state.W)
-        # g = self.state.parameters.g
-        # dt = self.state.timestepping.dt
-        # w, phi = TestFunctions(self.state.W)
-        # u_, D_ = TrialFunctions(self.state.W)
-        # self.xF = Function(self.state.W)
-        # dx0 = dx('everywhere', metadata = {'quadrature_degree': 6, 'representation': 'quadrature'})
-        # a = inner(w, u_)*dx + phi*D_*dx
-        # L = dt*(
-        #     -inner(w, self.state.perp(self.pv_flux))*dx0
-        #      + (div(w)*(g*self.Dbar + 0.5*inner(self.ubar, self.ubar))
-        #      - phi*div(self.MassFlux))*dx
-        #     )
-        # prob = LinearVariationalProblem(a, L, self.xF)
-        # self.flux_forcing_solver = LinearVariationalSolver(prob)
+
         return t
 
     def semi_implicit_step(self):
 
         alpha = self.state.timestepping.alpha
+
         # xrhs is the residual which goes in the linear solve
         self.xrhs.assign(0.)
 
         for k in range(self.maxk):
 
-            # advect D and q, computing fluxes
-            D0 = self.xn_fields['D']
-            # D1 = self.xnp1_fields['D']
-            u0 = self.xn_fields['u']
             self.xbar.assign(self.state.xn + (1-alpha)*self.xrhs)
 
-            D1 = Function(self.state.spaces("DG"))
-            for name, advection in self.active_advection:
-                # first computes ubar from state.xn and xnp1
-                advection.ubar.assign(self.xbar.split()[0])
-                # advection.update_ubar(self.state.xn, self.xnp1, alpha)
-                advection.apply(D0, D1)
+            for flux in self.fluxes:
+                flux.update_variables(self.state.xn, self.xbar)
+                flux.solve()
 
-            self.pv_flux_solver.solve(u0, D0, D1, self.MassFlux)
-            # print("q2: ", self.pv_flux_solver.q2.dat.data.min(), self.pv_flux_solver.q2.dat.data.max())
-            # print("mass flux: ", self.MassFlux.dat.data.min(), self.MassFlux.dat.data.max())
-            # QF = Function(u0.function_space()).project(self.pv_flux)
-            # print("Q: ", QF.dat.data.min(), QF.dat.data.max())
-
-            # get xrhs:
-            # self.Dbar.assign(D0 + (1-alpha)*self.xrhs.split()[1])
-            # print("Dth: ", self.Dbar.dat.data.min(), self.Dbar.dat.data.max())
-            # print("uth: ", self.ubar.dat.data.min(), self.ubar.dat.data.max())
-            # self.flux_forcing_solver.solve()
+            # apply forcing
             self.forcing.apply(self.state.timestepping.dt, self.xbar,
                                self.xF)
             self.xF -= self.xrhs
-            uF, DF = self.xF.split()
-            print("D: ", DF.dat.data.min(), DF.dat.data.max())
-            print("u: ", uF.dat.data.min(), uF.dat.data.max())
 
             # linear solve
             self.linear_solver.solve(self.xF, self.dy)

@@ -47,7 +47,7 @@ class Advection(object, metaclass=ABCMeta):
     """
 
     def __init__(self, state, field, equation=None, *, forcing=None,
-                 solver_parameters=None, limiter=None, flux=None):
+                 solver_parameters=None, limiter=None):
 
         if equation is not None:
 
@@ -76,7 +76,6 @@ class Advection(object, metaclass=ABCMeta):
                             DirichletBC(fs, 0.0, "top")]
 
         self.limiter = limiter
-        self.flux = flux
 
         # check to see if we are using an embedded DG method - if we are then
         # the projector and output function will have been set up in the
@@ -114,16 +113,12 @@ class Advection(object, metaclass=ABCMeta):
             r += self.dt*self.forcing_term()
         return r
 
-    def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
-        if hasattr(self, "xbar"):
-            self.xbar.assign(xn + alpha*(xnp1-xn))
+    def update_ubar(self, u_in):
+        self.ubar.assign(u_in)
 
     def update_xbar(self, xn, xnp1, alpha):
         self.xbar.assign(xn + alpha*(xnp1-xn))
-        self.ubar = self.xbar.split()[0]
+        self.ubar.assign(self.xbar.split()[0])
 
     @cached_property
     def solver(self):
@@ -155,7 +150,7 @@ class NoAdvection(Advection):
     def rhs(self):
         pass
 
-    def update_ubar(self, xn, xnp1, alpha):
+    def update_ubar(self, u_in):
         pass
 
     def apply(self, x_in, x_out):
@@ -176,9 +171,9 @@ class ExplicitAdvection(Advection):
     """
 
     def __init__(self, state, field, equation=None, *, forcing=None,
-                 subcycles=None, solver_parameters=None, limiter=None, flux=None):
+                 subcycles=None, solver_parameters=None, limiter=None):
         super().__init__(state, field, equation, forcing=forcing,
-                         solver_parameters=solver_parameters, limiter=limiter, flux=flux)
+                         solver_parameters=solver_parameters, limiter=limiter)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -260,18 +255,12 @@ class SSPRK3(ExplicitAdvection):
     def solve_stage(self, x_in, stage):
 
         if stage == 0:
-            self.solver.solve()
-            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign(self.dq)
 
         elif stage == 1:
-            self.solver.solve()
-            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign(0.75*x_in + 0.25*self.dq)
 
         elif stage == 2:
-            self.solver.solve()
-            self.flux.solve(stage, self.ubar, self.q1)
             self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
 
         if self.limiter is not None:
@@ -284,6 +273,7 @@ class SSPRK3(ExplicitAdvection):
 
         self.q1.assign(x_in)
         for i in range(3):
+            self.solver.solve()
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
 
