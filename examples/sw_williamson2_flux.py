@@ -8,10 +8,12 @@ day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     ref_dt = {3: 3000.}
     tmax = 3000.
+    dumptime = 3000.
 else:
     # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 3000.}  # 4: 1500., 5: 750., 6: 375.}
-    tmax = 5.*day
+    ref_dt = {3: 3000., 4: 1500., 5: 750., 6: 375.}
+    tmax = 15.*day
+    dumptime = 5*60.*60.
 
 # setup shallow water parameters
 R = 6371220.
@@ -23,7 +25,8 @@ parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
 
-    dirname = "new_fluxform_sw_W2_ref%s_dt%s" % (ref_level, dt)
+    dumpfreq = int(dumptime/dt)
+    dirname = "sw_W2_fluxform_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     x = SpatialCoordinate(mesh)
@@ -31,7 +34,9 @@ for ref_level, dt in ref_dt.items():
     mesh.init_cell_orientations(x)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
+                              dumplist_latlon=['D', 'D_error'],
+                              steady_state_error_fields=['D', 'u'])
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(),
@@ -56,9 +61,8 @@ for ref_level, dt in ref_dt.items():
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
     # Coriolis expression
     fexpr = 2*Omega*x[2]/R
-    V0 = FunctionSpace(mesh, "CG", 3)
-    # V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", V0)
+    V = FunctionSpace(mesh, "CG", 1)
+    f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
