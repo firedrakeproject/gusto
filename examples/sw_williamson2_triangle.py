@@ -15,7 +15,7 @@ else:
 
 # setup shallow water parameters
 R = 6371220.
-H = 5960.
+H = 2.94e4/9.80616
 
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
