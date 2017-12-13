@@ -241,9 +241,7 @@ class PVFluxTaylorGalerkin(Flux):
         q_ = TrialFunction(V0)
         self.q0 = Function(V0)
         self.u = Function(self.state.spaces("HDiv"))
-        outward_normals = CellNormal(self.state.mesh)
-        gradperp = lambda psi: cross(outward_normals, grad(psi))
-        # gradperp = lambda psi: self.state.perp(grad(psi))
+        gradperp = lambda psi: self.state.perp(grad(psi))
         f = self.state.fields("coriolis")
 
         aQ = gamma*q_*self.Dtwid0/detJ*dx0
