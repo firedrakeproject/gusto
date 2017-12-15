@@ -378,15 +378,7 @@ class ShallowWaterSolver(TimesteppingSolver):
                           'mg_levels': {'ksp_type': 'chebyshev',
                                         'ksp_max_it': 2,
                                         'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'},
-                          # Broken residual construction
-                          'hdiv_residual': {'ksp_type': 'cg',
-                                            'pc_type': 'bjacobi',
-                                            'sub_pc_type': 'ilu',
-                                            'ksp_rtol': 1e-8},
-                          # Projection step
-                          'hdiv_projection': {'ksp_type': 'cg',
-                                              'ksp_rtol': 1e-8}}
+                                        'sub_pc_type': 'ilu'}}
     }
 
     def _setup_solver(self):
