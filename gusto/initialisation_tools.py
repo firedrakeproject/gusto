@@ -11,6 +11,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, exp
 from gusto.forcing import exner
+from gusto.expressions import *
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
@@ -353,18 +354,15 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v = split(z)
 
     # define variables
-    T = Pi * theta_v / (1 + w_v * R_v / R_d)
-    p = p_0 * Pi ** (cp / R_d)
-    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    T = T_expr(theta_v, Pi, r_v=w_v)
+    p = p_expr(Pi)
+    w_sat = r_sat_expr(T, p)
 
     dxp = dx(degree=(quadrature_degree))
 
     # set up weak form of theta_e and w_sat equations
     F = (-gamma * theta_e * dxp
-         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
-         (- R_d / (cp + c_pl * water_t)) *
-         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         + gamma * theta_e_expr(T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp)
 
@@ -400,15 +398,12 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v, pi, v = split(z)
 
     # define variables
-    T = pi * theta_v / (1 + w_v * R_v / R_d)
-    p = p_0 * pi ** (cp / R_d)
-    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    T = T_expr(theta_v, pi, r_v=w_v)
+    p = p_expr(pi)
+    w_sat = r_sat_expr(T, p)
 
     F = (-gamma * theta_e * dxp
-         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
-         (- R_d / (cp + c_pl * water_t)) *
-         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         + gamma * theta_e_expr(T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp
          + cp * inner(v, w) * dxp

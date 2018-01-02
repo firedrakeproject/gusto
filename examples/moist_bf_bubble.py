@@ -10,10 +10,10 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100.
+    deltax = 250.
     tmax = 1000.
 
-L = 20000.
+L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
@@ -24,7 +24,7 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='moist_bf_expr', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e()]
@@ -87,7 +87,7 @@ water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
 
 # define perturbation
-xc = 10000.
+xc = L / 2
 zc = 2000.
 rc = 2000.
 Tdash = 2.0
@@ -112,9 +112,10 @@ rho_solver.solve()
 w_v = Function(Vt)
 phi = TestFunction(Vt)
 
-p = p_0 * (R_d * theta0 * rho0 / p_0) ** (1.0 / (1.0 - kappa))
-T = theta0 * (R_d * theta0 * rho0 / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
-w_sat = w_sat1 / (p * exp(w_sat2 * ((T - T_0) / (T - w_sat3))) - w_sat4)
+pi = pi_expr(rho0, theta0)
+p = p_expr(pi)
+T = T_expr(theta0, pi, r_v=w_v)
+w_sat = r_sat_expr(T, p)
 
 w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
 w_problem = NonlinearVariationalProblem(w_functional, w_v)
