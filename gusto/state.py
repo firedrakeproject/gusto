@@ -290,6 +290,7 @@ class State(object):
         Setup dump files
         Check for existence of directory so as not to overwrite
         output files
+        Setup checkpoint file
 
         :arg tmax: model stop time
         :arg pickup: recover state from the checkpointing file if true,
@@ -302,6 +303,8 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
+        if self.output.checkpoint and not pickup:
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -361,7 +364,10 @@ class State(object):
                         chk.load(field)
                     t = chk.read_attribute("/", "time")
                     next(self.dumpcount)
-
+                # Setup new checkpoint
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+            else:
+                raise NotImplementedError("Must set checkpoint True if pickup")
         else:
 
             if self.output.dump_diagnostics:
@@ -376,16 +382,11 @@ class State(object):
                 # Output pointwise data
                 self.pointdata_output.dump(self.fields, t)
 
-            # Open the checkpointing file (backup version)
+            # Dump all the fields to the checkpointing file (backup version)
             if self.output.checkpoint:
-                files = ["chkptbk", "chkpt"]
-                for file in files:
-                    chkfile = path.join(self.dumpdir, file)
-                    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                        # Dump all the fields to a checkpoint
-                        for field in self.to_pickup:
-                            chk.store(field)
-                        chk.write_attribute("/", "time", t)
+                for field in self.to_pickup:
+                    self.chkpt.store(field)
+                self.chkpt.write_attribute("/", "time", t)
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields

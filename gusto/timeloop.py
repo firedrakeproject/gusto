@@ -119,6 +119,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
 
+        if state.output.checkpoint:
+            state.chkpt.close()
+
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
