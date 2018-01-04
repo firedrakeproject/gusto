@@ -1,12 +1,13 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
+    div, avg, jump, FacetNormal, dS_v, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, exp
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
 
 
 class Diagnostics(object):
@@ -318,6 +319,42 @@ class InternalEnergy(DiagnosticField):
         T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
 
         return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pv * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+
+
+class HydrostaticImbalance(DiagnosticField):
+    name = "HydrostaticImbalance"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("Vv")
+            super(HydrostaticImbalance, self).setup(state, space=space)
+            rho = state.fields("rho")
+            rhobar = state.fields("rhobar")
+            theta = state.fields("theta")
+            thetabar = state.fields("thetabar")
+            pi = exner(theta, rho, state)
+            pibar = exner(thetabar, rhobar, state)
+
+            cp = Constant(state.parameters.cp)
+            n = FacetNormal(state.mesh)
+
+            F = TrialFunction(space)
+            w = TestFunction(space)
+            a = inner(w, F)*dx
+            L = (- cp*div((theta-thetabar)*w)*pibar*dx
+                 + cp*jump((theta-thetabar)*w, n)*avg(pibar)*dS_v
+                 - cp*div(thetabar*w)*(pi-pibar)*dx
+                 + cp*jump(thetabar*w, n)*avg(pi-pibar)*dS_v)
+
+            bcs = [DirichletBC(space, 0.0, "bottom"),
+                   DirichletBC(space, 0.0, "top")]
+
+            imbalanceproblem = LinearVariationalProblem(a, L, self.field, bcs=bcs)
+            self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
+
+    def compute(self, state):
+        self.imbalance_solver.solve()
+        return self.field[1]
 
 
 class Sum(DiagnosticField):
