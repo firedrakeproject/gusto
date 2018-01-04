@@ -45,13 +45,14 @@ class Forcing(object, metaclass=ABCMeta):
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
+        self.hydrostatic = state.hydrostatic
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
         self.moisture = moisture
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
-        self.mu_scaling = Constant(1.)
+        self.impl = Constant(1.)
 
         self._build_forcing_solvers()
 
@@ -68,7 +69,11 @@ class Forcing(object, metaclass=ABCMeta):
 
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
-        return -0.5*div(self.test)*inner(u0, u0)*dx
+        return -0.5*div(self.test)*inner(self.state.h_project(u0), u0)*dx
+
+    def hydrostatic_term(self):
+        u0 = split(self.x0)[0]
+        return inner(u0, self.state.k)*inner(self.test, self.state.k)*dx
 
     @abstractmethod
     def pressure_gradient_term(self):
@@ -90,7 +95,10 @@ class Forcing(object, metaclass=ABCMeta):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L -= self.mu_scaling*self.sponge_term()
+            L -= self.impl*self.state.timestepping.dt*self.sponge_term()
+        # hydrostatic term has no scaling factor
+        if self.hydrostatic:
+            L += (2*self.impl-1)*self.hydrostatic_term()
         return L
 
     def _build_forcing_solvers(self):
@@ -124,13 +132,13 @@ class Forcing(object, metaclass=ABCMeta):
         :arg x_in: :class:`.Function` object
         :arg x_nl: :class:`.Function` object
         :arg x_out: :class:`.Function` object
-        :arg mu_alpha: scale for sponge term, if present
+        :arg implicit: forcing stage for sponge and hydrostatic terms, if present
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
-        mu_scaling = kwargs.get("mu_alpha")
-        if mu_scaling is not None:
-            self.mu_scaling.assign(mu_scaling)
+        implicit = kwargs.get("implicit")
+        if implicit is not None:
+            self.impl.assign(int(implicit))
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         uF = x_out.split()[0]

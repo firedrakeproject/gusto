@@ -185,6 +185,7 @@ class State(object):
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
                  Coriolis=None, sponge_function=None,
+                 hydrostatic=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -194,6 +195,7 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
+        self.hydrostatic = hydrostatic
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -249,6 +251,12 @@ class State(object):
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
 
+        # project test function for hydrostatic case
+        if self.hydrostatic:
+            self.h_project = lambda u: u - self.k*inner(u, self.k)
+        else:
+            self.h_project = lambda u: u
+
         #  Constant to hold current time
         self.t = Constant(0.0)
 
@@ -262,7 +270,9 @@ class State(object):
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
 
     def setup_diagnostics(self):
-        # add special case diagnostic fields
+        """
+        Add special case diagnostic fields
+        """
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
             self.diagnostic_fields.append(f)
@@ -281,6 +291,7 @@ class State(object):
         Check for existence of directory so as not to overwrite
         output files
         Setup checkpoint file
+
         :arg tmax: model stop time
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).

@@ -166,7 +166,7 @@ class CompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         eqn = (
-            inner(w, (u - u_in))*dx
+            inner(w, (state.h_project(u) - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
@@ -378,15 +378,7 @@ class ShallowWaterSolver(TimesteppingSolver):
                           'mg_levels': {'ksp_type': 'chebyshev',
                                         'ksp_max_it': 2,
                                         'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'},
-                          # Broken residual construction
-                          'hdiv_residual': {'ksp_type': 'cg',
-                                            'pc_type': 'bjacobi',
-                                            'sub_pc_type': 'ilu',
-                                            'ksp_rtol': 1e-8},
-                          # Projection step
-                          'hdiv_projection': {'ksp_type': 'cg',
-                                              'ksp_rtol': 1e-8}}
+                                        'sub_pc_type': 'ilu'}}
     }
 
     def _setup_solver(self):

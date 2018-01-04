@@ -154,11 +154,6 @@ class CrankNicolson(BaseTimestepper):
         else:
             self.incompressible = False
 
-        if state.mu is not None:
-            self.mu_alpha = [0., state.timestepping.dt]
-        else:
-            self.mu_alpha = [None, None]
-
         self.xstar_fields = {name: func for (name, func) in
                              zip(state.fieldlist, state.xstar.split())}
         self.xp_fields = {name: func for (name, func) in
@@ -185,7 +180,7 @@ class CrankNicolson(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               state.xstar, mu_alpha=self.mu_alpha[0])
+                               state.xstar, implicit=False)
 
         for k in range(state.timestepping.maxk):
 
@@ -202,7 +197,7 @@ class CrankNicolson(BaseTimestepper):
 
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                       state.xrhs, mu_alpha=self.mu_alpha[1],
+                                       state.xrhs, implicit=True,
                                        incompressible=self.incompressible)
 
                 state.xrhs -= state.xnp1
