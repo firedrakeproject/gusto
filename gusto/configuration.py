@@ -14,6 +14,8 @@ logger = logging.getLogger("gusto")
 def set_log_handler(comm):
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
+    if logger.hasHandlers():
+        logger.handlers.clear()
     if comm.rank == 0:
         logger.addHandler(handler)
     else:
