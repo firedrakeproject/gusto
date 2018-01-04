@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 250.
+    deltax = 100.
     tmax = 1000.
 
 L = 10000.
@@ -24,10 +24,10 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf_expr', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [Theta_e()]
+diagnostic_fields = [Theta_e(), InternalEnergy()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
@@ -53,23 +53,6 @@ Vr = rho0.function_space()
 x = SpatialCoordinate(mesh)
 quadrature_degree = (5, 5)
 dxp = dx(degree=(quadrature_degree))
-
-# declare some parameters
-p_0 = params.p_0
-R_d = params.R_d
-R_v = params.R_v
-cp = params.cp
-c_pl = params.c_pl
-c_pv = params.c_pv
-L_v0 = params.L_v0
-kappa = params.kappa
-w_sat1 = params.w_sat1
-w_sat2 = params.w_sat2
-w_sat3 = params.w_sat3
-w_sat4 = params.w_sat4
-T_0 = params.T_0
-g = params.g
-cp = params.cp
 
 # Define constant theta_e and water_t
 Tsurf = 320.0

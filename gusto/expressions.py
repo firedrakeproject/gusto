@@ -121,3 +121,17 @@ def theta_e_expr(T, p, r_v, r_t):
     Lv = Lv_expr(T)
 
     return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(Lv * r_v / (T * (cp + c_pl * r_t)))
+
+def I_expr(rho, T, r_v=0.0, r_l=0.0):
+    """
+    Returns an expression for the (possibly wet) internal energy density in J.
+
+    arg: rho: the dry density in kg / m^3.
+    arg: T: the temperature in K.
+    arg: r_v: the mixing ratio of water vapour.
+    arg: r_l: the mixing ratio of all forms of liquid water.
+    """
+
+    Lv = Lv_expr(T)
+ 
+    return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - Lv))
