@@ -2,7 +2,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, split, TrialFunction, TestFunction, \
     FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    dot, dS, Constant, warning, as_vector, SpatialCoordinate
+    dot, dS, Constant, as_vector, SpatialCoordinate
+from gusto.configuration import logger, DEBUG
 
 
 __all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
@@ -26,7 +27,7 @@ class Forcing(object, metaclass=ABCMeta):
         self.state = state
         if linear:
             self.euler_poincare = False
-            warning('Setting euler_poincare to False because you have set linear=True')
+            logger.warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
 
@@ -44,13 +45,14 @@ class Forcing(object, metaclass=ABCMeta):
         self.extruded = self.Vu.extruded
         self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
+        self.hydrostatic = state.hydrostatic
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
         self.moisture = moisture
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
-        self.mu_scaling = Constant(1.)
+        self.impl = Constant(1.)
 
         self._build_forcing_solvers()
 
@@ -67,7 +69,11 @@ class Forcing(object, metaclass=ABCMeta):
 
     def euler_poincare_term(self):
         u0 = split(self.x0)[0]
-        return -0.5*div(self.test)*inner(u0, u0)*dx
+        return -0.5*div(self.test)*inner(self.state.h_project(u0), u0)*dx
+
+    def hydrostatic_term(self):
+        u0 = split(self.x0)[0]
+        return inner(u0, self.state.k)*inner(self.test, self.state.k)*dx
 
     @abstractmethod
     def pressure_gradient_term(self):
@@ -89,7 +95,10 @@ class Forcing(object, metaclass=ABCMeta):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L -= self.mu_scaling*self.sponge_term()
+            L -= self.impl*self.state.timestepping.dt*self.sponge_term()
+        # hydrostatic term has no scaling factor
+        if self.hydrostatic:
+            L += (2*self.impl-1)*self.hydrostatic_term()
         return L
 
     def _build_forcing_solvers(self):
@@ -105,7 +114,14 @@ class Forcing(object, metaclass=ABCMeta):
             a, L, self.uF, bcs=bcs
         )
 
-        self.u_forcing_solver = LinearVariationalSolver(u_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.u_forcing_solver = LinearVariationalSolver(
+            u_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="UForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
         """
@@ -116,13 +132,13 @@ class Forcing(object, metaclass=ABCMeta):
         :arg x_in: :class:`.Function` object
         :arg x_nl: :class:`.Function` object
         :arg x_out: :class:`.Function` object
-        :arg mu_alpha: scale for sponge term, if present
+        :arg implicit: forcing stage for sponge and hydrostatic terms, if present
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
-        mu_scaling = kwargs.get("mu_alpha")
-        if mu_scaling is not None:
-            self.mu_scaling.assign(mu_scaling)
+        implicit = kwargs.get("implicit")
+        if implicit is not None:
+            self.impl.assign(int(implicit))
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
         uF = x_out.split()[0]
@@ -207,7 +223,14 @@ class CompressibleForcing(Forcing):
 
             theta_problem = LinearVariationalProblem(a, L, self.thetaF)
 
-            self.theta_solver = LinearVariationalSolver(theta_problem)
+            solver_parameters = {}
+            if self.state.output.log_level == DEBUG:
+                solver_parameters["ksp_monitor_true_residual"] = True
+            self.theta_solver = LinearVariationalSolver(
+                theta_problem,
+                solver_parameters=solver_parameters,
+                option_prefix="ThetaForcingSolver"
+            )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -275,7 +298,14 @@ class IncompressibleForcing(Forcing):
         divergence_problem = LinearVariationalProblem(
             a, L, self.divu)
 
-        self.divergence_solver = LinearVariationalSolver(divergence_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.divergence_solver = LinearVariationalSolver(
+            divergence_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="DivergenceSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -322,7 +352,14 @@ class EadyForcing(IncompressibleForcing):
             a, L, self.bF
         )
 
-        self.b_forcing_solver = LinearVariationalSolver(b_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.b_forcing_solver = LinearVariationalSolver(
+            b_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="BForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 
@@ -370,7 +407,14 @@ class CompressibleEadyForcing(CompressibleForcing):
             a, L, self.thetaF
         )
 
-        self.theta_forcing_solver = LinearVariationalSolver(theta_forcing_problem)
+        solver_parameters = {}
+        if self.state.output.log_level == DEBUG:
+            solver_parameters["ksp_monitor_true_residual"] = True
+        self.theta_forcing_solver = LinearVariationalSolver(
+            theta_forcing_problem,
+            solver_parameters=solver_parameters,
+            options_prefix="ThetaForcingSolver"
+        )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
 

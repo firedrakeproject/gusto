@@ -17,7 +17,7 @@ def setup_sk(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, Verbose=True)
+    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO)
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 

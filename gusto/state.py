@@ -11,7 +11,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
 import numpy as np
-
+from gusto.configuration import logger, set_log_handler
 
 __all__ = ["State"]
 
@@ -185,6 +185,7 @@ class State(object):
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
                  Coriolis=None, sponge_function=None,
+                 hydrostatic=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -194,6 +195,7 @@ class State(object):
 
         self.Omega = Coriolis
         self.mu = sponge_function
+        self.hydrostatic = hydrostatic
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -249,11 +251,28 @@ class State(object):
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
 
+        # project test function for hydrostatic case
+        if self.hydrostatic:
+            self.h_project = lambda u: u - self.k*inner(u, self.k)
+        else:
+            self.h_project = lambda u: u
+
         #  Constant to hold current time
         self.t = Constant(0.0)
 
+        # setup logger
+        logger.setLevel(output.log_level)
+        set_log_handler(mesh.comm)
+        logger.info("Timestepping parameters that take non-default values:")
+        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
+        if parameters is not None:
+            logger.info("Physical parameters that take non-default values:")
+            logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+
     def setup_diagnostics(self):
-        # add special case diagnostic fields
+        """
+        Add special case diagnostic fields
+        """
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
             self.diagnostic_fields.append(f)
@@ -267,10 +286,16 @@ class State(object):
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, tmax, pickup=False):
+        """
+        Setup dump files
+        Check for existence of directory so as not to overwrite
+        output files
+        Setup checkpoint file
 
-        # setup dump files
-        # check for existence of directory so as not to overwrite
-        # output files
+        :arg tmax: model stop time
+        :arg pickup: recover state from the checkpointing file if true,
+        otherwise dump and checkpoint to disk. (default is False).
+        """
         self.dumpdir = path.join("results", self.output.dirname)
         outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
@@ -278,6 +303,8 @@ class State(object):
             raise IOError("results directory '%s' already exists" % self.dumpdir)
         self.dumpcount = itertools.count()
         self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
+        if self.output.checkpoint and not pickup:
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
@@ -337,7 +364,10 @@ class State(object):
                         chk.load(field)
                     t = chk.read_attribute("/", "time")
                     next(self.dumpcount)
-
+                # Setup new checkpoint
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+            else:
+                raise NotImplementedError("Must set checkpoint True if pickup")
         else:
 
             if self.output.dump_diagnostics:
@@ -352,16 +382,11 @@ class State(object):
                 # Output pointwise data
                 self.pointdata_output.dump(self.fields, t)
 
-            # Open the checkpointing file (backup version)
+            # Dump all the fields to the checkpointing file (backup version)
             if self.output.checkpoint:
-                files = ["chkptbk", "chkpt"]
-                for file in files:
-                    chkfile = path.join(self.dumpdir, file)
-                    with DumbCheckpoint(chkfile, mode=FILE_CREATE) as chk:
-                        # Dump all the fields to a checkpoint
-                        for field in self.to_pickup:
-                            chk.store(field)
-                        chk.write_attribute("/", "time", t)
+                for field in self.to_pickup:
+                    self.chkpt.store(field)
+                self.chkpt.write_attribute("/", "time", t)
 
             if (next(self.dumpcount) % self.output.dumpfreq) == 0:
                 # dump fields

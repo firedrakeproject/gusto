@@ -1,11 +1,25 @@
 """
 Some simple tools for making model configuration nicer.
 """
-
+import logging
+from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters"]
+__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger"]
+
+logger = logging.getLogger("gusto")
+
+
+def set_log_handler(comm):
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
+    if logger.hasHandlers():
+        logger.handlers.clear()
+    if comm.rank == 0:
+        logger.addHandler(handler)
+    else:
+        logger.addHandler(logging.NullHandler())
 
 
 class Configuration(object):
@@ -39,12 +53,14 @@ class OutputParameters(Configuration):
     Output parameters for Gusto
     """
 
-    Verbose = False
+    #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
+    #: default value "warning"
+    log_level = WARNING
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = False
+    checkpoint = True
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
