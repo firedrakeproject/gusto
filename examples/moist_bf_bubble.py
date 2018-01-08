@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, exp, NonlinearVariationalProblem, \
+    SpatialCoordinate, conditional, cos, pi, sqrt, NonlinearVariationalProblem, \
     NonlinearVariationalSolver, TestFunction, dx, TrialFunction, Constant, Function, \
     LinearVariationalProblem, LinearVariationalSolver, DirichletBC
 import sys
@@ -95,10 +95,10 @@ rho_solver.solve()
 w_v = Function(Vt)
 phi = TestFunction(Vt)
 
-pi = pi_expr(rho0, theta0)
-p = p_expr(pi)
-T = T_expr(theta0, pi, r_v=w_v)
-w_sat = r_sat_expr(T, p)
+pi = pi_expr(rho0, theta0, state)
+p = p_expr(pi, state)
+T = T_expr(theta0, pi, state, r_v=w_v)
+w_sat = r_sat_expr(T, p, state)
 
 w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
 w_problem = NonlinearVariationalProblem(w_functional, w_v)

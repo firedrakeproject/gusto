@@ -9,9 +9,9 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, exp
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
 from gusto.forcing import exner
-from gusto.expressions import *
+from gusto.expressions import T_expr, p_expr, theta_e_expr, r_sat_expr
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
@@ -302,23 +302,10 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     Vr = rho0.function_space()
     Vv = state.spaces("Vv")
     n = FacetNormal(state.mesh)
-
-    param = state.parameters
-
-    # define some parameters as attributes
-    R_d = param.R_d
-    p_0 = param.p_0
-    cp = param.cp
-    c_pv = param.c_pv
-    c_pl = param.c_pl
-    R_v = param.R_v
-    L_v0 = param.L_v0
-    T_0 = param.T_0
-    w_sat1 = param.w_sat1
-    w_sat2 = param.w_sat2
-    w_sat3 = param.w_sat3
-    w_sat4 = param.w_sat4
-    g = param.g
+    g = state.parameters.g
+    cp = state.parameters.cp
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
@@ -354,15 +341,15 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v = split(z)
 
     # define variables
-    T = T_expr(theta_v, Pi, r_v=w_v)
-    p = p_expr(Pi)
-    w_sat = r_sat_expr(T, p)
+    T = T_expr(theta_v, Pi, state, r_v=w_v)
+    p = p_expr(Pi, state)
+    w_sat = r_sat_expr(T, p, state)
 
     dxp = dx(degree=(quadrature_degree))
 
     # set up weak form of theta_e and w_sat equations
     F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(T, p, w_v, water_t) * dxp
+         + gamma * theta_e_expr(T, p, w_v, water_t, state) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp)
 
@@ -398,12 +385,12 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v, pi, v = split(z)
 
     # define variables
-    T = T_expr(theta_v, pi, r_v=w_v)
-    p = p_expr(pi)
-    w_sat = r_sat_expr(T, p)
+    T = T_expr(theta_v, pi, state, r_v=w_v)
+    p = p_expr(pi, state)
+    w_sat = r_sat_expr(T, p, state)
 
     F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(T, p, w_v, water_t) * dxp
+         + gamma * theta_e_expr(T, p, w_v, water_t, state) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp
          + cp * inner(v, w) * dxp

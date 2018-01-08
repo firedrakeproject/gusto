@@ -1,9 +1,9 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver, exp
+    LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
-from gusto.expressions import *
+from gusto.expressions import T_expr, p_expr, pi_expr, theta_e_expr, I_expr
 import numpy as np
 
 
@@ -275,11 +275,11 @@ class Theta_e(DiagnosticField):
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         w_t = w_c + w_v
-        pi = pi_expr(rho, theta)
-        p = p_expr(pi)
-        T = T_expr(theta, pi, r_v=w_v)
+        pi = pi_expr(rho, theta, state)
+        p = p_expr(pi, state)
+        T = T_expr(theta, pi, state, r_v=w_v)
 
-        return self.field.interpolate(theta_e_expr(T, p, w_v, w_t))
+        return self.field.interpolate(theta_e_expr(T, p, w_v, w_t, state))
 
 
 class InternalEnergy(DiagnosticField):
@@ -295,11 +295,10 @@ class InternalEnergy(DiagnosticField):
         rho = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
-        pi = pi_expr(rho, theta)
-        T = T_expr(theta, pi, r_v=w_v)
-        I = I_expr(rho, T, r_v=w_v, r_l=w_c)
+        pi = pi_expr(rho, theta, state)
+        T = T_expr(theta, pi, state, r_v=w_v)
 
-        return self.field.interpolate(I)
+        return self.field.interpolate(I_expr(rho, T, state, r_v=w_v, r_l=w_c))
 
 
 class Sum(DiagnosticField):
