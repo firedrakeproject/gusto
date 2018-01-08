@@ -279,7 +279,9 @@ def calculate_Pi0(state, theta0, rho0):
     return Pi0
 
 
-def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)):
+def moist_hydrostatic_balance(state, theta_e, water_t, pi0=None,
+                              top=False, pi_boundary=Constant(1.0),
+                              solve_for_rho=True):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
@@ -287,7 +289,11 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     :arg state: The :class:`State` object.
     :arg theta_e: The initial wet equivalent potential temperature profile.
     :arg water_t: The total water pseudo-mixing ratio profile.
-    :arg pi_boundary: the value of pi on the lower boundary of the domain.
+    :arg pi0: Optional function to put exner pressure into.
+    :arg top: If True, set a boundary condition at the top, otherwise
+              it will be at the bottom.
+    :arg pi_boundary: The value of pi on the specified boundary.
+    :arg solve_for_rho: An option to return a balance solved for density. 
     """
 
     theta0 = state.fields('theta')
@@ -321,7 +327,13 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
     Pi = Function(Vr)
-    epsilon = 0.9  # relaxation constant
+
+    if top:
+        bmeasure = ds_t
+        bstring = "bottom"
+    else:
+        bmeasure = ds_b
+        bstring = "top"
 
     # set up mixed space
     Z = MixedFunctionSpace((Vt, Vt))
@@ -355,16 +367,11 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
 
     theta_v, w_v = z.split()
 
-    Pi_h = Function(Vr).interpolate((p / p_0) ** (R_d / cp))
-
     # solve for Pi with theta_v and w_v constant
     # then solve for theta_v and w_v with Pi constant
-    for i in range(5):
-        compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi_h, water_t=water_t)
-        Pi.assign(Pi * (1 - epsilon) + epsilon * Pi_h)
-        solver.solve()
-        theta0.assign(theta0 * (1 - epsilon) + epsilon * theta_v)
-        water_v0.assign(water_v0 * (1 - epsilon) + epsilon * w_v)
+    compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi, top=top,
+                                     pi_boundary=pi_boundary, water_t=water_t)
+    solver.solve()
 
     # now begin on Newton solver, setup up new mixed space
     Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
@@ -393,10 +400,10 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
          + cp * inner(v, w) * dxp
          - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
          + psi * div(theta_v * v / (1.0 + water_t)) * dxp
-         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * ds_b
+         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * bmeasure
          + g * inner(w, state.k) * dxp)
 
-    bcs = [DirichletBC(Z.sub(3), 0.0, "top")]
+    bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
 
     problem = NonlinearVariationalProblem(F, z, bcs=bcs)
     solver = NonlinearVariationalSolver(problem, solver_parameters=params)
@@ -409,5 +416,13 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta0.assign(theta_v)
     water_v0.assign(w_v)
 
+    if pi0 is not None:
+        pi0.assign(pi)
+
     # find rho
-    compressible_hydrostatic_balance(state, theta0, rho0, water_t=water_t, solve_for_rho=True)
+    if solve_for_rho:
+        compressible_hydrostatic_balance(state, theta0, rho0, top=top,
+                                         pi_boundary=pi_boundary,
+                                         water_t=water_t, solve_for_rho=True)
+    else:
+        rho0.interpolate(rho_expr(state.parameters, theta0, pi))
