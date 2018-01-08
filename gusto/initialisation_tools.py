@@ -10,7 +10,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
-from gusto.expressions import T_expr, pi_expr, p_expr, theta_e_expr, r_sat_expr
+from gusto.expressions import T_expr, pi_expr, p_expr, theta_e_expr, r_sat_expr, rho_expr
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
@@ -183,10 +183,10 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     if solve_for_rho:
         w1 = Function(W)
         v, rho = w1.split()
-        rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+        rho.interpolate(rho_expr(state.parameters, theta0, Pi))
         v, rho = split(w1)
         dv, dpi = TestFunctions(W)
-        pi = pi_expr(state.parameters, rho0, theta0)
+        pi = pi_expr(state.parameters, rho, theta0)
         F = (
             (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
             + dpi*div(theta0*v)*dx
@@ -199,7 +199,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         v, rho_ = w1.split()
         rho0.assign(rho_)
     else:
-        rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+        rho0.interpolate(rho_expr(state.parameters, theta0, Pi))
 
 
 def remove_initial_w(u, Vv):

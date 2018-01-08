@@ -148,7 +148,7 @@ state.parameters.Pi0 = Pi0
 # set x component of velocity
 cp = state.parameters.cp
 dthetady = state.parameters.dthetady
-Pi = exner(theta0, rho0, state)
+Pi = pi_expr(state.parameters, rho0, theta0)
 u = cp*dthetady/f*(Pi-Pi0)
 
 # set y component of velocity

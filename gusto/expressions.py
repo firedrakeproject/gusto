@@ -4,6 +4,9 @@ Some thermodynamic expressions to help declutter the code.
 from firedrake import exp
 
 
+__all__ = ["theta_expr", "pi_expr", "pi_rho_expr", "pi_theta_expr", "p_expr", "T_expr", "rho_expr", "r_sat_expr", "Lv_expr", "theta_e_expr", "I_expr"]
+
+
 def theta_expr(parameters, T, p):
     """
     Returns an expression for dry potential temperature theta in K.
@@ -194,6 +197,6 @@ def I_expr(parameters, rho, T, r_v=0.0, r_l=0.0):
     cv = parameters.cv
     c_vv = parameters.c_vv
     c_pv = parameters.c_pv
-    Lv = Lv_expr(T, state)
+    Lv = Lv_expr(parameters, T)
 
     return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - Lv))
