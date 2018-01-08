@@ -6,7 +6,7 @@ from firedrake import split, LinearVariationalProblem, \
 from firedrake.solving_utils import flatten_parameters
 
 from gusto.configuration import DEBUG
-from gusto.forcing import exner, exner_rho, exner_theta
+from gusto.expressions import pi_expr, pi_rho_expr, pi_theta_expr
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -133,9 +133,9 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = exner(thetabar, rhobar, state)
-        pibar_rho = exner_rho(thetabar, rhobar, state)
-        pibar_theta = exner_theta(thetabar, rhobar, state)
+        pibar = pi_expr(state.parameters, rhobar, thetabar)
+        pibar_rho = pi_rho_expr(state.parameters, rhobar, thetabar)
+        pibar_theta = pi_theta_expr(state.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector

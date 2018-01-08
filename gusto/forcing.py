@@ -4,9 +4,10 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     dot, dS, Constant, as_vector, SpatialCoordinate
 from gusto.configuration import logger, DEBUG
+from gusto.expressions import pi_expr
 
 
-__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "exner", "exner_rho", "exner_theta"]
+__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing"]
 
 
 class Forcing(object, metaclass=ABCMeta):
@@ -161,7 +162,7 @@ class CompressibleForcing(Forcing):
                 water_t += self.state.fields(water)
             theta = theta / (1 + water_t)
 
-        pi = exner(theta0, rho0, self.state)
+        pi = pi_expr(self.state.parameters, rho0, theta0)
 
         L = (
             + cp*div(theta*self.test)*pi*dx
@@ -231,33 +232,6 @@ class CompressibleForcing(Forcing):
             self.theta_solver.solve()
             _, _, theta_out = x_out.split()
             theta_out += self.thetaF
-
-
-def exner(theta, rho, state):
-    """
-    Compute the exner function.
-    """
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa))
-
-
-def exner_rho(theta, rho, state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*theta*kappa/(1-kappa)
-
-
-def exner_theta(theta, rho, state):
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-    kappa = state.parameters.kappa
-
-    return (R_d/p_0)**(kappa/(1-kappa))*pow(rho*theta, kappa/(1-kappa)-1)*rho*kappa/(1-kappa)
 
 
 class IncompressibleForcing(Forcing):
@@ -375,7 +349,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         cp = self.state.parameters.cp
 
         _, rho0, theta0 = split(self.x0)
-        Pi = exner(theta0, rho0, self.state)
+        Pi = pi_expr(self.state.parameters, rho0, theta0)
         Pi_0 = Constant(Pi0)
 
         L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0., 1., 0.]))*dx  # Eady forcing

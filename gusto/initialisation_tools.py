@@ -10,8 +10,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
-from gusto.forcing import exner
-from gusto.expressions import T_expr, p_expr, theta_e_expr, r_sat_expr
+from gusto.expressions import T_expr, pi_expr, p_expr, theta_e_expr, r_sat_expr
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
@@ -187,7 +186,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
         v, rho = split(w1)
         dv, dpi = TestFunctions(W)
-        pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
+        pi = pi_expr(state.parameters, rho0, theta0)
         F = (
             (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
             + dpi*div(theta0*v)*dx
@@ -246,8 +245,7 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
 
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
-    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi = Function(Vr).interpolate(pi_expr(state.parameters, rho0, theta0))
 
     # get Pi gradient
     Vu = state.spaces("HDiv")
@@ -275,8 +273,7 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
 def calculate_Pi0(state, theta0, rho0):
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
-    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi = Function(Vr).interpolate(pi_expr(state.parameters, rho0, theta0))
     Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
     return Pi0
@@ -341,15 +338,15 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v = split(z)
 
     # define variables
-    T = T_expr(theta_v, Pi, state, r_v=w_v)
-    p = p_expr(Pi, state)
-    w_sat = r_sat_expr(T, p, state)
+    T = T_expr(state.parameters, theta_v, Pi, r_v=w_v)
+    p = p_expr(state.parameters, Pi)
+    w_sat = r_sat_expr(state.parameters, T, p)
 
     dxp = dx(degree=(quadrature_degree))
 
     # set up weak form of theta_e and w_sat equations
     F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(T, p, w_v, water_t, state) * dxp
+         + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp)
 
@@ -385,12 +382,12 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v, pi, v = split(z)
 
     # define variables
-    T = T_expr(theta_v, pi, state, r_v=w_v)
-    p = p_expr(pi, state)
-    w_sat = r_sat_expr(T, p, state)
+    T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+    p = p_expr(state.parameters, pi)
+    w_sat = r_sat_expr(state.parameters, T, p)
 
     F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(T, p, w_v, water_t, state) * dxp
+         + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp
          + cp * inner(v, w) * dxp
