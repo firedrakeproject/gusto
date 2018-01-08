@@ -176,10 +176,6 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     if pi0 is not None:
         pi0.assign(Pi)
 
-    kappa = state.parameters.kappa
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-
     if solve_for_rho:
         w1 = Function(W)
         v, rho = w1.split()

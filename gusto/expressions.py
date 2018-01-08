@@ -11,9 +11,9 @@ def theta_expr(parameters, T, p):
     """
     Returns an expression for dry potential temperature theta in K.
 
-    arg: parameters: an OutputParameters object.
-    arg: T: temperature in K.
-    arg: p: pressure in Pa.
+    :arg parameters: an OutputParameters object.
+    :arg T: temperature in K.
+    :arg p: pressure in Pa.
     """
 
     kappa = parameters.kappa
@@ -26,9 +26,9 @@ def pi_expr(parameters, rho, theta_v):
     """
     Returns an expression for the Exner pressure.
 
-    arg: parameters: an OutputParameters object.
-    arg: rho: the dry density of air in kg / m^3.
-    arg: theta: the potential temperature (or the virtual
+    :arg parameters: an OutputParameters object.
+    :arg rho: the dry density of air in kg / m^3.
+    :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
     """
 
@@ -44,9 +44,9 @@ def pi_rho_expr(parameters, rho, theta_v):
     Returns an expression for the derivative of Exner pressure
     with respect to density.
 
-    arg: parameters: an OutputParameters object.
-    arg: rho: the dry density of air in kg / m^3.
-    arg: theta: the potential temperature (or the virtual
+    :arg parameters: an OutputParameters object.
+    :arg rho: the dry density of air in kg / m^3.
+    :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
     """
 
@@ -62,9 +62,9 @@ def pi_theta_expr(parameters, rho, theta_v):
     Returns an expression for the deriavtive of Exner pressure
     with respect to potential temperature.
 
-    arg: parameters: an OutputParameters object.
-    arg: rho: the dry density of air in kg / m^3.
-    arg: theta: the potential temperature (or the virtual
+    :arg parameters: an OutputParameters object.
+    :arg rho: the dry density of air in kg / m^3.
+    :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
     """
 
@@ -79,8 +79,8 @@ def p_expr(parameters, pi):
     """
     Returns an expression for the pressure in Pa from the Exner Pi.
 
-    arg: parameters: an OutputParameters object.
-    arg: pi: the Exner pressure.
+    :arg parameters: an OutputParameters object.
+    :arg pi: the Exner pressure.
     """
 
     kappa = parameters.kappa
@@ -93,10 +93,10 @@ def T_expr(parameters, theta_v, pi, r_v=None):
     """
     Returns an expression for temperature T in K.
 
-    arg: parameters: an OutputParameters object.
-    arg: theta_v: the virtual potential temperature in K.
-    arg: pi: the Exner pressure.
-    arg: r_v: the mixing ratio of water vapour.
+    :arg parameters: an OutputParameters object.
+    :arg theta_v: the virtual potential temperature in K.
+    :arg pi: the Exner pressure.
+    :arg r_v: the mixing ratio of water vapour.
     """
 
     R_d = parameters.R_d
@@ -115,9 +115,9 @@ def rho_expr(parameters, theta_v, pi):
     Returns an expression for the dry density rho in kg / m^3
     from the (virtual) potential temperature and Exner pressure.
 
-    arg: parameters: an OutputParameters object.
-    arg: theta_v: the virtual potential temperature in K.
-    arg: pi: the Exner pressure.
+    :arg parameters: an OutputParameters object.
+    :arg theta_v: the virtual potential temperature in K.
+    :arg pi: the Exner pressure.
     """
 
     kappa = parameters.kappa
@@ -132,9 +132,9 @@ def r_sat_expr(parameters, T, p):
     Returns an expression from Tetens' formula for the
     saturation mixing ratio of water vapour.
 
-    arg: parameters: an OutputParameters object.
-    arg: T: the temperature in K.
-    arg: p: the pressure in Pa.
+    :arg parameters: an OutputParameters object.
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
     """
 
     w_sat1 = parameters.w_sat1
@@ -150,8 +150,8 @@ def Lv_expr(parameters, T):
     """
     Returns an expression for the latent heat of vaporisation of water.
 
-    arg: parameters: an OutputParameters object.
-    arg: T: the temperature in K.
+    :arg parameters: an OutputParameters object.
+    :arg T: the temperature in K.
     """
 
     L_v0 = parameters.L_v0
@@ -166,11 +166,11 @@ def theta_e_expr(parameters, T, p, r_v, r_t):
     """
     Returns an expression for the wet equivalent potential temperature in K.
 
-    arg: parameters: an OutputParameters object.
-    arg: T: the temperature in K.
-    arg: p: the pressure in Pa.
-    arg: r_v: the mixing ratio of water vapour.
-    arg: r_t: the total mixing ratio of water.
+    :arg parameters: an OutputParameters object.
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
+    :arg r_v: the mixing ratio of water vapour.
+    :arg r_t: the total mixing ratio of water.
     """
 
     R_d = parameters.R_d
@@ -187,11 +187,11 @@ def I_expr(parameters, rho, T, r_v=0.0, r_l=0.0):
     """
     Returns an expression for the (possibly wet) internal energy density in J.
 
-    arg: parameters: an OutputParameters object.
-    arg: rho: the dry density in kg / m^3.
-    arg: T: the temperature in K.
-    arg: r_v: the mixing ratio of water vapour.
-    arg: r_l: the mixing ratio of all forms of liquid water.
+    :arg parameters: an OutputParameters object.
+    :arg rho: the dry density in kg / m^3.
+    :arg T: the temperature in K.
+    :arg r_v: the mixing ratio of water vapour.
+    :arg r_l: the mixing ratio of all forms of liquid water.
     """
 
     cv = parameters.cv
