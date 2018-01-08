@@ -176,10 +176,6 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     if pi0 is not None:
         pi0.assign(Pi)
 
-    kappa = state.parameters.kappa
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-
     if solve_for_rho:
         w1 = Function(W)
         v, rho = w1.split()
@@ -293,7 +289,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
     :arg pi_boundary: The value of pi on the specified boundary.
-    :arg solve_for_rho: An option to return a balance solved for density. 
+    :arg solve_for_rho: An option to return a balance solved for density.
     """
 
     theta0 = state.fields('theta')
@@ -307,8 +303,6 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     n = FacetNormal(state.mesh)
     g = state.parameters.g
     cp = state.parameters.cp
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):

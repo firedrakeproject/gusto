@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import FunctionSpace, as_vector, \
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, op2
+    SpatialCoordinate, pi, cos, Function, conditional, Mesh, sin, op2
 import sys
 
 dt = 5.0
@@ -109,6 +109,7 @@ params = {'pc_type': 'fieldsplit',
 Pi = Function(Vr)
 rho_b = Function(Vr)
 moist_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.5)
+
 
 def min(f):
     fmin = op2.Global(1, [1000], dtype=float)
