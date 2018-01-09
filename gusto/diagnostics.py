@@ -3,11 +3,11 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     div, avg, jump, FacetNormal, dS_v, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
-from gusto.expressions import T_expr, p_expr, pi_expr, theta_e_expr, I_expr
+from gusto.expressions import T_expr, p_expr, pi_expr, theta_e_expr, I_expr, T_d_expr, RH_expr
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
 
 
 class Diagnostics(object):
@@ -299,6 +299,60 @@ class InternalEnergy(DiagnosticField):
         T = T_expr(state.parameters, theta, pi, r_v=w_v)
 
         return self.field.interpolate(I_expr(state.parameters, rho, T, r_v=w_v, r_l=w_c))
+
+
+class Dewpoint(DiagnosticField):
+    name = "Dewpoint"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Dewpoint, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        pi = pi_expr(state.parameters, rho, theta)
+        p = p_expr(state.parameters, pi)
+
+        return self.field.interpolate(T_d_expr(state.parameters, p, w_v))
+
+
+class Temperature(DiagnosticField):
+    name = "Temperature"
+   
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Temperature, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        pi = pi_expr(state.parameters, rho, theta)
+
+        return self.field.interpolate(T_expr(state.parameters, theta, pi, r_v=w_v))
+
+
+class RelativeHumidity(DiagnosticField):
+    name = "RelativeHumidity"
+   
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(RelativeHumidity, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho = state.fields('rho')
+        w_v = state.fields('water_v')
+        pi = pi_expr(state.parameters, rho, theta)
+        T = T_expr(state.parameters, theta, pi, r_v=w_v)
+        p = p_expr(state.parameters, pi)
+
+        return self.field.interpolate(RH_expr(state.parameters, w_v, T, p))
 
 
 class HydrostaticImbalance(DiagnosticField):

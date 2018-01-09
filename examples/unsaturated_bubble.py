@@ -10,7 +10,7 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100.
+    deltax = 200.
     tmax = 1000.
 
 L = 10000.
@@ -24,10 +24,10 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[])
+output = OutputParameters(dirname='unsaturated_bubble', dumpfreq=20, dumplist=['u'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [Theta_e(), InternalEnergy(), Perturbation("InternalEnergy")]
+diagnostic_fields = [Theta_e(), Temperature(), Dewpoint(), RelativeHumidity()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
@@ -55,23 +55,18 @@ quadrature_degree = (5, 5)
 dxp = dx(degree=(quadrature_degree))
 
 # Define constant theta_e and water_t
-Tsurf = 320.0
-total_water = 0.02
-theta_e = Function(Vt).assign(Tsurf)
-water_t = Function(Vt).assign(total_water)
+Tsurf = 300.0
+humidity = 0.5
+theta_d = Function(Vt).assign(Tsurf)
+RH = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
-saturated_hydrostatic_balance(state, theta_e, water_t)
+unsaturated_hydrostatic_balance(state, theta_d, RH)
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
 rho_b = Function(Vr).assign(rho0)
 water_vb = Function(Vt).assign(water_v0)
-water_cb = Function(Vt).assign(water_t - water_vb)
-pibar = pi_expr(state.parameters, rho_b, theta_b)
-Tb = T_expr(state.parameters, theta_b, pibar, r_v=water_vb)
-Ibar = state.fields("InternalEnergybar", FunctionSpace(mesh, "CG", 1))
-Ibar.interpolate(I_expr(state.parameters, rho_b, Tb, r_v=water_vb, r_l=water_cb))
 
 # define perturbation
 xc = L / 2
@@ -95,22 +90,7 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-# find perturbed water_v
-w_v = Function(Vt)
-phi = TestFunction(Vt)
-
-pi = pi_expr(state.parameters, rho0, theta0)
-p = p_expr(state.parameters, pi)
-T = T_expr(state.parameters, theta0, pi, r_v=w_v)
-w_sat = r_sat_expr(state.parameters, T, p)
-
-w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
-w_problem = NonlinearVariationalProblem(w_functional, w_v)
-w_solver = NonlinearVariationalSolver(w_problem)
-w_solver.solve()
-
-water_v0.assign(w_v)
-water_c0.assign(water_t - water_v0)
+water_c0.assign(0.0)
 
 # initialise fields
 state.initialise([('u', u0),

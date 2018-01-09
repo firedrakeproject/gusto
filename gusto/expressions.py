@@ -1,10 +1,10 @@
 """
 Some thermodynamic expressions to help declutter the code.
 """
-from firedrake import exp
+from firedrake import exp, ln
 
 
-__all__ = ["theta_expr", "pi_expr", "pi_rho_expr", "pi_theta_expr", "p_expr", "T_expr", "rho_expr", "r_sat_expr", "Lv_expr", "theta_e_expr", "I_expr"]
+__all__ = ["theta_expr", "pi_expr", "pi_rho_expr", "pi_theta_expr", "p_expr", "T_expr", "rho_expr", "r_sat_expr", "Lv_expr", "theta_e_expr", "I_expr", "RH_expr", "e_sat_expr", "r_v_expr", "T_d_expr"]
 
 
 def theta_expr(parameters, T, p):
@@ -200,3 +200,70 @@ def I_expr(parameters, rho, T, r_v=0.0, r_l=0.0):
     Lv = Lv_expr(parameters, T)
 
     return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - Lv))
+
+
+def RH_expr(parameters, r_v, T, p):
+    """
+    Returns an expression for the relative humidity.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg r_v: the mixing ratio of water vapour.
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
+    """
+    
+    r_sat = r_sat_expr(parameters, T, p)
+
+    return r_v / r_sat
+
+
+def e_sat_expr(parameters, T):
+    """
+    Returns an expression for the saturated partial pressure
+    of water vapour as a function of T, based on Tetens' formula.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg T: the temperature in K.
+    """
+
+    w_sat2 = parameters.w_sat2
+    w_sat3 = parameters.w_sat3
+    w_sat4 = parameters.w_sat4
+    T_0 = parameters.T_0
+
+    return w_sat4 * exp(-w_sat2 * (T - T_0) / (T - w_sat3))
+
+
+def r_v_expr(parameters, H, T, p):
+    """
+    Returns an expression for the mixing ratio of water vapour
+    from the relative humidity, pressure and temperature.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg H: the relative humidity (as a decimal).
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
+    """
+
+    r_sat = r_sat_expr(parameters, T, p)
+
+    return H * r_sat
+
+
+def T_d_expr(parameters, p, r_v):
+    """
+    Returns the dewpoint temperature as a function of
+    temperature and the water vapour mixing ratio.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg T: the temperature in K.
+    :arg r_v: the water vapour mixing ratio.
+    """
+
+    R_d = parameters.R_d
+    R_v = parameters.R_v
+    T_0 = parameters.T_0
+    e = p * r_v / (r_v + R_d / R_v)
+
+    return 243.5 / ((17.67 / ln(e / 611.2)) - 1) + T_0
+
