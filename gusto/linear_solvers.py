@@ -166,7 +166,7 @@ class CompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         eqn = (
-            inner(w, (u - u_in))*dx
+            inner(w, (state.h_project(u) - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
