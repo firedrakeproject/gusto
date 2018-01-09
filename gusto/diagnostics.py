@@ -442,7 +442,7 @@ class Precipitation(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("DG1", state.mesh, "DG", 1)
+            space = state.spaces("DG0", state.mesh, "DG", 0)
             super(Precipitation, self).setup(state, space=space)
 
             rain = state.fields('rain')
@@ -453,15 +453,13 @@ class Precipitation(DiagnosticField):
             n = FacetNormal(state.mesh)
             un = 0.5 * (dot(v, n) + abs(dot(v, n)))
             self.flux = Function(space)
-            self.total_water = Function(space)
-
-            if space.extruded:
-                self.ds = ds_b + ds_t + ds_v
-            else:
-                self.ds = ds
 
             a = phi * flux * dx
-            L = phi * rain * un * rho * self.ds
+            L = phi * rain * un * rho
+            if space.extruded:
+                L = L * (ds_b + ds_t + ds_v)
+            else:
+                L = L * ds
 
             # setup solver
             problem = LinearVariationalProblem(a, L, self.flux)
@@ -469,8 +467,8 @@ class Precipitation(DiagnosticField):
 
     def compute(self, state):
         self.solver.solve()
-        self.total_water.assign(self.total_water + self.flux)
-        return self.field.interpolate(self.total_water)
+        self.field.assign(self.field + self.flux)
+        return self.field
 
 
 class Vorticity(DiagnosticField):

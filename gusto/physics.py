@@ -133,12 +133,12 @@ class Fallout(Physics):
         terminal_velocity = 10  # in m/s
         self.v = state.fields("rainfall_velocity", Vu)
         self.v.project(as_vector([0, -terminal_velocity]))
-        state.fields
 
+        # sedimentation will happen using a full advection method
         advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True)
         self.advection_method = SSPRK3(state, self.rain, advection_equation)
 
     def apply(self):
         for k in range(self.state.timestepping.maxk):
             self.advection_method.update_ubar(self.v, self.v, 0)
-            self.advection_method.apply(self.rain, self. rain)
+            self.advection_method.apply(self.rain, self.rain)

@@ -159,14 +159,10 @@ class AdvectionEquation(TransportEquation):
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
-        if vector_manifold:
-            self.vector_manifold = True
-        else:
-            self.vector_manifold = False
-        if outflow:
-            self.outflow = True
-        else:
-            self.outflow = False
+        self.vector_manifold = vector_manifold
+        self.outflow = outflow
+        if outflow and ibp is None:
+            raise ValueError("outflow is True and ibp is None are incompatible options")
 
     def advection_term(self, q):
 
@@ -190,7 +186,7 @@ class AdvectionEquation(TransportEquation):
                       + inner(self.test('-'),
                               dot(self.ubar('-'), self.n('-'))*q('-')))*self.dS
 
-        if self.outflow and self.ibp is not None:
+        if self.outflow:
             L += self.test*self.un*q*self.ds
 
         if self.vector_manifold:
