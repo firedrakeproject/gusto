@@ -206,6 +206,8 @@ class PVFluxTaylorGalerkin(Flux):
 
     def __init__(self, state, mass_flux):
         self.F = mass_flux.flux
+        self.V0 = FunctionSpace(state.mesh, "CG", 3)
+        self.pv = state.fields("PotentialVorticity", self.V0)
         super().__init__(state)
         Vdg = state.spaces("DG")
         self.D0 = Function(Vdg)
@@ -236,10 +238,9 @@ class PVFluxTaylorGalerkin(Flux):
                                                         'sub_pc_type': 'ilu'})
 
         # setup pv solver
-        V0 = FunctionSpace(self.state.mesh, "CG", 3)
-        gamma = TestFunction(V0)
-        q_ = TrialFunction(V0)
-        self.q0 = Function(V0)
+        gamma = TestFunction(self.V0)
+        q_ = TrialFunction(self.V0)
+        self.q0 = Function(self.V0)
         self.u = Function(self.state.spaces("HDiv"))
         gradperp = lambda psi: self.state.perp(grad(psi))
         f = self.state.fields("coriolis")
@@ -256,8 +257,8 @@ class PVFluxTaylorGalerkin(Flux):
         # setup TG advection
         self.dt = self.state.timestepping.dt
 
-        self.q1 = Function(V0)
-        self.q2 = Function(V0)
+        self.q1 = Function(self.V0)
+        self.q2 = Function(self.V0)
 
         # two-step TG scheme for Q
         self.Dtwidh = 0.5*(self.Dtwid0+self.Dtwid1)/detJ
@@ -319,3 +320,5 @@ class PVFluxTaylorGalerkin(Flux):
 
         self.q1_solver.solve()
         self.q2_solver.solve()
+        self.pv.assign(self.q2)
+
