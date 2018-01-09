@@ -289,12 +289,12 @@ class ThetaMethod(Advection):
     def lhs(self):
         eqn = self.equation
         trial = eqn.trial
-        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(trial)
+        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
 
     @cached_property
     def rhs(self):
         eqn = self.equation
-        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.q1)
+        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

@@ -14,6 +14,8 @@ logger = logging.getLogger("gusto")
 def set_log_handler(comm):
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
+    if logger.hasHandlers():
+        logger.handlers.clear()
     if comm.rank == 0:
         logger.addHandler(handler)
     else:
@@ -58,7 +60,7 @@ class OutputParameters(Configuration):
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = False
+    checkpoint = True
     dirname = None
     #: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
