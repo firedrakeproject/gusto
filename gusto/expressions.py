@@ -211,7 +211,7 @@ def RH_expr(parameters, r_v, T, p):
     :arg T: the temperature in K.
     :arg p: the pressure in Pa.
     """
-    
+
     r_sat = r_sat_expr(parameters, T, p)
 
     return r_v / r_sat
@@ -266,4 +266,3 @@ def T_d_expr(parameters, p, r_v):
     e = p * r_v / (r_v + R_d / R_v)
 
     return 243.5 / ((17.67 / ln(e / 611.2)) - 1) + T_0
-

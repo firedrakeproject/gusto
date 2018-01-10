@@ -1,8 +1,8 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, NonlinearVariationalProblem, \
-    NonlinearVariationalSolver, TestFunction, dx, TrialFunction, Constant, Function, \
-    FunctionSpace, LinearVariationalProblem, LinearVariationalSolver, DirichletBC
+    SpatialCoordinate, conditional, cos, pi, sqrt, \
+    TestFunction, dx, TrialFunction, Constant, Function, \
+    LinearVariationalProblem, LinearVariationalSolver, DirichletBC
 import sys
 
 dt = 1.0
@@ -24,7 +24,7 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='unsaturated_bubble', dumpfreq=20, dumplist=['u'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
+output = OutputParameters(dirname='unsaturated_bubble_RH50_slopedtheta_nolimiters', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), Temperature(), Dewpoint(), RelativeHumidity()]
@@ -50,14 +50,15 @@ moisture = ["water_v", "water_c"]
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
-x = SpatialCoordinate(mesh)
+x, z = SpatialCoordinate(mesh)
 quadrature_degree = (5, 5)
 dxp = dx(degree=(quadrature_degree))
 
 # Define constant theta_e and water_t
 Tsurf = 300.0
+Ttop = 320.0
 humidity = 0.5
-theta_d = Function(Vt).assign(Tsurf)
+theta_d = Function(Vt).interpolate(Tsurf + (z / H) * (Ttop - Tsurf))
 RH = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
@@ -73,9 +74,9 @@ xc = L / 2
 zc = 2000.
 rc = 2000.
 Tdash = 2.0
-theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2) > rc,
+theta_pert = Function(Vt).interpolate(conditional(sqrt((x - xc) ** 2 + (z - zc) ** 2) > rc,
                                                   0.0, Tdash *
-                                                  (cos(pi * sqrt(((x[0] - xc) / rc) ** 2 + ((x[1] - zc) / rc) ** 2) / 2.0))
+                                                  (cos(pi * sqrt(((x - xc) / rc) ** 2 + ((z - zc) / rc) ** 2) / 2.0))
                                                   ** 2))
 
 # define initial theta

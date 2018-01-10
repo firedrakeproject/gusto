@@ -108,7 +108,7 @@ params = {'pc_type': 'fieldsplit',
           'fieldsplit_1_sub_pc_type': 'ilu'}
 Pi = Function(Vr)
 rho_b = Function(Vr)
-moist_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.5)
+saturated_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.5)
 
 
 def min(f):
@@ -122,13 +122,13 @@ void minify(double *a, double *b) {
 
 
 p0 = min(Pi)
-moist_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.95)
+saturated_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.95)
 p1 = min(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
 print(pi_top)
-moist_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.9, solve_for_rho=True)
+saturated_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.9, solve_for_rho=True)
 
 u0.project(as_vector([10.0, 0.0]))
 remove_initial_w(u0, state.Vv)

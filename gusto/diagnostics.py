@@ -321,7 +321,7 @@ class Dewpoint(DiagnosticField):
 
 class Temperature(DiagnosticField):
     name = "Temperature"
-   
+
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("CG1", state.mesh, "CG", 1)
@@ -338,7 +338,7 @@ class Temperature(DiagnosticField):
 
 class RelativeHumidity(DiagnosticField):
     name = "RelativeHumidity"
-   
+
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("CG1", state.mesh, "CG", 1)
