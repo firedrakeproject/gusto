@@ -51,7 +51,7 @@ Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
 x = SpatialCoordinate(mesh)
-quadrature_degree = (5, 5)
+quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
 # Define constant theta_e and water_t

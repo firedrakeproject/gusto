@@ -1,5 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function
+from firedrake import dx, NonlinearVariationalSolver, NonlinearVariationalProblem, TestFunction
 from os import path
 from netCDF4 import Dataset
 
@@ -56,6 +57,21 @@ def setup_unsaturated(dirname):
 
     # Calculate hydrostatic Pi
     unsaturated_hydrostatic_balance(state, theta_d, RH)
+
+    # solve again for water_v
+    quadrature_degree = (4, 4)
+    dxp = dx(degree=(quadrature_degree))
+    w_v = Function(Vt)
+    phi = TestFunction(Vt)
+    pi = pi_expr(state.parameters, rho0, theta0)
+    p = p_expr(state.parameters, pi)
+    T = T_expr(state.parameters, theta0, pi, r_v=w_v)
+    w_sat = r_sat_expr(state.parameters, T, p)
+    w_functional = (phi * w_v * dxp - phi * RH * w_sat * dxp)
+    w_problem = NonlinearVariationalProblem(w_functional, w_v)
+    w_solver = NonlinearVariationalSolver(w_problem)
+    w_solver.solve()
+    water_v0.assign(w_v)
     water_c0.assign(0.0)
 
     state.initialise([('u', u0),
@@ -84,7 +100,7 @@ def setup_unsaturated(dirname):
     compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state)]
+    physics_list = [Condensation(state, weak=True)]
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
@@ -109,4 +125,4 @@ def test_unsaturated_setup(tmpdir):
     u = data.groups['u']
     umax = u.variables['max']
 
-    assert umax[-1] < 1e-5
+    assert umax[-1] < 1e-4

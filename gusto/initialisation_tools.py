@@ -307,7 +307,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
-    quadrature_degree = (5, 5)
+    quadrature_degree = (4, 4)
 
     params = {'ksp_type': 'preonly',
               'ksp_monitor_true_residual': True,
@@ -456,7 +456,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
-    quadrature_degree = (5, 5)
+    quadrature_degree = (4, 4)
 
     params = {'ksp_type': 'preonly',
               'ksp_monitor_true_residual': True,

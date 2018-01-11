@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import exp, Interpolator, conditional, Function, \
-    min_value, max_value
+    min_value, max_value, TestFunction, dx, \
+    NonlinearVariationalProblem, NonlinearVariationalSolver
 
 
 __all__ = ["Condensation"]
@@ -33,10 +34,14 @@ class Condensation(Physics):
     latent heat changes.
 
     :arg state: :class:`.State.` object.
+    :arg weak: Boolean to determine whether weak
+               formulation of condensation is used.
     """
 
-    def __init__(self, state):
+    def __init__(self, state, weak=False):
         super(Condensation, self).__init__(state)
+
+        self.weak = weak
 
         # obtain our fields
         self.theta = state.fields('theta')
@@ -86,6 +91,18 @@ class Condensation(Physics):
                       (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
                                     (cp * R_v * T ** 2.0)))))
 
+        # introduce a weak condensation which might hold at discrete level
+        if self.weak:
+            cond_rate_expr = dot_r_cond
+            dot_r_cond = Function(Vt)
+            phi = TestFunction(Vt)
+            quadrature_degree = (4, 4)
+            dxp = dx(degree=(quadrature_degree)) 
+            cond_rate_functional = (phi * dot_r_cond * dxp
+                                    - phi * cond_rate_expr * dxp)
+            cond_rate_problem = NonlinearVariationalProblem(cond_rate_functional, dot_r_cond)
+            self.cond_rate_solver = NonlinearVariationalSolver(cond_rate_problem)
+
         # make cond_rate function, that needs to be the same for all updates in one time step
         self.cond_rate = Function(Vt)
 
@@ -103,6 +120,8 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        if self.weak:
+            self.cond_rate_solver.solve()
         self.lim_cond_rate.interpolate()
         self.water_v.assign(self.water_v_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
