@@ -448,14 +448,14 @@ class Precipitation(DiagnosticField):
             rain = state.fields('rain')
             rho = state.fields('rho')
             v = state.fields('rainfall_velocity')
-            phi = TestFunction(space)
+            self.phi = TestFunction(space)
             flux = TrialFunction(space)
             n = FacetNormal(state.mesh)
             un = 0.5 * (dot(v, n) + abs(dot(v, n)))
             self.flux = Function(space)
 
-            a = phi * flux * dx
-            L = phi * rain * un * rho
+            a = self.phi * flux * dx
+            L = self.phi * rain * un * rho
             if space.extruded:
                 L = L * (ds_b + ds_t + ds_v)
             else:
@@ -467,7 +467,7 @@ class Precipitation(DiagnosticField):
 
     def compute(self, state):
         self.solver.solve()
-        self.field.assign(self.field + self.flux)
+        self.field.assign(self.field + assemble(self.flux * self.phi * dx))
         return self.field
 
 
