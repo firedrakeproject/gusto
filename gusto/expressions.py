@@ -234,6 +234,21 @@ def e_sat_expr(parameters, T):
     return w_sat4 * exp(-w_sat2 * (T - T_0) / (T - w_sat3))
 
 
+def e_expr(parameters, p, r_v):
+    """
+    Returns an expression for the partial pressure of water vapour
+    from the total pressure and the water vapour mixing ratio.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg p: the pressure in Pa.
+    :arg r_v: the mixing ratio of water vapour.
+    """
+
+    epsilon = parameters.R_d / parameters.R_v
+
+    return p * r_v / (epsilon + r_v)
+
+
 def r_v_expr(parameters, H, T, p):
     """
     Returns an expression for the mixing ratio of water vapour
@@ -245,9 +260,10 @@ def r_v_expr(parameters, H, T, p):
     :arg p: the pressure in Pa.
     """
 
+    epsilon = parameters.R_d / parameters.R_v
     r_sat = r_sat_expr(parameters, T, p)
 
-    return H * r_sat
+    return H * r_sat / (1 + (1 - H) * r_sat / epsilon)
 
 
 def T_d_expr(parameters, p, r_v):

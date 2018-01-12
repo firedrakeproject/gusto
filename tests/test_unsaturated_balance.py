@@ -10,7 +10,7 @@ def setup_unsaturated(dirname):
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 5.
-    deltax = 400
+    deltax = 200
     L = 2000.
     H = 10000.
 
@@ -22,7 +22,7 @@ def setup_unsaturated(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u'])
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u','theta'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = []
@@ -58,20 +58,20 @@ def setup_unsaturated(dirname):
     # Calculate hydrostatic Pi
     unsaturated_hydrostatic_balance(state, theta_d, RH)
 
-    # solve again for water_v
-    quadrature_degree = (4, 4)
-    dxp = dx(degree=(quadrature_degree))
-    w_v = Function(Vt)
-    phi = TestFunction(Vt)
-    pi = pi_expr(state.parameters, rho0, theta0)
-    p = p_expr(state.parameters, pi)
-    T = T_expr(state.parameters, theta0, pi, r_v=w_v)
-    w_sat = r_sat_expr(state.parameters, T, p)
-    w_functional = (phi * w_v * dxp - phi * RH * w_sat * dxp)
-    w_problem = NonlinearVariationalProblem(w_functional, w_v)
-    w_solver = NonlinearVariationalSolver(w_problem)
-    w_solver.solve()
-    water_v0.assign(w_v)
+    # # solve again for water_v
+    # quadrature_degree = (4, 4)
+    # dxp = dx(degree=(quadrature_degree))
+    # w_v = Function(Vt).assign(water_v0)
+    # phi = TestFunction(Vt)
+    # pi = pi_expr(state.parameters, rho0, theta0)
+    # p = p_expr(state.parameters, pi)
+    # T = T_expr(state.parameters, theta0, pi, r_v=w_v)
+    # r_v = r_v_expr(state.parameters, RH, T, p)
+    # w_functional = (phi * w_v * dxp - phi * r_v * dxp)
+    # w_problem = NonlinearVariationalProblem(w_functional, w_v)
+    # w_solver = NonlinearVariationalSolver(w_problem)
+    # w_solver.solve()
+    # water_v0.assign(w_v)
     water_c0.assign(0.0)
 
     state.initialise([('u', u0),
@@ -80,7 +80,8 @@ def setup_unsaturated(dirname):
                       ('water_v', water_v0),
                       ('water_c', water_c0)])
     state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
+                                  ('theta', theta0),
+                                  ('water_v', water_v0)])
 
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
@@ -100,7 +101,7 @@ def setup_unsaturated(dirname):
     compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state, weak=True)]
+    physics_list = []
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
@@ -125,4 +126,4 @@ def test_unsaturated_setup(tmpdir):
     u = data.groups['u']
     umax = u.variables['max']
 
-    assert umax[-1] < 1e-4
+    assert umax[-1] < 1e-12

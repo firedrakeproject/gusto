@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function
-from firedrake import NonlinearVariationalProblem, NonlinearVariationalSolver, TestFunction, dx
+from firedrake import NonlinearVariationalProblem, NonlinearVariationalSolver, TestFunction, dx, FunctionSpace, MixedFunctionSpace, TestFunctions, split
 from os import path
 from netCDF4 import Dataset
 
@@ -25,7 +25,7 @@ def setup_saturated(dirname):
     output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
-    diagnostic_fields = []
+    diagnostic_fields = [Theta_e(), Perturbation("Theta_e")]
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
@@ -54,24 +54,54 @@ def setup_saturated(dirname):
     total_water = Constant(0.02)
     theta_e = Function(Vt).interpolate(Tsurf)
     water_t = Function(Vt).interpolate(total_water)
+    theta_e_bar = state.fields("Theta_ebar", FunctionSpace(mesh, "CG", 1)).interpolate(Tsurf)
 
     # Calculate hydrostatic Pi
     saturated_hydrostatic_balance(state, theta_e, water_t)
 
-    # solve again for water_v
+    # # solve again for water_v
+    # quadrature_degree = (4, 4)
+    # dxp = dx(degree=(quadrature_degree))
+    # w_v = Function(Vt)
+    # phi = TestFunction(Vt)
+    # pi = pi_expr(state.parameters, rho0, theta0)
+    # p = p_expr(state.parameters, pi)
+    # T = T_expr(state.parameters, theta0, pi, r_v=w_v)
+    # w_sat = r_sat_expr(state.parameters, T, p)
+    # w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
+    # w_problem = NonlinearVariationalProblem(w_functional, w_v)
+    # w_solver = NonlinearVariationalSolver(w_problem)
+    # w_solver.solve()
+    # water_v0.assign(w_v)
+    # water_c0.assign(water_t - water_v0)
+
+    # set up mixed space
+    Z = MixedFunctionSpace((Vt, Vt))
+    z = Function(Z)
+    gamma, phi = TestFunctions(Z)
+    theta_v, w_v = z.split()
+    # give first guesses for trial functions
+    theta_v.assign(theta0)
+    w_v.assign(water_v0)
+    theta_v, w_v = split(z)
+    # define variables
+    pi = pi_expr(state.parameters, rho0, theta_v)
+    T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+    p = p_expr(state.parameters, pi)
+    w_sat = r_sat_expr(state.parameters, T, p)
     quadrature_degree = (4, 4)
     dxp = dx(degree=(quadrature_degree))
-    w_v = Function(Vt)
-    phi = TestFunction(Vt)
-    pi = pi_expr(state.parameters, rho0, theta0)
-    p = p_expr(state.parameters, pi)
-    T = T_expr(state.parameters, theta0, pi, r_v=w_v)
-    w_sat = r_sat_expr(state.parameters, T, p)
-    w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
-    w_problem = NonlinearVariationalProblem(w_functional, w_v)
-    w_solver = NonlinearVariationalSolver(w_problem)
-    w_solver.solve()
+    # set up weak form of theta_e and w_sat equations
+    F = (-gamma * theta_e * dxp
+         + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
+         - phi * w_v * dxp
+         + phi * w_sat * dxp)
+    problem = NonlinearVariationalProblem(F, z)
+    solver = NonlinearVariationalSolver(problem)
+    theta_v, w_v = z.split()
+    solver.solve()
     water_v0.assign(w_v)
+    theta0.assign(theta_v)
     water_c0.assign(water_t - water_v0)
 
     state.initialise([('u', u0),
@@ -126,4 +156,4 @@ def test_saturated_setup(tmpdir):
     u = data.groups['u']
     umax = u.variables['max']
 
-    assert umax[-1] < 1e-5
+    assert umax[-1] < 1e-12
