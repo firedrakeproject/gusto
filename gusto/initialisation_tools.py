@@ -277,7 +277,7 @@ def calculate_Pi0(state, theta0, rho0):
 
 def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                                   top=False, pi_boundary=Constant(1.0),
-                                  solve_for_rho=True):
+                                  solve_for_rho=True, solve_for_rho_again=False):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
@@ -373,48 +373,94 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
 
     gamma, phi, psi, w = TestFunctions(Z)
 
-    theta_v, w_v, pi, v = z.split()
-
-    # use previous values as first guesses for newton solver
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-    pi.assign(Pi)
-
-    theta_v, w_v, pi, v = split(z)
-
-    # define variables
-    T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
-    p = p_expr(state.parameters, pi)
-    w_sat = r_sat_expr(state.parameters, T, p)
-
-    F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp
-         + cp * inner(v, w) * dxp
-         - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
-         + psi * div(theta_v * v / (1.0 + water_t)) * dxp
-         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * bmeasure
-         + g * inner(w, state.k) * dxp)
-
-    bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
-
-    problem = NonlinearVariationalProblem(F, z, bcs=bcs)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
-
-    solver.solve()
-
-    theta_v, w_v, pi, v = z.split()
-
-    # assign final values
-    theta0.assign(theta_v)
-    water_v0.assign(w_v)
-
-    if pi0 is not None:
-        pi0.assign(pi)
-
-    # find rho
     if solve_for_rho:
+
+        theta_v, w_v, rho, v = z.split()
+
+        # use previous values as first guesses for newton solver
+        theta_v.assign(theta0)
+        w_v.assign(water_v0)
+        rho.interpolate(rho_expr(state.parameters, theta0, Pi))
+
+        theta_v, w_v, rho, v = split(z)
+        
+        # define variables
+        pi = pi_expr(state.parameters, rho, theta_v)
+        T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+        p = p_expr(state.parameters, pi)
+        w_sat = r_sat_expr(state.parameters, T, p)
+
+        F = (-gamma * theta_e * dxp
+             + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
+             - phi * w_v * dxp
+             + phi * w_sat * dxp
+             + cp * inner(v, w) * dxp
+             - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
+             + psi * div(theta_v * v / (1.0 + water_t)) * dxp
+             + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * bmeasure
+             + g * inner(w, state.k) * dxp)
+
+        bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
+
+        problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+
+        solver.solve()
+
+        theta_v, w_v, rho, v = z.split()
+
+        # assign final values
+        rho0.assign(rho)
+        theta0.assign(theta_v)
+        water_v0.assign(w_v)
+
+        if pi0 is not None:
+            pi0.assign(pi)
+
+    else:
+        
+        theta_v, w_v, pi, v = z.split()
+
+        # use previous values as first guesses for newton solver
+        theta_v.assign(theta0)
+        w_v.assign(water_v0)
+        pi.interpolate(pi_expr(state.parameters, rho0, theta0))
+
+        theta_v, w_v, pi, v = split(z)
+        
+        # define variables
+        T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+        p = p_expr(state.parameters, pi)
+        w_sat = r_sat_expr(state.parameters, T, p)
+
+        F = (-gamma * theta_e * dxp
+             + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
+             - phi * w_v * dxp
+             + phi * w_sat * dxp
+             + cp * inner(v, w) * dxp
+             - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
+             + psi * div(theta_v * v / (1.0 + water_t)) * dxp
+             + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * bmeasure
+             + g * inner(w, state.k) * dxp)
+
+        bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
+
+        problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+
+        solver.solve()
+
+        theta_v, w_v, pi, v = z.split()
+
+        # assign final values
+        theta0.assign(theta_v)
+        water_v0.assign(w_v)
+
+        if pi0 is not None:
+            pi0.assign(pi)
+       
+    # find rho
+    if solve_for_rho_again:
         compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                          pi_boundary=pi_boundary,
                                          water_t=water_t, solve_for_rho=True)
@@ -424,7 +470,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                     top=False, pi_boundary=Constant(1.0),
-                                    solve_for_rho=True):
+                                    solve_for_rho=True, solve_for_rho_again=False):
     """
     Given vertical profiles for dry potential temperature
     and relative humiditym compute hydrostatically balanced
@@ -523,48 +569,93 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
 
     gamma, phi, psi, w = TestFunctions(Z)
 
-    theta_v, w_v, pi, v = z.split()
+    if solve_for_rho:
+    
+        theta_v, w_v, rho, v = z.split()
 
-    # use previous values as first guesses for newton solver
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-    pi.assign(Pi)
+        # use previous values as first guesses for newton solver
+        theta_v.assign(theta0)
+        w_v.assign(water_v0)
+        rho.interpolate(rho_expr(state.parameters, theta0, Pi))
 
-    theta_v, w_v, pi, v = split(z)
+        theta_v, w_v, rho, v = split(z)
 
-    # define variables
-    T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
-    p = p_expr(state.parameters, pi)
-    r_v = r_v_expr(state.parameters, H, T, p)
+        # define variables
+        pi = pi_expr(state.parameters, rho, theta_v)
+        T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+        p = p_expr(state.parameters, pi)
+        r_v = r_v_expr(state.parameters, H, T, p)
 
-    F = (-gamma * theta_v * dxp
-         + gamma * theta_d * (1 + w_v * R_v / R_d) * dxp
-         - phi * w_v * dxp
-         + phi * r_v * dxp
-         + cp * inner(v, w) * dxp
-         - cp * div(w * theta_v / (1.0 + w_v)) * pi * dxp
-         + psi * div(theta_v * v / (1.0 + w_v)) * dxp
-         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + w_v) * bmeasure
-         + g * inner(w, state.k) * dxp)
+        F = (-gamma * theta_v * dxp
+             + gamma * theta_d * (1 + w_v * R_v / R_d) * dxp
+             - phi * w_v * dxp
+             + phi * r_v * dxp
+             + cp * inner(v, w) * dxp
+             - cp * div(w * theta_v / (1.0 + w_v)) * pi * dxp
+             + psi * div(theta_v * v / (1.0 + w_v)) * dxp
+             + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + w_v) * bmeasure
+             + g * inner(w, state.k) * dxp)
 
-    bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
+        bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
 
-    problem = NonlinearVariationalProblem(F, z, bcs=bcs)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+        problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=params)
 
-    solver.solve()
+        solver.solve()
 
-    theta_v, w_v, pi, v = z.split()
+        theta_v, w_v, rho, v = z.split()
 
-    # assign final values
-    theta0.assign(theta_v)
-    water_v0.assign(w_v)
+        # assign final values
+        rho0.assign(rho)
+        theta0.assign(theta_v)
+        water_v0.assign(w_v)
 
-    if pi0 is not None:
-        pi0.assign(pi)
+        if pi0 is not None:
+            pi0.assign(pi)
+
+    else:
+        theta_v, w_v, pi, v = z.split()
+
+        # use previous values as first guesses for newton solver
+        theta_v.assign(theta0)
+        w_v.assign(water_v0)
+        pi.interpolate(pi_expr(state.parameters, rho0, theta0))
+
+        theta_v, w_v, pi, v = split(z)
+
+        # define variables
+        T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
+        p = p_expr(state.parameters, pi)
+        r_v = r_v_expr(state.parameters, H, T, p)
+
+        F = (-gamma * theta_v * dxp
+             + gamma * theta_d * (1 + w_v * R_v / R_d) * dxp
+             - phi * w_v * dxp
+             + phi * r_v * dxp
+             + cp * inner(v, w) * dxp
+             - cp * div(w * theta_v / (1.0 + w_v)) * pi * dxp
+             + psi * div(theta_v * v / (1.0 + w_v)) * dxp
+             + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + w_v) * bmeasure
+             + g * inner(w, state.k) * dxp)
+
+        bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
+
+        problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+
+        solver.solve()
+
+        theta_v, w_v, pi, v = z.split()
+
+        # assign final values
+        theta0.assign(theta_v)
+        water_v0.assign(w_v)
+
+        if pi0 is not None:
+            pi0.assign(pi)
 
     # find rho
-    if solve_for_rho:
+    if solve_for_rho_again:
         compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                          pi_boundary=pi_boundary,
                                          water_t=water_v0, solve_for_rho=True)

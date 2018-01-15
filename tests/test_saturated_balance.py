@@ -7,6 +7,12 @@ from netCDF4 import Dataset
 
 def setup_saturated(dirname):
 
+    solve_for_rho = True
+    solve_again_for_rho = True
+    solve_again_for_water_v = False
+    weak_condensation = True
+    condensation_off = False
+
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
@@ -22,7 +28,7 @@ def setup_saturated(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
+    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u','rho','theta'], perturbation_fields=['rho','theta','water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [Theta_e(), Perturbation("Theta_e")]
@@ -57,51 +63,24 @@ def setup_saturated(dirname):
     theta_e_bar = state.fields("Theta_ebar", FunctionSpace(mesh, "CG", 1)).interpolate(Tsurf)
 
     # Calculate hydrostatic Pi
-    saturated_hydrostatic_balance(state, theta_e, water_t)
+    saturated_hydrostatic_balance(state, theta_e, water_t, solve_for_rho=solve_for_rho, solve_for_rho_again=solve_again_for_rho)
 
-    # # solve again for water_v
-    # quadrature_degree = (4, 4)
-    # dxp = dx(degree=(quadrature_degree))
-    # w_v = Function(Vt)
-    # phi = TestFunction(Vt)
-    # pi = pi_expr(state.parameters, rho0, theta0)
-    # p = p_expr(state.parameters, pi)
-    # T = T_expr(state.parameters, theta0, pi, r_v=w_v)
-    # w_sat = r_sat_expr(state.parameters, T, p)
-    # w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
-    # w_problem = NonlinearVariationalProblem(w_functional, w_v)
-    # w_solver = NonlinearVariationalSolver(w_problem)
-    # w_solver.solve()
-    # water_v0.assign(w_v)
-    # water_c0.assign(water_t - water_v0)
+    if solve_again_for_water_v:
+        # solve again for water_v
+        quadrature_degree = (4, 4)
+        dxp = dx(degree=(quadrature_degree))
+        w_v = Function(Vt)
+        phi = TestFunction(Vt)
+        pi = pi_expr(state.parameters, rho0, theta0)
+        p = p_expr(state.parameters, pi)
+        T = T_expr(state.parameters, theta0, pi, r_v=w_v)
+        w_sat = r_sat_expr(state.parameters, T, p)
+        w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
+        w_problem = NonlinearVariationalProblem(w_functional, w_v)
+        w_solver = NonlinearVariationalSolver(w_problem)
+        w_solver.solve()
+        water_v0.assign(w_v)
 
-    # set up mixed space
-    Z = MixedFunctionSpace((Vt, Vt))
-    z = Function(Z)
-    gamma, phi = TestFunctions(Z)
-    theta_v, w_v = z.split()
-    # give first guesses for trial functions
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-    theta_v, w_v = split(z)
-    # define variables
-    pi = pi_expr(state.parameters, rho0, theta_v)
-    T = T_expr(state.parameters, theta_v, pi, r_v=w_v)
-    p = p_expr(state.parameters, pi)
-    w_sat = r_sat_expr(state.parameters, T, p)
-    quadrature_degree = (4, 4)
-    dxp = dx(degree=(quadrature_degree))
-    # set up weak form of theta_e and w_sat equations
-    F = (-gamma * theta_e * dxp
-         + gamma * theta_e_expr(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp)
-    problem = NonlinearVariationalProblem(F, z)
-    solver = NonlinearVariationalSolver(problem)
-    theta_v, w_v = z.split()
-    solver.solve()
-    water_v0.assign(w_v)
-    theta0.assign(theta_v)
     water_c0.assign(water_t - water_v0)
 
     state.initialise([('u', u0),
@@ -131,7 +110,10 @@ def setup_saturated(dirname):
     compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state, weak=True)]
+    if condensation_off:
+        physics_list = []
+    else:
+        physics_list = [Condensation(state, weak=weak_condensation)]
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
@@ -155,5 +137,16 @@ def test_saturated_setup(tmpdir):
 
     u = data.groups['u']
     umax = u.variables['max']
+    theta_e = data.groups['Theta_e_perturbation']
+    theta_e_max = theta_e.variables['max']
+    theta_e_min = theta_e.variables['min']
+    water_v = data.groups['water_v_perturbation']
+    w_v_max = water_v.variables['max']
+    w_v_min = water_v.variables['min']
+
+    max_theta = max(abs(theta_e_max[-1]), abs(theta_e_min[-1]))
+    max_w_v = max(abs(w_v_max[-1]), abs(w_v_min[-1]))
+
+    print(umax[-1], max_theta, max_w_v)
 
     assert umax[-1] < 1e-12

@@ -1,15 +1,21 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function
-from firedrake import dx, NonlinearVariationalSolver, NonlinearVariationalProblem, TestFunction
+from firedrake import dx, NonlinearVariationalSolver, NonlinearVariationalProblem, TestFunction, FunctionSpace
 from os import path
 from netCDF4 import Dataset
 
 
 def setup_unsaturated(dirname):
 
+    solve_for_rho = True
+    solve_again_for_rho = True
+    solve_again_for_water_v = False
+    weak_condensation = True
+    condensation_off = False
+    
     # set up grid and time stepping parameters
     dt = 1.
-    tmax = 5.
+    tmax = 6.
     deltax = 200
     L = 2000.
     H = 10000.
@@ -22,10 +28,10 @@ def setup_unsaturated(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u','theta'], perturbation_fields=['water_v'])
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u','rho','theta'], perturbation_fields=['theta','water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
-    diagnostic_fields = []
+    diagnostic_fields = [Theta_d(), Perturbation("Theta_d"), RelativeHumidity(), Perturbation("RelativeHumidity")]
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
@@ -54,24 +60,27 @@ def setup_unsaturated(dirname):
     humidity = Constant(0.5)
     theta_d = Function(Vt).interpolate(Tsurf)
     RH = Function(Vt).interpolate(humidity)
+    theta_d_bar = state.fields("Theta_dbar", FunctionSpace(mesh, "CG", 1)).interpolate(Tsurf)
+    RH_bar = state.fields("RelativeHumiditybar", FunctionSpace(mesh, "CG", 1)).interpolate(humidity)
 
     # Calculate hydrostatic Pi
-    unsaturated_hydrostatic_balance(state, theta_d, RH)
-
-    # # solve again for water_v
-    # quadrature_degree = (4, 4)
-    # dxp = dx(degree=(quadrature_degree))
-    # w_v = Function(Vt).assign(water_v0)
-    # phi = TestFunction(Vt)
-    # pi = pi_expr(state.parameters, rho0, theta0)
-    # p = p_expr(state.parameters, pi)
-    # T = T_expr(state.parameters, theta0, pi, r_v=w_v)
-    # r_v = r_v_expr(state.parameters, RH, T, p)
-    # w_functional = (phi * w_v * dxp - phi * r_v * dxp)
-    # w_problem = NonlinearVariationalProblem(w_functional, w_v)
-    # w_solver = NonlinearVariationalSolver(w_problem)
-    # w_solver.solve()
-    # water_v0.assign(w_v)
+    unsaturated_hydrostatic_balance(state, theta_d, RH, solve_for_rho=solve_for_rho, solve_for_rho_again=solve_again_for_rho)
+    
+    if solve_again_for_water_v:
+        # solve again for water_v
+        quadrature_degree = (4, 4)
+        dxp = dx(degree=(quadrature_degree))
+        w_v = Function(Vt)
+        phi = TestFunction(Vt)
+        pi = pi_expr(state.parameters, rho0, theta0)
+        p = p_expr(state.parameters, pi)
+        T = T_expr(state.parameters, theta0, pi, r_v=w_v)
+        r_v = r_v_expr(state.parameters, RH, T, p)
+        w_functional = (phi * w_v * dxp - phi * r_v * dxp)
+        w_problem = NonlinearVariationalProblem(w_functional, w_v)
+        w_solver = NonlinearVariationalSolver(w_problem)
+        w_solver.solve()
+        water_v0.assign(w_v)
     water_c0.assign(0.0)
 
     state.initialise([('u', u0),
@@ -101,7 +110,10 @@ def setup_unsaturated(dirname):
     compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # Set up physics
-    physics_list = []
+    if condensation_off:
+        physics_list = []
+    else:
+        physics_list = [Condensation(state, weak=weak_condensation)]
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
@@ -125,5 +137,16 @@ def test_unsaturated_setup(tmpdir):
 
     u = data.groups['u']
     umax = u.variables['max']
+    theta_d = data.groups['Theta_d_perturbation']
+    theta_d_max = theta_d.variables['max']
+    theta_d_min = theta_d.variables['min']
+    water_v = data.groups['water_v_perturbation']
+    w_v_max = water_v.variables['max']
+    w_v_min = water_v.variables['min']
+
+    max_theta = max(abs(theta_d_max[-1]), abs(theta_d_min[-1]))
+    max_w_v = max(abs(w_v_max[-1]), abs(w_v_min[-1]))
+
+    print(umax[-1], max_theta, max_w_v)
 
     assert umax[-1] < 1e-12

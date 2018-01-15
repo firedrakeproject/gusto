@@ -7,7 +7,7 @@ from gusto.expressions import T_expr, p_expr, pi_expr, theta_e_expr, I_expr, T_d
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
 
 
 class Diagnostics(object):
@@ -334,6 +334,22 @@ class Temperature(DiagnosticField):
         pi = pi_expr(state.parameters, rho, theta)
 
         return self.field.interpolate(T_expr(state.parameters, theta, pi, r_v=w_v))
+
+
+class Theta_d(DiagnosticField):
+    name = "Theta_d"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Theta_d, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        w_v = state.fields('water_v')
+        epsilon = state.parameters.R_d / state.parameters.R_v
+
+        return self.field.interpolate(theta / (1 + w_v / epsilon))
 
 
 class RelativeHumidity(DiagnosticField):
