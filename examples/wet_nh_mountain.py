@@ -128,7 +128,7 @@ alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
 print(pi_top)
-saturated_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.9, solve_for_rho=True)
+saturated_hydrostatic_balance(state, theta_e, water_t, pi0=Pi, top=True, pi_boundary=0.9)
 
 u0.project(as_vector([10.0, 0.0]))
 remove_initial_w(u0, state.Vv)

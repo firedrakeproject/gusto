@@ -97,7 +97,7 @@ class Condensation(Physics):
             dot_r_cond = Function(Vt)
             phi = TestFunction(Vt)
             quadrature_degree = (4, 4)
-            dxp = dx(degree=(quadrature_degree)) 
+            dxp = dx(degree=(quadrature_degree))
             cond_rate_functional = (phi * dot_r_cond * dxp
                                     - phi * cond_rate_expr * dxp)
             cond_rate_problem = NonlinearVariationalProblem(cond_rate_functional, dot_r_cond)
