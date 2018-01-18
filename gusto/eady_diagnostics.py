@@ -4,7 +4,7 @@ from firedrake import SpatialCoordinate, TrialFunction, \
     FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
     as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
     sqrt, jump, FacetNormal
-from gusto.expressions import pi_expr
+from gusto import thermodynamics
 from gusto.diagnostics import DiagnosticField, Energy
 
 
@@ -60,7 +60,7 @@ class CompressibleEadyPotentialEnergy(Energy):
 
         rho = state.fields("rho")
         theta = state.fields("theta")
-        Pi = pi_expr(state.parameters, rho, theta)
+        Pi = thermodynamics.pi(state.parameters, rho, theta)
 
         potential = rho*(g*z + cv*Pi*theta - cp*Pi0*theta)
         return self.field.interpolate(potential)

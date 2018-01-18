@@ -3,15 +3,14 @@ Some thermodynamic expressions to help declutter the code.
 """
 from firedrake import exp, ln
 
+__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv_expr", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_d"]
 
-__all__ = ["theta_expr", "pi_expr", "pi_rho_expr", "pi_theta_expr", "p_expr", "T_expr", "rho_expr", "r_sat_expr", "Lv_expr", "theta_e_expr", "I_expr", "RH_expr", "e_sat_expr", "r_v_expr", "T_d_expr"]
 
-
-def theta_expr(parameters, T, p):
+def theta(parameters, T, p):
     """
     Returns an expression for dry potential temperature theta in K.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg T: temperature in K.
     :arg p: pressure in Pa.
     """
@@ -22,11 +21,11 @@ def theta_expr(parameters, T, p):
     return T * (p_0 / p) ** kappa
 
 
-def pi_expr(parameters, rho, theta_v):
+def pi(parameters, rho, theta_v):
     """
     Returns an expression for the Exner pressure.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg rho: the dry density of air in kg / m^3.
     :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
@@ -39,12 +38,12 @@ def pi_expr(parameters, rho, theta_v):
     return (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa))
 
 
-def pi_rho_expr(parameters, rho, theta_v):
+def pi_rho(parameters, rho, theta_v):
     """
     Returns an expression for the derivative of Exner pressure
     with respect to density.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg rho: the dry density of air in kg / m^3.
     :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
@@ -57,12 +56,12 @@ def pi_rho_expr(parameters, rho, theta_v):
     return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / rho
 
 
-def pi_theta_expr(parameters, rho, theta_v):
+def pi_theta(parameters, rho, theta_v):
     """
     Returns an expression for the deriavtive of Exner pressure
     with respect to potential temperature.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg rho: the dry density of air in kg / m^3.
     :arg theta: the potential temperature (or the virtual
                 potential temperature for wet air), in K.
@@ -75,11 +74,11 @@ def pi_theta_expr(parameters, rho, theta_v):
     return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / theta_v
 
 
-def p_expr(parameters, pi):
+def p(parameters, pi):
     """
     Returns an expression for the pressure in Pa from the Exner Pi.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg pi: the Exner pressure.
     """
 
@@ -89,11 +88,11 @@ def p_expr(parameters, pi):
     return p_0 * pi ** (1 / kappa)
 
 
-def T_expr(parameters, theta_v, pi, r_v=None):
+def T(parameters, theta_v, pi, r_v=None):
     """
     Returns an expression for temperature T in K.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg theta_v: the virtual potential temperature in K.
     :arg pi: the Exner pressure.
     :arg r_v: the mixing ratio of water vapour.
@@ -110,12 +109,12 @@ def T_expr(parameters, theta_v, pi, r_v=None):
         return theta_v * pi
 
 
-def rho_expr(parameters, theta_v, pi):
+def rho(parameters, theta_v, pi):
     """
     Returns an expression for the dry density rho in kg / m^3
     from the (virtual) potential temperature and Exner pressure.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg theta_v: the virtual potential temperature in K.
     :arg pi: the Exner pressure.
     """
@@ -127,12 +126,12 @@ def rho_expr(parameters, theta_v, pi):
     return p_0 * pi ** (1 / kappa - 1) / (R_d * theta_v)
 
 
-def r_sat_expr(parameters, T, p):
+def r_sat(parameters, T, p):
     """
     Returns an expression from Tetens' formula for the
     saturation mixing ratio of water vapour.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg T: the temperature in K.
     :arg p: the pressure in Pa.
     """
@@ -146,11 +145,11 @@ def r_sat_expr(parameters, T, p):
     return w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
 
 
-def Lv_expr(parameters, T):
+def Lv(parameters, T):
     """
     Returns an expression for the latent heat of vaporisation of water.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg T: the temperature in K.
     """
 
@@ -162,11 +161,11 @@ def Lv_expr(parameters, T):
     return L_v0 - (c_pl - c_pv) * (T - T_0)
 
 
-def theta_e_expr(parameters, T, p, r_v, r_t):
+def theta_e(parameters, T, p, r_v, r_t):
     """
     Returns an expression for the wet equivalent potential temperature in K.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg T: the temperature in K.
     :arg p: the pressure in Pa.
     :arg r_v: the mixing ratio of water vapour.
@@ -178,16 +177,16 @@ def theta_e_expr(parameters, T, p, r_v, r_t):
     p_0 = parameters.p_0
     cp = parameters.cp
     c_pl = parameters.c_pl
-    Lv = Lv_expr(parameters, T)
+    L_v = Lv(parameters, T)
 
-    return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(Lv * r_v / (T * (cp + c_pl * r_t)))
+    return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(L_v * r_v / (T * (cp + c_pl * r_t)))
 
 
-def I_expr(parameters, rho, T, r_v=0.0, r_l=0.0):
+def internal_energy(parameters, rho, T, r_v=0.0, r_l=0.0):
     """
     Returns an expression for the (possibly wet) internal energy density in J.
 
-    :arg parameters: an OutputParameters object.
+    :arg parameters: a CompressibleParameters object.
     :arg rho: the dry density in kg / m^3.
     :arg T: the temperature in K.
     :arg r_v: the mixing ratio of water vapour.
@@ -197,12 +196,12 @@ def I_expr(parameters, rho, T, r_v=0.0, r_l=0.0):
     cv = parameters.cv
     c_vv = parameters.c_vv
     c_pv = parameters.c_pv
-    Lv = Lv_expr(parameters, T)
+    L_v = Lv(parameters, T)
 
-    return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - Lv))
+    return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - L_v))
 
 
-def RH_expr(parameters, r_v, T, p):
+def RH(parameters, r_v, T, p):
     """
     Returns an expression for the relative humidity.
 
@@ -212,12 +211,12 @@ def RH_expr(parameters, r_v, T, p):
     :arg p: the pressure in Pa.
     """
 
-    r_sat = r_sat_expr(parameters, T, p)
+    rsat = r_sat(parameters, T, p)
 
-    return r_v / r_sat
+    return r_v / rsat
 
 
-def e_sat_expr(parameters, T):
+def e_sat(parameters, T):
     """
     Returns an expression for the saturated partial pressure
     of water vapour as a function of T, based on Tetens' formula.
@@ -234,7 +233,7 @@ def e_sat_expr(parameters, T):
     return w_sat4 * exp(-w_sat2 * (T - T_0) / (T - w_sat3))
 
 
-def e_expr(parameters, p, r_v):
+def e(parameters, p, r_v):
     """
     Returns an expression for the partial pressure of water vapour
     from the total pressure and the water vapour mixing ratio.
@@ -249,7 +248,7 @@ def e_expr(parameters, p, r_v):
     return p * r_v / (epsilon + r_v)
 
 
-def r_v_expr(parameters, H, T, p):
+def r_v(parameters, H, T, p):
     """
     Returns an expression for the mixing ratio of water vapour
     from the relative humidity, pressure and temperature.
@@ -261,12 +260,12 @@ def r_v_expr(parameters, H, T, p):
     """
 
     epsilon = parameters.R_d / parameters.R_v
-    r_sat = r_sat_expr(parameters, T, p)
+    rsat = r_sat(parameters, T, p)
 
-    return H * r_sat / (1 + (1 - H) * r_sat / epsilon)
+    return H * rsat / (1 + (1 - H) * rsat / epsilon)
 
 
-def T_d_expr(parameters, p, r_v):
+def T_dew(parameters, p, r_v):
     """
     Returns the dewpoint temperature as a function of
     temperature and the water vapour mixing ratio.

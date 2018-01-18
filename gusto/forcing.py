@@ -4,7 +4,7 @@ from firedrake import Function, split, TrialFunction, TestFunction, \
     DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
     dot, dS, Constant, as_vector, SpatialCoordinate
 from gusto.configuration import logger, DEBUG
-from gusto.expressions import pi_expr
+from gusto import thermodynamics
 
 
 __all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing"]
@@ -170,7 +170,7 @@ class CompressibleForcing(Forcing):
                 water_t += self.state.fields(water)
             theta = theta / (1 + water_t)
 
-        pi = pi_expr(self.state.parameters, rho0, theta0)
+        pi = thermodynamics.pi(self.state.parameters, rho0, theta0)
 
         L = (
             + cp*div(theta*self.test)*pi*dx
@@ -357,7 +357,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         cp = self.state.parameters.cp
 
         _, rho0, theta0 = split(self.x0)
-        Pi = pi_expr(self.state.parameters, rho0, theta0)
+        Pi = thermodynamics.pi(self.state.parameters, rho0, theta0)
         Pi_0 = Constant(Pi0)
 
         L += self.scaling*cp*dthetady*(Pi-Pi_0)*inner(self.test, as_vector([0., 1., 0.]))*dx  # Eady forcing

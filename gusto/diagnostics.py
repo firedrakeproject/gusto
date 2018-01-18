@@ -3,7 +3,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     div, avg, jump, FacetNormal, dS_v, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
 from abc import ABCMeta, abstractmethod, abstractproperty
-from gusto.expressions import T_expr, p_expr, pi_expr, theta_e_expr, I_expr, T_d_expr, RH_expr
+from gusto import thermodynamics
 import numpy as np
 
 
@@ -257,7 +257,7 @@ class ExnerPi(DiagnosticField):
     def compute(self, state):
         rho = state.fields(self.rho_name)
         theta = state.fields(self.theta_name)
-        Pi = pi_expr(state.parameters, rho, theta)
+        Pi = thermodynamics.pi(state.parameters, rho, theta)
         return self.field.interpolate(Pi)
 
 
@@ -275,11 +275,11 @@ class Theta_e(DiagnosticField):
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         w_t = w_c + w_v
-        pi = pi_expr(state.parameters, rho, theta)
-        p = p_expr(state.parameters, pi)
-        T = T_expr(state.parameters, theta, pi, r_v=w_v)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        p = thermodynamics.p(state.parameters, pi)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
-        return self.field.interpolate(theta_e_expr(state.parameters, T, p, w_v, w_t))
+        return self.field.interpolate(thermodynamics.theta_e(state.parameters, T, p, w_v, w_t))
 
 
 class InternalEnergy(DiagnosticField):
@@ -295,10 +295,10 @@ class InternalEnergy(DiagnosticField):
         rho = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
-        pi = pi_expr(state.parameters, rho, theta)
-        T = T_expr(state.parameters, theta, pi, r_v=w_v)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
-        return self.field.interpolate(I_expr(state.parameters, rho, T, r_v=w_v, r_l=w_c))
+        return self.field.interpolate(thermodynamics.internal_energy(state.parameters, rho, T, r_v=w_v, r_l=w_c))
 
 
 class Dewpoint(DiagnosticField):
@@ -313,10 +313,10 @@ class Dewpoint(DiagnosticField):
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
-        pi = pi_expr(state.parameters, rho, theta)
-        p = p_expr(state.parameters, pi)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        p = thermodynamics.p(state.parameters, pi)
 
-        return self.field.interpolate(T_d_expr(state.parameters, p, w_v))
+        return self.field.interpolate(thermodynamics.T_dew(state.parameters, p, w_v))
 
 
 class Temperature(DiagnosticField):
@@ -331,9 +331,9 @@ class Temperature(DiagnosticField):
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
-        pi = pi_expr(state.parameters, rho, theta)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
 
-        return self.field.interpolate(T_expr(state.parameters, theta, pi, r_v=w_v))
+        return self.field.interpolate(thermodynamics.T(state.parameters, theta, pi, r_v=w_v))
 
 
 class Theta_d(DiagnosticField):
@@ -364,11 +364,11 @@ class RelativeHumidity(DiagnosticField):
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
-        pi = pi_expr(state.parameters, rho, theta)
-        T = T_expr(state.parameters, theta, pi, r_v=w_v)
-        p = p_expr(state.parameters, pi)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
+        p = thermodynamics.p(state.parameters, pi)
 
-        return self.field.interpolate(RH_expr(state.parameters, w_v, T, p))
+        return self.field.interpolate(thermodynamics.RH(state.parameters, w_v, T, p))
 
 
 class HydrostaticImbalance(DiagnosticField):
@@ -382,8 +382,8 @@ class HydrostaticImbalance(DiagnosticField):
             rhobar = state.fields("rhobar")
             theta = state.fields("theta")
             thetabar = state.fields("thetabar")
-            pi = pi_expr(state.parameters, rho, theta)
-            pibar = pi_expr(state.parameters, rhobar, thetabar)
+            pi = thermodynamics.pi(state.parameters, rho, theta)
+            pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
 
             cp = Constant(state.parameters.cp)
             n = FacetNormal(state.mesh)
