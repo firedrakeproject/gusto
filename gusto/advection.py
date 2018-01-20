@@ -1,9 +1,13 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector
+    LinearVariationalSolver, Projector, Interpolator
 from firedrake.utils import cached_property
 from gusto.configuration import DEBUG
 from gusto.transport_equation import EmbeddedDGAdvection
+from firedrake import expression, function
+from firedrake.parloops import par_loop, READ, INC
+import ufl
+import numpy as np
 
 
 __all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
@@ -17,13 +21,16 @@ def embedded_dg(original_apply):
     def get_apply(self, x_in, x_out):
         if self.embedded_dg:
             def new_apply(self, x_in, x_out):
-                # try to interpolate to x_in but revert to projection
-                # if interpolation is not implemented for this
-                # function space
-                try:
-                    self.xdg_in.interpolate(x_in)
-                except NotImplementedError:
-                    self.xdg_in.project(x_in)
+                if self.recovered:
+                    recovered_apply(self, x_in)
+                else:
+                    # try to interpolate to x_in but revert to projection
+                    # if interpolation is not implemented for this
+                    # function space
+                    try:
+                        self.xdg_in.interpolate(x_in)
+                    except NotImplementedError:
+                        self.xdg_in.project(x_in)
                 original_apply(self, self.xdg_in, self.xdg_out)
                 self.Projector.project()
                 x_out.assign(self.x_projected)
@@ -73,17 +80,34 @@ class Advection(object, metaclass=ABCMeta):
         # equation class and we can get the correct function space from
         # the output function.
         if isinstance(equation, EmbeddedDGAdvection):
+            # check that the field and the equation are compatible
+            if not equation.V0.__eq__(field.function_space()):
+                raise ValueError('The field to be advected is not compatible with the equation used.')
             self.embedded_dg = True
             fs = equation.space
-            self.xdg_in = Function(equation.space)
-            self.xdg_out = Function(equation.space)
+            self.xdg_in = Function(fs)
+            self.xdg_out = Function(fs)
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
-            self.xdg_in = Function(fs)
+            self.recovered = equation.recovered
+            if self.recovered:
+                # set up the necessary functions
+                self.x_in = Function(field.function_space())
+                x_adv = Function(fs)
+                x_rec = Function(equation.V_rec)
+                x_brok = Function(equation.V_brok)
+
+                # set up interpolators and projectors
+                self.x_adv_interpolator = Interpolator(self.x_in, x_adv)  # interpolate before recovery
+                self.x_rec_projector = Recoverer(x_adv, x_rec)  # recovered function
+                # when the "average" method comes into firedrake master, this will be
+                # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
+                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
+                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
         else:
             self.embedded_dg = False
             fs = field.function_space()
@@ -300,3 +324,82 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
+
+
+def recovered_apply(self, x_in):
+    """
+    Extra steps to the apply method for the recovered advection scheme.
+
+    :arg x_in: the input set of prognostic fields.
+    """
+    self.x_in.assign(x_in)
+    self.x_adv_interpolator.interpolate()
+    self.x_rec_projector.project()
+    self.x_brok_projector.project()
+    self.xdg_interpolator.interpolate()
+
+
+class Recoverer(object):
+    """
+    A temporary piece of code that replicates the action of the
+    Firedrake Projector object, using the "average" method.
+    This can be removed when this method comes into the master branch.
+
+    :arg v: the :class:`ufl.Expr` or
+         :class:`.Function` to project.
+    :arg v_out: :class:`.Function` to put the result in.
+    """
+
+    def __init__(self, v, v_out):
+
+        if isinstance(v, expression.Expression) or not isinstance(v, (ufl.core.expr.Expr, function.Function)):
+            raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v))
+
+        # Check shape values
+        if v.ufl_shape != v_out.ufl_shape:
+            raise RuntimeError('Shape mismatch between source %s and target function spaces %s in project' % (v.ufl_shape, v_out.ufl_shape))
+
+        self._same_fspace = (isinstance(v, function.Function) and v.function_space() == v_out.function_space())
+        self.v = v
+        self.v_out = v_out
+        self.V = v_out.function_space()
+
+        # Check the number of local dofs
+        if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
+            raise RuntimeError("Number of local dofs for each field must be equal.")
+
+        # NOTE: Any bcs on the function self.v should just work.
+        # Loop over node extent and dof extent
+        self._shapes = (self.V.finat_element.space_dimension(), np.prod(self.V.shape))
+        self._average_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        vo[i][j] += v[i][j]/w[i][j];
+        }}""" % self._shapes
+
+    @cached_property
+    def _weighting(self):
+        """
+        Generates a weight function for computing a projection via averaging.
+        """
+        w = Function(self.V)
+        weight_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        w[i][j] += 1.0;
+        }}""" % self._shapes
+
+        par_loop(weight_kernel, ufl.dx, {"w": (w, INC)})
+        return w
+
+    def project(self):
+        """
+        Apply the recovery.
+        """
+
+        # Ensure that the function being populated is zeroed out
+        self.v_out.dat.zero()
+        par_loop(self._average_kernel, ufl.dx, {"vo": (self.v_out, INC),
+                                                "w": (self._weighting, READ),
+                                                "v": (self.v, READ)})
+        return self.v_out
