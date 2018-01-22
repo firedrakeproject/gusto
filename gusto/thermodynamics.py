@@ -3,7 +3,7 @@ Some thermodynamic expressions to help declutter the code.
 """
 from firedrake import exp, ln
 
-__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv_expr", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_d"]
+__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_dew"]
 
 
 def theta(parameters, T, p):

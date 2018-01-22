@@ -306,6 +306,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
     quadrature_degree = (4, 4)
+    dxp = dx(degree=(quadrature_degree))
 
     params = {'ksp_type': 'preonly',
               'ksp_monitor_true_residual': True,
@@ -327,43 +328,9 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    # set up mixed space
-    Z = MixedFunctionSpace((Vt, Vt))
-    z = Function(Z)
-
-    gamma, phi = TestFunctions(Z)
-
-    theta_v, w_v = z.split()
-
-    # give first guesses for trial functions
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-
-    theta_v, w_v = split(z)
-
-    # define variables
-    T = thermodynamics.T(state.parameters, theta_v, Pi, r_v=w_v)
-    p = thermodynamics.p(state.parameters, Pi)
-    w_sat = thermodynamics.r_sat(state.parameters, T, p)
-
-    dxp = dx(degree=(quadrature_degree))
-
-    # set up weak form of theta_e and w_sat equations
-    F = (-gamma * theta_e * dxp
-         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp)
-
-    problem = NonlinearVariationalProblem(F, z)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
-
-    theta_v, w_v = z.split()
-
-    # solve for Pi with theta_v and w_v constant
-    # then solve for theta_v and w_v with Pi constant
+    # solve for Pi with theta_v and w_v guesses
     compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi, top=top,
                                      pi_boundary=pi_boundary, water_t=water_t)
-    solver.solve()
 
     # now begin on Newton solver, setup up new mixed space
     Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
@@ -451,6 +418,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
     quadrature_degree = (4, 4)
+    dxp = dx(degree=(quadrature_degree))
 
     params = {'ksp_type': 'preonly',
               'ksp_monitor_true_residual': True,
@@ -473,43 +441,9 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    # set up mixed space
-    Z = MixedFunctionSpace((Vt, Vt))
-    z = Function(Z)
-
-    gamma, phi = TestFunctions(Z)
-
-    theta_v, w_v = z.split()
-
-    # give first guesses for trial functions
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-
-    theta_v, w_v = split(z)
-
-    # define variables
-    T = thermodynamics.T(state.parameters, theta_v, Pi, r_v=w_v)
-    p = thermodynamics.p(state.parameters, Pi)
-    r_v = thermodynamics.r_v(state.parameters, H, T, p)
-
-    dxp = dx(degree=(quadrature_degree))
-
-    # set up weak form of theta_e and w_sat equations
-    F = (-gamma * theta_v * dxp
-         + gamma * theta_d * (1 + w_v * R_v / R_d) * dxp
-         - phi * w_v * dxp
-         + phi * r_v * dxp)
-
-    problem = NonlinearVariationalProblem(F, z)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
-
-    theta_v, w_v = z.split()
-
-    # solve for Pi with theta_v and w_v constant
-    # then solve for theta_v and w_v with Pi constant
+    # solve for Pi with theta_v and w_v guesses
     compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi, top=top,
                                      pi_boundary=pi_boundary, water_t=water_v0)
-    solver.solve()
 
     # now begin on Newton solver, setup up new mixed space
     Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
