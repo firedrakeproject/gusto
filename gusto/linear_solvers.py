@@ -2,8 +2,8 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, ds_v, ds_tb, inner, dot, grad, \
-    Function, VectorSpaceBasis, \
-    Projector, assemble, LinearSolver, Tensor, BrokenElement
+    Function, VectorSpaceBasis, BrokenElement, \
+    Projector, assemble, LinearSolver, Tensor, AssembledVector
 from firedrake.solving_utils import flatten_parameters
 
 from gusto.configuration import DEBUG
@@ -341,10 +341,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             - beta*cp*div(theta*V(w))*pibar*dxp
             - beta*cp*div(thetabar*w)*pi*dxp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-            + beta*inner(phi*u, n)*rhobar_tr*(dS_v + dS_h)
+            + beta*jump(phi*u, n=n)*rhobar_tr('+')*(dS_v + dS_h)
         )
+
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
+
         Aop = Tensor(lhs(Aeqn))
         Arhs = rhs(Aeqn)
 
@@ -353,11 +355,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         dl = dl('+')
         l0 = l0('+')
-
-        K = Tensor(beta*cp*inner(thetabar*w, n)*l0*(dS_vp + dS_hp)
+        K = Tensor(beta*cp*jump(thetabar*w, n=n)*l0*(dS_vp + dS_hp)
                    + beta*cp*inner(thetabar*w, n)*l0*ds_vp
                    + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
-        L = Tensor(dl*inner(u, n)*(dS_vp + dS_hp)
+        L = Tensor(dl*jump(u, n=n)*(dS_vp + dS_hp)
                    + dl*inner(u, n)*ds_vp
                    + dl*inner(u, n)*ds_tbp)
 
@@ -377,13 +378,13 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Reconstruction of broken u and rho
-        self.ASolver = LinearSolver(assemble(Aop),
+        self.ASolver = LinearSolver(assemble(lhs(Aeqn)),
                                     solver_parameters={'ksp_type': 'preonly',
                                                        'pc_type': 'bjacobi',
                                                        'pc_sub_type': 'lu'},
                                     options_prefix='urhoreconstruction')
         # Rhs for broken u and rho reconstruction
-        self.Rurhoexp = -K*self.lambdar + Tensor(Arhs)
+        self.Rurhoexp = -K * AssembledVector(self.lambdar) + Tensor(Arhs)
         self.Rurho = Function(M)
         u, rho = self.urho.split()
 
