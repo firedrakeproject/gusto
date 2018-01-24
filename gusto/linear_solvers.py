@@ -269,6 +269,8 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
+        from firedrake.assemble import create_assembly_callable
+
         state = self.state      # just cutting down line length a bit
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
@@ -336,22 +338,19 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                                                                         'pc_type': 'bjacobi',
                                                                         'pc_sub_type': 'lu'})
 
-        Aeqn = (
-            inner(w, (u - u_in))*dx
-            - beta*cp*div(theta*V(w))*pibar*dxp
-            - beta*cp*div(thetabar*w)*pi*dxp
-            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-            + beta*jump(phi*u, n=n)*rhobar_tr('+')*(dS_v + dS_h)
-        )
+        Aeqn = (inner(w, (u - u_in))*dx
+                - beta*cp*div(theta*V(w))*pibar*dxp
+                - beta*cp*div(thetabar*w)*pi*dxp
+                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                + beta*jump(phi*u, n=n)*rhobar_tr('+')*(dS_v + dS_h))
 
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
+        # (A K)(U) = (U_r)
+        # (L 0)(l)   (0  )
         Aop = Tensor(lhs(Aeqn))
         Arhs = rhs(Aeqn)
-
-        #  (A K)(U) = (U_r)
-        #  (L 0)(l)   (0  )
 
         dl = dl('+')
         l0 = l0('+')
@@ -362,12 +361,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                    + dl*inner(u, n)*ds_vp
                    + dl*inner(u, n)*ds_tbp)
 
-        #  U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
+        # U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
         # reduced eqns for l0
         S = assemble(L * Aop.inv * K)
         self.Rexp = L * Aop.inv * Tensor(Arhs)
         # place to put the RHS (self.Rexp gets assembled in here)
-        self.R = Function(M)
+        self.R = Function(Vtrace)
 
         # Set up the LinearSolver for the system of Lagrange multipliers
         self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters)
@@ -378,16 +377,32 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Reconstruction of broken u and rho
-        self.ASolver = LinearSolver(assemble(lhs(Aeqn)),
-                                    solver_parameters={'ksp_type': 'preonly',
-                                                       'pc_type': 'bjacobi',
-                                                       'pc_sub_type': 'lu'},
-                                    options_prefix='urhoreconstruction')
-        # Rhs for broken u and rho reconstruction
-        self.Rurhoexp = -K * AssembledVector(self.lambdar) + Tensor(Arhs)
-        self.Rurho = Function(M)
         u, rho = self.urho.split()
 
+        # Split operators for two-stage reconstruction
+        A00 = Aop.block((0, 0))
+        A01 = Aop.block((0, 1))
+        A10 = Aop.block((1, 0))
+        A11 = Aop.block((1, 1))
+        K0 = K.block((0, 0))
+        L0 = L.block((0, 0))
+        Rurho = Tensor(Arhs)
+        Ru = Rurho.block((0,))
+        Rrho = Rurho.block((1,))
+        lambda_vec = AssembledVector(self.lambdar)
+
+        # rho reconstruction
+        Srho = A11 - A10 * A00.inv * A01
+        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
+        self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho)
+
+        # u reconstruction
+        rho_vec = AssembledVector(rho)
+        u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
+        self._assemble_u = create_assembly_callable(u_expr, tensor=u)
+
+        # Project broken u into the HDiv space
+        # NOTE: We can use the averaging trick here
         self.u_hdiv = Function(Vu)
         self.u_projector = Projector(u, self.u_hdiv,
                                      solver_parameters={'ksp_type': 'cg',
@@ -420,21 +435,26 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Assemble the RHS for lambda into self.R
         assemble(self.Rexp, tensor=self.R)
+
         # Solve for lambda
         self.lSolver.solve(self.lambdar, self.R)
-        # Assemble the RHS for uhat, rho reconstruction
-        assemble(self.Rurhoexp, tensor=self.Rurho)
-        # Solve for uhat, rho
-        self.ASolver.solve(self.urho, self.Rurho)
+
+        # Reconstruct u and rho
+        self._assemble_rho()
+        self._assemble_u()
+
         # Project uhat as self.u_hdiv in H(div)
         self.u_projector.project()
+
         # copy back into u and rho cpts of dy
         _, rho1 = self.urho.split()
         u, rho, theta = self.state.dy.split()
         u.assign(self.u_hdiv)
         rho.assign(rho1)
+
         # reconstruct theta
         self.theta_solver.solve()
+
         # copy into theta cpt of dy
         theta.assign(self.theta)
 
