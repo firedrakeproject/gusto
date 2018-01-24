@@ -250,7 +250,8 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     :arg params (optional): solver parameters
     """
     solver_parameters = {'ksp_type': 'gmres',
-                         'pc_type': 'lu'}
+                         'pc_type': 'lu',
+                         'ksp_monitor_true_residual': True}
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
@@ -336,7 +337,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
                                                      solver_parameters={'ksp_type': 'preonly',
                                                                         'pc_type': 'bjacobi',
-                                                                        'pc_sub_type': 'lu'})
+                                                                        'pc_sub_type': 'lu',
+                                                                        'ksp_monitor_true_residual': True},
+                                                     options_prefix='rhobar_solver')
 
         Aeqn = (inner(w, (u - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
@@ -363,21 +366,25 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
         # reduced eqns for l0
-        S = assemble(L * Aop.inv * K)
-        self.Rexp = L * Aop.inv * Tensor(Arhs)
-        # place to put the RHS (self.Rexp gets assembled in here)
-        self.R = Function(Vtrace)
 
+        # Right-hand side
+        Rexp = L * Aop.inv * Tensor(Arhs)
+        self.R = Function(Vtrace)
+        self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
+
+        # Schur complement operator obtained from element-wise static condensation
+        S = assemble(L * Aop.inv * K)
         # Set up the LinearSolver for the system of Lagrange multipliers
-        self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters)
-        # a place to keep the solution
+        self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
+                                    options_prefix='lambda_solve')
+        # a place to keep the multiplier solution
         self.lambdar = Function(Vtrace)
 
-        # Place to put result of u rho solver
+        # Place to put result of u rho reconstruction
         self.urho = Function(M)
 
         # Reconstruction of broken u and rho
-        u, rho = self.urho.split()
+        u_, rho = self.urho.split()
 
         # Split operators for two-stage reconstruction
         A00 = Aop.block((0, 0))
@@ -385,7 +392,6 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         A10 = Aop.block((1, 0))
         A11 = Aop.block((1, 1))
         K0 = K.block((0, 0))
-        L0 = L.block((0, 0))
         Rurho = Tensor(Arhs)
         Ru = Rurho.block((0,))
         Rrho = Rurho.block((1,))
@@ -399,15 +405,15 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # u reconstruction
         rho_vec = AssembledVector(rho)
         u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
-        self._assemble_u = create_assembly_callable(u_expr, tensor=u)
+        self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
         # Project broken u into the HDiv space
         # NOTE: We can use the averaging trick here
         self.u_hdiv = Function(Vu)
-        self.u_projector = Projector(u, self.u_hdiv,
-                                     solver_parameters={'ksp_type': 'cg',
-                                                        'pc_type': 'bjacobi',
-                                                        'pc_sub_type': 'ilu'})
+        self.u_projector = Projector(u_, self.u_hdiv,
+                                     solver_parameters={'ksp_type': 'gmres',
+                                                        'pc_type': 'lu',
+                                                        'ksp_monitor_true_residual': True})
 
         # Reconstruction of theta
         theta = TrialFunction(Vtheta)
@@ -423,9 +429,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                                                  rhs(theta_eqn),
                                                  self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters={'ksp_type': 'cg',
+                                                    solver_parameters={'ksp_type': 'gmres',
                                                                        'pc_type': 'bjacobi',
-                                                                       'pc_sub_type': 'ilu'},
+                                                                       'pc_sub_type': 'ilu',
+                                                                       'ksp_monitor_true_residual': True},
                                                     options_prefix='thetabacksubstitution')
 
     def solve(self):
@@ -434,7 +441,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
 
         # Assemble the RHS for lambda into self.R
-        assemble(self.Rexp, tensor=self.R)
+        self._assemble_Rexp()
 
         # Solve for lambda
         self.lSolver.solve(self.lambdar, self.R)
