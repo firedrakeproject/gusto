@@ -10,8 +10,8 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 200.
-    tmax = 1000.
+    deltax = 250.
+    tmax = 1500.
 
 L = 10000.
 H = 10000.
@@ -24,7 +24,7 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='unsaturated_bubble_RH50_slopedtheta_nolimiters', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
+output = OutputParameters(dirname='unsaturated_bubble_RH60_sloped50_pow2_theta_nolimiters', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), Temperature(), Dewpoint(), RelativeHumidity()]
@@ -56,9 +56,9 @@ dxp = dx(degree=(quadrature_degree))
 
 # Define constant theta_e and water_t
 Tsurf = 300.0
-Ttop = 320.0
-humidity = 0.5
-theta_d = Function(Vt).interpolate(Tsurf + (z / H) * (Ttop - Tsurf))
+Ttop = 350.0
+humidity = 0.6
+theta_d = Function(Vt).interpolate(Tsurf + (Ttop - Tsurf) * (z / H) ** 2.0)
 RH = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
