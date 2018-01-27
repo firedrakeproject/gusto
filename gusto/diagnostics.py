@@ -1,12 +1,12 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver, exp
+    LinearVariationalProblem, LinearVariationalSolver, exp, div
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
 
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "VelocityDivergence"]
 
 
 class Diagnostics(object):
@@ -145,6 +145,19 @@ class VelocityY(DiagnosticField):
         u = state.fields("u")
         v = u[1]
         return self.field.interpolate(v)
+
+
+class VelocityDivergence(DiagnosticField):
+    name = "VelocityDivergence"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("DG")
+            super().setup(state, space=space)
+
+    def compute(self, state):
+        u = state.fields("u")
+        return self.field.interpolate(div(u))
 
 
 class Energy(DiagnosticField):
