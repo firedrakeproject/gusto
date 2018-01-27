@@ -9,7 +9,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     interval, Function, Mesh, functionspaceimpl,\
     File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
+    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector, assemble
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -114,7 +114,8 @@ class PointDataOutput(object):
 
 
 class DiagnosticsOutput(object):
-    def __init__(self, filename, diagnostics, description, create=True):
+    def __init__(self, filename, diagnostics, description,
+                 compute_pv_conservation, create=True):
         """Create a dump file that stores diagnostics.
 
         :arg filename: The filename.
@@ -137,6 +138,9 @@ class DiagnosticsOutput(object):
                 group = dataset.createGroup(name)
                 for diagnostic in diagnostics.available_diagnostics:
                     group.createVariable(diagnostic, np.float64, ("time", ))
+            if compute_pv_conservation:
+                group = dataset.createGroup("qD")
+                var = group.createVariable("integral", np.float64, ("time", ))
 
     def dump(self, state, t):
         """Dump diagnostics.
@@ -154,6 +158,12 @@ class DiagnosticsOutput(object):
                     diagnostic = getattr(self.diagnostics, dname)
                     var = group.variables[dname]
                     var[idx:idx + 1] = diagnostic(field)
+            if state.output.compute_pv_conservation:
+                q = state.fields("PotentialVorticity")
+                D = state.fields("D")
+                group = dataset.groups["qD"]
+                var = group.variables["integral"]
+                var[idx:idx + 1] = assemble(q*D*dx)
 
 
 class State(object):
@@ -321,6 +331,7 @@ class State(object):
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
+                                                       self.output.compute_pv_conservation,
                                                        create=not pickup)
 
         if len(self.output.point_data) > 0:
