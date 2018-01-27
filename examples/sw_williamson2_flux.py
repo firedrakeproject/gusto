@@ -36,11 +36,13 @@ for ref_level, dt in ref_dt.items():
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                               dumplist_latlon=['D', 'D_error'],
-                              steady_state_error_fields=['D', 'u'])
+                              steady_state_error_fields=['D', 'u'],
+                              compute_pv_conservation=True)
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(),
-                         ShallowWaterPotentialEnstrophy()]
+                         ShallowWaterPotentialEnstrophy(),
+                         VelocityDivergence()]
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
@@ -61,12 +63,12 @@ for ref_level, dt in ref_dt.items():
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
     # Coriolis expression
     fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
+    V = FunctionSpace(mesh, "CG", 3)
     f = state.fields("coriolis", V)
     f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
-    D0.interpolate(Dexpr)
+    D0.project(Dexpr)
 
     state.initialise([('u', u0),
                       ('D', D0)])
