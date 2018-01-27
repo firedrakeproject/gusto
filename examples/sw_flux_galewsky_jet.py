@@ -39,10 +39,7 @@ diagnostic_fields = [ RelativeVorticity(),
                       ShallowWaterKineticEnergy(),
                       ShallowWaterPotentialEnergy(),
                       ShallowWaterPotentialEnstrophy(),
-                      VelocityDivergence(),
-                      Times('PotentialVorticity', 'D')]
-diagnostics = Diagnostics(*fieldlist)
-diagnostics.register('PotentialVorticity')
+                      VelocityDivergence()]
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
