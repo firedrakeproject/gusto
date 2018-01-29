@@ -211,9 +211,10 @@ def RH(parameters, r_v, T, p):
     :arg p: the pressure in Pa.
     """
 
+    epsilon = parameters.R_d / parameters.R_v
     rsat = r_sat(parameters, T, p)
 
-    return r_v / rsat
+    return r_v * (1 + rsat / epsilon) / (rsat * (1 + r_v / epsilon))
 
 
 def e_sat(parameters, T):
