@@ -329,23 +329,11 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         ds_vp = ds_v(degree=(self.quadrature_degree))
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
-        rhobar_tr = Function(Vtrace)
-        rbareqn = (l0('+') - avg(rhobar))*dl('+')*(dS_vp + dS_hp) + \
-                  (l0 - rhobar)*dl*ds_vp + \
-                  (l0 - rhobar)*dl*ds_tbp
-        rhobar_prob = LinearVariationalProblem(lhs(rbareqn), rhs(rbareqn), rhobar_tr)
-        self.rhobar_solver = LinearVariationalSolver(rhobar_prob,
-                                                     solver_parameters={'ksp_type': 'preonly',
-                                                                        'pc_type': 'bjacobi',
-                                                                        'pc_sub_type': 'lu',
-                                                                        'ksp_monitor_true_residual': True},
-                                                     options_prefix='rhobar_solver')
-
-        Aeqn = (inner(w, (u - u_in))*dx
+        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
                 - beta*cp*div(thetabar*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*jump(phi*u, n=n)*rhobar_tr('+')*(dS_v + dS_h))
+                + beta*jump(phi*u, n=n)*avg(rhobar)*(dS_v + dS_h))
 
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
@@ -355,12 +343,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         Aop = Tensor(lhs(Aeqn))
         Arhs = rhs(Aeqn)
 
-        dl = dl('+')
-        l0 = l0('+')
-        K = Tensor(beta*cp*jump(thetabar*w, n=n)*l0*(dS_vp + dS_hp)
+        K = Tensor(beta*cp*jump(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
                    + beta*cp*inner(thetabar*w, n)*l0*ds_vp
                    + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
-        L = Tensor(dl*jump(u, n=n)*(dS_vp + dS_hp)
+        L = Tensor(dl('+')*jump(u, n)*(dS_vp + dS_hp)
                    + dl*inner(u, n)*ds_vp
                    + dl*inner(u, n)*ds_tbp)
 
@@ -373,7 +359,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
 
         # Schur complement operator obtained from element-wise static condensation
-        S = assemble(L * Aop.inv * K)
+        Smatexp = L * Aop.inv * K
+        S = assemble(Smatexp)
+
         # Set up the LinearSolver for the system of Lagrange multipliers
         self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
                                     options_prefix='lambda_solve')
@@ -384,7 +372,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Reconstruction of broken u and rho
-        u_, rho = self.urho.split()
+        u_, rho_ = self.urho.split()
 
         # Split operators for two-stage reconstruction
         A00 = Aop.block((0, 0))
@@ -392,6 +380,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         A10 = Aop.block((1, 0))
         A11 = Aop.block((1, 1))
         K0 = K.block((0, 0))
+        K1 = K.block((1, 0))
         Rurho = Tensor(Arhs)
         Ru = Rurho.block((0,))
         Rrho = Rurho.block((1,))
@@ -399,11 +388,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # rho reconstruction
         Srho = A11 - A10 * A00.inv * A01
-        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
-        self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho)
+        Rthunk = K1 - A10 * A00.inv * K0
+        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * Ru - Rthunk * lambda_vec)
+        self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
         # u reconstruction
-        rho_vec = AssembledVector(rho)
+        rho_vec = AssembledVector(rho_)
         u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
@@ -439,9 +429,6 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
-        # Project rhobar average into the trace space
-        self.rhobar_solver.solve()
-
         # Assemble the RHS for lambda into self.R
         self._assemble_Rexp()
 
