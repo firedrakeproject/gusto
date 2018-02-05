@@ -439,6 +439,8 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
+        # Project rhobar average into the trace space
+        self.rhobar_solver.solve()
 
         # Assemble the RHS for lambda into self.R
         self._assemble_Rexp()
