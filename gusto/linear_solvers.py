@@ -5,6 +5,7 @@ from firedrake import split, LinearVariationalProblem, \
     Function, VectorSpaceBasis, BrokenElement, \
     Projector, assemble, LinearSolver, Tensor, AssembledVector
 from firedrake.solving_utils import flatten_parameters
+from firedrake.parloops import par_loop, READ, INC
 
 from gusto.configuration import DEBUG
 from gusto import thermodynamics
@@ -296,6 +297,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
     def _setup_solver(self):
         from firedrake.assemble import create_assembly_callable
+        import numpy as np
 
         state = self.state
         dt = state.timestepping.dt
@@ -438,23 +440,36 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
-        # Project broken u into the HDiv space
-        # NOTE: We can use the averaging trick here
+        # Project broken u into the HDiv space using facet averaging.
+        # Weight function counting the dofs of the HDiv element:
+        shapes = (Vu.finat_element.space_dimension(), np.prod(Vu.shape))
+
+        weight_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        w[i][j] += 1.0;
+        }}""" % shapes
+
+        self._weight = Function(Vu)
+        par_loop(weight_kernel, dx, {"w": (self._weight, INC)})
+
+        # Averaging kernel
+        self._average_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        vec_out[i][j] += vec_in[i][j]/w[i][j];
+        }}""" % shapes
+
+        # HDiv-conforming velocity
         self.u_hdiv = Function(Vu)
-        self.u_projector = Projector(u_, self.u_hdiv,
-                                     solver_parameters={'ksp_type': 'gmres',
-                                                        'pc_type': 'lu',
-                                                        'ksp_monitor_true_residual': True})
 
         # Reconstruction of theta
         theta = TrialFunction(Vtheta)
         gamma = TestFunction(Vtheta)
 
         self.theta = Function(Vtheta)
-
-        u = self.u_hdiv
         theta_eqn = gamma*(theta - theta_in +
-                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
+                           dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -480,13 +495,19 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self._assemble_rho()
         self._assemble_u()
 
-        # Project uhat as self.u_hdiv in H(div)
-        self.u_projector.project()
-
         # copy back into u and rho cpts of dy
-        _, rho1 = self.urho.split()
+        broken_u, rho1 = self.urho.split()
+        u1 = self.u_hdiv
+
+        # Project broken_u into the HDiv space
+        u1.assign(0.0)
+        par_loop(self._average_kernel, dx,
+                 {"w": (self._weight, READ),
+                  "vec_in": (broken_u, READ),
+                  "vec_out": (u1, INC)})
+
         u, rho, theta = self.state.dy.split()
-        u.assign(self.u_hdiv)
+        u.assign(u1)
         rho.assign(rho1)
 
         # reconstruct theta
