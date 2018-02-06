@@ -267,16 +267,22 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
     quadrature degree in the horizontal direction and q_v is that in
     the vertical direction
-    :arg solver_parameters (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters for the
+    trace system
     :arg overwrite_solver_parameters: boolean, if True use only the
     solver_parameters that have been passed in, if False then update
     the default solver parameters with the solver_parameters passed in.
     :arg moisture (optional): list of names of moisture fields.
     """
 
-    solver_parameters = {'ksp_type': 'gmres',
-                         'pc_type': 'lu',
-                         'ksp_monitor_true_residual': True}
+    # Solver parameters for the Lagrange multiplier system
+    solver_parameters = {'ksp_type': 'cg',
+                         'pc_type': 'gamg',
+                         'mg_levels': {'ksp_type': 'chebyshev',
+                                       'ksp_chebyshev_esteig': True,
+                                       'ksp_max_it': 1,
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'}}
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
@@ -477,8 +483,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters={'ksp_type': 'gmres',
                                                                        'pc_type': 'bjacobi',
-                                                                       'pc_sub_type': 'ilu',
-                                                                       'ksp_monitor_true_residual': True},
+                                                                       'pc_sub_type': 'ilu'},
                                                     options_prefix='thetabacksubstitution')
 
     def solve(self):
