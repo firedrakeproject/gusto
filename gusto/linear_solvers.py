@@ -234,27 +234,52 @@ class CompressibleSolver(TimesteppingSolver):
 class HybridisedCompressibleSolver(TimesteppingSolver):
     """
     Timestepping linear solver object for the compressible equations
-    in theta-pi formulation with prognostic variables u,rho,theta.
+    in theta-pi formulation with prognostic variables u, rho, and theta.
 
     This solver follows the following strategy:
+
     (1) Analytically eliminate theta (introduces error near topography)
-    (2a) Solve resulting system for (u[broken],rho,lambda) using hybridised
-    solver
-    (2b) reconstruct unbroken u
+
+    (2a) Formulate the resulting mixed system for u and rho using a
+         hybridized mixed method. This breaks continuity in the
+         linear perturbations of u, and introduces a new unknown on the
+         mesh interfaces approximating the average of the Exner pressure
+         perturbations. These trace unknowns also act as Lagrange
+         multipliers enforcing normal continuity of the "broken" u variable.
+
+    (2b) Statically condense the block-sparse system into a single system
+         for the Lagrange multipliers. This is the only globally coupled
+         system requiring a linear solver.
+
+    (2c) Using the computed trace variables, we locally recover the
+         broken velocity and density perturbations. This is accomplished
+         in two stages:
+         (i): Recover rho locally using the multipliers.
+         (ii): Recover "broken" u locally using rho and the multipliers.
+
+    (2d) Project the "broken" velocity field into the HDiv-conforming
+         space using local averaging.
+
     (3) Reconstruct theta
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
     quadrature degree in the horizontal direction and q_v is that in
     the vertical direction
-    :arg params (optional): solver parameters
+    :arg solver_parameters (optional): solver parameters
+    :arg overwrite_solver_parameters: boolean, if True use only the
+    solver_parameters that have been passed in, if False then update
+    the default solver parameters with the solver_parameters passed in.
+    :arg moisture (optional): list of names of moisture fields.
     """
+
     solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'lu',
                          'ksp_monitor_true_residual': True}
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
+
         self.moisture = moisture
 
         self.state = state
@@ -272,7 +297,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     def _setup_solver(self):
         from firedrake.assemble import create_assembly_callable
 
-        state = self.state      # just cutting down line length a bit
+        state = self.state
         dt = state.timestepping.dt
         beta = dt*state.timestepping.alpha
         cp = state.parameters.cp
@@ -289,11 +314,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
-        # Build the reduced function space for u,rho
+        # Build the reduced function space for "broken" u and rho
         M = MixedFunctionSpace((Vu_broken, Vrho))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
 
+        # Introduce test and trial functions on the trace space
         l0 = TrialFunction(Vtrace)
         dl = TestFunction(Vtrace)
 
@@ -313,22 +339,30 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Only include theta' (rather than pi') in the vertical
         # component of the gradient
 
-        # the pi prime term (here, bars are for mean and no bars are
+        # The pi prime term (here, bars are for mean and no bars are
         # for linear perturbations)
-
         pi = pibar_theta*theta + pibar_rho*rho
 
-        # vertical projection
+        # Vertical projection
         def V(u):
             return k*inner(u, k)
 
-        # specify degree for some terms as estimated degree is too large
+        # Specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
         dS_hp = dS_h(degree=(self.quadrature_degree))
         ds_vp = ds_v(degree=(self.quadrature_degree))
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
+        # Add effect of density of water upon theta
+        if self.moisture is not None:
+            water_t = Function(Vtheta).assign(0.0)
+            for water in self.moisture:
+                water_t += self.state.fields(water)
+            theta = theta / (1 + water_t)
+            thetabar = thetabar / (1 + water_t)
+
+        # "broken" u and rho system (minus momentum surface terms)
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
                 - beta*cp*div(thetabar*w)*pi*dxp
@@ -338,34 +372,41 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
+        # Form the mixed operators using Slate
         # (A K)(U) = (U_r)
         # (L 0)(l)   (0  )
         Aop = Tensor(lhs(Aeqn))
         Arhs = rhs(Aeqn)
 
-        K = Tensor(beta*cp*jump(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
+        # Off-diagonal block matrices containing the contributions
+        # of the Lagrange multipliers (surface terms in the momentum equation)
+        K = Tensor(beta*cp*jump(thetabar*w, n=n)*l0('+')*(dS_vp + dS_hp)
                    + beta*cp*inner(thetabar*w, n)*l0*ds_vp
                    + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
-        L = Tensor(dl('+')*jump(u, n)*(dS_vp + dS_hp)
+
+        # Transmission condition enforcing continuity of u.n
+        L = Tensor(dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
                    + dl*inner(u, n)*ds_vp
                    + dl*inner(u, n)*ds_tbp)
 
         # U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
-        # reduced eqns for l0
-
-        # Right-hand side
+        # reduced eqns for the Lagrange multipliers "l0".
+        # Right-hand side expression: (Forward substitution)
         Rexp = L * Aop.inv * Tensor(Arhs)
         self.R = Function(Vtrace)
+
+        # We need to rebuild R everytime data changes
         self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
 
-        # Schur complement operator obtained from element-wise static condensation
+        # Schur complement operator
         Smatexp = L * Aop.inv * K
         S = assemble(Smatexp)
 
-        # Set up the LinearSolver for the system of Lagrange multipliers
+        # Set up the Linear solver for the system of Lagrange multipliers
         self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
                                     options_prefix='lambda_solve')
-        # a place to keep the multiplier solution
+
+        # Result function for the multiplier solution
         self.lambdar = Function(Vtrace)
 
         # Place to put result of u rho reconstruction
@@ -392,7 +433,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         rho_expr = Srho.inv * (Rrho - A10 * A00.inv * Ru - Rthunk * lambda_vec)
         self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
-        # u reconstruction
+        # "broken" u reconstruction
         rho_vec = AssembledVector(rho_)
         u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
