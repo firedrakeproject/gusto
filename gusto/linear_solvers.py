@@ -1,9 +1,9 @@
 from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
-    div, dx, jump, avg, dS_v, dS_h, ds_v, ds_tb, inner, dot, grad, \
+    div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad, \
     Function, VectorSpaceBasis, BrokenElement, \
-    Projector, assemble, LinearSolver, Tensor, AssembledVector
+    assemble, LinearSolver, Tensor, AssembledVector
 from firedrake.solving_utils import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 
