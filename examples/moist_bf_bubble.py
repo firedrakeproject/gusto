@@ -15,6 +15,11 @@ else:
     deltax = 100.
     tmax = 1000.
 
+if '--hybrid' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
@@ -156,7 +161,11 @@ if recovered:
 else:
     advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
-linear_solver = CompressibleSolver(state, moisture=moisture)
+# Set up linear solver
+if hybridization:
+    linear_solver = HybridisedCompressibleSolver(state, moisture=moisture)
+else:
+    linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 if recovered:

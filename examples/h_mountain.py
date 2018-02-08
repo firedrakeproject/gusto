@@ -10,6 +10,11 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 15000.
 
+if '--hybrid' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 res = 10
 nlayers = res*20  # horizontal layers
 columns = res*12  # number of columns
@@ -152,13 +157,20 @@ advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
-# Set up linear solver
+# LU parameters
 lu_params = {'pc_type': 'lu',
              'ksp_type': 'preonly',
              'pc_factor_mat_solver_type': 'mumps',
              'mat_type': 'aij'}
 
-linear_solver = CompressibleSolver(state, solver_parameters=lu_params)
+# Set up linear solver
+if hybridization:
+    linear_solver = HybridisedCompressibleSolver(state, solver_parameters=lu_params,
+                                                 overwrite_solver_parameters=True)
+
+else:
+    linear_solver = CompressibleSolver(state, solver_parameters=lu_params,
+                                       overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

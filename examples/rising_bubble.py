@@ -9,6 +9,11 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 700.
 
+if '--hybrid' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 1000.
 H = 1000.
 nlayers = int(H/10.)
@@ -85,7 +90,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridisedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

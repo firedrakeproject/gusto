@@ -14,6 +14,11 @@ else:
     columns = 150  # number of columns
     tmax = 60000.0
 
+if '--hybrid' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 6.0e6
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
@@ -93,7 +98,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridisedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 # [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
