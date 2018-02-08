@@ -276,7 +276,8 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     """
 
     # Solver parameters for the Lagrange multiplier system
-    solver_parameters = {'ksp_type': 'cg',
+    # NOTE: The reduced operator is not symmetric
+    solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'gamg',
                          'mg_levels': {'ksp_type': 'chebyshev',
                                        'ksp_chebyshev_esteig': True,
@@ -373,6 +374,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # "broken" u and rho system (minus momentum surface terms)
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
+                # TODO: Need to think about whether we still need this
+                # term after breaking the space Vu.
+                + beta*cp*jump(theta*V(w), n=n)*avg(pibar)*dS_vp
                 - beta*cp*div(thetabar*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
                 + beta*jump(phi*u, n=n)*avg(rhobar)*(dS_v + dS_h))
@@ -381,10 +385,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
         # Form the mixed operators using Slate
-        # (A K)(U) = (U_r)
-        # (L 0)(l)   (0  )
+        # (A   K)(U) = (U_r)
+        # (K.T 0)(l)   (0  )
         Aop = Tensor(lhs(Aeqn))
-        Arhs = rhs(Aeqn)
+        Arhs = Tensor(rhs(Aeqn))
 
         # Off-diagonal block matrices containing the contributions
         # of the Lagrange multipliers (surface terms in the momentum equation)
@@ -392,22 +396,19 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                    + beta*cp*inner(thetabar*w, n)*l0*ds_vp
                    + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
 
-        # Transmission condition enforcing continuity of u.n
-        L = Tensor(dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-                   + dl*inner(u, n)*ds_vp
-                   + dl*inner(u, n)*ds_tbp)
-
-        # U = A^{-1}(-Kl + U_r), 0=LU=-(LA^{-1}K)l + LA^{-1}U_r, so (LA^{-1}K)l = LA^{-1}U_r
-        # reduced eqns for the Lagrange multipliers "l0".
+        # U = A.inv * (U_r - K * l),
+        # 0 = K.T * U = -(K.T * A.inv * K) * l + K.T * A.inv * U_r,
+        # so (K.T * A.inv * K) * l = K.T * A.inv * U_r
+        # is the reduced equation for the Lagrange multipliers.
         # Right-hand side expression: (Forward substitution)
-        Rexp = L * Aop.inv * Tensor(Arhs)
+        Rexp = K.T * Aop.inv * Arhs
         self.R = Function(Vtrace)
 
         # We need to rebuild R everytime data changes
         self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
 
-        # Schur complement operator
-        Smatexp = L * Aop.inv * K
+        # Schur complement operator:
+        Smatexp = K.T * Aop.inv * K
         S = assemble(Smatexp)
 
         # Set up the Linear solver for the system of Lagrange multipliers
@@ -429,16 +430,13 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         A10 = Aop.block((1, 0))
         A11 = Aop.block((1, 1))
         K0 = K.block((0, 0))
-        K1 = K.block((1, 0))
-        Rurho = Tensor(Arhs)
-        Ru = Rurho.block((0,))
-        Rrho = Rurho.block((1,))
+        Ru = Arhs.block((0,))
+        Rrho = Arhs.block((1,))
         lambda_vec = AssembledVector(self.lambdar)
 
         # rho reconstruction
         Srho = A11 - A10 * A00.inv * A01
-        Rthunk = K1 - A10 * A00.inv * K0
-        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * Ru - Rthunk * lambda_vec)
+        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
         self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
         # "broken" u reconstruction
@@ -477,9 +475,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         theta_eqn = gamma*(theta - theta_in +
                            dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta)*dx
 
-        theta_problem = LinearVariationalProblem(lhs(theta_eqn),
-                                                 rhs(theta_eqn),
-                                                 self.theta)
+        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters={'ksp_type': 'gmres',
                                                                        'pc_type': 'bjacobi',
@@ -500,7 +496,6 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self._assemble_rho()
         self._assemble_u()
 
-        # copy back into u and rho cpts of dy
         broken_u, rho1 = self.urho.split()
         u1 = self.u_hdiv
 
@@ -511,14 +506,15 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                   "vec_in": (broken_u, READ),
                   "vec_out": (u1, INC)})
 
+        # Copy back into u and rho cpts of dy
         u, rho, theta = self.state.dy.split()
         u.assign(u1)
         rho.assign(rho1)
 
-        # reconstruct theta
+        # Reconstruct theta
         self.theta_solver.solve()
 
-        # copy into theta cpt of dy
+        # Copy into theta cpt of dy
         theta.assign(self.theta)
 
 
