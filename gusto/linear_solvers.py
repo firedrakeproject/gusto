@@ -323,14 +323,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
-        # Build the reduced function space for "broken" u and rho
+        # Build the function space for "broken" u and rho
+        # and add the trace variable
         M = MixedFunctionSpace((Vu_broken, Vrho))
         w, phi = TestFunctions(M)
         u, rho = TrialFunctions(M)
-
-        # Introduce test and trial functions on the trace space
         l0 = TrialFunction(Vtrace)
-        dl = TestFunction(Vtrace)
 
         n = FacetNormal(state.mesh)
 
@@ -371,44 +369,44 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             theta = theta / (1 + water_t)
             thetabar = thetabar / (1 + water_t)
 
-        # "broken" u and rho system (minus momentum surface terms)
+        # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
-                # TODO: Need to think about whether we still need this
-                # term after breaking the space Vu.
-                + beta*cp*jump(theta*V(w), n=n)*avg(pibar)*dS_vp
+                + beta*cp*dot(theta*V(w), n)*pibar('+')*(dS_vp + dS_hp)
+                + beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
                 - beta*cp*div(thetabar*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*jump(phi*u, n=n)*avg(rhobar)*(dS_v + dS_h))
+                + beta*dot(phi*u, n)*rhobar('+')*(dS_v + dS_h))
 
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
         # Form the mixed operators using Slate
-        # (A   K)(U) = (U_r)
+        # (A   K)(X) = (X_r)
         # (K.T 0)(l)   (0  )
-        Aop = Tensor(lhs(Aeqn))
-        Arhs = Tensor(rhs(Aeqn))
+        # where X = ("broken" u, rho)
+        A = Tensor(lhs(Aeqn))
+        X_r = Tensor(rhs(Aeqn))
 
         # Off-diagonal block matrices containing the contributions
         # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta*cp*jump(thetabar*w, n=n)*l0('+')*(dS_vp + dS_hp)
-                   + beta*cp*inner(thetabar*w, n)*l0*ds_vp
-                   + beta*cp*inner(thetabar*w, n)*l0*ds_tbp)
+        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_vp
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_tbp)
 
-        # U = A.inv * (U_r - K * l),
-        # 0 = K.T * U = -(K.T * A.inv * K) * l + K.T * A.inv * U_r,
-        # so (K.T * A.inv * K) * l = K.T * A.inv * U_r
+        # X = A.inv * (X_r - K * l),
+        # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
+        # so (K.T * A.inv * K) * l = K.T * A.inv * X_r
         # is the reduced equation for the Lagrange multipliers.
         # Right-hand side expression: (Forward substitution)
-        Rexp = K.T * Aop.inv * Arhs
+        Rexp = K.T * A.inv * X_r
         self.R = Function(Vtrace)
 
         # We need to rebuild R everytime data changes
         self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
 
         # Schur complement operator:
-        Smatexp = K.T * Aop.inv * K
+        Smatexp = K.T * A.inv * K
         S = assemble(Smatexp)
 
         # Set up the Linear solver for the system of Lagrange multipliers
@@ -425,13 +423,13 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         u_, rho_ = self.urho.split()
 
         # Split operators for two-stage reconstruction
-        A00 = Aop.block((0, 0))
-        A01 = Aop.block((0, 1))
-        A10 = Aop.block((1, 0))
-        A11 = Aop.block((1, 1))
+        A00 = A.block((0, 0))
+        A01 = A.block((0, 1))
+        A10 = A.block((1, 0))
+        A11 = A.block((1, 1))
         K0 = K.block((0, 0))
-        Ru = Arhs.block((0,))
-        Rrho = Arhs.block((1,))
+        Ru = X_r.block((0,))
+        Rrho = X_r.block((1,))
         lambda_vec = AssembledVector(self.lambdar)
 
         # rho reconstruction
@@ -492,7 +490,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Solve for lambda
         self.lSolver.solve(self.lambdar, self.R)
 
-        # Reconstruct u and rho
+        # Reconstruct broken u and rho
         self._assemble_rho()
         self._assemble_u()
 
