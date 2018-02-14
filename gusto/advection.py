@@ -81,7 +81,7 @@ class Advection(object, metaclass=ABCMeta):
         # the output function.
         if isinstance(equation, EmbeddedDGAdvection):
             # check that the field and the equation are compatible
-            if not equation.V0.__eq__(field.function_space()):
+            if equation.V0 != field.function_space():
                 raise ValueError('The field to be advected is not compatible with the equation used.')
             self.embedded_dg = True
             fs = equation.space
@@ -329,6 +329,8 @@ class ThetaMethod(Advection):
 def recovered_apply(self, x_in):
     """
     Extra steps to the apply method for the recovered advection scheme.
+    This provides an advection scheme for the lowest-degree family
+    of spaces, but which has second order numerical accuracy.
 
     :arg x_in: the input set of prognostic fields.
     """
