@@ -1,9 +1,9 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    LinearVariationalProblem, LinearVariationalSolver, exp, FacetNormal, \
+    LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC
 from abc import ABCMeta, abstractmethod, abstractproperty
-from gusto.forcing import exner
+from gusto import thermodynamics
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
@@ -256,7 +256,7 @@ class ExnerPi(DiagnosticField):
     def compute(self, state):
         rho = state.fields(self.rho_name)
         theta = state.fields(self.theta_name)
-        Pi = exner(theta, rho, state)
+        Pi = thermodynamics.pi(state.parameters, rho, theta)
         return self.field.interpolate(Pi)
 
 
@@ -269,25 +269,16 @@ class Theta_e(DiagnosticField):
             super(Theta_e, self).setup(state, space=space)
 
     def compute(self, state):
-        X = state.parameters
-        p_0 = X.p_0
-        R_v = X.R_v
-        R_d = X.R_d
-        cp = X.cp
-        c_pl = X.c_pl
-        c_pv = X.c_pv
-        L_v0 = X.L_v0
-        T_0 = X.T_0
-        kappa = X.kappa
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
-        p = p_0 * (R_d * theta * rho / p_0) ** (1.0 / (1.0 - kappa))
-        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
         w_c = state.fields('water_c')
         w_t = w_c + w_v
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        p = thermodynamics.p(state.parameters, pi)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
-        return self.field.interpolate(T * (p / (p_0 * (1 + w_v * R_v / R_d))) ** -(R_d / (cp + c_pl * w_t)) * exp(w_v * (L_v0 - (c_pl - c_pv) * (T - T_0)) / (T * (cp + c_pl * w_t))))
+        return self.field.interpolate(thermodynamics.theta_e(state.parameters, T, p, w_v, w_t))
 
 
 class InternalEnergy(DiagnosticField):
@@ -299,25 +290,14 @@ class InternalEnergy(DiagnosticField):
             super(InternalEnergy, self).setup(state, space=space)
 
     def compute(self, state):
-        X = state.parameters
-        p_0 = X.p_0
-        R_v = X.R_v
-        R_d = X.R_d
-        cv = X.cv
-        c_vv = X.c_vv
-        c_pl = X.c_pl
-        c_pv = X.c_pv
-        L_v0 = X.L_v0
-        T_0 = X.T_0
-        kappa = X.kappa
-
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
-        T = theta * (R_d * theta * rho / p_0) ** (kappa / (1.0 - kappa)) / (1.0 + w_v * R_v / R_d)
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
-        return self.field.interpolate(rho * (cv * T + c_vv * w_v * T + c_pv * w_c * T - (L_v0 - (c_pl - c_pv) * (T - T_0)) * w_c))
+        return self.field.interpolate(thermodynamics.internal_energy(state.parameters, rho, T, r_v=w_v, r_l=w_c))
 
 
 class HydrostaticImbalance(DiagnosticField):
@@ -331,8 +311,8 @@ class HydrostaticImbalance(DiagnosticField):
             rhobar = state.fields("rhobar")
             theta = state.fields("theta")
             thetabar = state.fields("thetabar")
-            pi = exner(theta, rho, state)
-            pibar = exner(thetabar, rhobar, state)
+            pi = thermodynamics.pi(state.parameters, rho, theta)
+            pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
 
             cp = Constant(state.parameters.cp)
             n = FacetNormal(state.mesh)
