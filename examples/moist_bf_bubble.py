@@ -28,7 +28,7 @@ degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[], log_level='INFO')
+output = OutputParameters(dirname='moist_bf_test', dumpfreq=20, dumplist=['u'], perturbation_fields=[], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), InternalEnergy(), Perturbation("InternalEnergy")]
@@ -58,7 +58,6 @@ x = SpatialCoordinate(mesh)
 quadrature_degree = (5, 5)
 dxp = dx(degree=(quadrature_degree))
 
-<<<<<<< HEAD
 if recovered:
     VDG1 = FunctionSpace(mesh, "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
@@ -70,25 +69,6 @@ if recovered:
     rho_spaces = (VDG1, VCG1, Vr)
     theta_spaces = (VDG1, VCG1, Vt_brok)
 
-# declare some parameters
-p_0 = params.p_0
-R_d = params.R_d
-R_v = params.R_v
-cp = params.cp
-c_pl = params.c_pl
-c_pv = params.c_pv
-L_v0 = params.L_v0
-kappa = params.kappa
-w_sat1 = params.w_sat1
-w_sat2 = params.w_sat2
-w_sat3 = params.w_sat3
-w_sat4 = params.w_sat4
-T_0 = params.T_0
-g = params.g
-cp = params.cp
-
-=======
->>>>>>> master
 # Define constant theta_e and water_t
 Tsurf = 320.0
 total_water = 0.02
