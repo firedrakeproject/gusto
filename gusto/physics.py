@@ -1,9 +1,11 @@
 from abc import ABCMeta, abstractmethod
+from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.advection import SSPRK3
 from firedrake import exp, Interpolator, conditional, Function, \
-    min_value, max_value
+    min_value, max_value, as_vector
 
 
-__all__ = ["Condensation"]
+__all__ = ["Condensation", "Fallout"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -104,6 +106,39 @@ class Condensation(Physics):
 
     def apply(self):
         self.lim_cond_rate.interpolate()
+        self.theta.assign(self.theta_new.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
-        self.theta.assign(self.theta_new.interpolate())
+
+
+class Fallout(Physics):
+    """
+    The fallout process of hydrometeors.
+
+    :arg state :class: `.State.` object.
+    """
+
+    def __init__(self, state):
+        super(Fallout, self).__init__(state)
+
+        self.state = state
+        self.rain = state.fields('rain')
+
+        # function spaces
+        Vt = self.rain.function_space()
+        Vu = state.fields('u').function_space()
+
+        # introduce sedimentation rate
+        # for now assume all rain falls at terminal velocity
+        terminal_velocity = 10  # in m/s
+        self.v = state.fields("rainfall_velocity", Vu)
+        self.v.project(as_vector([0, -terminal_velocity]))
+
+        # sedimentation will happen using a full advection method
+        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True)
+        self.advection_method = SSPRK3(state, self.rain, advection_equation)
+
+    def apply(self):
+        for k in range(self.state.timestepping.maxk):
+            self.advection_method.update_ubar(self.v, self.v, 0)
+            self.advection_method.apply(self.rain, self.rain)

@@ -1,13 +1,12 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
-    div, avg, jump, FacetNormal, dS_v, DirichletBC, \
-    LinearVariationalProblem, LinearVariationalSolver, exp
+    LinearVariationalProblem, LinearVariationalSolver, exp, FacetNormal, \
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.forcing import exner
 import numpy as np
 
-
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -436,6 +435,40 @@ class Perturbation(Difference):
     @property
     def name(self):
         return self.field1+"_perturbation"
+
+
+class Precipitation(DiagnosticField):
+    name = "Precipitation"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("DG0", state.mesh, "DG", 0)
+            super(Precipitation, self).setup(state, space=space)
+
+            rain = state.fields('rain')
+            rho = state.fields('rho')
+            v = state.fields('rainfall_velocity')
+            self.phi = TestFunction(space)
+            flux = TrialFunction(space)
+            n = FacetNormal(state.mesh)
+            un = 0.5 * (dot(v, n) + abs(dot(v, n)))
+            self.flux = Function(space)
+
+            a = self.phi * flux * dx
+            L = self.phi * rain * un * rho
+            if space.extruded:
+                L = L * (ds_b + ds_t + ds_v)
+            else:
+                L = L * ds
+
+            # setup solver
+            problem = LinearVariationalProblem(a, L, self.flux)
+            self.solver = LinearVariationalSolver(problem)
+
+    def compute(self, state):
+        self.solver.solve()
+        self.field.assign(self.field + assemble(self.flux * self.phi * dx))
+        return self.field
 
 
 class Vorticity(DiagnosticField):
