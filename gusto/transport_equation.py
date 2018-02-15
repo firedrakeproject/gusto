@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import Function, TestFunction, TrialFunction, \
     FacetNormal, \
     dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
+    ds, ds_v, ds_t, ds_b, \
     outer, sign, cross, CellNormal, sqrt, Constant, \
     curl, BrokenElement, FunctionSpace
 from gusto.configuration import DEBUG
@@ -52,11 +53,14 @@ class TransportEquation(object, metaclass=ABCMeta):
         # n and un
         if self.is_cg:
             self.dS = None
+            self.ds = None
         else:
             if V.extruded:
                 self.dS = (dS_h + dS_v)
+                self.ds = (ds_b + ds_t + ds_v)
             else:
                 self.dS = dS
+                self.ds = ds
             self.n = FacetNormal(state.mesh)
             self.un = 0.5*(dot(self.ubar, self.n) + abs(dot(self.ubar, self.n)))
 
@@ -149,16 +153,16 @@ class AdvectionEquation(TransportEquation):
                         linear solver.
     """
     def __init__(self, state, V, *, ibp="once", equation_form="advective",
-                 vector_manifold=False, solver_params=None):
+                 vector_manifold=False, solver_params=None, outflow=False):
         super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params)
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
-        if vector_manifold:
-            self.vector_manifold = True
-        else:
-            self.vector_manifold = False
+        self.vector_manifold = vector_manifold
+        self.outflow = outflow
+        if outflow and ibp is None:
+            raise ValueError("outflow is True and ibp is None are incompatible options")
 
     def advection_term(self, q):
 
@@ -181,6 +185,10 @@ class AdvectionEquation(TransportEquation):
                             dot(self.ubar('+'), self.n('+'))*q('+'))
                       + inner(self.test('-'),
                               dot(self.ubar('-'), self.n('-'))*q('-')))*self.dS
+
+        if self.outflow:
+            L += self.test*self.un*q*self.ds
+
         if self.vector_manifold:
             un = self.un
             w = self.test
@@ -222,7 +230,11 @@ class EmbeddedDGAdvection(AdvectionEquation):
                            will not be used.
     """
 
+<<<<<<< HEAD
     def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None, recovered_spaces=None):
+=======
+    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None, outflow=False):
+>>>>>>> master
 
         # give equation the property V0, the space that the function should live in
         # in the absence of Vdg, this is used to set up the space for advection
@@ -254,7 +266,8 @@ class EmbeddedDGAdvection(AdvectionEquation):
                          ibp=ibp,
                          equation_form=equation_form,
                          vector_manifold=vector_manifold,
-                         solver_params=solver_params)
+                         solver_params=solver_params,
+                         outflow=outflow)
 
 
 class SUPGAdvection(AdvectionEquation):
@@ -287,7 +300,7 @@ class SUPGAdvection(AdvectionEquation):
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
     """
-    def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None):
+    def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None, outflow=False):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -298,7 +311,8 @@ class SUPGAdvection(AdvectionEquation):
 
         super().__init__(state=state, V=V, ibp=ibp,
                          equation_form=equation_form,
-                         solver_params=solver_params)
+                         solver_params=solver_params,
+                         outflow=outflow)
 
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp == "once":
