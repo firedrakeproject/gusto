@@ -335,9 +335,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = exner(thetabar, rhobar, state)
-        pibar_rho = exner_rho(thetabar, rhobar, state)
-        pibar_theta = exner_theta(thetabar, rhobar, state)
+        pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
+        pibar_rho = thermodynamics.pi_rho(state.parameters, rhobar, thetabar)
+        pibar_theta = thermodynamics.pi_theta(state.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
