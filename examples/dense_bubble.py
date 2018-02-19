@@ -11,11 +11,6 @@ else:
     res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
 
-if '--hybrid' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
-
 L = 51200.
 
 # build volume mesh
@@ -23,100 +18,108 @@ H = 6400.  # Height position of the model top
 
 for delta, dt in res_dt.items():
 
-    dirname = "db_dx%s_dt%s" % (delta, dt)
-    nlayers = int(H/delta)  # horizontal layers
-    columns = int(L/delta)  # number of columns
+    # Run example with hybridization and without
+    for hybridization in [True, False]:
 
-    m = PeriodicIntervalMesh(columns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+        dirname = "db_dx%s_dt%s" % (delta, dt)
+        if hybridization:
+            dirname += '_hybridization'
+        nlayers = int(H/delta)  # horizontal layers
+        columns = int(L/delta)  # number of columns
 
-    fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname, dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
-    parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
-    diagnostic_fields = [CourantNumber()]
+        m = PeriodicIntervalMesh(columns, L)
+        mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
+        fieldlist = ['u', 'rho', 'theta']
+        timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
+        output = OutputParameters(dirname=dirname,
+                                  dumpfreq=5,
+                                  dumplist=['u'],
+                                  perturbation_fields=['theta', 'rho'])
+        parameters = CompressibleParameters()
+        diagnostics = Diagnostics(*fieldlist)
+        diagnostic_fields = [CourantNumber()]
 
-    # Initial conditions
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+        state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                      family="CG",
+                      timestepping=timestepping,
+                      output=output,
+                      parameters=parameters,
+                      diagnostics=diagnostics,
+                      fieldlist=fieldlist,
+                      diagnostic_fields=diagnostic_fields)
 
-    # spaces
-    Vu = u0.function_space()
-    Vt = theta0.function_space()
-    Vr = rho0.function_space()
+        # Initial conditions
+        u0 = state.fields("u")
+        rho0 = state.fields("rho")
+        theta0 = state.fields("theta")
 
-    # Isentropic background state
-    Tsurf = Constant(300.)
+        # spaces
+        Vu = u0.function_space()
+        Vt = theta0.function_space()
+        Vr = rho0.function_space()
 
-    theta_b = Function(Vt).interpolate(Tsurf)
-    rho_b = Function(Vr)
+        # Isentropic background state
+        Tsurf = Constant(300.)
 
-    # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+        theta_b = Function(Vt).interpolate(Tsurf)
+        rho_b = Function(Vr)
 
-    x = SpatialCoordinate(mesh)
-    a = 5.0e3
-    deltaTheta = 1.0e-2
-    xc = 0.5*L
-    xr = 4000.
-    zc = 3000.
-    zr = 2000.
-    r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
-    theta_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
-    theta0.interpolate(theta_b + theta_pert)
-    rho0.assign(rho_b)
+        # Calculate hydrostatic Pi
+        compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0)])
-    state.set_reference_profiles([('rho', rho_b),
-                                  ('theta', theta_b)])
+        x = SpatialCoordinate(mesh)
+        a = 5.0e3
+        deltaTheta = 1.0e-2
+        xc = 0.5*L
+        xr = 4000.
+        zc = 3000.
+        zr = 2000.
+        r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
+        theta_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
+        theta0.interpolate(theta_b + theta_pert)
+        rho0.assign(rho_b)
 
-    # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    supg = True
-    if supg:
-        thetaeqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction": "horizontal"},
-                                 equation_form="advective")
-    else:
-        thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective")
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+        state.initialise([('u', u0),
+                          ('rho', rho0),
+                          ('theta', theta0)])
+        state.set_reference_profiles([('rho', rho_b),
+                                      ('theta', theta_b)])
 
-    # Set up linear solver
-    if hybridization:
-        linear_solver = HybridisedCompressibleSolver(state)
-    else:
-        linear_solver = CompressibleSolver(state)
+        # Set up advection schemes
+        ueqn = EulerPoincare(state, Vu)
+        rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+        supg = True
+        if supg:
+            thetaeqn = SUPGAdvection(state, Vt,
+                                     supg_params={"dg_direction": "horizontal"},
+                                     equation_form="advective")
+        else:
+            thetaeqn = EmbeddedDGAdvection(state, Vt,
+                                           equation_form="advective")
+        advected_fields = []
+        advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+        advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+        advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+        # Set up linear solver
+        if hybridization:
+            linear_solver = HybridisedCompressibleSolver(state)
+        else:
+            linear_solver = CompressibleSolver(state)
 
-    bcs = [DirichletBC(Vu, 0.0, "bottom"),
-           DirichletBC(Vu, 0.0, "top")]
-    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75.,
-                                             mu=Constant(10./delta), bcs=bcs)),
-                       ("theta", InteriorPenalty(state, Vt, kappa=75.,
-                                                 mu=Constant(10./delta)))]
+        # Set up forcing
+        compressible_forcing = CompressibleForcing(state)
 
-    # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing, diffused_fields)
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
+        diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75.,
+                                                 mu=Constant(10./delta), bcs=bcs)),
+                           ("theta", InteriorPenalty(state, Vt, kappa=75.,
+                                                     mu=Constant(10./delta)))]
 
-    stepper.run(t=0, tmax=tmax)
+        # build time stepper
+        stepper = CrankNicolson(state, advected_fields, linear_solver,
+                                compressible_forcing, diffused_fields)
+
+        stepper.run(t=0, tmax=tmax)

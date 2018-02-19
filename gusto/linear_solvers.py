@@ -279,6 +279,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     # NOTE: The reduced operator is not symmetric
     solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'gamg',
+                         'ksp_monitor_true_residual': True,
                          'mg_levels': {'ksp_type': 'chebyshev',
                                        'ksp_chebyshev_esteig': True,
                                        'ksp_max_it': 1,
@@ -325,10 +326,11 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Build the function space for "broken" u and rho
         # and add the trace variable
-        M = MixedFunctionSpace((Vu_broken, Vrho))
-        w, phi = TestFunctions(M)
-        u, rho = TrialFunctions(M)
+        M = MixedFunctionSpace((Vu_broken, Vrho, Vrho))
+        w, phi, psi = TestFunctions(M)
+        u, rho, pi = TrialFunctions(M)
         l0 = TrialFunction(Vtrace)
+        dl = TestFunction(Vtrace)
 
         n = FacetNormal(state.mesh)
 
@@ -348,7 +350,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # The pi prime term (here, bars are for mean and no bars are
         # for linear perturbations)
-        pi = pibar_theta*theta + pibar_rho*rho
+        # pi = pibar_theta*theta + pibar_rho*rho
 
         # Vertical projection
         def V(u):
@@ -361,6 +363,24 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         ds_vp = ds_v(degree=(self.quadrature_degree))
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
+        trace_mass = (dl('+')*l0('+')*(dS_vp + dS_hp)
+                      + dl*l0*ds_vp + dl*l0*ds_tbp)
+        tM = assemble(trace_mass)
+
+        self._traceL = lambda f: (dl('+')*avg(f)*(dS_vp + dS_hp)
+                                  + dl*f*ds_vp + dl*f*ds_tbp)
+
+        self.Lrhobar = Function(Vtrace)
+        self.Lpibar = Function(Vtrace)
+        rhopi_solver = LinearSolver(tM, solver_parameters={'ksp_type': 'cg',
+                                                           'pc_type': 'bjacobi',
+                                                           'sub_pc_type': 'ilu',
+                                                           'ksp_monitor_true_residual': True},
+                                    options_prefix='rhobarpibar_solver')
+        self.rhobarpibar_solver = rhopi_solver
+        self.rhobar_avg = Function(Vtrace)
+        self.pibar_avg = Function(Vtrace)
+
         # Add effect of density of water upon theta
         if self.moisture is not None:
             water_t = Function(Vtheta).assign(0.0)
@@ -369,14 +389,28 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             theta = theta / (1 + water_t)
             thetabar = thetabar / (1 + water_t)
 
-        # "broken" u and rho system
-        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+        # eqn = (
+        #     inner(w, (state.h_project(u) - u_in))*dx
+        #     - beta*cp*div(theta*V(w))*pibar*dxp
+        #     # following does nothing but is preserved in the comments
+        #     # to remind us why (because V(w) is purely vertical.
+        #     # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+        #     - beta*cp*div(thetabar*w)*pi*dxp
+        #     + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
+        #     + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+        #     + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
+        # )
+
+        # "broken" u and rho, pi system
+        Aeqn = (inner(w, (u - u_in))*dx
                 - beta*cp*div(theta*V(w))*pibar*dxp
-                + beta*cp*dot(theta*V(w), n)*pibar('+')*(dS_vp + dS_hp)
-                + beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
+                + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_hp
+                + beta*cp*dot(theta*V(w), n)*self.pibar_avg*ds_tbp
                 - beta*cp*div(thetabar*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*dot(phi*u, n)*rhobar('+')*(dS_v + dS_h))
+                + beta*dot(phi*u, n)*self.rhobar_avg('+')*(dS_v + dS_h)
+                + psi*(pi - pibar)*dxp)
 
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
@@ -417,29 +451,35 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self.lambdar = Function(Vtrace)
 
         # Place to put result of u rho reconstruction
-        self.urho = Function(M)
+        self.urhopi = Function(M)
 
         # Reconstruction of broken u and rho
-        u_, rho_ = self.urho.split()
+        u_, rho_, _ = self.urhopi.split()
 
-        # Split operators for two-stage reconstruction
         A00 = A.block((0, 0))
         A01 = A.block((0, 1))
+        A02 = A.block((0, 2))
         A10 = A.block((1, 0))
         A11 = A.block((1, 1))
+        A12 = A.block((1, 2))
+        A22 = A.block((2, 2))
         K0 = K.block((0, 0))
         Ru = X_r.block((0,))
         Rrho = X_r.block((1,))
-        lambda_vec = AssembledVector(self.lambdar)
+        Rpi = X_r.block((2,))
 
-        # rho reconstruction
-        Srho = A11 - A10 * A00.inv * A01
-        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
+        Lambda = AssembledVector(self.lambdar)
+        S_pi = A10 * A00.inv * A02 * A22.inv - A12 * A22.inv
+        S_rho = A11 - A10 * A00.inv * A01
+        S_lambda = A10 * A00.inv * K0
+
+        rho_expr = S_rho.inv * (Rrho - A10 * A00.inv * Ru +
+                                S_pi * Rpi + S_lambda * Lambda)
         self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
-        # "broken" u reconstruction
-        rho_vec = AssembledVector(rho_)
-        u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
+        Rho = AssembledVector(rho_)
+        u_expr = A00.inv * (Ru - A01 * Rho -
+                            A02 * A22.inv * Rpi - K0 * Lambda)
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
         # Project broken u into the HDiv space using facet averaging.
@@ -475,7 +515,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters={'ksp_type': 'gmres',
+                                                    solver_parameters={'ksp_type': 'cg',
                                                                        'pc_type': 'bjacobi',
                                                                        'pc_sub_type': 'ilu'},
                                                     options_prefix='thetabacksubstitution')
@@ -484,6 +524,15 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
+        thetabar = self.state.fields("thetabar")
+        rhobar = self.state.fields("rhobar")
+        pibar = thermodynamics.pi(self.state.parameters, rhobar, thetabar)
+        assemble(self._traceL(rhobar), tensor=self.Lrhobar)
+        assemble(self._traceL(pibar), tensor=self.Lpibar)
+
+        self.rhobarpibar_solver.solve(self.rhobar_avg, self.Lrhobar)
+        self.rhobarpibar_solver.solve(self.pibar_avg, self.Lpibar)
+
         # Assemble the RHS for lambda into self.R
         self._assemble_Rexp()
 
@@ -494,7 +543,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         self._assemble_rho()
         self._assemble_u()
 
-        broken_u, rho1 = self.urho.split()
+        broken_u, rho1, _ = self.urhopi.split()
         u1 = self.u_hdiv
 
         # Project broken_u into the HDiv space
