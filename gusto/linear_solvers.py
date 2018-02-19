@@ -235,12 +235,8 @@ class IncompressibleSolver(TimesteppingSolver):
 
     This solver follows the following strategy:
     (1) Analytically eliminate b (introduces error near topography)
-    (2) Solve resulting system for (u,p) using a block Hdiv preconditioner
+    (2) Solve resulting system for (u,p) using a hybrid-mixed method
     (3) Reconstruct b
-
-    This currently requires a (parallel) direct solver so is probably
-    a bit memory-hungry, we'll improve this with a hybridised solver
-    soon.
 
     :arg state: a :class:`.State` object containing everything else.
     :arg L: the width of the domain, used in the preconditioner.
@@ -251,15 +247,17 @@ class IncompressibleSolver(TimesteppingSolver):
     """
 
     solver_parameters = {
-        'ksp_type': 'gmres',
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'additive',
-        'fieldsplit_0': {'ksp_type': 'preonly',
-                         'pc_type': 'lu',
-                         'pc_factor_mat_solver_type': 'mumps'},
-        'fieldsplit_1': {'ksp_type': 'preonly',
-                         'pc_type': 'lu',
-                         'pc_factor_mat_solver_type': 'mumps'}
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_chebyshev_esteig': True,
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
     }
 
     def __init__(self, state, L, solver_parameters=None,
@@ -315,24 +313,11 @@ class IncompressibleSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
                DirichletBC(M.sub(0), 0.0, "top")]
 
-        # preconditioner equation
-        L = self.L
-        Ap = (
-            inner(w, u) + L*L*div(w)*div(u) +
-            phi*p/L/L
-        )*dx
-
         # Solver for u, p
-        up_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.up, bcs=bcs, aP=Ap)
-
-        nullspace = MixedVectorSpaceBasis(M,
-                                          [M.sub(0),
-                                           VectorSpaceBasis(constant=True)])
+        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
 
         self.up_solver = LinearVariationalSolver(up_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 nullspace=nullspace)
+                                                 solver_parameters=self.solver_parameters)
 
         # Reconstruction of b
         b = TrialFunction(Vb)
