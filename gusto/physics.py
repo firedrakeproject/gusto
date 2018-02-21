@@ -1,9 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.advection import SSPRK3
-from firedrake import exp, Interpolator, conditional, Function, \
+from firedrake import Interpolator, conditional, Function, \
     min_value, max_value, TestFunction, dx, as_vector, \
     NonlinearVariationalProblem, NonlinearVariationalSolver
+from gusto import thermodynamics
 
 
 __all__ = ["Condensation", "Fallout"]
