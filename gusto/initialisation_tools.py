@@ -297,7 +297,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-    Vv = state.spaces("Vv")
+    Vv = state.fields('u').function_space()
     n = FacetNormal(state.mesh)
     g = state.parameters.g
     cp = state.parameters.cp
