@@ -136,13 +136,10 @@ def r_sat(parameters, T, p):
     :arg p: the pressure in Pa.
     """
 
-    w_sat1 = parameters.w_sat1
-    w_sat2 = parameters.w_sat2
-    w_sat3 = parameters.w_sat3
-    w_sat4 = parameters.w_sat4
-    T_0 = parameters.T_0
+    epsilon = parameters.R_d / parameters.R_v
+    esat = e_sat(parameters, T)
 
-    return w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    return esat * epsilon / (p - esat)
 
 
 def Lv(parameters, T):
