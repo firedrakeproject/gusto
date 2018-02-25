@@ -1,10 +1,9 @@
 from gusto import *
-from gusto import thermodynamics
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, NonlinearVariationalProblem, \
-    NonlinearVariationalSolver, TestFunction, dx, TrialFunction, Constant, Function, \
+    SpatialCoordinate, conditional, cos, pi, sqrt, \
+    TestFunction, dx, TrialFunction, Constant, Function, \
     LinearVariationalProblem, LinearVariationalSolver, DirichletBC, \
-    FunctionSpace, BrokenElement, VectorFunctionSpace
+    FunctionSpace, BrokenElement
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -16,20 +15,23 @@ else:
     deltax = 100.
     tmax = 1000.
 
+# make mesh
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
-
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+
+# options
+limit = False
 diffusion = False
 recovered = True
 degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_bf_recovered_limiter_test', dumpfreq=20, dumplist=['u'], perturbation_fields=['theta'], log_level='INFO')
+output = OutputParameters(dirname='dry_bf_bubble', dumpfreq=20, dumplist=['u'], perturbation_fields=['theta'])
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
@@ -115,8 +117,18 @@ else:
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
+
+# set up limiter
+if limit:
+    if recovered:
+        limiter = VertexBasedLimiter(VDG1)
+    else:
+        limiter = ThetaLimiter(thetaeqn)
+else:
+    limiter = None
+
 advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
-                   ('theta', SSPRK3(state, theta0, thetaeqn, limiter=VertexBasedLimiter(VDG1)))]
+                   ('theta', SSPRK3(state, theta0, thetaeqn, limiter=limiter))]
 if recovered:
     advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
 else:

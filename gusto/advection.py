@@ -36,7 +36,6 @@ def embedded_dg(original_apply):
                     recovered_project(self)
                 else:
                     self.Projector.project()
-                #self.Projector.project()
                 x_out.assign(self.x_projected)
             return new_apply(self, x_in, x_out)
 
