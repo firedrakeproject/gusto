@@ -3,7 +3,7 @@ from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, conditional, cos, pi, sqrt, \
     TestFunction, dx, TrialFunction, Constant, Function, \
     LinearVariationalProblem, LinearVariationalSolver, DirichletBC, \
-    FunctionSpace, BrokenElement
+    FunctionSpace, BrokenElement, VectorFunctionSpace
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 

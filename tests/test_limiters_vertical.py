@@ -49,7 +49,6 @@ def setup_vert_limiters(dirname):
     V1_element = TensorProductElement(DG1_element, CG2_element)
 
     # spaces
-    Vpsi = FunctionSpace(mesh, "CG", 2)
     VDG1 = FunctionSpace(mesh, "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
     V0 = FunctionSpace(mesh, V0_element)
