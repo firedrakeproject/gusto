@@ -57,7 +57,7 @@ class Advection(object, metaclass=ABCMeta):
     """
 
     def __init__(self, state, field, equation=None, *, solver_parameters=None,
-                 limiter=None, limit=False):
+                 limiter=None):
 
         if equation is not None:
 
@@ -189,9 +189,9 @@ class ExplicitAdvection(Advection):
     """
 
     def __init__(self, state, field, equation=None, *, subcycles=None,
-                 solver_parameters=None, limiter=None, limit=False):
+                 solver_parameters=None, limiter=None):
         super().__init__(state, field, equation,
-                         solver_parameters=solver_parameters, limiter=limiter, limit=limit)
+                         solver_parameters=solver_parameters, limiter=limiter)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
