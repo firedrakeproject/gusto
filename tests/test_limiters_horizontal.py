@@ -10,7 +10,7 @@ from netCDF4 import Dataset
 # This bubble is then advected by a prescribed advection scheme
 
 
-def setup_limiters(dirname):
+def setup_hori_limiters(dirname):
 
     # declare grid shape
     L = 400.
@@ -25,10 +25,10 @@ def setup_limiters(dirname):
 
     fieldlist = ['u']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+"/limiting",
+    output = OutputParameters(dirname=dirname+"/limiting_hori",
                               dumpfreq=5,
                               dumplist=['u'],
-                              perturbation_fields=['theta0v', 'theta0h', 'theta1'])
+                              perturbation_fields=['theta0', 'theta1'])
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -44,29 +44,25 @@ def setup_limiters(dirname):
     DG0_element = FiniteElement("DG", cell, 0)
     CG1_element = FiniteElement("CG", cell, 1)
     DG1_element = FiniteElement("DG", cell, 1)
-    v0_element = TensorProductElement(DG0_element, CG1_element)
-    h0_element = TensorProductElement(CG1_element, DG0_element)
-    v1_element = TensorProductElement(DG1_element, CG2_element)
+    CG2_element = FiniteElement("CG", cell, 2)
+    V0_element = TensorProductElement(DG0_element, CG1_element)
+    V1_element = TensorProductElement(DG1_element, CG2_element)
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
     VDG1 = FunctionSpace(mesh, "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
-    V0v = FunctionSpace(mesh, v0_element)
-    V0h = FunctionSpace(mesh, h0_element)
-    V1v = FunctionSpace(mesh, v1_element)
+    V0 = FunctionSpace(mesh, V0_element)
+    V1 = FunctionSpace(mesh, V1_element)
 
-    V0v_brok = FunctionSpace(mesh, BrokenElement(V0v.ufl_element()))
-    V0h_brok = FunctionSpace(mesh, BrokenElement(V0h.ufl_element()))
+    V0_brok = FunctionSpace(mesh, BrokenElement(V0.ufl_element()))
 
-    v0_spaces = (VDG1, VCG1, V0v_brok)
-    h0_spaces = (VDG1, VCG1, V0h_brok)
+    V0_spaces = (VDG1, VCG1, V0_brok)
 
     # declare initial fields
     u0 = state.fields("u")
-    theta0v = state.fields("theta0v", V0v)
-    theta0h = state.fields("theta0h", V0h)
-    theta1 = state.fields("theta1", V1v)
+    theta0 = state.fields("theta0", V0)
+    theta1 = state.fields("theta1", V1)
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
@@ -74,9 +70,8 @@ def setup_limiters(dirname):
     # Isentropic background state
     Tsurf = 300.
     thetab = Constant(Tsurf)
-    theta_b1 = Function(V1v).interpolate(thetab)
-    theta_b0v = Function(V0v).interpolate(thetab)
-    theta_b0h = Function(V0h).interpolate(thetab)
+    theta_b1 = Function(V1).interpolate(thetab)
+    theta_b0 = Function(V0).interpolate(thetab)
 
     # set up bubble
     xc = 200.
@@ -86,9 +81,8 @@ def setup_limiters(dirname):
                              conditional(sqrt((z - zc) ** 2.0) < rc,
                                          Constant(2.0),
                                          Constant(0.0)), Constant(0.0))
-    theta_pert1 = Function(V1v).interpolate(theta_expr)
-    theta_pert0v = Function(V0v).interpolate(theta_expr)
-    theta_pert0h = Function(V0h).interpolate(theta_expr)
+    theta_pert1 = Function(V1).interpolate(theta_expr)
+    theta_pert0 = Function(V0).interpolate(theta_expr)
 
     # set up velocity field
     u_max = Constant(10.0)
@@ -97,24 +91,21 @@ def setup_limiters(dirname):
 
     psi0 = Function(Vpsi).interpolate(psi_expr)
     u0.project(gradperp(psi0))
-    theta0v.interpolate(theta_b0v + theta_pert0v)
-    theta0h.interpolate(theta_b0h + theta_pert0h)
+    theta0.interpolate(theta_b0 + theta_pert0)
     theta1.interpolate(theta_b1 + theta_pert1)
 
-    state.initialise([('u', u0), ('theta1', theta1), ('theta0v', theta0v), ('theta0h', theta0h)])
-    state.set_reference_profiles([('theta1', theta_b1), ('theta0v', theta_b0v), ('theta0h', theta_b0h)])
+    state.initialise([('u', u0), ('theta1', theta1), ('theta0', theta0)])
+    state.set_reference_profiles([('theta1', theta_b1), ('theta0', theta_b0)])
 
     # set up advection schemes
-    thetaeqn1 = EmbeddedDGAdvection(state, V1v, equation_form="advective")
-    thetaeqn0v = EmbeddedDGAdvection(state, V0v, equation_form="advective", recovered_spaces=v0_spaces)
-    thetaeqn0h = EmbeddedDGAdvection(state, V0h, equation_form="advective", recovered_spaces=h0_spaces)
+    thetaeqn1 = EmbeddedDGAdvection(state, V1, equation_form="advective")
+    thetaeqn0 = EmbeddedDGAdvection(state, V0, equation_form="advective", recovered_spaces=V0_spaces)
 
     # build advection dictionary
     advected_fields = []
     advected_fields.append(('u', NoAdvection(state, u0, None)))
     advected_fields.append(('theta1', SSPRK3(state, theta1, thetaeqn1, limiter=ThetaLimiter(thetaeqn1))))
-    advected_fields.append(('theta0v', SSPRK3(state, theta0v, thetaeqn0v, limiter=VertexBasedLimiter(VDG1))))
-    advected_fields.append(('theta0h', SSPRK3(state, theta0h, thetaeqn0h, limiter=VertexBasedLimiter(VDG1))))
+    advected_fields.append(('theta0', SSPRK3(state, theta0, thetaeqn0, limiter=VertexBasedLimiter(VDG1))))
 
     # build time stepper
     stepper = AdvectionDiffusion(state, advected_fields)
@@ -122,34 +113,28 @@ def setup_limiters(dirname):
     return stepper, 40.0
 
 
-def run_limiters(dirname):
+def run_hori_limiters(dirname):
 
-    stepper, tmax = setup_limiters(dirname)
+    stepper, tmax = setup_hori_limiters(dirname)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_limiters_setup(tmpdir):
+def test_hori_limiters_setup(tmpdir):
 
     dirname = str(tmpdir)
-    run_limiters(dirname)
-    filename = path.join(dirname, "limiting/diagnostics.nc")
+    run_hori_limiters(dirname)
+    filename = path.join(dirname, "limiting_hori/diagnostics.nc")
     data = Dataset(filename, "r")
 
     theta1 = data.groups["theta1_perturbation"]
     max_theta1 = theta1.variables["max"]
     min_theta1 = theta1.variables["min"]
 
-    theta0v = data.groups["theta0v_perturbation"]
-    max_theta0v = theta0v.variables["max"]
-    min_theta0v = theta0v.variables["min"]
-
-    theta0h = data.groups["theta0h_perturbation"]
-    max_theta0h = theta0h.variables["max"]
-    min_theta0h = theta0h.variables["min"]
+    theta0 = data.groups["theta0_perturbation"]
+    max_theta0 = theta0.variables["max"]
+    min_theta0 = theta0.variables["min"]
 
     assert max_theta1[-1] <= max_theta1[0]
     assert min_theta1[-1] >= min_theta1[0]
-    assert max_theta0v[-1] <= max_theta0v[0]
-    assert min_theta0v[-1] >= min_theta0v[0]
-    assert max_theta0h[-1] <= max_theta0h[0]
-    assert min_theta0h[-1] >= min_theta0h[0]
+    assert max_theta0[-1] <= max_theta0[0]
+    assert min_theta0[-1] >= min_theta0[0]
