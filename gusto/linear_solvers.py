@@ -390,15 +390,25 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         # "broken" u and rho system
-        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                - beta*cp*div(theta*V(w))*pibar*dxp
-                + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
-                + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_hp
-                + beta*cp*dot(theta*V(w), n)*self.pibar_avg*ds_tbp
-                - beta*cp*div(thetabar*w)*pi*dxp
-                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*dot(phi*u, n)*self.rhobar_avg('+')*(dS_v + dS_h))
-
+        average = True
+        if average:
+            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+                    - beta*cp*div(theta*V(w))*pibar*dxp
+                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_hp
+                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg*ds_tbp
+                    - beta*cp*div(thetabar*w)*pi*dxp
+                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                    + beta*dot(phi*u, n)*self.rhobar_avg('+')*(dS_v + dS_h))
+        else:
+            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+                    - beta*cp*div(theta*V(w))*pibar*dxp
+                    #+ beta*cp*dot(theta*V(w), n)*pibar('+')*dS_vp
+                    + beta*cp*dot(theta*V(w), n)*pibar('+')*dS_hp
+                    #+ beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
+                    - beta*cp*div(thetabar*w)*pi*dxp
+                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                    + beta*dot(phi*u, n)*rhobar('+')*(dS_v + dS_h))
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
