@@ -286,6 +286,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
 
+    solver_parameters = {'ksp_type': 'gmres',
+                         'pc_type': 'lu',
+                         'ksp_monitor_true_residual':True}
+    
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
@@ -363,12 +367,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         ds_vp = ds_v(degree=(self.quadrature_degree))
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
-        trace_mass = (dl('+')*l0('+')*(dS_vp + dS_hp)
-                      + dl*l0*ds_vp + dl*l0*ds_tbp)
+        trace_mass = (dl('+')*l0('+')*(dS_v + dS_h)
+                      + dl*l0*ds_v + dl*l0*ds_tb)
         tM = assemble(trace_mass)
 
-        self._traceL = lambda f: (dl('+')*avg(f)*(dS_vp + dS_hp)
-                                  + dl*f*ds_vp + dl*f*ds_tbp)
+        self._traceL = lambda f: (dl('+')*avg(f)*(dS_v + dS_h)
+                                  + dl*f*ds_v + dl*f*ds_tb)
 
         self.Lrhobar = Function(Vtrace)
         self.Lpibar = Function(Vtrace)
@@ -393,9 +397,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         average = True
         if average:
             Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                    - beta*cp*div(theta*V(w))*pibar*dxp
-                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
-                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_hp
+                    - beta*cp*div(theta*V(w))*pibar*dx
+                    #+ beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_h
                     + beta*cp*dot(theta*V(w), n)*self.pibar_avg*ds_tbp
                     - beta*cp*div(thetabar*w)*pi*dxp
                     + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
@@ -405,7 +409,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                     - beta*cp*div(theta*V(w))*pibar*dxp
                     #+ beta*cp*dot(theta*V(w), n)*pibar('+')*dS_vp
                     + beta*cp*dot(theta*V(w), n)*pibar('+')*dS_hp
-                    #+ beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
+                    + beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
                     - beta*cp*div(thetabar*w)*pi*dxp
                     + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
                     + beta*dot(phi*u, n)*rhobar('+')*(dS_v + dS_h))
@@ -421,9 +425,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Off-diagonal block matrices containing the contributions
         # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_vp
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_tbp)
+        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_v + dS_h)
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_v
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_tb)
 
         # X = A.inv * (X_r - K * l),
         # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
