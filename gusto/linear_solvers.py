@@ -279,17 +279,12 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     # NOTE: The reduced operator is not symmetric
     solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'gamg',
-                         'ksp_monitor_true_residual': True,
                          'mg_levels': {'ksp_type': 'chebyshev',
                                        'ksp_chebyshev_esteig': True,
                                        'ksp_max_it': 1,
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
 
-    solver_parameters = {'ksp_type': 'gmres',
-                         'pc_type': 'lu',
-                         'ksp_monitor_true_residual':True}
-    
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
@@ -367,23 +362,30 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         ds_vp = ds_v(degree=(self.quadrature_degree))
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
-        trace_mass = (dl('+')*l0('+')*(dS_v + dS_h)
+        # Mass matrix for the trace space
+        tM = assemble(dl('+')*l0('+')*(dS_v + dS_h)
                       + dl*l0*ds_v + dl*l0*ds_tb)
-        tM = assemble(trace_mass)
 
-        self._traceL = lambda f: (dl('+')*avg(f)*(dS_v + dS_h)
-                                  + dl*f*ds_v + dl*f*ds_tb)
-
-        self.Lrhobar = Function(Vtrace)
-        self.Lpibar = Function(Vtrace)
+        Lrhobar = Function(Vtrace)
+        Lpibar = Function(Vtrace)
         rhopi_solver = LinearSolver(tM, solver_parameters={'ksp_type': 'cg',
                                                            'pc_type': 'bjacobi',
-                                                           'sub_pc_type': 'ilu',
-                                                           'ksp_monitor_true_residual': True},
+                                                           'sub_pc_type': 'ilu'},
                                     options_prefix='rhobarpibar_solver')
-        self.rhobarpibar_solver = rhopi_solver
-        self.rhobar_avg = Function(Vtrace)
-        self.pibar_avg = Function(Vtrace)
+
+        rhobar_avg = Function(Vtrace)
+        pibar_avg = Function(Vtrace)
+
+        def _traceRHS(f):
+            return (dl('+')*avg(f)*(dS_v + dS_h)
+                    + dl*f*ds_v + dl*f*ds_tb)
+
+        assemble(_traceRHS(rhobar), tensor=Lrhobar)
+        assemble(_traceRHS(pibar), tensor=Lpibar)
+
+        # Project averages of coefficients into the trace space
+        rhopi_solver.solve(rhobar_avg, Lrhobar)
+        rhopi_solver.solve(pibar_avg, Lpibar)
 
         # Add effect of density of water upon theta
         if self.moisture is not None:
@@ -394,25 +396,15 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         # "broken" u and rho system
-        average = True
-        if average:
-            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                    - beta*cp*div(theta*V(w))*pibar*dx
-                    #+ beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
-                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_h
-                    + beta*cp*dot(theta*V(w), n)*self.pibar_avg*ds_tbp
-                    - beta*cp*div(thetabar*w)*pi*dxp
-                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                    + beta*dot(phi*u, n)*self.rhobar_avg('+')*(dS_v + dS_h))
-        else:
-            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                    - beta*cp*div(theta*V(w))*pibar*dxp
-                    #+ beta*cp*dot(theta*V(w), n)*pibar('+')*dS_vp
-                    + beta*cp*dot(theta*V(w), n)*pibar('+')*dS_hp
-                    + beta*cp*dot(theta*V(w), n)*pibar*ds_tbp
-                    - beta*cp*div(thetabar*w)*pi*dxp
-                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                    + beta*dot(phi*u, n)*rhobar('+')*(dS_v + dS_h))
+        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+                - beta*cp*div(theta*V(w))*pibar*dx
+                # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                + beta*cp*dot(theta*V(w), n)*pibar_avg('+')*dS_h
+                + beta*cp*dot(theta*V(w), n)*pibar_avg*ds_tbp
+                - beta*cp*div(thetabar*w)*pi*dxp
+                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
+
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
@@ -443,6 +435,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # Schur complement operator:
         Smatexp = K.T * A.inv * K
         S = assemble(Smatexp)
+        S.force_evaluation()
 
         # Set up the Linear solver for the system of Lagrange multipliers
         self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
@@ -519,16 +512,6 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
-        # Trace projection RHS
-        thetabar = self.state.fields("thetabar")
-        rhobar = self.state.fields("rhobar")
-        pibar = thermodynamics.pi(self.state.parameters, rhobar, thetabar)
-        assemble(self._traceL(rhobar), tensor=self.Lrhobar)
-        assemble(self._traceL(pibar), tensor=self.Lpibar)
-
-        # Project averages of coefficients into the trace space
-        self.rhobarpibar_solver.solve(self.rhobar_avg, self.Lrhobar)
-        self.rhobarpibar_solver.solve(self.pibar_avg, self.Lpibar)
 
         # Assemble the RHS for lambda into self.R
         self._assemble_Rexp()
