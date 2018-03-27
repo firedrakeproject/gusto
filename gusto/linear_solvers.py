@@ -280,9 +280,10 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
     # NOTE: The reduced operator is not symmetric
     solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'gamg',
+                         'ksp_rtol': 1.0e-8,
                          'mg_levels': {'ksp_type': 'chebyshev',
                                        'ksp_chebyshev_esteig': True,
-                                       'ksp_max_it': 1,
+                                       'ksp_max_it': 2,
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
 
