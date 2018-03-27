@@ -239,11 +239,12 @@ class IncompressibleSolver(TimesteppingSolver):
     (3) Reconstruct b
 
     :arg state: a :class:`.State` object containing everything else.
-    :arg L: the width of the domain, used in the preconditioner.
     :arg solver_parameters: (optional) Solver parameters.
     :arg overwrite_solver_parameters: boolean, if True use only the
-    solver_parameters that have been passed in, if False then update
-    the default solver parameters with the solver_parameters passed in.
+                                      solver_parameters that have been passed
+                                      in, if False then update the default
+                                      solver parameters with the solver_parameters
+                                      passed in.
     """
 
     solver_parameters = {
@@ -260,7 +261,7 @@ class IncompressibleSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, L, solver_parameters=None,
+    def __init__(self, state, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.L = L
