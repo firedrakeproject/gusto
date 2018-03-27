@@ -2,7 +2,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, MixedVectorSpaceBasis, VectorSpaceBasis
+    Function, VectorSpaceBasis
 from firedrake.solving_utils import flatten_parameters
 
 from gusto.configuration import DEBUG
