@@ -265,13 +265,14 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
-    quadrature degree in the horizontal direction and q_v is that in
-    the vertical direction
+                            quadrature degree in the horizontal direction
+                            and q_v is that in the vertical direction.
     :arg solver_parameters (optional): solver parameters for the
-    trace system
-    :arg overwrite_solver_parameters: boolean, if True use only the
-    solver_parameters that have been passed in, if False then update
-    the default solver parameters with the solver_parameters passed in.
+                                       trace system.
+    :arg overwrite_solver_parameters: boolean, if True use only the solver_parameters
+                                      that have been passed in, if False then update.
+                                      the default solver parameters with the
+                                      solver_parameters passed in.
     :arg moisture (optional): list of names of moisture fields.
     """
 
