@@ -398,9 +398,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                - beta*cp*div(theta*V(w))*pibar*dx
+                - beta*cp*div(theta*V(w))*pibar*dxp
                 # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
-                + beta*cp*dot(theta*V(w), n)*pibar_avg('+')*dS_h
+                + beta*cp*dot(theta*V(w), n)*pibar_avg('+')*dS_hp
                 + beta*cp*dot(theta*V(w), n)*pibar_avg*ds_tbp
                 - beta*cp*div(thetabar*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
@@ -418,9 +418,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Off-diagonal block matrices containing the contributions
         # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_v + dS_h)
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_v
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_tb)
+        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_vp
+                   + beta*cp*dot(thetabar*w, n)*l0*ds_tbp)
 
         # X = A.inv * (X_r - K * l),
         # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
