@@ -247,14 +247,17 @@ class IncompressibleSolver(TimesteppingSolver):
     """
 
     solver_parameters = {
-        'ksp_type': 'gmres',
-        'pmat_type': 'matfree',
-        'ksp_monitor_true_residual': True,
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'preonly',
-                          'pc_type': 'lu',
-                          'pc_factor_mat_solver_package': 'mumps'}
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
     }
 
     def __init__(self, state, L, solver_parameters=None,
@@ -313,12 +316,14 @@ class IncompressibleSolver(TimesteppingSolver):
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
 
-        # Nullspace for the trace system
-        trace_nullsp = VectorSpaceBasis(constant=True)
-        app_ctx = {"hybridization_trace_nullspace": trace_nullsp}
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
         self.up_solver = LinearVariationalSolver(up_problem,
                                                  solver_parameters=self.solver_parameters,
-                                                 appctx=app_ctx)
+                                                 appctx=appctx)
 
         # Reconstruction of b
         b = TrialFunction(Vb)
