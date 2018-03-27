@@ -10,21 +10,9 @@ dt = 100.
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
-    # don't use mumps here, testing the overwrite-solver-options functionality
-    linear_solver_params = {'ksp_type': 'gmres',
-                            'pc_type': 'fieldsplit',
-                            'pc_fieldsplit_type': 'additive',
-                            'fieldsplit_0_pc_type': 'lu',
-                            'fieldsplit_1_pc_type': 'lu',
-                            'fieldsplit_0_ksp_type': 'preonly',
-                            'fieldsplit_1_ksp_type': 'preonly'}
-    overwrite = True
 else:
     tmax = 30*day
     tdump = 2*hour
-    # use default linear solver parameters (i.e. mumps)
-    linear_solver_params = None
-    overwrite = False
 
 ##############################################################################
 # set up mesh
@@ -196,7 +184,7 @@ advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, 2.*L, solver_parameters=linear_solver_params, overwrite_solver_parameters=overwrite)
+linear_solver = IncompressibleSolver(state)
 
 ##############################################################################
 # Set up forcing

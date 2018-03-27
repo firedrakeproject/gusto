@@ -263,8 +263,6 @@ class IncompressibleSolver(TimesteppingSolver):
 
     def __init__(self, state, solver_parameters=None,
                  overwrite_solver_parameters=False):
-
-        self.L = L
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):

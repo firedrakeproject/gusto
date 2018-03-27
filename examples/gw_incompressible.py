@@ -137,7 +137,7 @@ advected_fields.append(("b", SSPRK3(state, b0, beqn)))
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-linear_solver = IncompressibleSolver(state, L)
+linear_solver = IncompressibleSolver(state)
 
 ##############################################################################
 # Set up forcing
