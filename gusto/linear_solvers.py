@@ -165,20 +165,29 @@ class CompressibleSolver(TimesteppingSolver):
             water_t = Function(Vtheta).assign(0.0)
             for water in self.moisture:
                 water_t += self.state.fields(water)
-            theta = theta / (1 + water_t)
-            thetabar = thetabar / (1 + water_t)
-
-        eqn = (
-            inner(w, (state.h_project(u) - u_in))*dx
-            - beta*cp*div(theta*V(w))*pibar*dxp
-            # following does nothing but is preserved in the comments
-            # to remind us why (because V(w) is purely vertical.
-            # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
-            - beta*cp*div(thetabar*w)*pi*dxp
-            + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
-            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-            + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
-        )
+            eqn = (
+                inner(w, (state.h_project(u) - u_in))*dx
+                - beta*cp*div(theta/(1 + water_t)*V(w))*pibar*dxp
+                # following does nothing but is preserved in the comments
+                # to remind us why (because V(w) is purely vertical.
+                # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+                - beta*cp*div(thetabar/(1 + water_t)*w)*pi*dxp
+                + beta*cp*jump(thetabar/(1 + water_t)*w, n)*avg(pi)*dS_vp
+                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
+            )
+        else:
+            eqn = (
+                inner(w, (state.h_project(u) - u_in))*dx
+                - beta*cp*div(theta*V(w))*pibar*dxp
+                # following does nothing but is preserved in the comments
+                # to remind us why (because V(w) is purely vertical.
+                # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+                - beta*cp*div(thetabar*w)*pi*dxp
+                + beta*cp*jump(thetabar*w, n)*avg(pi)*dS_vp
+                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
+            )
 
         if mu is not None:
             eqn += dt*mu*inner(w, k)*inner(u, k)*dx
@@ -394,18 +403,25 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
             water_t = Function(Vtheta).assign(0.0)
             for water in self.moisture:
                 water_t += self.state.fields(water)
-            theta = theta / (1 + water_t)
-            thetabar = thetabar / (1 + water_t)
-
-        # "broken" u and rho system
-        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                - beta*cp*div(theta*V(w))*pibar*dxp
-                # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
-                + beta*cp*dot(theta*V(w), n)*pibar_avg('+')*dS_hp
-                + beta*cp*dot(theta*V(w), n)*pibar_avg*ds_tbp
-                - beta*cp*div(thetabar*w)*pi*dxp
-                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
+            # "broken" u and rho system
+            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+                    - beta*cp*div(theta/(1 + water_t)*V(w))*pibar*dxp
+                    # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                    + beta*cp*dot(theta/(1 + water_t)*V(w), n)*pibar_avg('+')*dS_hp
+                    + beta*cp*dot(theta/(1 + water_t)*V(w), n)*pibar_avg*ds_tbp
+                    - beta*cp*div(thetabar/(1 + water_t)*w)*pi*dxp
+                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                    + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
+        else:
+            # "broken" u and rho system
+            Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
+                    - beta*cp*div(theta*V(w))*pibar*dxp
+                    # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                    + beta*cp*dot(theta*V(w), n)*pibar_avg('+')*dS_hp
+                    + beta*cp*dot(theta*V(w), n)*pibar_avg*ds_tbp
+                    - beta*cp*div(thetabar*w)*pi*dxp
+                    + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+                    + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
 
         if mu is not None:
             Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
@@ -417,11 +433,18 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         A = Tensor(lhs(Aeqn))
         X_r = Tensor(rhs(Aeqn))
 
-        # Off-diagonal block matrices containing the contributions
-        # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_vp
-                   + beta*cp*dot(thetabar*w, n)*l0*ds_tbp)
+        if self.moisture is not None:
+            # Off-diagonal block matrices containing the contributions
+            # of the Lagrange multipliers (surface terms in the momentum equation)
+            K = Tensor(beta*cp*dot(thetabar/(1 + water_t)*w, n)*l0('+')*(dS_vp + dS_hp)
+                       + beta*cp*dot(thetabar/(1 + water_t)*w, n)*l0*ds_vp
+                       + beta*cp*dot(thetabar/(1 + water_t)*w, n)*l0*ds_tbp)
+        else:
+            # Off-diagonal block matrices containing the contributions
+            # of the Lagrange multipliers (surface terms in the momentum equation)
+            K = Tensor(beta*cp*dot(thetabar*w, n)*l0('+')*(dS_vp + dS_hp)
+                       + beta*cp*dot(thetabar*w, n)*l0*ds_vp
+                       + beta*cp*dot(thetabar*w, n)*l0*ds_tbp)
 
         # X = A.inv * (X_r - K * l),
         # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
