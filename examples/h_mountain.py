@@ -25,6 +25,7 @@ def minimum(f):
         """, "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
     return fmin.data[0]
 
+
 # Run example with hybridization and without
 for hybridization in [True, False]:
     m = PeriodicIntervalMesh(columns, L)
