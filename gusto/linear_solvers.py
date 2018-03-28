@@ -406,7 +406,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
         # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta_w*V(w))*pibar*dxp
-                # + beta*cp*dot(theta*V(w), n)*self.pibar_avg('+')*dS_vp
+                # following does nothing but is preserved in the comments
+                # to remind us why (because V(w) is purely vertical).
+                # + beta*cp*dot(theta_w*V(w), n)*self.pibar_avg('+')*dS_vp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
                 - beta*cp*div(thetabar_w*w)*pi*dxp
