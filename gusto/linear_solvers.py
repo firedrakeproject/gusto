@@ -540,7 +540,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         for bc in self.bcs:
             bc.apply(u1)
-        
+
         # Copy back into u and rho cpts of dy
         u, rho, theta = self.state.dy.split()
         u.assign(u1)
