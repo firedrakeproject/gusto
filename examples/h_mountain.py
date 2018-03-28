@@ -155,7 +155,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 # Set up linear solver
 lu_params = {'pc_type': 'lu',
              'ksp_type': 'preonly',
-             'pc_factor_mat_solver_package': 'mumps',
+             'pc_factor_mat_solver_type': 'mumps',
              'mat_type': 'aij'}
 
 linear_solver = CompressibleSolver(state, solver_parameters=lu_params)

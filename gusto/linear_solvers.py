@@ -256,10 +256,10 @@ class IncompressibleSolver(TimesteppingSolver):
         'pc_fieldsplit_type': 'additive',
         'fieldsplit_0': {'ksp_type': 'preonly',
                          'pc_type': 'lu',
-                         'pc_factor_mat_solver_package': 'mumps'},
+                         'pc_factor_mat_solver_type': 'mumps'},
         'fieldsplit_1': {'ksp_type': 'preonly',
                          'pc_type': 'lu',
-                         'pc_factor_mat_solver_package': 'mumps'}
+                         'pc_factor_mat_solver_type': 'mumps'}
     }
 
     def __init__(self, state, L, solver_parameters=None,
