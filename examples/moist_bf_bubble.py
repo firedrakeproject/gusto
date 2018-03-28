@@ -69,17 +69,6 @@ for hybridization in [True, False]:
     quadrature_degree = (5, 5)
     dxp = dx(degree=(quadrature_degree))
 
-    if recovered:
-        VDG1 = FunctionSpace(mesh, "DG", 1)
-        VCG1 = FunctionSpace(mesh, "CG", 1)
-        Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-        Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
-        Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-        u_spaces = (Vu_DG1, Vu_CG1, Vu)
-        rho_spaces = (VDG1, VCG1, Vr)
-        theta_spaces = (VDG1, VCG1, Vt_brok)
-
     # Define constant theta_e and water_t
     Tsurf = 320.0
     total_water = 0.02
@@ -106,7 +95,8 @@ for hybridization in [True, False]:
     Tdash = 2.0
     theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2) > rc,
                                                       0.0, Tdash *
-                                                      (cos(pi * sqrt(((x[0] - xc) / rc) ** 2 + ((x[1] - zc) / rc) ** 2) / 2.0)) ** 2))
+                                                      (cos(pi * sqrt(((x[0] - xc) / rc) ** 2 + ((x[1] - zc) / rc) ** 2) / 2.0))
+                                                      ** 2))
 
     # define initial theta
     theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
@@ -114,22 +104,22 @@ for hybridization in [True, False]:
     # find perturbed rho
     gamma = TestFunction(Vr)
     rho_trial = TrialFunction(Vr)
-    a = gamma * rho_trial * dxp
-    L = gamma * (rho_b * theta_b / theta0) * dxp
-    rho_problem = LinearVariationalProblem(a, L, rho0)
+    arho = gamma * rho_trial * dxp
+    Lrho = gamma * (rho_b * theta_b / theta0) * dxp
+    rho_problem = LinearVariationalProblem(arho, Lrho, rho0)
     rho_solver = LinearVariationalSolver(rho_problem)
     rho_solver.solve()
 
     # find perturbed water_v
     w_v = Function(Vt)
-    phi = TestFunction(Vt)
+    phi_v = TestFunction(Vt)
 
-    pi = thermodynamics.pi(state.parameters, rho0, theta0)
-    p = thermodynamics.p(state.parameters, pi)
-    T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
+    pie = thermodynamics.pi(state.parameters, rho0, theta0)
+    p = thermodynamics.p(state.parameters, pie)
+    T = thermodynamics.T(state.parameters, theta0, pie, r_v=w_v)
     w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
-    w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
+    w_functional = (phi_v * w_v * dxp - phi_v * w_sat * dxp)
     w_problem = NonlinearVariationalProblem(w_functional, w_v)
     w_solver = NonlinearVariationalSolver(w_problem)
     w_solver.solve()
@@ -149,6 +139,16 @@ for hybridization in [True, False]:
 
     # Set up advection schemes
     if recovered:
+        VDG1 = FunctionSpace(mesh, "DG", 1)
+        VCG1 = FunctionSpace(mesh, "CG", 1)
+        Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+        Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
+        Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+        u_spaces = (Vu_DG1, Vu_CG1, Vu)
+        rho_spaces = (VDG1, VCG1, Vr)
+        theta_spaces = (VDG1, VCG1, Vt_brok)
+
         ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective",
                                    recovered_spaces=u_spaces)
         rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity",
