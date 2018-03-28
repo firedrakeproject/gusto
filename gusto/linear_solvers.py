@@ -510,6 +510,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                                                                        'pc_sub_type': 'ilu'},
                                                     options_prefix='thetabacksubstitution')
 
+        self.bcs = [DirichletBC(Vu, 0.0, "bottom"),
+                    DirichletBC(Vu, 0.0, "top")]
+
     def solve(self):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
@@ -535,6 +538,9 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                   "vec_in": (broken_u, READ),
                   "vec_out": (u1, INC)})
 
+        for bc in self.bcs:
+            bc.apply(u1)
+        
         # Copy back into u and rho cpts of dy
         u, rho, theta = self.state.dy.split()
         u.assign(u1)
