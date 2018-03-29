@@ -112,31 +112,33 @@ for hybridization in [True, False]:
     theta_b = Function(Vt).interpolate(thetab)
 
     # Calculate hydrostatic Pi
-    params = {'pc_type': 'fieldsplit',
-              'pc_fieldsplit_type': 'schur',
-              'ksp_type': 'gmres',
-              'ksp_monitor_true_residual': True,
-              'ksp_max_it': 1000,
-              'ksp_gmres_restart': 50,
-              'pc_fieldsplit_schur_fact_type': 'FULL',
-              'pc_fieldsplit_schur_precondition': 'selfp',
-              'fieldsplit_0': {'ksp_type': 'richardson',
-                               'ksp_max_it': 5,
-                               'pc_type': 'bjacobi',
-                               'sub_pc_type': 'ilu'},
-              'fieldsplit_1': {'ksp_type': 'richardson',
-                               'ksp_max_it': 5,
-                               'ksp_monitor_true_residual': True,
-                               'pc_type': 'bjacobi',
-                               'sub_pc_type': 'ilu'}}
+    piparams = {'pc_type': 'fieldsplit',
+                'pc_fieldsplit_type': 'schur',
+                'ksp_type': 'gmres',
+                'ksp_monitor_true_residual': True,
+                'ksp_max_it': 1000,
+                'ksp_gmres_restart': 50,
+                'pc_fieldsplit_schur_fact_type': 'FULL',
+                'pc_fieldsplit_schur_precondition': 'selfp',
+                'fieldsplit_0': {'ksp_type': 'preonly',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'},
+                'fieldsplit_1': {'ksp_type': 'preonly',
+                                 'pc_type': 'gamg',
+                                 'pc_gamg_sym_graph': True,
+                                 'mg_levels': {'ksp_type': 'chebyshev',
+                                               'ksp_chebyshev_esteig': True,
+                                               'ksp_max_it': 5,
+                                               'pc_type': 'bjacobi',
+                                               'sub_pc_type': 'ilu'}}}
     Pi = Function(Vr)
     rho_b = Function(Vr)
     compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True,
-                                     pi_boundary=0.5, params=params)
+                                     pi_boundary=0.5, params=piparams)
 
     p0 = minimum(Pi)
     compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True,
-                                     params=params)
+                                     params=piparams)
 
     p1 = minimum(Pi)
     alpha = 2.*(p1-p0)
@@ -144,7 +146,7 @@ for hybridization in [True, False]:
     pi_top = (1.-beta)/alpha
     compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True,
                                      pi_boundary=pi_top, solve_for_rho=True,
-                                     params=params)
+                                     params=piparams)
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
@@ -173,14 +175,24 @@ for hybridization in [True, False]:
 
     # Set up linear solver
     if hybridization:
-        linear_solver = HybridisedCompressibleSolver(state)
+        params = {'ksp_type': 'gmres',
+                  'ksp_rtol': 1.0e-8,
+                  'pc_type': 'gamg',
+                  'pc_gamg_sym_graph': True,
+                  'mg_levels': {'ksp_type': 'chebyshev',
+                                'ksp_chebyshev_esteig': True,
+                                'ksp_max_it': 5,
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}}
+        linear_solver = HybridisedCompressibleSolver(state, solver_parameters=params,
+                                                     overwrite_solver_parameters=True)
     else:
         # LU parameters
-        lu_params = {'pc_type': 'lu',
-                     'ksp_type': 'preonly',
-                     'pc_factor_mat_solver_type': 'mumps',
-                     'mat_type': 'aij'}
-        linear_solver = CompressibleSolver(state, solver_parameters=lu_params,
+        params = {'pc_type': 'lu',
+                  'ksp_type': 'preonly',
+                  'pc_factor_mat_solver_type': 'mumps',
+                  'mat_type': 'aij'}
+        linear_solver = CompressibleSolver(state, solver_parameters=params,
                                            overwrite_solver_parameters=True)
 
     # Set up forcing

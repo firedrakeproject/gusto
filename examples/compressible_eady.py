@@ -182,6 +182,7 @@ for hybridization in [True, False]:
     # Set up linear solver for the timestepping scheme
     if hybridization:
         linear_solver_params = {'ksp_type': 'gmres',
+                                'ksp_rtol': 1.0e-8,
                                 'pc_type': 'gamg',
                                 'pc_gamg_sym_graph': True,
                                 'mg_levels': {'ksp_type': 'chebyshev',
