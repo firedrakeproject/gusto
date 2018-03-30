@@ -25,8 +25,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     :arg state: :class:`.State` object.
     :arg solver_parameters (optional): solver parameters
     :arg overwrite_solver_parameters: boolean, if True use only the
-    solver_parameters that have been passed in, if False then update
-    the default solver parameters with the solver_parameters passed in.
+         solver_parameters that have been passed in, if False then update
+         the default solver parameters with the solver_parameters passed in.
     """
 
     def __init__(self, state, solver_parameters=None,
@@ -69,12 +69,12 @@ class CompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
-    quadrature degree in the horizontal direction and q_v is that in
-    the vertical direction
+         quadrature degree in the horizontal direction and q_v is that in
+         the vertical direction
     :arg solver_parameters (optional): solver parameters
     :arg overwrite_solver_parameters: boolean, if True use only the
-    solver_parameters that have been passed in, if False then update
-    the default solver parameters with the solver_parameters passed in.
+         solver_parameters that have been passed in, if False then update
+         the default solver parameters with the solver_parameters passed in.
     :arg moisture (optional): list of names of moisture fields.
     """
 
@@ -268,14 +268,13 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
-                            quadrature degree in the horizontal direction
-                            and q_v is that in the vertical direction.
+         quadrature degree in the horizontal direction and q_v is that in
+         the vertical direction.
     :arg solver_parameters (optional): solver parameters for the
-                                       trace system.
-    :arg overwrite_solver_parameters: boolean, if True use only the solver_parameters
-                                      that have been passed in, if False then update.
-                                      the default solver parameters with the
-                                      solver_parameters passed in.
+         trace system.
+    :arg overwrite_solver_parameters: boolean, if True use only the
+         solver_parameters that have been passed in, if False then update.
+         the default solver parameters with the solver_parameters passed in.
     :arg moisture (optional): list of names of moisture fields.
     """
 
@@ -687,6 +686,11 @@ class IncompressibleSolver(TimesteppingSolver):
 
 
 class ShallowWaterSolver(TimesteppingSolver):
+    """
+    Timestepping linear solver object for the nonlinear shallow water
+    equations with prognostic variables u and D. The linearized system
+    is solved using a hybridized-mixed method.
+    """
 
     solver_parameters = {
         'ksp_type': 'preonly',
