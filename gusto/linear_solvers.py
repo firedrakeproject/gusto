@@ -175,8 +175,8 @@ class CompressibleSolver(TimesteppingSolver):
             inner(w, (state.h_project(u) - u_in))*dx
             - beta*cp*div(theta_w*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
-            # to remind us why (because V(w) is purely vertical.
-            # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v
+            # to remind us why (because V(w) is purely vertical).
+            # + beta*cp*jump(theta*V(w), n)*avg(pibar)*dS_v
             - beta*cp*div(thetabar_w*w)*pi*dxp
             + beta*cp*jump(thetabar_w*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
@@ -408,7 +408,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
                 - beta*cp*div(theta_w*V(w))*pibar*dxp
                 # following does nothing but is preserved in the comments
                 # to remind us why (because V(w) is purely vertical).
-                # + beta*cp*dot(theta_w*V(w), n)*self.pibar_avg('+')*dS_vp
+                # + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
                 - beta*cp*div(thetabar_w*w)*pi*dxp
