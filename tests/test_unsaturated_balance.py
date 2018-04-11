@@ -9,8 +9,8 @@ def setup_unsaturated(dirname):
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 200
-    L = 2000.
+    deltax = 100
+    L = 10000.
     H = 10000.
 
     nlayers = int(H/deltax)

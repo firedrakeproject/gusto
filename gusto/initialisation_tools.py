@@ -427,7 +427,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
               'ksp_max_it': 100,
               'mat_type': 'aij',
               'pc_type': 'lu',
-              'pc_factor_mat_solver_package': 'mumps'}
+              'pc_factor_mat_solver_type': 'mumps'}
 
     # apply first guesses
     theta0.assign(theta_d * 1.01)
