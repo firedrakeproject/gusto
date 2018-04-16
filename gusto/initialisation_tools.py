@@ -315,7 +315,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
               'ksp_max_it': 100,
               'mat_type': 'aij',
               'pc_type': 'lu',
-              'pc_factor_mat_solver_package': 'mumps'}
+              'pc_factor_mat_solver_type': 'mumps'}
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
