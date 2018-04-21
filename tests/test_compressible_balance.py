@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, FunctionSpace, VectorFunctionSpace, BrokenElement
 from os import path
 from netCDF4 import Dataset
 
@@ -18,6 +18,9 @@ def setup_balance(dirname):
 
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+
+    recovered = True
+    degree = 0 if recovered else 1
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)

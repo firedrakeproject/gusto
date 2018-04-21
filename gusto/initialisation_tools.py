@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, ufl_expr
 from gusto import thermodynamics
 
 
@@ -384,12 +384,31 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                                      pi_boundary=pi_boundary,
                                      water_t=water_t, solve_for_rho=True)
 
+    # # do an extra solve for r_v
+    # psi = TestFunction(Vt)
+    # w_v = Function(Vt)
+    
+    # pi = thermodynamics.pi(state.parameters, rho0, theta0)
+    # T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
+    # p = thermodynamics.p(state.parameters, pi)
+    # w_sat = thermodynamics.r_sat(state.parameters, T, p)
+
+    # F = (-psi * w_v * dx + psi * w_sat * dx)
+    # problem = NonlinearVariationalProblem(F, w_v)
+    # solver = NonlinearVariationalSolver(problem)
+
+    # solver.solve()
+
+    # water_v0.assign(w_v)
+
+    
+
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                     top=False, pi_boundary=Constant(1.0)):
     """
     Given vertical profiles for dry potential temperature
-    and relative humiditym compute hydrostatically balanced
+    and relative humidity compute hydrostatically balanced
     virtual potential temperature, dry density and water vapour profiles.
     :arg state: The :class:`State` object.
     :arg theta_d: The initial dry potential temperature profile.
@@ -476,6 +495,11 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
          + g * inner(w, state.k) * dxp)
 
     bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
+
+    G = assemble(ufl_expr.derivative(F, z))
+    import pdb; pdb.set_trace()
+    print(G.M.values)
+    import matplotlib.pyplot as plt; plt.pcolormesh(assemble(ufl_expr.derivative(F, z)).M.values)
 
     problem = NonlinearVariationalProblem(F, z, bcs=bcs)
     solver = NonlinearVariationalSolver(problem, solver_parameters=params)

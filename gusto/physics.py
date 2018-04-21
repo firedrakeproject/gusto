@@ -81,6 +81,7 @@ class Condensation(Physics):
         dot_r_cond = ((self.water_v - w_sat) /
                       (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
                                     (cp * R_v * T ** 2.0)))))
+        dot_r_cond = self.water_v - w_sat
 
         # introduce a weak condensation which might hold at discrete level
         if self.weak:
@@ -96,11 +97,13 @@ class Condensation(Physics):
 
         # make cond_rate function, that needs to be the same for all updates in one time step
         self.cond_rate = Function(Vt)
+        self.cond_rate = state.fields('cond_rate', Vt)
 
         # adjust cond rate so negative concentrations don't occur
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
                                                       max_value(dot_r_cond, - self.water_c / dt),
                                                       min_value(dot_r_cond, self.water_v / dt)), self.cond_rate)
+        
 
         # tell the prognostic fields what to update to
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
