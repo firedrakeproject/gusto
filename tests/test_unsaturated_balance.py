@@ -9,8 +9,8 @@ def setup_unsaturated(dirname):
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 2500
-    L = 10000.
+    deltax = 100
+    L = 1000.
     H = 10000.
 
     nlayers = int(H/deltax)
@@ -24,7 +24,7 @@ def setup_unsaturated(dirname):
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, dumplist=['u', 'rho', 'theta'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [Theta_d(), RelativeHumidity()]
@@ -109,7 +109,8 @@ def setup_unsaturated(dirname):
         compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state, weak=True)]
+    physics_list = [Condensation(state)]
+    physics_list = []
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

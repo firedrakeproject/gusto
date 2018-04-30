@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
-from gusto.advection import SSPRK3
+from gusto.advection import SSPRK3, Recoverer
 from firedrake import Interpolator, conditional, Function, \
     min_value, max_value, TestFunction, dx, as_vector, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver
+    NonlinearVariationalProblem, NonlinearVariationalSolver, BrokenElement, FunctionSpace
 from gusto import thermodynamics
 
 
@@ -55,6 +55,11 @@ class Condensation(Physics):
         # declare function space
         Vt = self.theta.function_space()
 
+        # make rho variables
+        rho_averaged = Function(Vt)
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+        self.rho_recoverer = Recoverer(rho_broken, rho_averaged)
+
         # define some parameters as attributes
         dt = state.timestepping.dt
         R_d = state.parameters.R_d
@@ -66,7 +71,7 @@ class Condensation(Physics):
         R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = thermodynamics.pi(state.parameters, rho, self.theta)
+        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
         T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
         p = thermodynamics.p(state.parameters, Pi)
         L_v = thermodynamics.Lv(state.parameters, T)
@@ -114,6 +119,7 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        self.rho_recoverer.project()
         if self.weak:
             self.cond_rate_solver.solve()
         self.lim_cond_rate.interpolate()

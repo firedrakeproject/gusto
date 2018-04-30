@@ -10,7 +10,7 @@ import ufl
 import numpy as np
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "Recoverer"]
 
 
 def embedded_dg(original_apply):
