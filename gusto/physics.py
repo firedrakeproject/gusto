@@ -41,10 +41,8 @@ class Condensation(Physics):
                formulation of condensation is used.
     """
 
-    def __init__(self, state, weak=False):
+    def __init__(self, state):
         super(Condensation, self).__init__(state)
-
-        self.weak = weak
 
         # obtain our fields
         self.theta = state.fields('theta')
@@ -57,8 +55,9 @@ class Condensation(Physics):
 
         # make rho variables
         rho_averaged = Function(Vt)
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-        self.rho_recoverer = Recoverer(rho_broken, rho_averaged)
+        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
+        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
 
         # define some parameters as attributes
         dt = state.timestepping.dt
@@ -88,18 +87,6 @@ class Condensation(Physics):
                                     (cp * R_v * T ** 2.0)))))
         dot_r_cond = self.water_v - w_sat
 
-        # introduce a weak condensation which might hold at discrete level
-        if self.weak:
-            cond_rate_expr = dot_r_cond
-            dot_r_cond = Function(Vt)
-            phi = TestFunction(Vt)
-            quadrature_degree = (4, 4)
-            dxp = dx(degree=(quadrature_degree))
-            cond_rate_functional = (phi * dot_r_cond * dxp
-                                    - phi * cond_rate_expr * dxp)
-            cond_rate_problem = NonlinearVariationalProblem(cond_rate_functional, dot_r_cond)
-            self.cond_rate_solver = NonlinearVariationalSolver(cond_rate_problem)
-
         # make cond_rate function, that needs to be the same for all updates in one time step
         self.cond_rate = Function(Vt)
         self.cond_rate = state.fields('cond_rate', Vt)
@@ -119,9 +106,8 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        self.rho_broken.assign(self.rho_interpolator.interpolate())
         self.rho_recoverer.project()
-        if self.weak:
-            self.cond_rate_solver.solve()
         self.lim_cond_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())

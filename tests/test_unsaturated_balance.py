@@ -9,7 +9,7 @@ def setup_unsaturated(dirname):
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 100
+    deltax = 200
     L = 1000.
     H = 10000.
 
@@ -64,7 +64,7 @@ def setup_unsaturated(dirname):
 
     # Isentropic background state
     Tsurf = Constant(300.)
-    humidity = Constant(0.5)
+    humidity = Constant(1.0)
     theta_d = Function(Vt).interpolate(Tsurf)
     RH = Function(Vt).interpolate(humidity)
 
@@ -110,7 +110,6 @@ def setup_unsaturated(dirname):
 
     # Set up physics
     physics_list = [Condensation(state)]
-    physics_list = []
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

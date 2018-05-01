@@ -1,9 +1,10 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, FunctionSpace
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
+from gusto.advection import Recoverer
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
@@ -274,6 +275,12 @@ class Theta_e(DiagnosticField):
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         w_t = w_c + w_v
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         p = thermodynamics.p(state.parameters, pi)
         T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
@@ -294,6 +301,12 @@ class InternalEnergy(DiagnosticField):
         rho = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
@@ -312,6 +325,12 @@ class Dewpoint(DiagnosticField):
         theta = state.fields('theta')
         rho = state.fields('rho')
         w_v = state.fields('water_v')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         p = thermodynamics.p(state.parameters, pi)
 
@@ -328,8 +347,15 @@ class Temperature(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
+
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
 
         return self.field.interpolate(thermodynamics.T(state.parameters, theta, pi, r_v=w_v))
@@ -361,8 +387,14 @@ class RelativeHumidity(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
         p = thermodynamics.p(state.parameters, pi)

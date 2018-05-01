@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, ufl_expr, FunctionSpace, BrokenElement
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, ufl_expr, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
 from gusto.advection import Recoverer
 
@@ -461,30 +461,39 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
+    rho_h = Function(Vr)
     rho_averaged = Function(Vt)
     rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
     rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    w_h = Function(Vt)
+    delta = 1.0
 
-    for i in range(20):
+    for i in range(40):
         # solve for rho with theta_vd and w_v guesses
-        compressible_hydrostatic_balance(state, theta0, rho0, top=top,
+        compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
                                          pi_boundary=pi_boundary, water_t=water_v0,
                                          solve_for_rho=True)
+
+        # damp solution
+        print("i =", i, errornorm(rho0, rho_h))
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)        
 
         # calculate averaged rho
         rho_broken.interpolate(rho0)
         rho_recoverer.project()
         
         # now solve for r_v
-        pie = thermodynamics.pi(state.parameters, rho0, theta0)
+        pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
         p = thermodynamics.p(state.parameters, pie)
         T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
         r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
         for j in range(20):
-            water_v0.interpolate(r_v_expr)
+            w_h.interpolate(r_v_expr)
+            print("j =", j, errornorm(water_v0, w_h))
+            water_v0.assign(water_v0 * (1 - delta) + delta * w_h)          
 
             # compute theta_vd
-            theta0 = theta_d * (1 + water_v0 / epsilon)
+            theta0.assign(theta_d * (1 + water_v0 / epsilon))
 
     if pi0 is not None:
         pie = thermodynamics.pi(state.parameters, rho0, theta0)
