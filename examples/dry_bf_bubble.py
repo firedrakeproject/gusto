@@ -94,9 +94,9 @@ theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
 # find perturbed rho
 gamma = TestFunction(Vr)
 rho_trial = TrialFunction(Vr)
-a = gamma * rho_trial * dx
-L = gamma * (rho_b * theta_b / theta0) * dx
-rho_problem = LinearVariationalProblem(a, L, rho0)
+lhs = gamma * rho_trial * dx
+rhs = gamma * (rho_b * theta_b / theta0) * dx
+rho_problem = LinearVariationalProblem(lhs, rhs, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 

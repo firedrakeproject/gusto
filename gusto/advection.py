@@ -23,6 +23,8 @@ def embedded_dg(original_apply):
             def new_apply(self, x_in, x_out):
                 if self.recovered:
                     recovered_apply(self, x_in)
+                    original_apply(self, self.xdg_in, self.xdg_out)
+                    recovered_project(self)
                 else:
                     # try to interpolate to x_in but revert to projection
                     # if interpolation is not implemented for this
@@ -31,10 +33,7 @@ def embedded_dg(original_apply):
                         self.xdg_in.interpolate(x_in)
                     except NotImplementedError:
                         self.xdg_in.project(x_in)
-                original_apply(self, self.xdg_in, self.xdg_out)
-                if self.recovered:
-                    recovered_project(self)
-                else:
+                    original_apply(self, self.xdg_in, self.xdg_out)
                     self.Projector.project()
                 x_out.assign(self.x_projected)
             return new_apply(self, x_in, x_out)
