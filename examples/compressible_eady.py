@@ -185,8 +185,7 @@ for hybridization in [True, False]:
                                 'ksp_rtol': 1.0e-8,
                                 'pc_type': 'gamg',
                                 'pc_gamg_sym_graph': True,
-                                'mg_levels': {'ksp_type': 'chebyshev',
-                                              'ksp_chebyshev_esteig': True,
+                                'mg_levels': {'ksp_type': 'richardson',
                                               'ksp_max_it': 5,
                                               'pc_type': 'bjacobi',
                                               'sub_pc_type': 'ilu'}}
