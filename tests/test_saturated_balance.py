@@ -109,7 +109,7 @@ def setup_saturated(dirname):
         compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
     # add physics
-    physics_list = [Condensation(state, weak=True)]
+    physics_list = [Condensation(state)]
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

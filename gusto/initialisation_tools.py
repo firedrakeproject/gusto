@@ -329,80 +329,50 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    # solve for Pi with theta_v and w_v guesses
-    compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi, top=top,
-                                     pi_boundary=pi_boundary, water_t=water_t)
+    rho_h = Function(Vr)
+    rho_averaged = Function(Vt)
+    rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+    rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    w_h = Function(Vt)
+    theta_h = Function(Vt)
+    delta = 0.5
 
-    # now begin on Newton solver, setup up new mixed space
-    Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
-    z = Function(Z)
+    for i in range(40):
+        # solve for rho with theta_vd and w_v guesses
+        compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
+                                         pi_boundary=pi_boundary, water_t=water_t,
+                                         solve_for_rho=True)
 
-    gamma, phi, psi, w = TestFunctions(Z)
-    theta_v, w_v, rho, v = z.split()
+        # damp solution
+        print("i =", i, errornorm(rho0, rho_h))
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)        
 
-    # use previous values as first guesses for newton solver
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-    rho.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
-
-    theta_v, w_v, rho, v = split(z)
-
-    # define variables
-    pi = thermodynamics.pi(state.parameters, rho, theta_v)
-    T = thermodynamics.T(state.parameters, theta_v, pi, r_v=w_v)
-    p = thermodynamics.p(state.parameters, pi)
-    w_sat = thermodynamics.r_sat(state.parameters, T, p)
-
-    F = (-gamma * theta_e * dxp
-         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp
-         + cp * inner(v, w) * dxp
-         - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
-         + psi * div(theta_v * v / (1.0 + water_t)) * dxp
-         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * bmeasure
-         + g * inner(w, state.k) * dxp)
-
-    bcs = [DirichletBC(Z.sub(3), 0.0, bstring)]
-
-    problem = NonlinearVariationalProblem(F, z, bcs=bcs)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
-
-    solver.solve()
-
-    theta_v, w_v, rho, v = z.split()
-
-    # assign final values
-    rho0.assign(rho)
-    theta0.assign(theta_v)
-    water_v0.assign(w_v)
+        # calculate averaged rho
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
+        
+        # now solve for r_v
+        pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+        p = thermodynamics.p(state.parameters, pie)
+        T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+        r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
+        theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
+        for j in range(5):
+            theta_h.interpolate(theta_e / theta_e_expr * theta0)
+            theta0.assign(theta0 * (1 - delta) + delta * theta_h)
+            for k in range(3):
+                w_h.interpolate(r_v_expr)
+                print("k =", k, errornorm(water_v0, w_h))
+                water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
     if pi0 is not None:
-        pi0.interpolate(pi)
+        pie = thermodynamics.pi(state.parameters, rho0, theta0)
+        pi0.interpolate(pie)
 
-    # do an extra solve for rho
+    # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                      pi_boundary=pi_boundary,
-                                     water_t=water_t, solve_for_rho=True)
-
-    # # do an extra solve for r_v
-    # psi = TestFunction(Vt)
-    # w_v = Function(Vt)
-    
-    # pi = thermodynamics.pi(state.parameters, rho0, theta0)
-    # T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
-    # p = thermodynamics.p(state.parameters, pi)
-    # w_sat = thermodynamics.r_sat(state.parameters, T, p)
-
-    # F = (-psi * w_v * dx + psi * w_sat * dx)
-    # problem = NonlinearVariationalProblem(F, w_v)
-    # solver = NonlinearVariationalSolver(problem)
-
-    # solver.solve()
-
-    # water_v0.assign(w_v)
-
-    
+                                     water_t=water_t, solve_for_rho=True)    
 
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,

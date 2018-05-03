@@ -271,7 +271,7 @@ class Theta_e(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         w_t = w_c + w_v
