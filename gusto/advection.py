@@ -23,6 +23,8 @@ def embedded_dg(original_apply):
             def new_apply(self, x_in, x_out):
                 if self.recovered:
                     recovered_apply(self, x_in)
+                    original_apply(self, self.xdg_in, self.xdg_out)
+                    recovered_project(self)
                 else:
                     # try to interpolate to x_in but revert to projection
                     # if interpolation is not implemented for this
@@ -31,8 +33,8 @@ def embedded_dg(original_apply):
                         self.xdg_in.interpolate(x_in)
                     except NotImplementedError:
                         self.xdg_in.project(x_in)
-                original_apply(self, self.xdg_in, self.xdg_out)
-                self.Projector.project()
+                    original_apply(self, self.xdg_in, self.xdg_out)
+                    self.Projector.project()
                 x_out.assign(self.x_projected)
             return new_apply(self, x_in, x_out)
 
@@ -108,6 +110,11 @@ class Advection(object, metaclass=ABCMeta):
                 # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
                 self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
                 self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
+                if self.limiter is not None:
+                    self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
+                    self.x_out_projector = Recoverer(x_brok, self.x_projected)
+                    # when the "average" method comes into firedrake master, this will be
+                    # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
         else:
             self.embedded_dg = False
             fs = field.function_space()
@@ -339,6 +346,20 @@ def recovered_apply(self, x_in):
     self.x_rec_projector.project()
     self.x_brok_projector.project()
     self.xdg_interpolator.interpolate()
+
+
+def recovered_project(self):
+    """
+    The projection steps for the recovered advection scheme,
+    used for the lowest-degree sets of spaces. This returns the
+    field to its original space, from the space the embedded DG
+    advection happens in. This step acts as a limiter.
+    """
+    if self.limiter is not None:
+        self.x_brok_interpolator.interpolate()
+        self.x_out_projector.project()
+    else:
+        self.Projector.project()
 
 
 class Recoverer(object):

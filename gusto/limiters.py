@@ -6,7 +6,7 @@ from firedrake.functionspace import FunctionSpace
 from firedrake.parloops import par_loop, READ, RW, INC
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
-__all__ = ["ThetaLimiter"]
+__all__ = ["ThetaLimiter", "NoLimiter"]
 
 _copy_into_Q1DG_loop = """
 theta_hat[0][0] = theta[0][0];
@@ -130,3 +130,21 @@ class ThetaLimiter(object):
         self.copy_vertex_values_back(field)
         self.check_midpoint_values(field)
         self.remap_to_embedded_space(field)
+
+
+class NoLimiter(object):
+    """
+    A blank limiter that does nothing.
+    """
+
+    def __init__(self):
+        """
+        Initialise the blank limiter.
+        """
+        pass
+
+    def apply(self, field):
+        """
+        The application of the blank limiter.
+        """
+        pass
