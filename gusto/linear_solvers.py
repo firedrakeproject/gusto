@@ -241,10 +241,9 @@ class IncompressibleSolver(TimesteppingSolver):
     :arg state: a :class:`.State` object containing everything else.
     :arg solver_parameters: (optional) Solver parameters.
     :arg overwrite_solver_parameters: boolean, if True use only the
-                                      solver_parameters that have been passed
-                                      in, if False then update the default
-                                      solver parameters with the solver_parameters
-                                      passed in.
+         solver_parameters that have been passed in, if False then
+         update the default solver parameters with the solver_parameters
+         passed in.
     """
 
     solver_parameters = {
