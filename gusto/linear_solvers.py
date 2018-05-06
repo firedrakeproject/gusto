@@ -2,7 +2,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad, \
-    Function, VectorSpaceBasis, BrokenElement, \
+    Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace, \
     assemble, LinearSolver, Tensor, AssembledVector
 from firedrake.solving_utils import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
@@ -367,7 +367,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         # Mass matrix for the trace space
         tM = assemble(dl('+')*l0('+')*(dS_v + dS_h)
-                      + dl*l0*ds_v + dl*l0*ds_tb)
+                      + dl*l0*ds_v + dl*l0*(ds_t + ds_b))
 
         Lrhobar = Function(Vtrace)
         Lpibar = Function(Vtrace)
@@ -381,7 +381,7 @@ class HybridisedCompressibleSolver(TimesteppingSolver):
 
         def _traceRHS(f):
             return (dl('+')*avg(f)*(dS_v + dS_h)
-                    + dl*f*ds_v + dl*f*ds_tb)
+                    + dl*f*ds_v + dl*f*(ds_t + ds_b))
 
         assemble(_traceRHS(rhobar), tensor=Lrhobar)
         assemble(_traceRHS(pibar), tensor=Lpibar)
