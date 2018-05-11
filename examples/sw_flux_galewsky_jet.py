@@ -36,6 +36,7 @@ output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D', 'PotentialVorticity', 'RelativeVorticity'],
                           dumpfreq=10, compute_pv_conservation=True)
 diagnostic_fields = [ RelativeVorticity(),
+                      PotentialVorticity(),
                       ShallowWaterKineticEnergy(),
                       ShallowWaterPotentialEnergy(),
                       ShallowWaterPotentialEnstrophy(),
@@ -46,7 +47,6 @@ state = State(mesh, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
