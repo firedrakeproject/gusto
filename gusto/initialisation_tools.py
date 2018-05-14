@@ -335,7 +335,15 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     rho_recoverer = Recoverer(rho_broken, rho_averaged)
     w_h = Function(Vt)
     theta_h = Function(Vt)
-    delta = 0.5
+    theta_e_test = Function(Vt)
+    delta = 0.8
+
+    # expressions for finding theta0 and water_v0 from theta_e and water_t
+    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, pie)
+    T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+    r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
+    theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
 
     for i in range(40):
         # solve for rho with theta_vd and w_v guesses
@@ -345,25 +353,31 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
 
         # damp solution
         print("i =", i, errornorm(rho0, rho_h))
-        rho0.assign(rho0 * (1 - delta) + delta * rho_h)        
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)
+
+        theta_e_test.assign(theta_e_expr)
+        if errornorm(theta_e_test, theta_e) < 1e-8:
+            break
 
         # calculate averaged rho
         rho_broken.interpolate(rho0)
         rho_recoverer.project()
         
         # now solve for r_v
-        pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-        p = thermodynamics.p(state.parameters, pie)
-        T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
-        r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
-        theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
         for j in range(5):
             theta_h.interpolate(theta_e / theta_e_expr * theta0)
             theta0.assign(theta0 * (1 - delta) + delta * theta_h)
+            theta_e_test.assign(theta_e_expr)
+            if errornorm(theta_e_test, theta_e) < 1e-6:
+                break
             for k in range(3):
                 w_h.interpolate(r_v_expr)
                 print("k =", k, errornorm(water_v0, w_h))
                 water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
+
+                theta_e_test.assign(theta_e_expr)
+                if errornorm(theta_e_test, theta_e) < 1e-6:
+                    break
 
     if pi0 is not None:
         pie = thermodynamics.pi(state.parameters, rho0, theta0)
@@ -383,7 +397,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     virtual potential temperature, dry density and water vapour profiles.
     :arg state: The :class:`State` object.
     :arg theta_d: The initial dry potential temperature profile.
-    :arg water_t: The total water pseudo-mixing ratio profile.
+    :arg H: The relative humidity profile.
     :arg pi0: Optional function to put exner pressure into.
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
@@ -438,6 +452,19 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     w_h = Function(Vt)
     delta = 1.0
 
+    # make expressions for determining water_v0
+    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, pie)
+    T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+    r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
+
+    # make expressions to evaluate residual
+    pi_ev = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p_ev = thermodynamics.p(state.parameters, pi_ev)
+    T_ev = thermodynamics.T(state.parameters, theta0, pi_ev, water_v0)
+    RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
+    RH = Function(Vt)
+
     for i in range(40):
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
@@ -445,25 +472,28 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                          solve_for_rho=True)
 
         # damp solution
-        print("i =", i, errornorm(rho0, rho_h))
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)        
 
         # calculate averaged rho
         rho_broken.interpolate(rho0)
         rho_recoverer.project()
-        
+
+        RH.assign(RH_ev)
+        if errornorm(RH, H) < 1e-10:
+            break
+
         # now solve for r_v
-        pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-        p = thermodynamics.p(state.parameters, pie)
-        T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
-        r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
         for j in range(20):
             w_h.interpolate(r_v_expr)
-            print("j =", j, errornorm(water_v0, w_h))
-            water_v0.assign(water_v0 * (1 - delta) + delta * w_h)          
+            water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
             # compute theta_vd
             theta0.assign(theta_d * (1 + water_v0 / epsilon))
+
+            # test quality of solution by re-evaluating expression
+            RH.assign(RH_ev)
+            if errornorm(RH, H) < 1e-10:
+                break
 
     if pi0 is not None:
         pie = thermodynamics.pi(state.parameters, rho0, theta0)

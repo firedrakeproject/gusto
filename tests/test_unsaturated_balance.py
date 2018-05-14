@@ -64,7 +64,7 @@ def setup_unsaturated(dirname):
 
     # Isentropic background state
     Tsurf = Constant(300.)
-    humidity = Constant(1.0)
+    humidity = Constant(0.5)
     theta_d = Function(Vt).interpolate(Tsurf)
     RH = Function(Vt).interpolate(humidity)
 
