@@ -187,7 +187,7 @@ if hybridization:
                             'ksp_max_it': 5,
                             'pc_type': 'bjacobi',
                             'sub_pc_type': 'ilu'}}
-    linear_solver = HybridisedCompressibleSolver(state, solver_parameters=params,
+    linear_solver = HybridizedCompressibleSolver(state, solver_parameters=params,
                                                  overwrite_solver_parameters=True)
 else:
     # LU parameters

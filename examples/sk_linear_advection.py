@@ -98,7 +98,7 @@ advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybridization:
-    linear_solver = HybridisedCompressibleSolver(state)
+    linear_solver = HybridizedCompressibleSolver(state)
 else:
     linear_solver = CompressibleSolver(state)
 

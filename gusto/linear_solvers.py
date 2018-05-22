@@ -13,7 +13,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 
 __all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
-           "HybridisedCompressibleSolver"]
+           "HybridizedCompressibleSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -235,7 +235,7 @@ class CompressibleSolver(TimesteppingSolver):
         theta.assign(self.theta)
 
 
-class HybridisedCompressibleSolver(TimesteppingSolver):
+class HybridizedCompressibleSolver(TimesteppingSolver):
     """
     Timestepping linear solver object for the compressible equations
     in theta-pi formulation with prognostic variables u, rho, and theta.

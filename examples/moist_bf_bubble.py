@@ -173,7 +173,7 @@ else:
 
 # Set up linear solver
 if hybridization:
-    linear_solver = HybridisedCompressibleSolver(state, moisture=moisture)
+    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
 else:
     linear_solver = CompressibleSolver(state, moisture=moisture)
 

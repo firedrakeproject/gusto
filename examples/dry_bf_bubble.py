@@ -150,7 +150,7 @@ else:
 
 # Set up linear solver
 if hybridization:
-    linear_solver = HybridisedCompressibleSolver(state)
+    linear_solver = HybridizedCompressibleSolver(state)
 else:
     linear_solver = CompressibleSolver(state)
 
