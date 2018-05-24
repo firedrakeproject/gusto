@@ -470,12 +470,14 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # rho reconstruction
         Srho = A11 - A10 * A00.inv * A01
-        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
+        rho_expr = Srho.solve(Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec),
+                              decomposition="PartialPivLU")
         self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
         # "broken" u reconstruction
         rho_vec = AssembledVector(rho_)
-        u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
+        u_expr = A00.solve(Ru - A01 * rho_vec - K0 * lambda_vec,
+                           decomposition="PartialPivLU")
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
         # Project broken u into the HDiv space using facet averaging.
