@@ -2,10 +2,11 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
-    Function, MixedVectorSpaceBasis, VectorSpaceBasis, warning
+    Function, VectorSpaceBasis
 from firedrake.solving_utils import flatten_parameters
 
-from gusto.forcing import exner, exner_rho, exner_theta
+from gusto.configuration import DEBUG
+from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -36,6 +37,9 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 p.update(flatten_parameters(solver_parameters))
                 solver_parameters = p
             self.solver_parameters = solver_parameters
+
+        if state.output.log_level == DEBUG:
+            self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
         self._setup_solver()
@@ -101,7 +105,7 @@ class CompressibleSolver(TimesteppingSolver):
         else:
             dgspace = state.spaces("DG")
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                warning("default quadrature degree most likely not sufficient for this degree element")
+                state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
@@ -129,9 +133,9 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = exner(thetabar, rhobar, state)
-        pibar_rho = exner_rho(thetabar, rhobar, state)
-        pibar_theta = exner_theta(thetabar, rhobar, state)
+        pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
+        pibar_rho = thermodynamics.pi_rho(state.parameters, rhobar, thetabar)
+        pibar_theta = thermodynamics.pi_theta(state.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
@@ -162,7 +166,7 @@ class CompressibleSolver(TimesteppingSolver):
             thetabar = thetabar / (1 + water_t)
 
         eqn = (
-            inner(w, (u - u_in))*dx
+            inner(w, (state.h_project(u) - u_in))*dx
             - beta*cp*div(theta*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical.
@@ -231,37 +235,33 @@ class IncompressibleSolver(TimesteppingSolver):
 
     This solver follows the following strategy:
     (1) Analytically eliminate b (introduces error near topography)
-    (2) Solve resulting system for (u,p) using a block Hdiv preconditioner
+    (2) Solve resulting system for (u,p) using a hybrid-mixed method
     (3) Reconstruct b
 
-    This currently requires a (parallel) direct solver so is probably
-    a bit memory-hungry, we'll improve this with a hybridised solver
-    soon.
-
     :arg state: a :class:`.State` object containing everything else.
-    :arg L: the width of the domain, used in the preconditioner.
     :arg solver_parameters: (optional) Solver parameters.
     :arg overwrite_solver_parameters: boolean, if True use only the
-    solver_parameters that have been passed in, if False then update
-    the default solver parameters with the solver_parameters passed in.
+         solver_parameters that have been passed in, if False then
+         update the default solver parameters with the solver_parameters
+         passed in.
     """
 
     solver_parameters = {
-        'ksp_type': 'gmres',
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'additive',
-        'fieldsplit_0': {'ksp_type': 'preonly',
-                         'pc_type': 'lu',
-                         'pc_factor_mat_solver_package': 'mumps'},
-        'fieldsplit_1': {'ksp_type': 'preonly',
-                         'pc_type': 'lu',
-                         'pc_factor_mat_solver_package': 'mumps'}
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, L, solver_parameters=None,
+    def __init__(self, state, solver_parameters=None,
                  overwrite_solver_parameters=False):
-
-        self.L = L
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
     def _setup_solver(self):
@@ -311,24 +311,17 @@ class IncompressibleSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
                DirichletBC(M.sub(0), 0.0, "top")]
 
-        # preconditioner equation
-        L = self.L
-        Ap = (
-            inner(w, u) + L*L*div(w)*div(u) +
-            phi*p/L/L
-        )*dx
-
         # Solver for u, p
-        up_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.up, bcs=bcs, aP=Ap)
+        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
 
-        nullspace = MixedVectorSpaceBasis(M,
-                                          [M.sub(0),
-                                           VectorSpaceBasis(constant=True)])
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
 
+        appctx = {"trace_nullspace": trace_nullsp}
         self.up_solver = LinearVariationalSolver(up_problem,
                                                  solver_parameters=self.solver_parameters,
-                                                 nullspace=nullspace)
+                                                 appctx=appctx)
 
         # Reconstruction of b
         b = TrialFunction(Vb)
@@ -374,15 +367,7 @@ class ShallowWaterSolver(TimesteppingSolver):
                           'mg_levels': {'ksp_type': 'chebyshev',
                                         'ksp_max_it': 2,
                                         'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'},
-                          # Broken residual construction
-                          'hdiv_residual': {'ksp_type': 'cg',
-                                            'pc_type': 'bjacobi',
-                                            'sub_pc_type': 'ilu',
-                                            'ksp_rtol': 1e-8},
-                          # Projection step
-                          'hdiv_projection': {'ksp_type': 'cg',
-                                              'ksp_rtol': 1e-8}}
+                                        'sub_pc_type': 'ilu'}}
     }
 
     def _setup_solver(self):

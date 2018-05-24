@@ -1,4 +1,5 @@
 from gusto import *
+from gusto import thermodynamics
 from firedrake import as_vector, SpatialCoordinate,\
     PeriodicRectangleMesh, ExtrudedMesh, \
     exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt
@@ -148,7 +149,7 @@ state.parameters.Pi0 = Pi0
 # set x component of velocity
 cp = state.parameters.cp
 dthetady = state.parameters.dthetady
-Pi = exner(theta0, rho0, state)
+Pi = thermodynamics.pi(state.parameters, rho0, theta0)
 u = cp*dthetady/f*(Pi-Pi0)
 
 # set y component of velocity

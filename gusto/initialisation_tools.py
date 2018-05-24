@@ -9,8 +9,8 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, exp, warning
-from gusto.forcing import exner
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
+from gusto import thermodynamics
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
@@ -176,17 +176,13 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     if pi0 is not None:
         pi0.assign(Pi)
 
-    kappa = state.parameters.kappa
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
-
     if solve_for_rho:
         w1 = Function(W)
         v, rho = w1.split()
-        rho.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+        rho.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
         v, rho = split(w1)
         dv, dpi = TestFunctions(W)
-        pi = ((R_d/p_0)*rho*theta0)**(kappa/(1.-kappa))
+        pi = thermodynamics.pi(state.parameters, rho, theta0)
         F = (
             (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
             + dpi*div(theta0*v)*dx
@@ -199,7 +195,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         v, rho_ = w1.split()
         rho0.assign(rho_)
     else:
-        rho0.interpolate(p_0*(Pi**((1-kappa)/kappa))/R_d/theta0)
+        rho0.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
 
 
 def remove_initial_w(u, Vv):
@@ -245,8 +241,7 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
 
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
-    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi = Function(Vr).interpolate(thermodynamics.pi(state.parameters, rho0, theta0))
 
     # get Pi gradient
     Vu = state.spaces("HDiv")
@@ -274,8 +269,7 @@ def compressible_eady_initial_v(state, theta0, rho0, v):
 def calculate_Pi0(state, theta0, rho0):
     # exner function
     Vr = rho0.function_space()
-    Pi_exp = exner(theta0, rho0, state)
-    Pi = Function(Vr).interpolate(Pi_exp)
+    Pi = Function(Vr).interpolate(thermodynamics.pi(state.parameters, rho0, theta0))
     Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
     return Pi0
@@ -299,29 +293,16 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-    Vv = state.spaces("Vv")
+    Vv = state.fields('u').function_space()
     n = FacetNormal(state.mesh)
-
-    param = state.parameters
-
-    # define some parameters as attributes
-    R_d = param.R_d
-    p_0 = param.p_0
-    cp = param.cp
-    c_pv = param.c_pv
-    c_pl = param.c_pl
-    R_v = param.R_v
-    L_v0 = param.L_v0
-    T_0 = param.T_0
-    w_sat1 = param.w_sat1
-    w_sat2 = param.w_sat2
-    w_sat3 = param.w_sat3
-    w_sat4 = param.w_sat4
-    g = param.g
+    g = state.parameters.g
+    cp = state.parameters.cp
+    R_d = state.parameters.R_d
+    p_0 = state.parameters.p_0
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
-        warning("default quadrature degree most likely not sufficient for this degree element")
+        state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
     quadrature_degree = (5, 5)
 
     params = {'ksp_type': 'preonly',
@@ -331,7 +312,7 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
               'ksp_max_it': 100,
               'mat_type': 'aij',
               'pc_type': 'lu',
-              'pc_factor_mat_solver_package': 'mumps'}
+              'pc_factor_mat_solver_type': 'mumps'}
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
@@ -353,18 +334,15 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v = split(z)
 
     # define variables
-    T = Pi * theta_v / (1 + w_v * R_v / R_d)
-    p = p_0 * Pi ** (cp / R_d)
-    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    T = thermodynamics.T(state.parameters, theta_v, Pi, r_v=w_v)
+    p = thermodynamics.p(state.parameters, Pi)
+    w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
     dxp = dx(degree=(quadrature_degree))
 
     # set up weak form of theta_e and w_sat equations
     F = (-gamma * theta_e * dxp
-         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
-         (- R_d / (cp + c_pl * water_t)) *
-         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp)
 
@@ -400,15 +378,12 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     theta_v, w_v, pi, v = split(z)
 
     # define variables
-    T = pi * theta_v / (1 + w_v * R_v / R_d)
-    p = p_0 * pi ** (cp / R_d)
-    L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
-    w_sat = w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    T = thermodynamics.T(state.parameters, theta_v, pi, r_v=w_v)
+    p = thermodynamics.p(state.parameters, pi)
+    w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
     F = (-gamma * theta_e * dxp
-         + gamma * T * (p / (p_0 * (1 + w_v * R_v / R_d))) **
-         (- R_d / (cp + c_pl * water_t)) *
-         exp(L_v * w_v / ((cp + c_pl * water_t) * T)) * dxp
+         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
          - phi * w_v * dxp
          + phi * w_sat * dxp
          + cp * inner(v, w) * dxp
