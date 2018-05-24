@@ -34,7 +34,7 @@ x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
 timestepping = TimesteppingParameters(dt=dt, move_mesh=True)
-output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'], Verbose=True)
+output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist_latlon=['D', 'PotentialVorticity'], log_level="INFO")
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
