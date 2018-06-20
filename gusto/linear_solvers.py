@@ -470,13 +470,13 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         u_, rho_ = self.urho.split()
 
         # Split operators for two-stage reconstruction
-        A00 = A.block((0, 0))
-        A01 = A.block((0, 1))
-        A10 = A.block((1, 0))
-        A11 = A.block((1, 1))
-        K0 = K.block((0, 0))
-        Ru = X_r.block((0,))
-        Rrho = X_r.block((1,))
+        A00 = A.block[0, 0]
+        A01 = A.block[0, 1]
+        A10 = A.block[1, 0]
+        A11 = A.block[1, 1]
+        K0 = K.block[0, 0]
+        Ru = X_r.block[0]
+        Rrho = X_r.block[1]
         lambda_vec = AssembledVector(self.lambdar)
 
         # rho reconstruction
