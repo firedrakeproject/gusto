@@ -193,6 +193,9 @@ class State(object):
                  fieldlist=None,
                  diagnostic_fields=None):
 
+        self.family = family
+        self.vertical_degree = vertical_degree
+        self.horizontal_degree = horizontal_degree
         self.Omega = Coriolis
         self.mu = sponge_function
         self.hydrostatic = hydrostatic

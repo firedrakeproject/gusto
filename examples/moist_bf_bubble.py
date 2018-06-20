@@ -15,6 +15,11 @@ else:
     deltax = 100.
     tmax = 1000.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
@@ -28,7 +33,17 @@ degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='moist_bf', dumpfreq=20, dumplist=['u'], perturbation_fields=[], log_level='INFO')
+
+dirname = 'moist_bf'
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=20,
+                          dumplist=['u'],
+                          perturbation_fields=[],
+                          log_level='INFO')
+
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), InternalEnergy(), Perturbation("InternalEnergy")]
@@ -156,7 +171,11 @@ if recovered:
 else:
     advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
-linear_solver = CompressibleSolver(state, moisture=moisture)
+# Set up linear solver
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+else:
+    linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 if recovered:

@@ -10,6 +10,11 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 9000.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
 L = 144000.
@@ -26,12 +31,16 @@ xc = L/2.
 x, z = SpatialCoordinate(ext_mesh)
 hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
+
 smooth_z = True
+dirname = 'nh_mountain'
 if smooth_z:
+    dirname += '_smootherz'
     zh = 5000.
     xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 else:
     xexpr = as_vector([x, z + ((H-z)/H)*zs])
+
 new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
 
@@ -44,7 +53,15 @@ mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain_smootherz', dumpfreq=18, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=18,
+                          dumplist=['u'],
+                          perturbation_fields=['theta', 'rho'])
+
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityZ()]
@@ -84,26 +101,30 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
 # Calculate hydrostatic Pi
-params = {'pc_type': 'fieldsplit',
-          'pc_fieldsplit_type': 'schur',
-          'ksp_type': 'gmres',
-          'ksp_monitor_true_residual': True,
-          'ksp_max_it': 1000,
-          'ksp_gmres_restart': 50,
-          'pc_fieldsplit_schur_fact_type': 'FULL',
-          'pc_fieldsplit_schur_precondition': 'selfp',
-          'fieldsplit_0_ksp_type': 'richardson',
-          'fieldsplit_0_ksp_max_it': 5,
-          'fieldsplit_0_pc_type': 'bjacobi',
-          'fieldsplit_0_sub_pc_type': 'ilu',
-          'fieldsplit_1_ksp_type': 'richardson',
-          'fieldsplit_1_ksp_max_it': 5,
-          "fieldsplit_1_ksp_monitor_true_residual": True,
-          'fieldsplit_1_pc_type': 'bjacobi',
-          'fieldsplit_1_sub_pc_type': 'ilu'}
+piparams = {'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'ksp_type': 'gmres',
+            'ksp_monitor_true_residual': True,
+            'ksp_max_it': 1000,
+            'ksp_gmres_restart': 50,
+            'pc_fieldsplit_schur_fact_type': 'FULL',
+            'pc_fieldsplit_schur_precondition': 'selfp',
+            'fieldsplit_0': {'ksp_type': 'preonly',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'},
+            'fieldsplit_1': {'ksp_type': 'preonly',
+                             'pc_type': 'gamg',
+                             'pc_gamg_sym_graph': True,
+                             'mg_levels': {'ksp_type': 'chebyshev',
+                                           'ksp_chebyshev_esteig': True,
+                                           'ksp_max_it': 5,
+                                           'pc_type': 'bjacobi',
+                                           'sub_pc_type': 'ilu'}}}
 Pi = Function(Vr)
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=0.5, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
+                                 top=True, pi_boundary=0.5,
+                                 params=piparams)
 
 
 def minimum(f):
@@ -117,12 +138,16 @@ void minify(double *a, double *b) {
 
 
 p0 = minimum(Pi)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
+                                 top=True,
+                                 params=piparams)
 p1 = minimum(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi, top=True, pi_boundary=pi_top, solve_for_rho=True, params=params)
+compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
+                                 top=True, pi_boundary=pi_top, solve_for_rho=True,
+                                 params=piparams)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
@@ -149,7 +174,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

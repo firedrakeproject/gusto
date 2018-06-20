@@ -15,6 +15,11 @@ else:
     deltax = 100.
     tmax = 1000.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 # make mesh
 L = 10000.
 H = 10000.
@@ -31,7 +36,16 @@ degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='dry_bf_bubble', dumpfreq=20, dumplist=['u'], perturbation_fields=['theta'])
+
+dirname = 'dry_bf_bubble'
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=20,
+                          dumplist=['u'],
+                          perturbation_fields=['theta'])
+
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = []
@@ -134,7 +148,11 @@ if recovered:
 else:
     advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
-linear_solver = CompressibleSolver(state)
+# Set up linear solver
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 if recovered:
