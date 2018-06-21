@@ -2,7 +2,7 @@ from os import path
 from gusto import *
 from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
-    conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement
+    conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement, interval
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
 
@@ -42,9 +42,9 @@ def setup_vert_limiters(dirname):
     # v is continuous in vertical, h is horizontal
     cell = mesh._base_mesh.ufl_cell().cellname()
     DG0_element = FiniteElement("DG", cell, 0)
-    CG1_element = FiniteElement("CG", cell, 1)
+    CG1_element = FiniteElement("CG", interval, 1)
     DG1_element = FiniteElement("DG", cell, 1)
-    CG2_element = FiniteElement("CG", cell, 2)
+    CG2_element = FiniteElement("CG", interval, 2)
     V0_element = TensorProductElement(DG0_element, CG1_element)
     V1_element = TensorProductElement(DG1_element, CG2_element)
 
