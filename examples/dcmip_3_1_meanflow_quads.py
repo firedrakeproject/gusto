@@ -1,14 +1,14 @@
 from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     FunctionSpace, Function, SpatialCoordinate, as_vector
-from firedrake import exp, acos, cos, sin
+from firedrake import exp, acos, cos, sin, pi
 import sys
 
 
-nlayers = 20           # Number of vertical layers
-refinements = 4        # Number of horiz. cells = 20*(4^refinements)
+nlayers = 10           # Number of vertical layers
+refinements = 3        # Number of horiz. refinements
 
-dt = 8.0               # Time-step size (s)
+dt = 100.0             # Time-step size (s)
 
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -60,8 +60,10 @@ timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'meanflow_ref_hybridization'
 
-output = OutputParameters(dumpfreq=args.dumpfreq, dirname=dirname,
-                          perturbation_fields=['theta', 'rho'])
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=10,
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
 diagnostics = Diagnostics(*fieldlist)
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -90,38 +92,60 @@ u0.project(uexpr)
 # Surface temperature
 G = g**2/(N**2*c_p)
 Ts_expr = G + (T_eq-G)*exp(-(u_max*N**2/(4*g*g))*u_max*(cos(2.0*lat)-1.0))
-Ts = Function(W_CG1).interpolate(Ts_expr)
+Ts = Function(W_Q1).interpolate(Ts_expr)
 
 # Surface pressure
 ps_expr = p_eq*exp((u_max/(4.0*G*R_d))*u_max*(cos(2.0*lat)-1.0))*(Ts/T_eq)**(1.0/kappa)
-ps = Function(W_CG1).interpolate(ps_expr)
+ps = Function(W_Q1).interpolate(ps_expr)
 
 # Background pressure
 p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
-p = Function(W_CG1).interpolate(p_expr)
+p = Function(W_Q1).interpolate(p_expr)
 
 # Background temperature
 Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
-Tb = Function(W_CG1).interpolate(Tb_expr)
+Tb = Function(W_Q1).interpolate(Tb_expr)
 
 # Background potential temperature
 thetab_expr = Tb*(p_0/p)**kappa
-thetab = Function(W_CG1).interpolate(thetab_expr)
+thetab = Function(W_Q1).interpolate(thetab_expr)
 theta_b = Function(theta0.function_space()).interpolate(thetab)
 rho_b = Function(rho0.function_space())
 sin_tmp = sin(lat) * sin(phi_c)
 cos_tmp = cos(lat) * cos(phi_c)
 r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
 s = (d**2)/(d**2 + r**2)
-theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
+theta_pert = deltaTheta*s*sin(2*pi*z/L_z)
 theta0.interpolate(theta_b)
 
 # Compute the balanced density
+pi_params = {
+    'pc_type': 'fieldsplit',
+    'pc_fieldsplit_type': 'schur',
+    'ksp_type': 'gmres',
+    'ksp_monitor_true_residual': True,
+    'ksp_max_it': 100,
+    'ksp_gmres_restart': 50,
+    'pc_fieldsplit_schur_fact_type': 'FULL',
+    'pc_fieldsplit_schur_precondition': 'selfp',
+    'fieldsplit_0': {'ksp_type': 'preonly',
+                     'pc_type': 'bjacobi',
+                     'sub_pc_type': 'ilu'},
+    'fieldsplit_1': {'ksp_type': 'cg',
+                     'pc_type': 'gamg',
+                     'pc_gamg_sym_graph': True,
+                     'mg_levels': {'ksp_type': 'chebyshev',
+                                   'ksp_chebyshev_esteig': True,
+                                   'ksp_max_it': 5,
+                                   'pc_type': 'bjacobi',
+                                   'sub_pc_type': 'ilu'}}
+}
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  top=False,
-                                 pi_boundary=(p/p_0)**kappa)
+                                 pi_boundary=(p/p_0)**kappa,
+                                 params=pi_params)
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
@@ -137,8 +161,8 @@ thetaeqn = SUPGAdvection(state, Vt,
                          equation_form="advective")
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
+advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
 solver_parameters = {
