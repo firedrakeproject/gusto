@@ -213,8 +213,25 @@ class CrankNicolson(BaseTimestepper):
 class AdvectionDiffusion(BaseTimestepper):
     """
     This class implements a timestepper for the advection-diffusion equations.
-    No semi implicit step is required.
+    No semi implicit step is required, although in this step we still do the
+    advection of the "active" fields.
     """
+
+    def __init__(self, state, advected_fields=None,
+                 diffused_fields=None, physics_list=None):
+
+        super(AdvectionDiffusion, self).__init__(state, advected_fields, diffused_fields, physics_list)
+
+        # build a lists to contain the fields that should be advected from state.fieldlist
+        # i.e. these are the active fields to be advected
+        self.active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
+
+        # we need these fields to have two states: xn and xnp1.
+        # for active fields, the advected state is in xnp1
+        self.xn_fields = {name: func for (name, func) in
+                             zip(state.fieldlist, state.xn.split())}
+        self.xnp1_fields = {name: func for (name, func) in
+                          zip(state.fieldlist, state.xnp1.split())}
 
     @property
     def passive_advection(self):
@@ -222,9 +239,17 @@ class AdvectionDiffusion(BaseTimestepper):
         All advected fields are passively advected
         """
         if self.advected_fields is not None:
-            return self.advected_fields
+            return [(name, scheme) for name, scheme in
+                    self.advected_fields if name not in self.state.fieldlist]
         else:
             return []
 
     def semi_implicit_step(self):
-        pass
+        """
+        Don't actually do semi-implicit advection, but passively advect those fields in state.fieldlist
+        """
+        for name, advection in self.active_advection:
+            # first computes ubar from state.xn and state.xnp1
+            advection.update_ubar(self.state.xn, self.state.xnp1, self.state.timestepping.alpha)
+            # advects a field from xstar and puts result in xp
+            advection.apply(self.xn_fields[name], self.xnp1_fields[name])
