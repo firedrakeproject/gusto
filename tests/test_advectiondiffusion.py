@@ -2,13 +2,13 @@ from os import path
 from gusto import *
 from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
     SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
-    conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement, interval, cos, sin
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
+    conditional, sqrt, cos, sin
 from netCDF4 import Dataset
 from math import pi
 
 # This tests the AdvectionDiffusion timestepper, by checking that
 # profiles are actually advected by it.
+
 
 def setup_advection_diffusion(dirname):
 
@@ -23,7 +23,7 @@ def setup_advection_diffusion(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     x, z = SpatialCoordinate(mesh)
 
-    fieldlist = ['u','rho']
+    fieldlist = ['u', 'rho']
     timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+"/advection_diffusion",
                               dumpfreq=5,
@@ -38,13 +38,11 @@ def setup_advection_diffusion(dirname):
                   parameters=parameters,
                   fieldlist=fieldlist)
 
-
     # declare initial fields
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     tracer0 = state.fields("tracer", rho0.function_space())
 
-    Vu = u0.function_space()
     Vr = rho0.function_space()
     Vpsi = FunctionSpace(mesh, "CG", 2)
 
@@ -54,11 +52,9 @@ def setup_advection_diffusion(dirname):
     rc = Constant(L / 5)
     r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
     expr = conditional(r < rc, Constant(1.0) + 0.1 * (cos(pi * r / (2 * rc))) ** 2, Constant(1.0))
-    
+
     rho0.interpolate(expr)
     tracer0.interpolate(expr)
-    rho_b = Function(Vr).interpolate(Constant(1.0))
-    tracer_b = Function(Vr).interpolate(Constant(1.0))
 
     # set up velocity field
     u_max = Constant(5.0)
@@ -113,4 +109,3 @@ def test_advection_diffusion_setup(tmpdir):
     assert l2_tracer[-1] >= tolerance
     # rho represents an "active" field
     assert l2_rho[-1] >= tolerance
-

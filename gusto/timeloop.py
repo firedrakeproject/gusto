@@ -222,16 +222,16 @@ class AdvectionDiffusion(BaseTimestepper):
 
         super(AdvectionDiffusion, self).__init__(state, advected_fields, diffused_fields, physics_list)
 
-        # build a lists to contain the fields that should be advected from state.fieldlist
-        # i.e. these are the active fields to be advected
-        self.active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in state.fieldlist]
-
-        # we need these fields to have two states: xn and xnp1.
+        # we need active fields to have two states: xn and xnp1.
         # for active fields, the advected state is in xnp1
         self.xn_fields = {name: func for (name, func) in
-                             zip(state.fieldlist, state.xn.split())}
+                          zip(state.fieldlist, state.xn.split())}
         self.xnp1_fields = {name: func for (name, func) in
-                          zip(state.fieldlist, state.xnp1.split())}
+                            zip(state.fieldlist, state.xnp1.split())}
+
+        # build a lists to contain the fields that should be advected from state.fieldlist
+        # i.e. these are the active fields to be advected
+        self.active_advection = [(name, scheme) for name, scheme in self.advected_fields if name in self.xn_fields]
 
     @property
     def passive_advection(self):
