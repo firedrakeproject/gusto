@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
+from firedrake import CubedSphereMesh, ExtrudedMesh, \
     FunctionSpace, Function, SpatialCoordinate, as_vector
-from firedrake import exp, acos, cos, sin, pi
+from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan_2
 import sys
 
 
@@ -45,15 +45,15 @@ z_top = 1.0e4                  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers,
                     layer_height=z_top/nlayers,
                     extrusion_type="radial")
-
+x = SpatialCoordinate(mesh)
 # Create polar coordinates:
 # Since we use a CG1 field, this is constant on layers
 W_Q1 = FunctionSpace(mesh, "CG", 1)
-z_expr = Expression("sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a", a=a)
+z_expr = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a
 z = Function(W_Q1).interpolate(z_expr)
-lat_expr = Expression("asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))")
+lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
-lon = Function(W_Q1).interpolate(Expression("atan2(x[1], x[0])"))
+lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
@@ -85,7 +85,6 @@ Vt = theta0.function_space()
 Vr = rho0.function_space()
 
 # Initial conditions with u0
-x = SpatialCoordinate(mesh)
 uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
 u0.project(uexpr)
 
@@ -119,7 +118,7 @@ theta_pert = deltaTheta*s*sin(2*pi*z/L_z)
 theta0.interpolate(theta_b)
 
 # Compute the balanced density
-pi_params = {
+rho_params = {
     'pc_type': 'fieldsplit',
     'pc_fieldsplit_type': 'schur',
     'ksp_type': 'gmres',
@@ -145,7 +144,7 @@ compressible_hydrostatic_balance(state,
                                  rho_b,
                                  top=False,
                                  pi_boundary=(p/p_0)**kappa,
-                                 params=pi_params)
+                                 params=rho_params)
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
