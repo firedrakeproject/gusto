@@ -1,12 +1,13 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, \
+    TensorFunctionSpace
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "VelocityGradient", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -21,7 +22,7 @@ class Diagnostics(object):
 
         fset = set(self.fields)
         for f in fields:
-            if f not in fset:
+            if f not in fset and f != "VelocityGradient":
                 self.fields.append(f)
 
     @staticmethod
@@ -145,6 +146,29 @@ class VelocityY(DiagnosticField):
         u = state.fields("u")
         v = u[1]
         return self.field.interpolate(v)
+
+
+class VelocityGradient(DiagnosticField):
+    name = "VelocityGradient"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = TensorFunctionSpace(state.mesh, "CG", 1)
+            super().setup(state, space=space)
+        u = state.fields("u")
+        n = FacetNormal(state.mesh)
+        test = TestFunction(space)
+        trial = TrialFunction(space)
+        a = inner(test, trial)*dx
+        print(test.ufl_shape)
+        print(n.ufl_shape)
+        L = -inner(div(test), u)*dx
+        prob = LinearVariationalProblem(a, L, self.field)
+        self.solver = LinearVariationalSolver(prob)
+
+    def compute(self, state):
+        self.solver.solve()
+        return self.field
 
 
 class Energy(DiagnosticField):
