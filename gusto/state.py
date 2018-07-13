@@ -9,7 +9,9 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     interval, Function, Mesh, functionspaceimpl,\
     File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector, assemble
+    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector, \
+    assemble, Jacobian, TestFunction, TrialFunction, LinearVariationalProblem, LinearVariationalSolver
+from ufl.compound_expressions import pseudo_determinant_expr
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -123,6 +125,7 @@ class DiagnosticsOutput(object):
         :arg description: A description.
         :kwarg create: If False, assume that filename already exists
         """
+        self.initialised = False
         self.filename = filename
         self.diagnostics = diagnostics
         if not create:
@@ -148,6 +151,24 @@ class DiagnosticsOutput(object):
         :arg state: The :class:`State` at which to compute the diagnostic.
         :arg t: The current time.
         """
+        if state.output.compute_pv_conservation and not self.initialised:
+            self.initialised = True
+            self.detJ = pseudo_determinant_expr(Jacobian(state.mesh))
+            self.dx0 = dx('everywhere',
+                          metadata={'quadrature_degree': 6,
+                                    'representation': 'quadrature'})
+            V2 = state.spaces("DG")
+            self.D = Function(V2)
+            self.Dtwid = Function(V2)
+            ptst = TestFunction(V2)
+            ptri = TrialFunction(V2)
+            atwid = ptst*ptri/self.detJ*self.dx0
+            Ltwid = ptst*self.D*self.dx0
+            Dtwid_problem = LinearVariationalProblem(atwid, Ltwid, self.Dtwid)
+            self.Dtwid_solver = LinearVariationalSolver(
+                Dtwid_problem, solver_parameters={'ksp_type': 'preonly',
+                                                  'pc_type': 'bjacobi',
+                                                  'sub_pc_type': 'ilu'})
         with Dataset(self.filename, "a") as dataset:
             idx = dataset.dimensions["time"].size
             dataset.variables["time"][idx:idx + 1] = t
@@ -161,9 +182,12 @@ class DiagnosticsOutput(object):
             if state.output.compute_pv_conservation:
                 q = state.fields("PotentialVorticity")
                 D = state.fields("D")
+                self.D.assign(D)
+                self.Dtwid_solver.solve()
                 group = dataset.groups["qD"]
                 var = group.variables["integral"]
-                var[idx:idx + 1] = assemble(q*D*dx)
+                var[idx:idx + 1] = assemble(q*self.Dtwid/self.detJ*self.dx0)
+                print("int(qD): ", assemble(q*D/self.detJ*self.dx0))
 
 
 class State(object):
