@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "VelocityGradient", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -22,7 +22,7 @@ class Diagnostics(object):
 
         fset = set(self.fields)
         for f in fields:
-            if f not in fset and f != "VelocityGradient":
+            if f not in fset:
                 self.fields.append(f)
 
     @staticmethod
@@ -48,11 +48,11 @@ void maxify(double *a, double *b) {
     @staticmethod
     def rms(f):
         area = assemble(1*dx(domain=f.ufl_domain()))
-        return sqrt(assemble(dot(f, f)*dx)/area)
+        return sqrt(assemble(inner(f, f)*dx)/area)
 
     @staticmethod
     def l2(f):
-        return sqrt(assemble(dot(f, f)*dx))
+        return sqrt(assemble(inner(f, f)*dx))
 
     @staticmethod
     def total(f):
@@ -148,27 +148,36 @@ class VelocityY(DiagnosticField):
         return self.field.interpolate(v)
 
 
-class VelocityGradient(DiagnosticField):
-    name = "VelocityGradient"
+class Gradient(DiagnosticField):
+
+    def __init__(self, name):
+        super().__init__()
+        self.fname = name
+
+    @property
+    def name(self):
+        return self.fname+"_gradient"
 
     def setup(self, state):
         if not self._initialised:
-            space = TensorFunctionSpace(state.mesh, "CG", 1)
+            mesh_dim = state.mesh.geometric_dimension()
+            field_dim = len(state.fields(self.fname).ufl_shape) + 1
+            shape = (mesh_dim, ) * field_dim
+            print(shape)
+            space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
             super().setup(state, space=space)
-        u = state.fields("u")
-        n = FacetNormal(state.mesh)
+
+        self.f = Function(state.fields(self.fname).function_space())
         test = TestFunction(space)
         trial = TrialFunction(space)
         a = inner(test, trial)*dx
-        print(test.ufl_shape)
-        print(n.ufl_shape)
-        L = -inner(div(test), u)*dx
+        L = -inner(div(test), self.f)*dx
         prob = LinearVariationalProblem(a, L, self.field)
         self.solver = LinearVariationalSolver(prob)
 
     def compute(self, state):
         self.solver.solve()
-        return self.field
+        return self.f
 
 
 class Energy(DiagnosticField):

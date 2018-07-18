@@ -278,11 +278,11 @@ class State(object):
         """
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
-            self.diagnostic_fields.append(f)
+            self.diagnostic_fields.insert(0, f)
 
         for name in self.output.steady_state_error_fields:
             f = SteadyStateError(self, name)
-            self.diagnostic_fields.append(f)
+            self.diagnostic_fields.insert(0, f)
 
         for diagnostic in self.diagnostic_fields:
             diagnostic.setup(self)
