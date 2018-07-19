@@ -206,7 +206,7 @@ class PVFluxTaylorGalerkin(Flux):
 
     def __init__(self, state, mass_flux):
         self.F = mass_flux.flux
-        self.V0 = FunctionSpace(state.mesh, "CG", 3)
+        self.V0 = state.spaces("CG", state.mesh, "CG", 3)
         self.pv = state.fields("ActivePotentialVorticity", self.V0)
         super().__init__(state)
         Vdg = state.spaces("DG")

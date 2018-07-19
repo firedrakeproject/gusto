@@ -10,7 +10,7 @@ from firedrake import FiniteElement, TensorProductElement, HDiv, \
     File, SpatialCoordinate, sqrt, Constant, inner, \
     dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
     FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector, \
-    assemble, Jacobian, TestFunction, TrialFunction, LinearVariationalProblem, LinearVariationalSolver
+    assemble, Jacobian, TestFunction, TrialFunction, LinearVariationalProblem, LinearVariationalSolver, grad
 from ufl.compound_expressions import pseudo_determinant_expr
 import numpy as np
 from gusto.configuration import logger, set_log_handler
@@ -144,6 +144,11 @@ class DiagnosticsOutput(object):
             if compute_pv_conservation:
                 group = dataset.createGroup("qD")
                 var = group.createVariable("integral", np.float64, ("time", ))
+                var = group.createVariable("normalised_integral", np.float64, ("time", ))
+                group = dataset.createGroup("enstrophy")
+                var = group.createVariable("integral", np.float64, ("time", ))
+                group = dataset.createGroup("coriolis")
+                var = group.createVariable("integral", np.float64, ("time", ))
 
     def dump(self, state, t):
         """Dump diagnostics.
@@ -158,17 +163,30 @@ class DiagnosticsOutput(object):
                           metadata={'quadrature_degree': 6,
                                     'representation': 'quadrature'})
             V2 = state.spaces("DG")
-            self.D = Function(V2)
+            D = state.fields("D")
             self.Dtwid = Function(V2)
             ptst = TestFunction(V2)
             ptri = TrialFunction(V2)
             atwid = ptst*ptri/self.detJ*self.dx0
-            Ltwid = ptst*self.D*self.dx0
+            Ltwid = ptst*D*self.dx0
             Dtwid_problem = LinearVariationalProblem(atwid, Ltwid, self.Dtwid)
             self.Dtwid_solver = LinearVariationalSolver(
                 Dtwid_problem, solver_parameters={'ksp_type': 'preonly',
                                                   'pc_type': 'bjacobi',
                                                   'sub_pc_type': 'ilu'})
+            V0 = state.spaces("CG")
+            self.q = Function(V0)
+            self.area = assemble(1*dx(domain=self.q.ufl_domain()))
+            u = state.fields("u")
+            gamma = TestFunction(V0)
+            q_ = TrialFunction(V0)
+            aq = gamma*q_*self.Dtwid/self.detJ*self.dx0
+            cell_normals = CellNormal(state.mesh)
+            gradperp = lambda psi: cross(cell_normals, grad(psi))
+            f = state.fields("coriolis")
+            Lq = -inner(gradperp(gamma), u)*dx + gamma*f*dx
+            pv_problem = LinearVariationalProblem(aq, Lq, self.q, constant_jacobian=False)
+            self.pv_solver = LinearVariationalSolver(pv_problem, solver_parameters={"ksp_type": "cg"})
         with Dataset(self.filename, "a") as dataset:
             idx = dataset.dimensions["time"].size
             dataset.variables["time"][idx:idx + 1] = t
@@ -180,14 +198,20 @@ class DiagnosticsOutput(object):
                     var = group.variables[dname]
                     var[idx:idx + 1] = diagnostic(field)
             if state.output.compute_pv_conservation:
-                q = state.fields("PotentialVorticity")
-                D = state.fields("D")
-                self.D.assign(D)
                 self.Dtwid_solver.solve()
+                self.pv_solver.solve()
                 group = dataset.groups["qD"]
                 var = group.variables["integral"]
-                var[idx:idx + 1] = assemble(q*self.Dtwid/self.detJ*self.dx0)
-                print("int(qD): ", assemble(q*D/self.detJ*self.dx0))
+                var[idx:idx + 1] = assemble(self.q*self.Dtwid/self.detJ*self.dx0)
+                var = group.variables["normalised_integral"]
+                var[idx:idx + 1] = assemble(self.q*self.Dtwid/self.detJ*self.dx0)/self.area
+                group = dataset.groups["enstrophy"]
+                var = group.variables["integral"]
+                var[idx:idx + 1] = assemble(self.q*self.q*self.Dtwid/self.detJ*self.dx0)
+                group = dataset.groups["coriolis"]
+                var = group.variables["integral"]
+                f = state.fields("coriolis")
+                var[idx:idx + 1] = assemble(f*dx)
 
 
 class State(object):
