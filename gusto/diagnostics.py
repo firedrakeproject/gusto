@@ -169,8 +169,9 @@ class Gradient(DiagnosticField):
         f = state.fields(self.fname)
         test = TestFunction(space)
         trial = TrialFunction(space)
+        n = FacetNormal(state.mesh)
         a = inner(test, trial)*dx
-        L = -inner(div(test), f)*dx
+        L = -inner(div(test), f)*dx + dot(dot(test, n), f)*(ds_t + ds_b)
         prob = LinearVariationalProblem(a, L, self.field)
         self.solver = LinearVariationalSolver(prob)
 
@@ -182,19 +183,19 @@ class Gradient(DiagnosticField):
 class RichardsonNumber(DiagnosticField):
     name = "RichardsonNumber"
 
-    def __init__(self, density_field):
+    def __init__(self, density_field, factor=1.):
         super().__init__()
         self.density_field = density_field
+        self.factor = Constant(factor)
 
     def Nsq(self, state, z_dim):
         g = state.parameters.g
-        density_ref = state.fields(self.density_field+"bar")
         try:
             grad_density = state.fields(self.density_field+"_gradient")
         except:
             raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % (self.density_field+"_gradient"))
         ddensity_dz = grad_density[z_dim]
-        return g*ddensity_dz/density_ref
+        return self.factor*ddensity_dz
 
     def compute(self, state):
         try:
@@ -206,15 +207,8 @@ class RichardsonNumber(DiagnosticField):
         u_dim = len(state.fields("u").ufl_shape)
         for i in range(u_dim):
             denom += gradu[i, z_dim]**2
-            Ns = self.Nsq(state, z_dim)
-            V = FunctionSpace(state.mesh, "DG", 1)
-            fn = Function(V)
-            fn.interpolate(Ns)
-            print("Nsq: ", fn.dat.data.min(), fn.dat.data.max())
-            fn.interpolate(denom)
-            print("denom: ", fn.dat.data.min(), fn.dat.data.max())
-            self.field.interpolate(Ns/denom)
-            print("Ri: ", self.field.dat.data.min(), self.field.dat.data.max())
+        Ns = self.Nsq(state, z_dim)
+        self.field.interpolate(Ns/denom)
         return self.field
 
 

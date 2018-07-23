@@ -38,15 +38,16 @@ if hybridization:
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
-                          dumplist=['u'],
+                          dumplist=['u', 'theta'],
                           perturbation_fields=['theta', 'rho'],
                           point_data=[('theta_perturbation', points)])
 
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 g = parameters.g
+Tsurf = 300.
 
-diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta"), RichardsonNumber("theta")]
+diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta"), RichardsonNumber("theta", g/Tsurf)]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
