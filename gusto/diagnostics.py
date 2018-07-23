@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "RichardsonNumber", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -163,21 +163,59 @@ class Gradient(DiagnosticField):
             mesh_dim = state.mesh.geometric_dimension()
             field_dim = len(state.fields(self.fname).ufl_shape) + 1
             shape = (mesh_dim, ) * field_dim
-            print(shape)
             space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
             super().setup(state, space=space)
 
-        self.f = Function(state.fields(self.fname).function_space())
+        f = state.fields(self.fname)
         test = TestFunction(space)
         trial = TrialFunction(space)
         a = inner(test, trial)*dx
-        L = -inner(div(test), self.f)*dx
+        L = -inner(div(test), f)*dx
         prob = LinearVariationalProblem(a, L, self.field)
         self.solver = LinearVariationalSolver(prob)
 
     def compute(self, state):
         self.solver.solve()
-        return self.f
+        return self.field
+
+
+class RichardsonNumber(DiagnosticField):
+    name = "RichardsonNumber"
+
+    def __init__(self, density_field):
+        super().__init__()
+        self.density_field = density_field
+
+    def Nsq(self, state, z_dim):
+        g = state.parameters.g
+        density_ref = state.fields(self.density_field+"bar")
+        try:
+            grad_density = state.fields(self.density_field+"_gradient")
+        except:
+            raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % (self.density_field+"_gradient"))
+        ddensity_dz = grad_density[z_dim]
+        return g*ddensity_dz/density_ref
+
+    def compute(self, state):
+        try:
+            gradu = state.fields("u_gradient")
+        except:
+            raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % "u_gradient")
+        denom = 0.
+        z_dim = state.mesh.geometric_dimension() - 1
+        u_dim = len(state.fields("u").ufl_shape)
+        for i in range(u_dim):
+            denom += gradu[i, z_dim]**2
+            Ns = self.Nsq(state, z_dim)
+            V = FunctionSpace(state.mesh, "DG", 1)
+            fn = Function(V)
+            fn.interpolate(Ns)
+            print("Nsq: ", fn.dat.data.min(), fn.dat.data.max())
+            fn.interpolate(denom)
+            print("denom: ", fn.dat.data.min(), fn.dat.data.max())
+            self.field.interpolate(Ns/denom)
+            print("Ri: ", self.field.dat.data.min(), self.field.dat.data.max())
+        return self.field
 
 
 class Energy(DiagnosticField):
