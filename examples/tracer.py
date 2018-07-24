@@ -11,6 +11,11 @@ else:
     res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 51200.
 
 # build volume mesh
@@ -27,7 +32,15 @@ for delta, dt in res_dt.items():
 
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname, dumpfreq=5, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+
+    if hybridization:
+        dirname += '_hybridization'
+
+    output = OutputParameters(dirname=dirname,
+                              dumpfreq=5,
+                              dumplist=['u'],
+                              perturbation_fields=['theta', 'rho'])
+
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [CourantNumber()]
@@ -104,7 +117,10 @@ for delta, dt in res_dt.items():
     advected_fields.append(("water", SSPRK3(state, water0, watereqn)))
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
+    if hybridization:
+        linear_solver = HybridizedCompressibleSolver(state)
+    else:
+        linear_solver = CompressibleSolver(state)
 
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)

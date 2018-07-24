@@ -14,6 +14,11 @@ else:
     columns = 150  # number of columns
     tmax = 60000.0
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 6.0e6
 m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 
@@ -23,7 +28,16 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_hydrostatic', dumpfreq=50, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+
+dirname = 'sk_hydrostatic'
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=50,
+                          dumplist=['u'],
+                          perturbation_fields=['theta', 'rho'])
+
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -93,7 +107,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 # [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]

@@ -11,6 +11,11 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 3600.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 nlayers = 10  # horizontal layers
 columns = 150  # number of columns
 L = 3.0e5
@@ -26,9 +31,17 @@ points = np.array([p for p in itertools.product(points_x, points_z)])
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'],
+
+dirname = 'sk_nonlinear'
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=1,
+                          dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           point_data=[('theta_perturbation', points)])
+
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -100,7 +113,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

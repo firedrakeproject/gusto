@@ -9,6 +9,11 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 700.
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
 L = 1000.
 H = 1000.
 nlayers = int(H/10.)
@@ -19,7 +24,16 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='rb', dumpfreq=10, dumplist=['u'], perturbation_fields=['theta', 'rho'])
+
+dirname = 'rb'
+if hybridization:
+    dirname += '_hybridization'
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=10,
+                          dumplist=['u'],
+                          perturbation_fields=['theta', 'rho'])
+
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -85,7 +99,10 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state)
+else:
+    linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

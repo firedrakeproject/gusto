@@ -3,9 +3,10 @@ from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
 from netCDF4 import Dataset
+import pytest
 
 
-def setup_tracer(dirname):
+def setup_tracer(dirname, hybridization):
 
     # declare grid shape, with length L and height H
     L = 1000.
@@ -90,7 +91,10 @@ def setup_tracer(dirname):
     advected_fields.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
+    if hybridization:
+        linear_solver = HybridizedCompressibleSolver(state)
+    else:
+        linear_solver = CompressibleSolver(state)
 
     compressible_forcing = CompressibleForcing(state)
 
@@ -101,16 +105,21 @@ def setup_tracer(dirname):
     return stepper, 100.0
 
 
-def run_tracer(dirname):
+def run_tracer(dirname, hybridization):
 
-    stepper, tmax = setup_tracer(dirname)
+    stepper, tmax = setup_tracer(dirname, hybridization)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_tracer_setup(tmpdir):
+@pytest.mark.parametrize("hybridization", [True, False])
+def test_tracer_setup(tmpdir, hybridization):
 
-    dirname = str(tmpdir)
-    run_tracer(dirname)
+    if hybridization:
+        dirname = str(tmpdir) + "_hybridization"
+    else:
+        dirname = str(tmpdir)
+
+    run_tracer(dirname, hybridization)
     filename = path.join(dirname, "tracer/diagnostics.nc")
     data = Dataset(filename, "r")
 
