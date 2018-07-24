@@ -278,15 +278,47 @@ class State(object):
         """
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
-            self.diagnostic_fields.insert(0, f)
+            self.diagnostic_fields.append(f)
 
         for name in self.output.steady_state_error_fields:
             f = SteadyStateError(self, name)
-            self.diagnostic_fields.insert(0, f)
+            self.diagnostic_fields.append(f)
 
-        for diagnostic in self.diagnostic_fields:
-            diagnostic.setup(self)
-            self.diagnostics.register(diagnostic.name)
+        # this list will contain the diagnostic fields in the right order for
+        # calculation
+        reordered_diagnostic_fields = []
+        # this list contains the diagnostic fields that have not yet
+        # been set up (currently all of them)
+        remaining_diagnostic_fields = self.diagnostic_fields.copy()
+        repeat = True
+        while repeat:
+            # this list contains the diagnostic fields that cannot be
+            # set up on this sweep due to dependence on other field
+            # that have not yet been set up
+            postponed_fields = []
+            for diagnostic in remaining_diagnostic_fields:
+                try:
+                    # try to setup the diagnostic and append to reordered list
+                    diagnostic.setup(self)
+                    self.diagnostics.register(diagnostic.name)
+                    reordered_diagnostic_fields.append(diagnostic)
+                except RuntimeError:
+                    # if the setup gives a RuntimeError then postpone this field
+                    postponed_fields.append(diagnostic)
+                    logger.info("setup of diagnostic %s postponed" % diagnostic.name)
+            if len(postponed_fields) == 0:
+                # if nothing needs postponing then we're done
+                repeat = False
+            elif len(postponed_fields) < len(remaining_diagnostic_fields):
+                # if we've managed to reduce the number of fields we
+                # postpone then continue with another sweep
+                remaining_diagnostic_fields = postponed_fields.copy()
+            else:
+                # if we're not managing to reduce the number of fields
+                # we postpone then something bad is happening
+                raise RuntimeError("There is a problem with your diagnostic fields")
+        # update the list of diagnostic fields to the reordered version
+        self.diagnostic_fields = reordered_diagnostic_fields
 
     def setup_dump(self, tmax, pickup=False):
         """

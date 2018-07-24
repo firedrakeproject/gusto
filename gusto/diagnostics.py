@@ -72,12 +72,22 @@ class DiagnosticField(object, metaclass=ABCMeta):
         """The name of this diagnostic field"""
         pass
 
-    def setup(self, state, space=None):
+    def check_fields_exist(self, state, fieldlist):
+        field_names = [f.name() for f in state.fields]
+        for field_name in fieldlist:
+            if field_name not in field_names:
+                raise RuntimeError("Field called %s required to compute diagnostic %s" % (field_name, self.name))
+
+    def setup(self, state, space=None, base_field=None, fieldlist=None):
         if not self._initialised:
-            self._initialised = True
-            if space is None:
+            if fieldlist is not None:
+                self.check_fields_exist(state, fieldlist)
+            if base_field:
+                space = state.fields(base_field).function_space()
+            elif space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
+            self._initialised = True
 
     @abstractmethod
     def compute(self, state):
@@ -193,25 +203,20 @@ class RichardsonNumber(DiagnosticField):
         self.density_field = density_field
         self.factor = Constant(factor)
 
-    def Nsq(self, state, z_dim):
-        try:
-            grad_density = getattr(state.fields, self.density_field+"_gradient")
-        except AttributeError:
-            raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % (self.density_field+"_gradient"))
-        ddensity_dz = grad_density[z_dim]
-        return self.factor*ddensity_dz
+    def setup(self, state):
+        rho_grad = self.density_field+"_gradient"
+        super().setup(state, fieldlist=[rho_grad, "u_gradient"])
+        self.grad_density = state.fields(rho_grad)
+        self.gradu = state.fields("u_gradient")
 
     def compute(self, state):
-        try:
-            gradu = getattr(state.fields, "u_gradient")
-        except AttributeError:
-            raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % "u_gradient")
         denom = 0.
         z_dim = state.mesh.geometric_dimension() - 1
         u_dim = state.fields("u").ufl_shape[0]
         for i in range(u_dim-1):
-            denom += gradu[i, z_dim]**2
-        self.field.interpolate(self.Nsq(state, z_dim)/denom)
+            denom += self.gradu[i, z_dim]**2
+        Nsq = self.factor*self.grad_density[z_dim]
+        self.field.interpolate(Nsq/denom)
         return self.field
 
 
@@ -417,13 +422,8 @@ class Sum(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.fields(self.field1).function_space()
-            super(Sum, self).setup(state, space=space)
-            field_names = [f.name() for f in state.fields]
-            if self.field1 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field1)
-            if self.field2 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field2)
+            super(Sum, self).setup(state, base_field=self.field1,
+                                   fieldlist=[self.field1, self.field2])
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -444,13 +444,8 @@ class Difference(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.fields(self.field1).function_space()
-            super(Difference, self).setup(state, space=space)
-            field_names = [f.name() for f in state.fields]
-            if self.field1 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field1)
-            if self.field2 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field2)
+            super(Difference, self).setup(state, base_field=self.field1,
+                                          fieldlist=[self.field1, self.field2])
 
     def compute(self, state):
         field1 = state.fields(self.field1)
