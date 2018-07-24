@@ -38,7 +38,7 @@ if hybridization:
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
-                          dumplist=['u', 'theta'],
+                          dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           point_data=[('theta_perturbation', points)])
 

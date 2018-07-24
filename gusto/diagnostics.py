@@ -161,7 +161,10 @@ class Gradient(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             mesh_dim = state.mesh.geometric_dimension()
-            field_dim = len(state.fields(self.fname).ufl_shape) + 1
+            try:
+                field_dim = state.fields(self.fname).ufl_shape[0]
+            except IndexError:
+                field_dim = 1
             shape = (mesh_dim, ) * field_dim
             space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
             super().setup(state, space=space)
@@ -191,24 +194,23 @@ class RichardsonNumber(DiagnosticField):
     def Nsq(self, state, z_dim):
         g = state.parameters.g
         try:
-            grad_density = state.fields(self.density_field+"_gradient")
-        except:
+            grad_density = getattr(state.fields, self.density_field+"_gradient")
+        except AttributeError:
             raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % (self.density_field+"_gradient"))
         ddensity_dz = grad_density[z_dim]
         return self.factor*ddensity_dz
 
     def compute(self, state):
         try:
-            gradu = state.fields("u_gradient")
-        except:
+            gradu = getattr(state.fields, "u_gradient")
+        except AttributeError:
             raise ValueError("To calculate the Richardson number, you must also have %s as a diagnostic field." % "u_gradient")
         denom = 0.
         z_dim = state.mesh.geometric_dimension() - 1
-        u_dim = len(state.fields("u").ufl_shape)
+        u_dim = state.fields("u").ufl_shape[0]
         for i in range(u_dim):
             denom += gradu[i, z_dim]**2
-        Ns = self.Nsq(state, z_dim)
-        self.field.interpolate(Ns/denom)
+        self.field.interpolate(self.Nsq(state, z_dim)/denom)
         return self.field
 
 
