@@ -192,7 +192,6 @@ class RichardsonNumber(DiagnosticField):
         self.factor = Constant(factor)
 
     def Nsq(self, state, z_dim):
-        g = state.parameters.g
         try:
             grad_density = getattr(state.fields, self.density_field+"_gradient")
         except AttributeError:
