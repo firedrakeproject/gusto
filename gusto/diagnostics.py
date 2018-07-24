@@ -1,7 +1,7 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, FunctionSpace
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 from gusto.advection import Recoverer
@@ -298,7 +298,7 @@ class InternalEnergy(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
@@ -323,7 +323,7 @@ class Dewpoint(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
         rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
         rho = Function(theta.function_space())

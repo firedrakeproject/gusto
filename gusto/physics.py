@@ -2,8 +2,7 @@ from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.advection import SSPRK3, Recoverer
 from firedrake import Interpolator, conditional, Function, \
-    min_value, max_value, TestFunction, dx, as_vector, \
-    NonlinearVariationalProblem, NonlinearVariationalSolver, BrokenElement, FunctionSpace
+    min_value, max_value, as_vector, BrokenElement, FunctionSpace
 from gusto import thermodynamics
 
 
@@ -95,7 +94,6 @@ class Condensation(Physics):
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
                                                       max_value(dot_r_cond, - self.water_c / dt),
                                                       min_value(dot_r_cond, self.water_v / dt)), self.cond_rate)
-        
 
         # tell the prognostic fields what to update to
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)

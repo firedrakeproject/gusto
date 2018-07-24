@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, ufl_expr, FunctionSpace, BrokenElement, errornorm
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
 from gusto.advection import Recoverer
 
@@ -298,36 +298,13 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-    Vv = state.fields('u').function_space()
-    n = FacetNormal(state.mesh)
-    g = state.parameters.g
-    cp = state.parameters.cp
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
-    quadrature_degree = (4, 4)
-    dxp = dx(degree=(quadrature_degree))
-
-    params = {'ksp_type': 'preonly',
-              'ksp_monitor_true_residual': True,
-              'ksp_converged_reason': True,
-              'snes_converged_reason': True,
-              'ksp_max_it': 100,
-              'mat_type': 'aij',
-              'pc_type': 'lu',
-              'pc_factor_mat_solver_type': 'mumps'}
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
-    Pi = Function(Vr)
-
-    if top:
-        bmeasure = ds_t
-        bstring = "bottom"
-    else:
-        bmeasure = ds_b
-        bstring = "top"
 
     rho_h = Function(Vr)
     rho_averaged = Function(Vt)
@@ -362,7 +339,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         # calculate averaged rho
         rho_broken.interpolate(rho0)
         rho_recoverer.project()
-        
+
         # now solve for r_v
         for j in range(5):
             theta_h.interpolate(theta_e / theta_e_expr * theta0)
@@ -386,7 +363,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                      pi_boundary=pi_boundary,
-                                     water_t=water_t, solve_for_rho=True)    
+                                     water_t=water_t, solve_for_rho=True)
 
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
@@ -411,10 +388,6 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-    Vv = state.spaces("Vv")
-    n = FacetNormal(state.mesh)
-    g = state.parameters.g
-    cp = state.parameters.cp
     R_d = state.parameters.R_d
     R_v = state.parameters.R_v
     epsilon = R_d / R_v
@@ -422,28 +395,10 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
-    quadrature_degree = (4, 4)
-    dxp = dx(degree=(quadrature_degree))
-
-    params = {'ksp_type': 'preonly',
-              'ksp_monitor_true_residual': True,
-              'ksp_converged_reason': True,
-              'snes_converged_reason': True,
-              'ksp_max_it': 100,
-              'mat_type': 'aij',
-              'pc_type': 'lu',
-              'pc_factor_mat_solver_type': 'mumps'}
 
     # apply first guesses
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
-
-    if top:
-        bmeasure = ds_t
-        bstring = "bottom"
-    else:
-        bmeasure = ds_b
-        bstring = "top"
 
     rho_h = Function(Vr)
     rho_averaged = Function(Vt)
@@ -472,7 +427,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                          solve_for_rho=True)
 
         # damp solution
-        rho0.assign(rho0 * (1 - delta) + delta * rho_h)        
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
         # calculate averaged rho
         rho_broken.interpolate(rho0)

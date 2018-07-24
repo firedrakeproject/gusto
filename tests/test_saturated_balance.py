@@ -90,7 +90,7 @@ def setup_saturated(dirname):
         ueqn = EulerPoincare(state, Vu)
         rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
         thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-        
+
     advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
                        ('theta', SSPRK3(state, theta0, thetaeqn)),
                        ('water_v', SSPRK3(state, water_v0, thetaeqn)),

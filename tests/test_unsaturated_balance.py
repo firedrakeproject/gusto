@@ -80,7 +80,7 @@ def setup_unsaturated(dirname):
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0),
                                   ('water_v', water_v0)])
-    
+
     # Set up advection schemes
     if recovered:
         ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", recovered_spaces=u_spaces)
@@ -90,7 +90,7 @@ def setup_unsaturated(dirname):
         ueqn = EulerPoincare(state, Vu)
         rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
         thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-        
+
     advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
                        ('theta', SSPRK3(state, theta0, thetaeqn)),
                        ('water_v', SSPRK3(state, water_v0, thetaeqn)),
