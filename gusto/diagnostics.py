@@ -174,7 +174,9 @@ class Gradient(DiagnosticField):
         trial = TrialFunction(space)
         n = FacetNormal(state.mesh)
         a = inner(test, trial)*dx
-        L = -inner(div(test), f)*dx + dot(dot(test, n), f)*(ds_t + ds_b)
+        L = -inner(div(test), f)*dx
+        if space.extruded:
+            L += dot(dot(test, n), f)*(ds_t + ds_b)
         prob = LinearVariationalProblem(a, L, self.field)
         self.solver = LinearVariationalSolver(prob)
 
@@ -207,7 +209,7 @@ class RichardsonNumber(DiagnosticField):
         denom = 0.
         z_dim = state.mesh.geometric_dimension() - 1
         u_dim = state.fields("u").ufl_shape[0]
-        for i in range(u_dim):
+        for i in range(u_dim-1):
             denom += gradu[i, z_dim]**2
         self.field.interpolate(self.Nsq(state, z_dim)/denom)
         return self.field
