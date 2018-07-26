@@ -7,7 +7,7 @@ import sys
 
 dt = 1.0
 if '--running-tests' in sys.argv:
-    tmax = 10.
+    tmax = 2.
     deltax = 1000.
 else:
     deltax = 250.
@@ -24,7 +24,7 @@ diffusion = True
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='unsaturated_bubble_RH60_sloped50_pow2_theta_nolimiters', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
+output = OutputParameters(dirname='unsaturated_bubble', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), Temperature(), Dewpoint(), RelativeHumidity()]
@@ -114,7 +114,7 @@ advected_fields = [('u', ThetaMethod(state, u0, ueqn)),
                    ('water_v', SSPRK3(state, water_v0, thetaeqn)),
                    ('water_c', SSPRK3(state, water_c0, thetaeqn))]
 
-linear_solver = CompressibleSolver(state, moisture=moisture)
+linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture)

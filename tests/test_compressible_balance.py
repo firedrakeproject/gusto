@@ -68,7 +68,7 @@ def setup_balance(dirname):
                        ("theta", SSPRK3(state, theta0, thetaeqn))]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
+    linear_solver = HybridizedCompressibleSolver(state)
 
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
