@@ -47,7 +47,7 @@ diagnostics = Diagnostics(*fieldlist)
 g = parameters.g
 Tsurf = 300.
 
-diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta"), RichardsonNumber("theta", g/Tsurf)]
+diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbation"), RichardsonNumber("theta", g/Tsurf), Gradient("theta")]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",

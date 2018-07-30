@@ -64,27 +64,18 @@ void maxify(double *a, double *b) {
 
 class DiagnosticField(object, metaclass=ABCMeta):
 
-    def __init__(self):
+    def __init__(self, required_fields=()):
         self._initialised = False
+        self.required_fields = required_fields
 
     @abstractproperty
     def name(self):
         """The name of this diagnostic field"""
         pass
 
-    def check_fields_exist(self, state, fieldlist):
-        field_names = [f.name() for f in state.fields]
-        for field_name in fieldlist:
-            if field_name not in field_names:
-                raise RuntimeError("Field called %s required to compute diagnostic %s" % (field_name, self.name))
-
-    def setup(self, state, space=None, base_field=None, fieldlist=None):
+    def setup(self, state, space=None):
         if not self._initialised:
-            if fieldlist is not None:
-                self.check_fields_exist(state, fieldlist)
-            if base_field:
-                space = state.fields(base_field).function_space()
-            elif space is None:
+            if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
             self._initialised = True
@@ -199,13 +190,13 @@ class RichardsonNumber(DiagnosticField):
     name = "RichardsonNumber"
 
     def __init__(self, density_field, factor=1.):
-        super().__init__()
+        super().__init__(required_fields=(density_field, "u_gradient"))
         self.density_field = density_field
         self.factor = Constant(factor)
 
     def setup(self, state):
         rho_grad = self.density_field+"_gradient"
-        super().setup(state, fieldlist=[rho_grad, "u_gradient"])
+        super().setup(state)
         self.grad_density = state.fields(rho_grad)
         self.gradu = state.fields("u_gradient")
 
@@ -412,7 +403,7 @@ class HydrostaticImbalance(DiagnosticField):
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Sum, self).__init__()
+        super(Sum, self).__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -422,8 +413,8 @@ class Sum(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            super(Sum, self).setup(state, base_field=self.field1,
-                                   fieldlist=[self.field1, self.field2])
+            space = state.fields(self.field1).function_space()
+            super(Sum, self).setup(state, space=space)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -434,7 +425,7 @@ class Sum(DiagnosticField):
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Difference, self).__init__()
+        super(Difference, self).__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -444,8 +435,8 @@ class Difference(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            super(Difference, self).setup(state, base_field=self.field1,
-                                          fieldlist=[self.field1, self.field2])
+            space = state.fields(self.field1).function_space()
+            super(Difference, self).setup(state, space=space)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -471,9 +462,9 @@ class SteadyStateError(Difference):
 class Perturbation(Difference):
 
     def __init__(self, name):
-        DiagnosticField.__init__(self)
         self.field1 = name
         self.field2 = name+'bar'
+        DiagnosticField.__init__(self, required_fields=(self.field1, self.field2))
 
     @property
     def name(self):

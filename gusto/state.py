@@ -284,41 +284,13 @@ class State(object):
             f = SteadyStateError(self, name)
             self.diagnostic_fields.append(f)
 
-        # this list will contain the diagnostic fields in the right order for
-        # calculation
-        reordered_diagnostic_fields = []
-        # this list contains the diagnostic fields that have not yet
-        # been set up (currently all of them)
-        remaining_diagnostic_fields = self.diagnostic_fields.copy()
-        repeat = True
-        while repeat:
-            # this list contains the diagnostic fields that cannot be
-            # set up on this sweep due to dependence on other field
-            # that have not yet been set up
-            postponed_fields = []
-            for diagnostic in remaining_diagnostic_fields:
-                try:
-                    # try to setup the diagnostic and append to reordered list
-                    diagnostic.setup(self)
-                    self.diagnostics.register(diagnostic.name)
-                    reordered_diagnostic_fields.append(diagnostic)
-                except RuntimeError:
-                    # if the setup gives a RuntimeError then postpone this field
-                    postponed_fields.append(diagnostic)
-                    logger.info("setup of diagnostic %s postponed" % diagnostic.name)
-            if len(postponed_fields) == 0:
-                # if nothing needs postponing then we're done
-                repeat = False
-            elif len(postponed_fields) < len(remaining_diagnostic_fields):
-                # if we've managed to reduce the number of fields we
-                # postpone then continue with another sweep
-                remaining_diagnostic_fields = postponed_fields.copy()
-            else:
-                # if we're not managing to reduce the number of fields
-                # we postpone then something bad is happening
-                raise RuntimeError("There is a problem with your diagnostic fields")
-        # update the list of diagnostic fields to the reordered version
-        self.diagnostic_fields = reordered_diagnostic_fields
+        fields = set([f.name() for f in self.fields])
+        field_deps = [(d, set(d.required_fields).difference(fields),) for d in self.diagnostic_fields]
+        schedule = topo_sort(field_deps)
+        self.diagnostic_fields = schedule
+        for diagnostic in self.diagnostic_fields:
+            diagnostic.setup(self)
+            self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, tmax, pickup=False):
         """
@@ -562,3 +534,34 @@ void splat_coords(double **coords) {
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
     return Mesh(coords_latlon)
+
+
+def topo_sort(field_deps):
+    # map node: (input_deps, output_deps)
+    graph = dict((f.name, (list(deps), [])) for f, deps in field_deps)
+    roots = []
+    for f, input_deps in field_deps:
+        if len(input_deps) == 0:
+            # No dependencies, candidate for evaluation
+            roots.append(f)
+        for d in input_deps:
+            # add f as output dependency
+            graph[d][1].append(f)
+
+    schedule = []
+    while roots:
+        n = roots.pop()
+        schedule.append(n)
+        output_deps = list(graph[n.name][1])
+        for m in output_deps:
+            # Remove edge
+            graph[m.name][0].remove(n.name)
+            graph[n.name][1].remove(m)
+            # If m now as no input deps, candidate for evaluation
+            if len(graph[m.name][0]) == 0:
+                roots.append(m)
+    if any(len(i) for i, _ in graph.values()):
+        cycle = "\n".join("%s -> %s" % (f, i) for f, (i, _) in graph.items()
+                          if f not in schedule)
+        raise RuntimeError("Field dependencies have a cycle:\n\n%s" % cycle)
+    return schedule
