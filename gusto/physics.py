@@ -36,8 +36,6 @@ class Condensation(Physics):
     latent heat changes.
 
     :arg state: :class:`.State.` object.
-    :arg weak: Boolean to determine whether weak
-               formulation of condensation is used.
     """
 
     def __init__(self, state):
