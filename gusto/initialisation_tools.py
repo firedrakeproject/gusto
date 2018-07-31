@@ -379,7 +379,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     Given vertical profiles for dry potential temperature
     and relative humidity compute hydrostatically balanced
     virtual potential temperature, dry density and water vapour profiles.
-    
+
     The general strategy is to split up the solving into two steps:
     1) finding rho to balance the theta profile
     2) finding theta_v and r_v to get back theta_d and H
