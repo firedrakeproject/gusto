@@ -3,14 +3,17 @@ from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function, Fu
 from os import path
 from netCDF4 import Dataset
 
+# this tests the moist-unsaturated hydrostatic balance, by setting up a vertical slice
+# with this initial procedure, before taking a few time steps and ensuring that
+# the resulting velocities are very small
 
 def setup_unsaturated(dirname):
 
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 200
-    L = 1000.
+    deltax = 400
+    L = 2000.
     H = 10000.
 
     nlayers = int(H/deltax)

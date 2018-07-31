@@ -51,6 +51,7 @@ class Condensation(Physics):
         Vt = self.theta.function_space()
 
         # make rho variables
+        # we recover rho into theta space
         rho_averaged = Function(Vt)
         self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
         self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())

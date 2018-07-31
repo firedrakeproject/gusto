@@ -282,6 +282,13 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
     dry density and water vapour profile.
+
+    The general strategy is to split up the solving into two steps:
+    1) finding rho to balance the theta profile
+    2) finding theta_v and r_v to get back theta_e and saturation
+    We iteratively solve these steps until we (hopefully)
+    converge to a solution.
+
     :arg state: The :class:`State` object.
     :arg theta_e: The initial wet equivalent potential temperature profile.
     :arg water_t: The total water pseudo-mixing ratio profile.
@@ -329,7 +336,6 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                                          solve_for_rho=True)
 
         # damp solution
-        print("i =", i, errornorm(rho0, rho_h))
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
         theta_e_test.assign(theta_e_expr)
@@ -344,14 +350,15 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         for j in range(5):
             theta_h.interpolate(theta_e / theta_e_expr * theta0)
             theta0.assign(theta0 * (1 - delta) + delta * theta_h)
-            theta_e_test.assign(theta_e_expr)
+
+            # break when close enough
             if errornorm(theta_e_test, theta_e) < 1e-6:
                 break
             for k in range(3):
                 w_h.interpolate(r_v_expr)
-                print("k =", k, errornorm(water_v0, w_h))
                 water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
+                # break when close enough
                 theta_e_test.assign(theta_e_expr)
                 if errornorm(theta_e_test, theta_e) < 1e-6:
                     break
@@ -372,6 +379,13 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     Given vertical profiles for dry potential temperature
     and relative humidity compute hydrostatically balanced
     virtual potential temperature, dry density and water vapour profiles.
+    
+    The general strategy is to split up the solving into two steps:
+    1) finding rho to balance the theta profile
+    2) finding theta_v and r_v to get back theta_d and H
+    We iteratively solve these steps until we (hopefully)
+    converge to a solution.
+
     :arg state: The :class:`State` object.
     :arg theta_d: The initial dry potential temperature profile.
     :arg H: The relative humidity profile.

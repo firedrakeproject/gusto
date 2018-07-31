@@ -3,13 +3,16 @@ from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function, Fu
 from os import path
 from netCDF4 import Dataset
 
+# this tests the moist-saturated hydrostatic balance, by setting up a vertical slice
+# with this initial procedure, before taking a few time steps and ensuring that
+# the resulting velocities are very small
 
 def setup_saturated(dirname):
 
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 100.
+    deltax = 400.
     L = 2000.
     H = 10000.
 
@@ -19,6 +22,8 @@ def setup_saturated(dirname):
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
+    # option to easily change between recovered and not if necessary
+    # default should be to use lowest order set of spaces
     recovered = True
     degree = 0 if recovered else 1
 
