@@ -285,7 +285,7 @@ class State(object):
             self.diagnostic_fields.append(f)
 
         fields = set([f.name() for f in self.fields])
-        field_deps = [(d, set(d.required_fields).difference(fields),) for d in self.diagnostic_fields]
+        field_deps = [(d, sorted(set(d.required_fields).difference(fields),)) for d in self.diagnostic_fields]
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
         for diagnostic in self.diagnostic_fields:
@@ -537,31 +537,32 @@ void splat_coords(double **coords) {
 
 
 def topo_sort(field_deps):
+    name2field = dict((f.name, f) for f, _ in field_deps)
     # map node: (input_deps, output_deps)
     graph = dict((f.name, (list(deps), [])) for f, deps in field_deps)
     roots = []
     for f, input_deps in field_deps:
         if len(input_deps) == 0:
             # No dependencies, candidate for evaluation
-            roots.append(f)
+            roots.append(f.name)
         for d in input_deps:
             # add f as output dependency
-            graph[d][1].append(f)
+            graph[d][1].append(f.name)
 
     schedule = []
     while roots:
         n = roots.pop()
         schedule.append(n)
-        output_deps = list(graph[n.name][1])
+        output_deps = list(graph[n][1])
         for m in output_deps:
             # Remove edge
-            graph[m.name][0].remove(n.name)
-            graph[n.name][1].remove(m)
+            graph[m][0].remove(n)
+            graph[n][1].remove(m)
             # If m now as no input deps, candidate for evaluation
-            if len(graph[m.name][0]) == 0:
+            if len(graph[m][0]) == 0:
                 roots.append(m)
     if any(len(i) for i, _ in graph.values()):
         cycle = "\n".join("%s -> %s" % (f, i) for f, (i, _) in graph.items()
                           if f not in schedule)
         raise RuntimeError("Field dependencies have a cycle:\n\n%s" % cycle)
-    return schedule
+    return list(map(name2field.__getitem__, schedule))
