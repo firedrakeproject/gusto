@@ -278,7 +278,9 @@ def calculate_Pi0(state, theta0, rho0):
 
 def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                                   top=False, pi_boundary=Constant(1.0),
-                                  max_iterations=40):
+                                  max_outer_solve_count=40,
+                                  max_theta_solve_count=5,
+                                  max_inner_solve_count=3):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
@@ -297,7 +299,10 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
     :arg pi_boundary: The value of pi on the specified boundary.
-    :arg max_iterations: Max number of iterations for balance solver.
+    :arg max_outer_solve_count: Max number of outer iterations for balance solver.
+    :arg max_theta_solve_count: Max number of iterations for theta solver (middle part of solve).
+    :arg max_inner_solve_count: Max number of iterations on the inner most
+                                loop for the water vapour solver.
     """
 
     theta0 = state.fields('theta')
@@ -331,8 +336,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
     theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
 
-    iterations = 0
-    for i in range(max_iterations):
+    for i in range(max_outer_solve_count):
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
                                          pi_boundary=pi_boundary, water_t=water_t,
@@ -350,14 +354,14 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         rho_recoverer.project()
 
         # now solve for r_v
-        for j in range(5):
+        for j in range(max_theta_solve_count):
             theta_h.interpolate(theta_e / theta_e_expr * theta0)
             theta0.assign(theta0 * (1 - delta) + delta * theta_h)
 
             # break when close enough
             if errornorm(theta_e_test, theta_e) < 1e-6:
                 break
-            for k in range(3):
+            for k in range(max_inner_solve_count):
                 w_h.interpolate(r_v_expr)
                 water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
@@ -365,9 +369,9 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                 theta_e_test.assign(theta_e_expr)
                 if errornorm(theta_e_test, theta_e) < 1e-6:
                     break
-        iterations += 1
-        if iterations == max_iterations:
-            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % iterations, 'iterations')
+
+        if i == max_outer_solve_count:
+            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
     if pi0 is not None:
         pie = thermodynamics.pi(state.parameters, rho0, theta0)
@@ -381,7 +385,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                     top=False, pi_boundary=Constant(1.0),
-                                    max_iterations=40):
+                                    max_outer_solve_count=40,
+                                    max_inner_solve_count=20):
     """
     Given vertical profiles for dry potential temperature
     and relative humidity compute hydrostatically balanced
@@ -400,7 +405,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
     :arg pi_boundary: The value of pi on the specified boundary.
-    :arg max_iterations: Max number of iterations for balance solver.
+    :arg max_outer_solve_count: Max number of iterations for outer loop of balance solver.
+    :arg max_inner_solve_count: Max number of iterations for inner loop of balanace solver.
     """
 
     theta0 = state.fields('theta')
@@ -442,8 +448,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
     RH = Function(Vt)
 
-    iterations = 0
-    for i in range(max_iterations):
+    for i in range(max_outer_solve_count):
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
                                          pi_boundary=pi_boundary, water_t=water_v0,
@@ -461,7 +466,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
             break
 
         # now solve for r_v
-        for j in range(20):
+        for j in range(max_inner_solve_count):
             w_h.interpolate(r_v_expr)
             water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
@@ -473,9 +478,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
             if errornorm(RH, H) < 1e-10:
                 break
 
-        iterations += 1
-        if iterations == max_iterations:
-            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % iterations, 'iterations')
+        if i == max_outer_solve_count:
+            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
     if pi0 is not None:
         pie = thermodynamics.pi(state.parameters, rho0, theta0)
