@@ -9,11 +9,12 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
+from gusto.advection import Recoverer
 
 
-__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "moist_hydrostatic_balance"]
+__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 
 def latlon_coords(mesh):
@@ -275,15 +276,33 @@ def calculate_Pi0(state, theta0, rho0):
     return Pi0
 
 
-def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)):
+def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
+                                  top=False, pi_boundary=Constant(1.0),
+                                  max_outer_solve_count=40,
+                                  max_theta_solve_count=5,
+                                  max_inner_solve_count=3):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
     dry density and water vapour profile.
+
+    The general strategy is to split up the solving into two steps:
+    1) finding rho to balance the theta profile
+    2) finding theta_v and r_v to get back theta_e and saturation
+    We iteratively solve these steps until we (hopefully)
+    converge to a solution.
+
     :arg state: The :class:`State` object.
     :arg theta_e: The initial wet equivalent potential temperature profile.
     :arg water_t: The total water pseudo-mixing ratio profile.
-    :arg pi_boundary: the value of pi on the lower boundary of the domain.
+    :arg pi0: Optional function to put exner pressure into.
+    :arg top: If True, set a boundary condition at the top, otherwise
+              it will be at the bottom.
+    :arg pi_boundary: The value of pi on the specified boundary.
+    :arg max_outer_solve_count: Max number of outer iterations for balance solver.
+    :arg max_theta_solve_count: Max number of iterations for theta solver (middle part of solve).
+    :arg max_inner_solve_count: Max number of iterations on the inner most
+                                loop for the water vapour solver.
     """
 
     theta0 = state.fields('theta')
@@ -293,117 +312,180 @@ def moist_hydrostatic_balance(state, theta_e, water_t, pi_boundary=Constant(1.0)
     # Calculate hydrostatic Pi
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-    Vv = state.fields('u').function_space()
-    n = FacetNormal(state.mesh)
-    g = state.parameters.g
-    cp = state.parameters.cp
-    R_d = state.parameters.R_d
-    p_0 = state.parameters.p_0
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
         state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
-    quadrature_degree = (5, 5)
-
-    params = {'ksp_type': 'preonly',
-              'ksp_monitor_true_residual': True,
-              'ksp_converged_reason': True,
-              'snes_converged_reason': True,
-              'ksp_max_it': 100,
-              'mat_type': 'aij',
-              'pc_type': 'lu',
-              'pc_factor_mat_solver_type': 'mumps'}
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
-    Pi = Function(Vr)
-    epsilon = 0.9  # relaxation constant
 
-    # set up mixed space
-    Z = MixedFunctionSpace((Vt, Vt))
-    z = Function(Z)
+    rho_h = Function(Vr)
+    rho_averaged = Function(Vt)
+    rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+    rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    w_h = Function(Vt)
+    theta_h = Function(Vt)
+    theta_e_test = Function(Vt)
+    delta = 0.8
 
-    gamma, phi = TestFunctions(Z)
+    # expressions for finding theta0 and water_v0 from theta_e and water_t
+    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, pie)
+    T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+    r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
+    theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
 
-    theta_v, w_v = z.split()
+    for i in range(max_outer_solve_count):
+        # solve for rho with theta_vd and w_v guesses
+        compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
+                                         pi_boundary=pi_boundary, water_t=water_t,
+                                         solve_for_rho=True)
 
-    # give first guesses for trial functions
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
+        # damp solution
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
-    theta_v, w_v = split(z)
+        theta_e_test.assign(theta_e_expr)
+        if errornorm(theta_e_test, theta_e) < 1e-8:
+            break
 
-    # define variables
-    T = thermodynamics.T(state.parameters, theta_v, Pi, r_v=w_v)
-    p = thermodynamics.p(state.parameters, Pi)
-    w_sat = thermodynamics.r_sat(state.parameters, T, p)
+        # calculate averaged rho
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
 
-    dxp = dx(degree=(quadrature_degree))
+        # now solve for r_v
+        for j in range(max_theta_solve_count):
+            theta_h.interpolate(theta_e / theta_e_expr * theta0)
+            theta0.assign(theta0 * (1 - delta) + delta * theta_h)
 
-    # set up weak form of theta_e and w_sat equations
-    F = (-gamma * theta_e * dxp
-         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp)
+            # break when close enough
+            if errornorm(theta_e_test, theta_e) < 1e-6:
+                break
+            for k in range(max_inner_solve_count):
+                w_h.interpolate(r_v_expr)
+                water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
-    problem = NonlinearVariationalProblem(F, z)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+                # break when close enough
+                theta_e_test.assign(theta_e_expr)
+                if errornorm(theta_e_test, theta_e) < 1e-6:
+                    break
 
-    theta_v, w_v = z.split()
+        if i == max_outer_solve_count:
+            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
-    Pi_h = Function(Vr).interpolate((p / p_0) ** (R_d / cp))
+    if pi0 is not None:
+        pie = thermodynamics.pi(state.parameters, rho0, theta0)
+        pi0.interpolate(pie)
 
-    # solve for Pi with theta_v and w_v constant
-    # then solve for theta_v and w_v with Pi constant
-    for i in range(5):
-        compressible_hydrostatic_balance(state, theta0, rho0, pi0=Pi_h, water_t=water_t)
-        Pi.assign(Pi * (1 - epsilon) + epsilon * Pi_h)
-        solver.solve()
-        theta0.assign(theta0 * (1 - epsilon) + epsilon * theta_v)
-        water_v0.assign(water_v0 * (1 - epsilon) + epsilon * w_v)
+    # do one extra solve for rho
+    compressible_hydrostatic_balance(state, theta0, rho0, top=top,
+                                     pi_boundary=pi_boundary,
+                                     water_t=water_t, solve_for_rho=True)
 
-    # now begin on Newton solver, setup up new mixed space
-    Z = MixedFunctionSpace((Vt, Vt, Vr, Vv))
-    z = Function(Z)
 
-    gamma, phi, psi, w = TestFunctions(Z)
+def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
+                                    top=False, pi_boundary=Constant(1.0),
+                                    max_outer_solve_count=40,
+                                    max_inner_solve_count=20):
+    """
+    Given vertical profiles for dry potential temperature
+    and relative humidity compute hydrostatically balanced
+    virtual potential temperature, dry density and water vapour profiles.
 
-    theta_v, w_v, pi, v = z.split()
+    The general strategy is to split up the solving into two steps:
+    1) finding rho to balance the theta profile
+    2) finding theta_v and r_v to get back theta_d and H
+    We iteratively solve these steps until we (hopefully)
+    converge to a solution.
 
-    # use previous values as first guesses for newton solver
-    theta_v.assign(theta0)
-    w_v.assign(water_v0)
-    pi.assign(Pi)
+    :arg state: The :class:`State` object.
+    :arg theta_d: The initial dry potential temperature profile.
+    :arg H: The relative humidity profile.
+    :arg pi0: Optional function to put exner pressure into.
+    :arg top: If True, set a boundary condition at the top, otherwise
+              it will be at the bottom.
+    :arg pi_boundary: The value of pi on the specified boundary.
+    :arg max_outer_solve_count: Max number of iterations for outer loop of balance solver.
+    :arg max_inner_solve_count: Max number of iterations for inner loop of balanace solver.
+    """
 
-    theta_v, w_v, pi, v = split(z)
+    theta0 = state.fields('theta')
+    rho0 = state.fields('rho')
+    water_v0 = state.fields('water_v')
 
-    # define variables
-    T = thermodynamics.T(state.parameters, theta_v, pi, r_v=w_v)
-    p = thermodynamics.p(state.parameters, pi)
-    w_sat = thermodynamics.r_sat(state.parameters, T, p)
+    # Calculate hydrostatic Pi
+    Vt = theta0.function_space()
+    Vr = rho0.function_space()
+    R_d = state.parameters.R_d
+    R_v = state.parameters.R_v
+    epsilon = R_d / R_v
 
-    F = (-gamma * theta_e * dxp
-         + gamma * thermodynamics.theta_e(state.parameters, T, p, w_v, water_t) * dxp
-         - phi * w_v * dxp
-         + phi * w_sat * dxp
-         + cp * inner(v, w) * dxp
-         - cp * div(w * theta_v / (1.0 + water_t)) * pi * dxp
-         + psi * div(theta_v * v / (1.0 + water_t)) * dxp
-         + cp * inner(w, n) * pi_boundary * theta_v / (1.0 + water_t) * ds_b
-         + g * inner(w, state.k) * dxp)
+    VDG = state.spaces("DG")
+    if any(deg > 2 for deg in VDG.ufl_element().degree()):
+        state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
 
-    bcs = [DirichletBC(Z.sub(3), 0.0, "top")]
+    # apply first guesses
+    theta0.assign(theta_d * 1.01)
+    water_v0.assign(0.01)
 
-    problem = NonlinearVariationalProblem(F, z, bcs=bcs)
-    solver = NonlinearVariationalSolver(problem, solver_parameters=params)
+    rho_h = Function(Vr)
+    rho_averaged = Function(Vt)
+    rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+    rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    w_h = Function(Vt)
+    delta = 1.0
 
-    solver.solve()
+    # make expressions for determining water_v0
+    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, pie)
+    T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+    r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
 
-    theta_v, w_v, pi, v = z.split()
+    # make expressions to evaluate residual
+    pi_ev = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+    p_ev = thermodynamics.p(state.parameters, pi_ev)
+    T_ev = thermodynamics.T(state.parameters, theta0, pi_ev, water_v0)
+    RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
+    RH = Function(Vt)
 
-    # assign final values
-    theta0.assign(theta_v)
-    water_v0.assign(w_v)
+    for i in range(max_outer_solve_count):
+        # solve for rho with theta_vd and w_v guesses
+        compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
+                                         pi_boundary=pi_boundary, water_t=water_v0,
+                                         solve_for_rho=True)
 
-    # find rho
-    compressible_hydrostatic_balance(state, theta0, rho0, water_t=water_t, solve_for_rho=True)
+        # damp solution
+        rho0.assign(rho0 * (1 - delta) + delta * rho_h)
+
+        # calculate averaged rho
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
+
+        RH.assign(RH_ev)
+        if errornorm(RH, H) < 1e-10:
+            break
+
+        # now solve for r_v
+        for j in range(max_inner_solve_count):
+            w_h.interpolate(r_v_expr)
+            water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
+
+            # compute theta_vd
+            theta0.assign(theta_d * (1 + water_v0 / epsilon))
+
+            # test quality of solution by re-evaluating expression
+            RH.assign(RH_ev)
+            if errornorm(RH, H) < 1e-10:
+                break
+
+        if i == max_outer_solve_count:
+            raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
+
+    if pi0 is not None:
+        pie = thermodynamics.pi(state.parameters, rho0, theta0)
+        pi0.interpolate(pie)
+
+    # do one extra solve for rho
+    compressible_hydrostatic_balance(state, theta0, rho0, top=top,
+                                     pi_boundary=pi_boundary,
+                                     water_t=water_v0, solve_for_rho=True)

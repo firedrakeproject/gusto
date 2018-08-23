@@ -1,12 +1,13 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
+from gusto.advection import Recoverer
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -270,10 +271,16 @@ class Theta_e(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
         w_t = w_c + w_v
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         p = thermodynamics.p(state.parameters, pi)
         T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
@@ -291,13 +298,108 @@ class InternalEnergy(DiagnosticField):
 
     def compute(self, state):
         theta = state.fields('theta')
-        rho = state.fields('rho')
+        rho0 = state.fields('rho')
         w_v = state.fields('water_v')
         w_c = state.fields('water_c')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
         pi = thermodynamics.pi(state.parameters, rho, theta)
         T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
 
         return self.field.interpolate(thermodynamics.internal_energy(state.parameters, rho, T, r_v=w_v, r_l=w_c))
+
+
+class Dewpoint(DiagnosticField):
+    name = "Dewpoint"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Dewpoint, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho0 = state.fields('rho')
+        w_v = state.fields('water_v')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        p = thermodynamics.p(state.parameters, pi)
+
+        return self.field.interpolate(thermodynamics.T_dew(state.parameters, p, w_v))
+
+
+class Temperature(DiagnosticField):
+    name = "Temperature"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Temperature, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho0 = state.fields('rho')
+        w_v = state.fields('water_v')
+
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+
+        return self.field.interpolate(thermodynamics.T(state.parameters, theta, pi, r_v=w_v))
+
+
+class Theta_d(DiagnosticField):
+    name = "Theta_d"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(Theta_d, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        w_v = state.fields('water_v')
+        epsilon = state.parameters.R_d / state.parameters.R_v
+
+        return self.field.interpolate(theta / (1 + w_v / epsilon))
+
+
+class RelativeHumidity(DiagnosticField):
+    name = "RelativeHumidity"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("CG1", state.mesh, "CG", 1)
+            super(RelativeHumidity, self).setup(state, space=space)
+
+    def compute(self, state):
+        theta = state.fields('theta')
+        rho0 = state.fields('rho')
+        w_v = state.fields('water_v')
+        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
+        rho = Function(theta.function_space())
+        rho_recoverer = Recoverer(rho_broken, rho)
+
+        rho_broken.interpolate(rho0)
+        rho_recoverer.project()
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
+        p = thermodynamics.p(state.parameters, pi)
+
+        return self.field.interpolate(thermodynamics.RH(state.parameters, w_v, T, p))
 
 
 class HydrostaticImbalance(DiagnosticField):

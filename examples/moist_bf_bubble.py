@@ -70,7 +70,7 @@ Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
 x = SpatialCoordinate(mesh)
-quadrature_degree = (5, 5)
+quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
 if recovered:
@@ -91,7 +91,7 @@ theta_e = Function(Vt).assign(Tsurf)
 water_t = Function(Vt).assign(total_water)
 
 # Calculate hydrostatic fields
-moist_hydrostatic_balance(state, theta_e, water_t)
+saturated_hydrostatic_balance(state, theta_e, water_t)
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
