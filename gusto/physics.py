@@ -1,8 +1,9 @@
 from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
-from gusto.advection import SSPRK3
-from firedrake import exp, Interpolator, conditional, Function, \
-    min_value, max_value, as_vector
+from gusto.advection import SSPRK3, Recoverer
+from firedrake import Interpolator, conditional, Function, \
+    min_value, max_value, as_vector, BrokenElement, FunctionSpace
+from gusto import thermodynamics
 
 
 __all__ = ["Condensation", "Fallout"]
@@ -49,47 +50,44 @@ class Condensation(Physics):
         # declare function space
         Vt = self.theta.function_space()
 
-        param = self.state.parameters
+        # make rho variables
+        # we recover rho into theta space
+        rho_averaged = Function(Vt)
+        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
+        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
 
         # define some parameters as attributes
-        dt = self.state.timestepping.dt
-        R_d = param.R_d
-        p_0 = param.p_0
-        kappa = param.kappa
-        cp = param.cp
-        cv = param.cv
-        c_pv = param.c_pv
-        c_pl = param.c_pl
-        c_vv = param.c_vv
-        R_v = param.R_v
-        L_v0 = param.L_v0
-        T_0 = param.T_0
-        w_sat1 = param.w_sat1
-        w_sat2 = param.w_sat2
-        w_sat3 = param.w_sat3
-        w_sat4 = param.w_sat4
+        dt = state.timestepping.dt
+        R_d = state.parameters.R_d
+        cp = state.parameters.cp
+        cv = state.parameters.cv
+        c_pv = state.parameters.c_pv
+        c_pl = state.parameters.c_pl
+        c_vv = state.parameters.c_vv
+        R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = ((R_d * rho * self.theta / p_0)
-              ** (kappa / (1.0 - kappa)))
-        T = Pi * self.theta * R_d / (R_d + self.water_v * R_v)
-        p = p_0 * Pi ** (1.0 / kappa)
-        L_v = L_v0 - (c_pl - c_pv) * (T - T_0)
+        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, Pi)
+        L_v = thermodynamics.Lv(state.parameters, T)
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * self.water_c
         c_vml = cv + c_vv * self.water_v + c_pl * self.water_c
 
         # use Teten's formula to calculate w_sat
-        w_sat = (w_sat1 /
-                 (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4))
+        w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
         # make appropriate condensation rate
         dot_r_cond = ((self.water_v - w_sat) /
                       (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
                                     (cp * R_v * T ** 2.0)))))
+        dot_r_cond = self.water_v - w_sat
 
         # make cond_rate function, that needs to be the same for all updates in one time step
         self.cond_rate = Function(Vt)
+        self.cond_rate = state.fields('cond_rate', Vt)
 
         # adjust cond rate so negative concentrations don't occur
         self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
@@ -105,6 +103,8 @@ class Condensation(Physics):
                                         R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        self.rho_broken.assign(self.rho_interpolator.interpolate())
+        self.rho_recoverer.project()
         self.lim_cond_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())

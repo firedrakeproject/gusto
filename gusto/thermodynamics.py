@@ -1,10 +1,9 @@
 """
 Some thermodynamic expressions to help declutter the code.
 """
-from firedrake import exp
+from firedrake import exp, ln
 
-
-__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy"]
+__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_dew"]
 
 
 def theta(parameters, T, p):
@@ -137,13 +136,10 @@ def r_sat(parameters, T, p):
     :arg p: the pressure in Pa.
     """
 
-    w_sat1 = parameters.w_sat1
-    w_sat2 = parameters.w_sat2
-    w_sat3 = parameters.w_sat3
-    w_sat4 = parameters.w_sat4
-    T_0 = parameters.T_0
+    epsilon = parameters.R_d / parameters.R_v
+    esat = e_sat(parameters, T)
 
-    return w_sat1 / (p * exp(w_sat2 * (T - T_0) / (T - w_sat3)) - w_sat4)
+    return esat * epsilon / (p - esat)
 
 
 def Lv(parameters, T):
@@ -200,3 +196,86 @@ def internal_energy(parameters, rho, T, r_v=0.0, r_l=0.0):
     L_v = Lv(parameters, T)
 
     return rho * (cv * T + r_v * c_vv * T + r_l * (c_pv * T - L_v))
+
+
+def RH(parameters, r_v, T, p):
+    """
+    Returns an expression for the relative humidity.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg r_v: the mixing ratio of water vapour.
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
+    """
+
+    epsilon = parameters.R_d / parameters.R_v
+    rsat = r_sat(parameters, T, p)
+
+    return r_v * (1 + rsat / epsilon) / (rsat * (1 + r_v / epsilon))
+
+
+def e_sat(parameters, T):
+    """
+    Returns an expression for the saturated partial pressure
+    of water vapour as a function of T, based on Tetens' formula.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg T: the temperature in K.
+    """
+
+    w_sat2 = parameters.w_sat2
+    w_sat3 = parameters.w_sat3
+    w_sat4 = parameters.w_sat4
+    T_0 = parameters.T_0
+
+    return w_sat4 * exp(-w_sat2 * (T - T_0) / (T - w_sat3))
+
+
+def e(parameters, p, r_v):
+    """
+    Returns an expression for the partial pressure of water vapour
+    from the total pressure and the water vapour mixing ratio.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg p: the pressure in Pa.
+    :arg r_v: the mixing ratio of water vapour.
+    """
+
+    epsilon = parameters.R_d / parameters.R_v
+
+    return p * r_v / (epsilon + r_v)
+
+
+def r_v(parameters, H, T, p):
+    """
+    Returns an expression for the mixing ratio of water vapour
+    from the relative humidity, pressure and temperature.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg H: the relative humidity (as a decimal).
+    :arg T: the temperature in K.
+    :arg p: the pressure in Pa.
+    """
+
+    epsilon = parameters.R_d / parameters.R_v
+    rsat = r_sat(parameters, T, p)
+
+    return H * rsat / (1 + (1 - H) * rsat / epsilon)
+
+
+def T_dew(parameters, p, r_v):
+    """
+    Returns the dewpoint temperature as a function of
+    temperature and the water vapour mixing ratio.
+
+    :arg parameters: a CompressibleParameters object.
+    :arg T: the temperature in K.
+    :arg r_v: the water vapour mixing ratio.
+    """
+
+    R_d = parameters.R_d
+    R_v = parameters.R_v
+    T_0 = parameters.T_0
+    e = p * r_v / (r_v + R_d / R_v)
+
+    return 243.5 / ((17.67 / ln(e / 611.2)) - 1) + T_0
