@@ -44,7 +44,10 @@ output = OutputParameters(dirname=dirname,
 
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber()]
+g = parameters.g
+Tsurf = 300.
+
+diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbation"), RichardsonNumber("theta", g/Tsurf), Gradient("theta")]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",

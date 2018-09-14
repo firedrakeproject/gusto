@@ -1,13 +1,15 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, \
+    TensorFunctionSpace
+
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 from gusto.advection import Recoverer
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "RichardsonNumber", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
 
 
 class Diagnostics(object):
@@ -48,11 +50,11 @@ void maxify(double *a, double *b) {
     @staticmethod
     def rms(f):
         area = assemble(1*dx(domain=f.ufl_domain()))
-        return sqrt(assemble(dot(f, f)*dx)/area)
+        return sqrt(assemble(inner(f, f)*dx)/area)
 
     @staticmethod
     def l2(f):
-        return sqrt(assemble(dot(f, f)*dx))
+        return sqrt(assemble(inner(f, f)*dx))
 
     @staticmethod
     def total(f):
@@ -64,8 +66,9 @@ void maxify(double *a, double *b) {
 
 class DiagnosticField(object, metaclass=ABCMeta):
 
-    def __init__(self):
+    def __init__(self, required_fields=()):
         self._initialised = False
+        self.required_fields = required_fields
 
     @abstractproperty
     def name(self):
@@ -74,10 +77,10 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
     def setup(self, state, space=None):
         if not self._initialised:
-            self._initialised = True
             if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
+            self._initialised = True
 
     @abstractmethod
     def compute(self, state):
@@ -146,6 +149,68 @@ class VelocityY(DiagnosticField):
         u = state.fields("u")
         v = u[1]
         return self.field.interpolate(v)
+
+
+class Gradient(DiagnosticField):
+
+    def __init__(self, name):
+        super().__init__()
+        self.fname = name
+
+    @property
+    def name(self):
+        return self.fname+"_gradient"
+
+    def setup(self, state):
+        if not self._initialised:
+            mesh_dim = state.mesh.geometric_dimension()
+            try:
+                field_dim = state.fields(self.fname).ufl_shape[0]
+            except IndexError:
+                field_dim = 1
+            shape = (mesh_dim, ) * field_dim
+            space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
+            super().setup(state, space=space)
+
+        f = state.fields(self.fname)
+        test = TestFunction(space)
+        trial = TrialFunction(space)
+        n = FacetNormal(state.mesh)
+        a = inner(test, trial)*dx
+        L = -inner(div(test), f)*dx
+        if space.extruded:
+            L += dot(dot(test, n), f)*(ds_t + ds_b)
+        prob = LinearVariationalProblem(a, L, self.field)
+        self.solver = LinearVariationalSolver(prob)
+
+    def compute(self, state):
+        self.solver.solve()
+        return self.field
+
+
+class RichardsonNumber(DiagnosticField):
+    name = "RichardsonNumber"
+
+    def __init__(self, density_field, factor=1.):
+        super().__init__(required_fields=(density_field, "u_gradient"))
+        self.density_field = density_field
+        self.factor = Constant(factor)
+
+    def setup(self, state):
+        rho_grad = self.density_field+"_gradient"
+        super().setup(state)
+        self.grad_density = state.fields(rho_grad)
+        self.gradu = state.fields("u_gradient")
+
+    def compute(self, state):
+        denom = 0.
+        z_dim = state.mesh.geometric_dimension() - 1
+        u_dim = state.fields("u").ufl_shape[0]
+        for i in range(u_dim-1):
+            denom += self.gradu[i, z_dim]**2
+        Nsq = self.factor*self.grad_density[z_dim]
+        self.field.interpolate(Nsq/denom)
+        return self.field
 
 
 class Energy(DiagnosticField):
@@ -441,7 +506,7 @@ class HydrostaticImbalance(DiagnosticField):
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Sum, self).__init__()
+        super(Sum, self).__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -453,11 +518,6 @@ class Sum(DiagnosticField):
         if not self._initialised:
             space = state.fields(self.field1).function_space()
             super(Sum, self).setup(state, space=space)
-            field_names = [f.name() for f in state.fields]
-            if self.field1 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field1)
-            if self.field2 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -468,7 +528,7 @@ class Sum(DiagnosticField):
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Difference, self).__init__()
+        super(Difference, self).__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -480,11 +540,6 @@ class Difference(DiagnosticField):
         if not self._initialised:
             space = state.fields(self.field1).function_space()
             super(Difference, self).setup(state, space=space)
-            field_names = [f.name() for f in state.fields]
-            if self.field1 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field1)
-            if self.field2 not in field_names:
-                raise RuntimeError("Field called %s does not exist" % self.field2)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -510,9 +565,9 @@ class SteadyStateError(Difference):
 class Perturbation(Difference):
 
     def __init__(self, name):
-        DiagnosticField.__init__(self)
         self.field1 = name
         self.field2 = name+'bar'
+        DiagnosticField.__init__(self, required_fields=(self.field1, self.field2))
 
     @property
     def name(self):
