@@ -165,18 +165,12 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
 solver_parameters = {
-    'ksp_type': 'fgmres',
-    'ksp_rtol': 1.0e-6,
-    'ksp_max_it': 100,
-    'pc_type': 'gamg',
-    'mg_levels': {'ksp_type': 'gmres',
-                  'ksp_max_it': 8,
-                  'pc_type': 'bjacobi',
-                  'sub_pc_type': 'ilu'}
-}
+    'ksp_monitor': True}
+overwrite = True
+
 linear_solver = HybridizedCompressibleSolver(state,
                                              solver_parameters=solver_parameters,
-                                             overwrite_solver_parameters=True)
+                                             overwrite_solver_parameters=overwrite)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
