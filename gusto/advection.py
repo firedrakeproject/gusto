@@ -4,6 +4,7 @@ from firedrake import Function, LinearVariationalProblem, \
 from firedrake.utils import cached_property
 from gusto.configuration import DEBUG
 from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.recovery import Recoverer
 from firedrake import expression, function
 from firedrake.parloops import par_loop, READ, INC
 import ufl
@@ -104,17 +105,12 @@ class Advection(object, metaclass=ABCMeta):
                 x_brok = Function(equation.V_brok)
 
                 # set up interpolators and projectors
-                self.x_adv_interpolator = Interpolator(self.x_in, x_adv)  # interpolate before recovery
-                self.x_rec_projector = Recoverer(x_adv, x_rec)  # recovered function
-                # when the "average" method comes into firedrake master, this will be
-                # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
-                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
-                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
+                self.x_recoverer = Recoverer(self.x_in, x_rec, VDG=fs, boundary_method=equation.boundary_method)  # recover function
+                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back to broken space
+                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)  # build function to be advected
                 if self.limiter is not None:
                     self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                     self.x_out_projector = Recoverer(x_brok, self.x_projected)
-                    # when the "average" method comes into firedrake master, this will be
-                    # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
         else:
             self.embedded_dg = False
             fs = field.function_space()
@@ -342,8 +338,7 @@ def recovered_apply(self, x_in):
     :arg x_in: the input set of prognostic fields.
     """
     self.x_in.assign(x_in)
-    self.x_adv_interpolator.interpolate()
-    self.x_rec_projector.project()
+    self.x_recoverer.apply()
     self.x_brok_projector.project()
     self.xdg_interpolator.interpolate()
 
@@ -357,72 +352,6 @@ def recovered_project(self):
     """
     if self.limiter is not None:
         self.x_brok_interpolator.interpolate()
-        self.x_out_projector.project()
+        self.x_out_projector.apply()
     else:
         self.Projector.project()
-
-
-class Recoverer(object):
-    """
-    A temporary piece of code that replicates the action of the
-    Firedrake Projector object, using the "average" method.
-    This can be removed when this method comes into the master branch.
-
-    :arg v: the :class:`ufl.Expr` or
-         :class:`.Function` to project.
-    :arg v_out: :class:`.Function` to put the result in.
-    """
-
-    def __init__(self, v, v_out):
-
-        if isinstance(v, expression.Expression) or not isinstance(v, (ufl.core.expr.Expr, function.Function)):
-            raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v))
-
-        # Check shape values
-        if v.ufl_shape != v_out.ufl_shape:
-            raise RuntimeError('Shape mismatch between source %s and target function spaces %s in project' % (v.ufl_shape, v_out.ufl_shape))
-
-        self._same_fspace = (isinstance(v, function.Function) and v.function_space() == v_out.function_space())
-        self.v = v
-        self.v_out = v_out
-        self.V = v_out.function_space()
-
-        # Check the number of local dofs
-        if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
-            raise RuntimeError("Number of local dofs for each field must be equal.")
-
-        # NOTE: Any bcs on the function self.v should just work.
-        # Loop over node extent and dof extent
-        self._shapes = (self.V.finat_element.space_dimension(), np.prod(self.V.shape))
-        self._average_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        vo[i][j] += v[i][j]/w[i][j];
-        }}""" % self._shapes
-
-    @cached_property
-    def _weighting(self):
-        """
-        Generates a weight function for computing a projection via averaging.
-        """
-        w = Function(self.V)
-        weight_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        w[i][j] += 1.0;
-        }}""" % self._shapes
-
-        par_loop(weight_kernel, ufl.dx, {"w": (w, INC)})
-        return w
-
-    def project(self):
-        """
-        Apply the recovery.
-        """
-
-        # Ensure that the function being populated is zeroed out
-        self.v_out.dat.zero()
-        par_loop(self._average_kernel, ufl.dx, {"vo": (self.v_out, INC),
-                                                "w": (self._weighting, READ),
-                                                "v": (self.v, READ)})
-        return self.v_out
