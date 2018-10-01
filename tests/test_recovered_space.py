@@ -68,7 +68,8 @@ def setup_recovered_space(dirname):
                       ('tracer', tracer0)])
 
     # set up advection schemes
-    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity", recovered_spaces=[VDG1, VCG1, VDG0])
+    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
+                                    recovered_spaces=[VDG1, VCG1, VDG0], boundary_method='density')
 
     # build advection dictionary
     advected_fields = []

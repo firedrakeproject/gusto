@@ -5,13 +5,9 @@ from firedrake.utils import cached_property
 from gusto.configuration import DEBUG
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer
-from firedrake import expression, function
-from firedrake.parloops import par_loop, READ, INC
-import ufl
-import numpy as np
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "Recoverer"]
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
 
 
 def embedded_dg(original_apply):
@@ -100,7 +96,6 @@ class Advection(object, metaclass=ABCMeta):
             if self.recovered:
                 # set up the necessary functions
                 self.x_in = Function(field.function_space())
-                x_adv = Function(fs)
                 x_rec = Function(equation.V_rec)
                 x_brok = Function(equation.V_brok)
 
@@ -338,7 +333,7 @@ def recovered_apply(self, x_in):
     :arg x_in: the input set of prognostic fields.
     """
     self.x_in.assign(x_in)
-    self.x_recoverer.apply()
+    self.x_recoverer.project()
     self.x_brok_projector.project()
     self.xdg_interpolator.interpolate()
 
@@ -352,6 +347,6 @@ def recovered_project(self):
     """
     if self.limiter is not None:
         self.x_brok_interpolator.interpolate()
-        self.x_out_projector.apply()
+        self.x_out_projector.project()
     else:
         self.Projector.project()

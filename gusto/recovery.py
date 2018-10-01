@@ -116,14 +116,15 @@ class Boundary_Recoverer(object):
         # check function spaces of functions -- this only works for a particular set
         if v0.function_space() != VDG0:
             raise NotImplementedError("We can currently only do boundary recovery when v0 is in DG0.")
-        #if v1.function_space() != FunctionSpace(v1.function_space().mesh(), "CG", 1):
-        #    raise NotImplementedError("We can currently only do boundary recovery when v1 is in CG1.")
-        #if v_out.function_space() != FunctionSpace(v_out.function_space().mesh(), "DG", 1):
-        #    raise NotImplementedError("We can currently only do boundary recovery when v_out is in DG1.")
+        if v1.function_space() != FunctionSpace(v1.function_space().mesh(), "CG", 1):
+            raise NotImplementedError("We can currently only do boundary recovery when v1 is in CG1.")
+        if v_out.function_space() != FunctionSpace(v_out.function_space().mesh(), "DG", 1):
+            raise NotImplementedError("We can currently only do boundary recovery when v_out is in DG1.")
 
         VuDG1 = VectorFunctionSpace(VDG0.mesh(), "DG", 1)
         x, z = SpatialCoordinate(VDG0.mesh())
         self.coords = Function(VuDG1).project(as_vector([x, z]))
+        self.interpolator = Interpolator(self.v1, self.v_out)
 
         # check that we're using quads on extruded mesh -- otherwise it will fail!
         if not VDG0.extruded:
@@ -133,7 +134,7 @@ class Boundary_Recoverer(object):
 
         # make DG0 field that is one in rightmost cells, but zero otherwise
         # this is done as the DOF numbering is different in the rightmost cells
-        max_coord = Function(VDG0).interpolate(Constant(np.max(self.coords.dat.data[:,0])))
+        max_coord = Function(VDG0).interpolate(Constant(np.max(self.coords.dat.data[:, 0])))
         self.right = Function(VDG0)
         right_kernel = """
         if (fmax(COORDS[0][0], fmax(COORDS[1][0], COORDS[2][0])) == MAX[0][0])
@@ -200,6 +201,7 @@ class Boundary_Recoverer(object):
 
     def apply(self):
 
+        self.interpolator.interpolate()
         par_loop(self.bottom_kernel, dx,
                  args={"DG1": (self.v_out, RW),
                        "CG1": (self.v1, READ),
@@ -223,7 +225,7 @@ class Recoverer(object):
     (e.g. DG0) into a higher order space (e.g. CG1). This encompasses
     the process of interpolating first to a the right space before
     using the :class:`Averager` object, and also automates the
-    boundary recovery process. If no boundary method is specified, 
+    boundary recovery process. If no boundary method is specified,
     this simply performs the action of the :class: `Averager`.
 
     :arg v_in: the :class:`ufl.Expr` or
@@ -276,9 +278,9 @@ class Recoverer(object):
                 self.VDG0 = FunctionSpace(self.VDG.mesh(), "DG", 0)
                 self.VCG1 = FunctionSpace(self.VDG.mesh(), "CG", 1)
                 self.VDG1 = FunctionSpace(self.VDG.mesh(), "DG", 1)
-                self.v_in_scalar = Function(VDG0)
-                self.v_scalar = Function(VDG1)
-                self.v_out_scalar = Function(VCG1)
+                self.v_in_scalar = Function(self.VDG0)
+                self.v_scalar = Function(self.VDG1)
+                self.v_out_scalar = Function(self.VCG1)
 
                 self.boundary_recoverer = Boundary_Recoverer(self.v_in_scalar, self.v_out_scalar, self.v_scalar)
                 # the boundary recoverer needs to be done on a scalar fields
@@ -294,9 +296,9 @@ class Recoverer(object):
         self.project_to_scalar_CG.project()
 
     def restore_vector(self):
-        self.project_to_vector.project()        
+        self.project_to_vector.project()
 
-    def apply(self):
+    def project(self):
         """
         Perform the fully specified recovery.
         """

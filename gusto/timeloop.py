@@ -19,7 +19,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a function that returns the field as a function of time.
+    :arg prescribed_fields: an order list of tuples, pairing a field name with a
+         function that returns the field as a function of time.
     """
 
     def __init__(self, state, advected_fields=None, diffused_fields=None,
@@ -148,11 +149,12 @@ class CrankNicolson(BaseTimestepper):
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a function that returns the field as a function of time.
+    :arg prescribed_fields: an order list of tuples, pairing a field name with a
+         function that returns the field as a function of time.
     """
 
     def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None):
+                 diffused_fields=None, physics_list=None, prescribed_fields=None):
 
         super().__init__(state, advected_fields, diffused_fields, physics_list)
         self.linear_solver = linear_solver
