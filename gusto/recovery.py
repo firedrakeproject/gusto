@@ -289,7 +289,7 @@ class Recoverer(object):
                 self.project_to_scalar_DG = Projector(self.v_in[0], self.v_in_scalar)
                 self.project_to_scalar_CG = Projector(self.v_out[0], self.v_out_scalar)
                 # need an extra averager that works on the scalar fields rather than the vector one
-                self.extra_averager(self.v_scalar, self.v_out_scalar)
+                self.extra_averager = Averager(self.v_scalar, self.v_out_scalar)
 
     def extract_scalar(self):
         self.project_to_scalar_DG.project()
