@@ -7,18 +7,25 @@ from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     FunctionSpace, BrokenElement, VectorFunctionSpace
 import sys
 
-dt = 1.0
-if '--running-tests' in sys.argv:
-    tmax = 10.
-    deltax = 1000.
+if '--recovered' in sys.argv:
+    recovered = True
 else:
-    deltax = 100.
-    tmax = 1000.
+    recovered = False
 
 if '--hybridization' in sys.argv:
     hybridization = True
 else:
     hybridization = False
+
+dt = 1.0
+if '--running-tests' in sys.argv:
+    tmax = 10.
+    deltax = 1000.
+else:
+    deltax = 100. if recovered else 200
+    tmax = 1000.
+
+
 
 L = 10000.
 H = 10000.
@@ -28,7 +35,6 @@ ncolumns = int(L/deltax)
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 diffusion = False
-recovered = True
 degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
@@ -128,8 +134,12 @@ rho_solver.solve()
 # find perturbed water_v
 w_v = Function(Vt)
 phi = TestFunction(Vt)
+rho_averaged = Function(Vt)
+rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))).interpolate(rho0)
+rho_recoverer = Recoverer(rho_broken, rho_averaged)
+rho_recoverer.project()
 
-pi = thermodynamics.pi(state.parameters, rho0, theta0)
+pi = thermodynamics.pi(state.parameters, rho_averaged, theta0)
 p = thermodynamics.p(state.parameters, pi)
 T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
 w_sat = thermodynamics.r_sat(state.parameters, T, p)
