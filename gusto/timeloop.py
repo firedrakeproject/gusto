@@ -156,7 +156,7 @@ class CrankNicolson(BaseTimestepper):
     def __init__(self, state, advected_fields, linear_solver, forcing,
                  diffused_fields=None, physics_list=None, prescribed_fields=None):
 
-        super().__init__(state, advected_fields, diffused_fields, physics_list)
+        super().__init__(state, advected_fields, diffused_fields, physics_list, prescribed_fields)
         self.linear_solver = linear_solver
         self.forcing = forcing
 

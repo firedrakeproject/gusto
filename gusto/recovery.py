@@ -128,7 +128,7 @@ class Boundary_Recoverer(object):
 
         # check that we're using quads on extruded mesh -- otherwise it will fail!
         if not VDG0.extruded:
-            raise ValueError("This code only works on extruded quadrilateral meshes.")
+            raise NotImplementedError("This code only works on extruded quadrilateral meshes.")
 
         logger.warning('This boundary recovery method is bespoke: it should only be used extruded meshes based on a periodic interval in 2D.')
 
