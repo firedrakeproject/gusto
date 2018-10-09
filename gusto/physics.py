@@ -2,8 +2,12 @@ from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.advection import SSPRK3, Recoverer
 from firedrake import Interpolator, conditional, Function, \
-    min_value, max_value, as_vector, BrokenElement, FunctionSpace
+    min_value, max_value, as_vector, BrokenElement, FunctionSpace, \
+    Constant, pi, Projector
+from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
+from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto import thermodynamics
+from scipy.special import gamma
 
 
 __all__ = ["Condensation", "Fallout"]
@@ -125,41 +129,87 @@ class Fallout(Physics):
                   0 -- rainfall all at terminal velocity 5 m/s.
                   1 -- droplet size depends upon density. Advect the mean
                   of the droplet size distribution.
+    :arg limit: if True (the default value), applies a limiter to the
+                rainfall advection.
     """
 
-    def __init__(self, state):
-        super(Fallout, self).__init__(state, moments)
+    def __init__(self, state, moments=1, limit=True):
+        super(Fallout, self).__init__(state)
 
         self.state = state
         self.moments = moments
         self.rain = state.fields('rain')
-        self.v = Function(state.fields('u').function_space())
+        self.v = state.fields('rainfall_velocity', state.fields('u').function_space())
+        self.limit = limit
 
         # function spaces
         Vt = self.rain.function_space()
-        Vu = state.fields('u').function_space()
-
-        # introduce sedimentation rate
-        # for now assume all rain falls at terminal velocity
-        
+        Vu = state.fields('u').function_space()        
 
         if moments == 0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
             self.v.project(as_vector([0, -terminal_velocity]))
         elif moments == 1:
+            # this advects the third moment M3 of the raindrop
+            # distribution, which corresponds to the mean mass
             rho = state.fields('rho')
-            v_expression = rho
-            raise NotImplementedError('sorry!')
+            rho_w = Constant(1000.0)  # density of liquid water
+            # assume n(D) = n_0 * D^mu * exp(-Lambda*D)
+            # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
+            N_r = Constant(10**5)  # number of rain droplets per m^3
+            mu = 0.0  # shape constant of droplet gamma distribution
+            # assume V(D) = a * D^b * exp(-f*D) * (rho_0 / rho)^g 
+            # take f = 0
+            a = Constant(362.)  # intercept for velocity distr. in log space
+            b = 0.65  # inverse scale parameter for velocity distr.
+            rho0 = Constant(1.22)  # reference density in kg/m^3
+            g = Constant(0.5)  # scaling of density correction
+            # we keep mu in the expressions even though mu = 0
+            threshold = Constant(10**-10)  # only do rainfall for r > threshold
+            Lambda = (N_r * pi * gamma(4 + mu) /
+                      (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
+            Lambda0 = (N_r * pi * gamma(4 + mu) /
+                      (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
+            v_expression = conditional(self.rain > threshold,
+                                       (a * gamma(4 + b + mu) /
+                                        (gamma(4 + mu) * Lambda ** b) *
+                                        (rho0 / rho) ** g),
+                                       (a * gamma(4 + b + mu) /
+                                        (gamma(4 + mu) * Lambda0 ** b) *
+                                        (rho0 / rho) ** g))
         else:
-            raise NotImplementedError('Currently we only have implementations for 0th and 1st moments of rainfall')
+            raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall')
 
-        if moments > 1:
+        if moments > 0:
             self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
 
+        # determine whether to do recovered space advection scheme
+        spaces = None
+        # if horizontal and vertical degrees are 0 do recovered space
+        if state.horizontal_degree == 0 and state.vertical_degree == 0:
+            VDG1 = FunctionSpace(Vt.mesh(), "DG", 1)
+            VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
+            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
+            spaces = (VDG1, VCG1, Vbrok)
+
+        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
+        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, recovered_spaces=spaces)
+
+        # decide which limiter to use
+        if self.limit:
+            if state.horizontal_degree == 0 and state.vertical_degree == 0:
+                limiter = VertexBasedLimiter(VDG1)
+            elif state.horizontal_degree == 1 and state.vertical_degree == 1:
+                limiter = ThetaLimiter(advection_equation)
+            else:
+                state.logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
+                limiter = NoLimiter()
+        else:
+            limiter = None
+
         # sedimentation will happen using a full advection method
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True)
-        self.advection_method = SSPRK3(state, self.rain, advection_equation)
+        self.advection_method = SSPRK3(state, self.rain, advection_equation, limiter=limiter)
 
     def apply(self):
         if self.moments > 0:
