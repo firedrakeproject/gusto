@@ -53,7 +53,7 @@ class Condensation(Physics):
         try:
             rain = state.fields('rain')
             water_l = self.water_c + rain
-        except:
+        except NotImplementedError:
             water_l = self.water_c
 
         # declare function space
@@ -136,15 +136,16 @@ class Fallout(Physics):
     def __init__(self, state, moments=1, limit=True):
         super(Fallout, self).__init__(state)
 
+        # function spaces
+        Vt = state.fields('rain').function_space()
+        Vu = state.fields('u').function_space()
+
+        # declare properties of class
         self.state = state
         self.moments = moments
         self.rain = state.fields('rain')
-        self.v = state.fields('rainfall_velocity', state.fields('u').function_space())
+        self.v = state.fields('rainfall_velocity', Vu)
         self.limit = limit
-
-        # function spaces
-        Vt = self.rain.function_space()
-        Vu = state.fields('u').function_space()        
 
         if moments == 0:
             # all rain falls at terminal velocity
@@ -159,7 +160,7 @@ class Fallout(Physics):
             # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
             N_r = Constant(10**5)  # number of rain droplets per m^3
             mu = 0.0  # shape constant of droplet gamma distribution
-            # assume V(D) = a * D^b * exp(-f*D) * (rho_0 / rho)^g 
+            # assume V(D) = a * D^b * exp(-f*D) * (rho_0 / rho)^g
             # take f = 0
             a = Constant(362.)  # intercept for velocity distr. in log space
             b = 0.65  # inverse scale parameter for velocity distr.
@@ -167,10 +168,10 @@ class Fallout(Physics):
             g = Constant(0.5)  # scaling of density correction
             # we keep mu in the expressions even though mu = 0
             threshold = Constant(10**-10)  # only do rainfall for r > threshold
-            Lambda = (N_r * pi * gamma(4 + mu) /
+            Lambda = (N_r * pi * rho_w * gamma(4 + mu) /
                       (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
-            Lambda0 = (N_r * pi * gamma(4 + mu) /
-                      (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
+            Lambda0 = (N_r * pi * rho_w * gamma(4 + mu) /
+                       (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
             v_expression = conditional(self.rain > threshold,
                                        (a * gamma(4 + b + mu) /
                                         (gamma(4 + mu) * Lambda ** b) *

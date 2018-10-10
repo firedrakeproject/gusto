@@ -15,8 +15,8 @@ from math import pi
 def setup_fallout(dirname):
 
     # declare grid shape, with length L and height H
-    L = 100.
-    H = 100.
+    L = 10.
+    H = 10.
     nlayers = 10
     ncolumns = 10
 
@@ -26,7 +26,7 @@ def setup_fallout(dirname):
     x = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta', 'rain']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
+    timestepping = TimesteppingParameters(dt=0.1, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+"/fallout",
                               dumpfreq=10,
                               dumplist=['rain'])
@@ -56,7 +56,7 @@ def setup_fallout(dirname):
     zc = H / 2
     rc = H / 4
     r = sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2)
-    rain_expr = conditional(r > rc, 0., 1e-5 * (cos(pi * r / (rc * 2))) ** 2)
+    rain_expr = conditional(r > rc, 0., 1e-3 * (cos(pi * r / (rc * 2))) ** 2)
 
     rain0.interpolate(rain_expr)
 
@@ -77,7 +77,7 @@ def setup_fallout(dirname):
     # build time stepper
     stepper = AdvectionDiffusion(state, advected_fields, physics_list=physics_list)
 
-    return stepper, 100.0
+    return stepper, 10.0
 
 
 def run_fallout(dirname):
@@ -97,5 +97,5 @@ def test_fallout_setup(tmpdir):
     final_rain = rain.variables["total"][-1]
     final_rms_rain = rain.variables["rms"][-1]
 
-    assert abs(final_rain) < 1e-3
-    assert abs(final_rms_rain) < 1e-3
+    assert abs(final_rain) < 1e-4
+    assert abs(final_rms_rain) < 1e-4
