@@ -9,6 +9,7 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import DEBUG
+from gusto.state import FieldCreator
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -24,16 +25,20 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     This is a dummy base class.
 
     :arg state: :class:`.State` object.
+    :arg equations: :class:`.Equations` object.
     :arg solver_parameters (optional): solver parameters
     :arg overwrite_solver_parameters: boolean, if True use only the
          solver_parameters that have been passed in, if False then update
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, equations, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.W = equations.mixed_function_space
+        state.xrhs = FieldCreator(equations)
+        state.dy = Function(self.W)
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -743,11 +748,10 @@ class ShallowWaterSolver(TimesteppingSolver):
         beta = state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        u_in, D_in = split(state.xrhs('xfields'))
 
-        W = state.W
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        w, phi = TestFunctions(self.W)
+        u, D = TrialFunctions(self.W)
 
         eqn = (
             inner(w, u) - beta*g*div(w)*D
@@ -760,11 +764,11 @@ class ShallowWaterSolver(TimesteppingSolver):
         Leqn = rhs(eqn)
 
         # Place to put result of u rho solver
-        self.uD = Function(W)
+        self.uD = Function(self.W)
 
         # Solver for u, D
         uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
+            aeqn, Leqn, state.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,

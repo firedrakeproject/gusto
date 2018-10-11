@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, LinearVariationalProblem, \
-    LinearVariationalSolver, Projector, Interpolator
+    LinearVariationalSolver
 from firedrake.utils import cached_property
 from gusto.configuration import DEBUG
-from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.transport_terms import TransportTerm
 from firedrake import expression, function
 from firedrake.parloops import par_loop, READ, INC
 import ufl
@@ -63,61 +63,24 @@ class Advection(object, metaclass=ABCMeta):
             self.state = state
             self.field = field
             self.equation = equation
-            # get ubar from the equation class
-            self.ubar = self.equation.ubar
             self.dt = self.state.timestepping.dt
 
-            # get default solver options if none passed in
-            if solver_parameters is None:
-                self.solver_parameters = equation.solver_parameters
-            else:
+            # set default solver options if none passed in
+            if solver_parameters:
                 self.solver_parameters = solver_parameters
-                if state.output.log_level == DEBUG:
-                    self.solver_parameters["ksp_monitor_true_residual"] = True
+
+                # default solver options
+            else:
+                self.solver_parameters = {'ksp_type': 'cg',
+                                          'pc_type': 'bjacobi',
+                                          'sub_pc_type': 'ilu'}
+            if state.output.log_level == DEBUG:
+                self.solver_parameters["ksp_monitor_true_residual"] = True
 
             self.limiter = limiter
 
-        # check to see if we are using an embedded DG method - if we are then
-        # the projector and output function will have been set up in the
-        # equation class and we can get the correct function space from
-        # the output function.
-        if isinstance(equation, EmbeddedDGAdvection):
-            # check that the field and the equation are compatible
-            if equation.V0 != field.function_space():
-                raise ValueError('The field to be advected is not compatible with the equation used.')
-            self.embedded_dg = True
-            fs = equation.space
-            self.xdg_in = Function(fs)
-            self.xdg_out = Function(fs)
-            self.x_projected = Function(field.function_space())
-            parameters = {'ksp_type': 'cg',
-                          'pc_type': 'bjacobi',
-                          'sub_pc_type': 'ilu'}
-            self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=parameters)
-            self.recovered = equation.recovered
-            if self.recovered:
-                # set up the necessary functions
-                self.x_in = Function(field.function_space())
-                x_adv = Function(fs)
-                x_rec = Function(equation.V_rec)
-                x_brok = Function(equation.V_brok)
-
-                # set up interpolators and projectors
-                self.x_adv_interpolator = Interpolator(self.x_in, x_adv)  # interpolate before recovery
-                self.x_rec_projector = Recoverer(x_adv, x_rec)  # recovered function
-                # when the "average" method comes into firedrake master, this will be
-                # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
-                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
-                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
-                if self.limiter is not None:
-                    self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
-                    self.x_out_projector = Recoverer(x_brok, self.x_projected)
-                    # when the "average" method comes into firedrake master, this will be
-                    # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
-        else:
-            self.embedded_dg = False
-            fs = field.function_space()
+        self.embedded_dg = False
+        fs = field.function_space()
 
         # setup required functions
         self.fs = fs
@@ -130,12 +93,16 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        rhs = self.equation.mass_term(self.q1)
+        for name, term in self.equation.terms.items():
+            if isinstance(term, TransportTerm):
+                rhs -= self.dt*term(self.q1, self.state.fields)
+        return rhs
 
     def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
+        un = xn('u')
+        unp1 = xnp1('u')
+        self.state.fields('uadv').assign(un + alpha*(unp1-un))
 
     @cached_property
     def solver(self):
@@ -318,14 +285,22 @@ class ThetaMethod(Advection):
 
     @cached_property
     def lhs(self):
-        eqn = self.equation
-        trial = eqn.trial
-        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
+        trial = self.equation.trial
+        lhs = self.equation.mass_term(trial)
+        for name, term in self.equation.terms.items():
+            if isinstance(term, TransportTerm):
+                lhs += self.theta*self.dt*term(self.state.h_project(trial),
+                                               self.state.fields)
+        return lhs
 
     @cached_property
     def rhs(self):
-        eqn = self.equation
-        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
+        rhs = self.equation.mass_term(self.q1)
+        for name, term in self.equation.terms.items():
+            if isinstance(term, TransportTerm):
+                rhs -= (1.-self.theta)*self.dt*term(self.state.h_project(self.q1),
+                                                    self.state.fields)
+        return rhs
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

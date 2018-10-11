@@ -7,7 +7,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def setup_sw(dirname, euler_poincare):
+def setup_sw(dirname):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -40,13 +40,13 @@ def setup_sw(dirname, euler_poincare):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_AbsoluteVorticity')]
 
-    state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+                  diagnostic_fields=diagnostic_fields)
+
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -67,23 +67,14 @@ def setup_sw(dirname, euler_poincare):
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    if euler_poincare:
-        ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
-    else:
-        ueqn = VectorInvariant(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
-
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    advected_fields.append(("u", ThetaMethod(state, u0, eqns("u"))))
+    advected_fields.append(("D", SSPRK3(state, D0, eqns("D"))))
 
-    linear_solver = ShallowWaterSolver(state)
+    linear_solver = ShallowWaterSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
@@ -97,28 +88,29 @@ def setup_sw(dirname, euler_poincare):
     return stepper, 0.25*day
 
 
-def run_sw(dirname, euler_poincare):
+def run_sw(dirname):
 
-    stepper, tmax = setup_sw(dirname, euler_poincare)
+    stepper, tmax = setup_sw(dirname)
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("euler_poincare", [True, False])
-def test_sw_setup(tmpdir, euler_poincare):
+def test_sw_setup(tmpdir):
 
     dirname = str(tmpdir)
-    run_sw(dirname, euler_poincare=euler_poincare)
+    run_sw(dirname)
     filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
 
     Derr = data.groups["D_error"]
     D = data.groups["D"]
     Dl2 = Derr["l2"][-1]/D["l2"][0]
+    assert Dl2 > 0.
     assert Dl2 < 5.e-4
 
     uerr = data.groups["u_error"]
     u = data.groups["u"]
     ul2 = uerr["l2"][-1]/u["l2"][0]
+    assert ul2 > 0.
     assert ul2 < 5.e-3
 
     # these 3 checks are for the diagnostic field so the checks are
