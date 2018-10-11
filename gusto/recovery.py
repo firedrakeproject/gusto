@@ -273,7 +273,7 @@ class Recoverer(object):
             if boundary_method == 'velocity':
                 # check dimensions
                 if self.V.value_size != 2:
-                    raise ValueError('This method only works for 2D vector functions.')
+                    raise NotImplementedError('This method only works for 2D vector functions.')
                 # declare spaces and functions manually for the scalar field
                 self.VDG0 = FunctionSpace(self.VDG.mesh(), "DG", 0)
                 self.VCG1 = FunctionSpace(self.VDG.mesh(), "CG", 1)
