@@ -3,7 +3,8 @@ The recovery operators used for lowest-order advection schemes.
 """
 from gusto.configuration import logger
 from firedrake import expression, function, Function, FunctionSpace, Projector, \
-    VectorFunctionSpace, SpatialCoordinate, as_vector, Constant, dx, Interpolator
+    VectorFunctionSpace, SpatialCoordinate, as_vector, Constant, dx, Interpolator, \
+    quadrilateral
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, RW
 from pyop2 import ON_TOP, ON_BOTTOM
@@ -127,7 +128,7 @@ class Boundary_Recoverer(object):
         self.interpolator = Interpolator(self.v1, self.v_out)
 
         # check that we're using quads on extruded mesh -- otherwise it will fail!
-        if not VDG0.extruded:
+        if not VDG0.extruded and VDG0.ufl_element().cell() != quadrilateral:
             raise NotImplementedError("This code only works on extruded quadrilateral meshes.")
 
         logger.warning('This boundary recovery method is bespoke: it should only be used extruded meshes based on a periodic interval in 2D.')
