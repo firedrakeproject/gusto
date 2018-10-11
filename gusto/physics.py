@@ -37,7 +37,8 @@ class Condensation(Physics):
     The process of condensation of water vapour
     into liquid water and evaporation of liquid
     water into water vapour, with the associated
-    latent heat changes.
+    latent heat changes. The parametrization follows
+    that used in Bryan and Fritsch (2002).
 
     :arg state: :class:`.State.` object.
     :arg iterations: number of iterations to do
@@ -226,7 +227,9 @@ class Fallout(Physics):
 class Coalescence(Physics):
     """
     The process of the coalescence of cloud
-    droplets to form rain droplets.
+    droplets to form rain droplets. These
+    parametrizations come from Klemp and
+    Wilhelmson (1978).
 
     :arg state: :class:`.State.` object.
     :arg accretion: Boolean which determines
@@ -286,7 +289,8 @@ class Coalescence(Physics):
 class Evaporation(Physics):
     """
     The process of evaporation of rain into water vapour
-    with the associated latent heat change.
+    with the associated latent heat change. This
+    parametrization comes from Klemp and Wilhelmson (1978).
 
     :arg state: :class:`.State.` object.
     """
