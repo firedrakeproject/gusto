@@ -25,8 +25,6 @@ else:
     deltax = 100. if recovered else 200
     tmax = 1000.
 
-
-
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
@@ -172,14 +170,14 @@ else:
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
 
-advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
+u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
+euler_poincare = False if recovered else True
+    
+advected_fields = [u_advection,
+                   ('rho', SSPRK3(state, rho0, rhoeqn)),
                    ('theta', SSPRK3(state, theta0, thetaeqn)),
                    ('water_v', SSPRK3(state, water_v0, thetaeqn)),
                    ('water_c', SSPRK3(state, water_c0, thetaeqn))]
-if recovered:
-    advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
-else:
-    advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
 # Set up linear solver
 if hybridization:
@@ -188,10 +186,7 @@ else:
     linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
-if recovered:
-    compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
-else:
-    compressible_forcing = CompressibleForcing(state, moisture=moisture)
+compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

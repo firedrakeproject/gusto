@@ -175,8 +175,10 @@ def theta_e(parameters, T, p, r_v, r_t):
     cp = parameters.cp
     c_pl = parameters.c_pl
     L_v = Lv(parameters, T)
+    H = RH(parameters, r_v, T, p)
 
-    return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(L_v * r_v / (T * (cp + c_pl * r_t)))
+    #return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(L_v * r_v / (T * (cp + c_pl * r_t)))
+    return T * (p_0 * (1 + r_v * R_v / R_d) / p) ** (R_d / (cp + c_pl * r_t)) * exp(L_v * r_v / (T * (cp + c_pl * r_t))) * H ** (-r_v * R_v / (cp + c_pl * r_t)) # with humidity
 
 
 def internal_energy(parameters, rho, T, r_v=0.0, r_l=0.0):

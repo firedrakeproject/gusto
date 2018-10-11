@@ -10,7 +10,7 @@ from gusto import thermodynamics
 from scipy.special import gamma
 
 
-__all__ = ["Condensation", "Fallout"]
+__all__ = ["Condensation", "Fallout", "Coalescence"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -217,3 +217,63 @@ class Fallout(Physics):
             self.determine_v.project()
         self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
+
+
+class Coalescence(Physics):
+    """
+    The process of the coalescence of cloud
+    droplets to form rain droplets.
+
+    :arg state: :class:`.State.` object.
+    :arg accretion: Boolean which determines
+                    whether the accretion
+                    process is used.
+    :arg accumulation: Boolean which determines
+                    whether the accumulation
+                    process is used.
+    """
+
+    def __init__(self, state, accretion=True, accumulation=True):
+        super(Coalescence, self).__init__(state)
+
+        # obtain our fields
+        self.water_c = state.fields('water_c')
+        self.rain = state.fields('rain')
+
+        # declare function space
+        Vt = self.water_c.function_space()
+
+        # define some parameters as attributes
+        dt = state.timestepping.dt
+        k_1 = Constant(0.001)  # accretion rate in 1/s
+        k_2 = Constant(2.2)  # accumulation rate in 1/s
+        a = Constant(0.001)  # min cloud conc in kg/kg
+        b = Constant(0.875)  # power for rain in accumulation
+
+        # make default rates to be zero
+        accr_rate = Constant(0.0)
+        accu_rate = Constant(0.0)
+
+        if accretion:
+            accr_rate = k_1 * (self.water_c - a)
+        if accumulation:
+            accu_rate = k_2 * self.water_c * self.rain ** b
+
+        # make appropriate coalescence rate by combining two processes
+        dot_r = accr_rate + accu_rate
+
+        # make coalescence rate function, that needs to be the same for all updates in one time step
+        coalesce_rate = Function(Vt)
+
+        # adjust coalesce rate so negative concentration doesn't occur
+        self.lim_coalesce_rate = Interpolator(max_value(dot_r, self.water_c / dt),
+                                              coalesce_rate)
+
+        # tell the prognostic fields what to update to
+        self.water_c_new = Interpolator(self.water_c - dt * coalesce_rate, Vt)
+        self.rain_new = Interpolator(self.rain + dt * coalesce_rate, Vt)
+
+    def apply(self):
+        self.lim_coalesce_rate.interpolate()
+        self.rain.assign(self.rain_new.interpolate())
+        self.water_c.assign(self.water_c_new.interpolate())
