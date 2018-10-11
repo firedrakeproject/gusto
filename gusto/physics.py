@@ -10,7 +10,7 @@ from gusto import thermodynamics
 from scipy.special import gamma
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence"]
+__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -40,11 +40,14 @@ class Condensation(Physics):
     latent heat changes.
 
     :arg state: :class:`.State.` object.
+    :arg iterations: number of iterations to do
+         of condensation scheme per time step.
     """
 
-    def __init__(self, state):
+    def __init__(self, state, iterations=1):
         super(Condensation, self).__init__(state)
 
+        self.iterations = iterations
         # obtain our fields
         self.theta = state.fields('theta')
         self.water_v = state.fields('water_v')
@@ -112,10 +115,11 @@ class Condensation(Physics):
     def apply(self):
         self.rho_broken.assign(self.rho_interpolator.interpolate())
         self.rho_recoverer.project()
-        self.lim_cond_rate.interpolate()
-        self.theta.assign(self.theta_new.interpolate())
-        self.water_v.assign(self.water_v_new.interpolate())
-        self.water_c.assign(self.water_c_new.interpolate())
+        for i in range(self.iterations):
+            self.lim_cond_rate.interpolate()
+            self.theta.assign(self.theta_new.interpolate())
+            self.water_v.assign(self.water_v_new.interpolate())
+            self.water_c.assign(self.water_c_new.interpolate())
 
 
 class Fallout(Physics):
@@ -266,7 +270,7 @@ class Coalescence(Physics):
         coalesce_rate = Function(Vt)
 
         # adjust coalesce rate so negative concentration doesn't occur
-        self.lim_coalesce_rate = Interpolator(max_value(dot_r, self.water_c / dt),
+        self.lim_coalesce_rate = Interpolator(min_value(dot_r, self.water_c / dt),
                                               coalesce_rate)
 
         # tell the prognostic fields what to update to
@@ -277,3 +281,96 @@ class Coalescence(Physics):
         self.lim_coalesce_rate.interpolate()
         self.rain.assign(self.rain_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
+
+
+class Evaporation(Physics):
+    """
+    The process of evaporation of rain into water vapour
+    with the associated latent heat change.
+
+    :arg state: :class:`.State.` object.
+    """
+
+    def __init__(self, state):
+        super(Evaporation, self).__init__(state)
+
+        # obtain our fields
+        self.theta = state.fields('theta')
+        self.water_v = state.fields('water_v')
+        self.rain = state.fields('rain')
+        rho = state.fields('rho')
+        try:
+            water_c = state.fields('water_c')
+            water_l = self.rain + water_c
+        except NotImplementedError:
+            water_l = self.rain
+
+        # declare function space
+        Vt = self.theta.function_space()
+
+        # make rho variables
+        # we recover rho into theta space
+        rho_averaged = Function(Vt)
+        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
+        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
+        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
+
+        # define some parameters as attributes
+        dt = state.timestepping.dt
+        R_d = state.parameters.R_d
+        cp = state.parameters.cp
+        cv = state.parameters.cv
+        c_pv = state.parameters.c_pv
+        c_pl = state.parameters.c_pl
+        c_vv = state.parameters.c_vv
+        R_v = state.parameters.R_v
+
+        # make useful fields
+        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, Pi)
+        L_v = thermodynamics.Lv(state.parameters, T)
+        R_m = R_d + R_v * self.water_v
+        c_pml = cp + c_pv * self.water_v + c_pl * water_l
+        c_vml = cv + c_vv * self.water_v + c_pl * water_l
+
+        # use Teten's formula to calculate w_sat
+        w_sat = thermodynamics.r_sat(state.parameters, T, p)
+
+        # expression for ventilation factor
+        a = Constant(1.6)
+        b = Constant(124.9)
+        c = Constant(0.2046)
+        C = a + b * (rho_averaged * self.rain) ** c
+
+        # make appropriate condensation rate
+        f = Constant(5.4e5)
+        g = Constant(2.55e6)
+        h = Constant(0.525)
+        dot_r_evap = (((1 - self.water_v - w_sat) * C * (rho_averaged * self.rain) ** h)
+                      / (rho_averaged * (f + g / (p * w_sat))))
+
+        # make evap_rate function, needs to be the same for all updates in one time step
+        evap_rate = Function(Vt)
+
+        # adjust evap rate so negative rain doesn't occur
+        self.lim_evap_rate = Interpolator(conditional(dot_r_evap < 0,
+                                                      Constant(0.0),
+                                                      min_value(dot_r_evap, self.rain / dt)),
+                                          evap_rate)
+
+        # tell the prognostic fields what to update to
+        self.water_v_new = Interpolator(self.water_v + dt * evap_rate, Vt)
+        self.rain_new = Interpolator(self.rain - dt * evap_rate, Vt)
+        self.theta_new = Interpolator(self.theta *
+                                      (1.0 - dt * evap_rate *
+                                       (cv * L_v / (c_vml * cp * T) -
+                                        R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+
+    def apply(self):
+        self.rho_broken.assign(self.rho_interpolator.interpolate())
+        self.rho_recoverer.project()
+        self.lim_evap_rate.interpolate()
+        self.theta.assign(self.theta_new.interpolate())
+        self.water_v.assign(self.water_v_new.interpolate())
+        self.rain.assign(self.rain_new.interpolate())

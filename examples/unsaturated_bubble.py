@@ -17,6 +17,11 @@ if '--hybridization' in sys.argv:
 else:
     hybridization = False
 
+if '--diffusion' in sys.argv:
+    diffusion = True
+else:
+    diffusion = False
+
 dt = 1.0
 if '--running-tests' in sys.argv:
     tmax = 10.
@@ -32,17 +37,20 @@ ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
-diffusion = False
 degree = 0 if recovered else 1
 
-dirname = 'unsaturated_bubble'
+dirname = 'unsaturated_bubble_full'
+if recovered:
+    dirname += '_recovered'
 if hybridization:
     dirname += '_hybridization'
+if diffusion:
+    dirname += '_diffusion'
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 output = OutputParameters(dirname=dirname, dumpfreq=20, dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['theta', 'water_v'], log_level='INFO')
+                          perturbation_fields=['theta', 'water_v', 'rho'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [RelativeHumidity(), Theta_e()]
@@ -199,11 +207,6 @@ state.set_reference_profiles([('rho', rho_b),
                               ('water_v', water_vb)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-
-# Set up advection schemes
 if recovered:
     ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", recovered_spaces=u_spaces)
     rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", recovered_spaces=rho_spaces)
@@ -214,10 +217,10 @@ else:
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
     limiter = ThetaLimiter(thetaeqn)
-    
+
 u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
 euler_poincare = False if recovered else True
-    
+
 advected_fields = [u_advection,
                    ('rho', SSPRK3(state, rho0, rhoeqn)),
                    ('theta', SSPRK3(state, theta0, thetaeqn)),
@@ -225,7 +228,7 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
                    ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
-linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+linear_solver = HybridizedCompressibleSolver(state, moisture=moisture) if hybridization else CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
@@ -241,7 +244,7 @@ if diffusion:
                                                  mu=Constant(10./deltax), bcs=bcs)))
 
 # define condensation
-physics_list = [Condensation(state), Coalescence(state), Fallout(state)]
+physics_list = [Fallout(state), Coalescence(state), Evaporation(state), Condensation(state)]
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

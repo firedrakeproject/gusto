@@ -172,7 +172,7 @@ else:
 
 u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
 euler_poincare = False if recovered else True
-    
+
 advected_fields = [u_advection,
                    ('rho', SSPRK3(state, rho0, rhoeqn)),
                    ('theta', SSPRK3(state, theta0, thetaeqn)),
