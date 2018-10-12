@@ -8,6 +8,7 @@ from gusto.initialisation_tools import *  # noqa
 from gusto.limiters import *  # noqa
 from gusto.linear_solvers import *  # noqa
 from gusto.physics import *         # noqa
+from gusto.recovery import *        # noqa
 from gusto.state import *           # noqa
 from gusto.timeloop import *        # noqa
 from gusto.transport_equation import *     # noqa

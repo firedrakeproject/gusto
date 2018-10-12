@@ -6,7 +6,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
-from gusto.advection import Recoverer
+from gusto.recovery import Recoverer
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "RichardsonNumber", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
