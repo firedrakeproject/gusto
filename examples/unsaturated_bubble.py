@@ -1,35 +1,65 @@
+"""
+This test is similar to the one done by Grabowski and Clark (1991),
+featuring a moist thermal rising in an unsaturated atmosphere.
+"""
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, \
+    SpatialCoordinate, conditional, cos, pi, sqrt, exp, \
     TestFunction, dx, TrialFunction, Constant, Function, \
-    LinearVariationalProblem, LinearVariationalSolver, DirichletBC
+    LinearVariationalProblem, LinearVariationalSolver, DirichletBC, \
+    FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm
+from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
+
+if '--recovered' in sys.argv:
+    recovered = True
+else:
+    recovered = False
+
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+
+if '--diffusion' in sys.argv:
+    diffusion = True
+else:
+    diffusion = False
 
 dt = 1.0
 if '--running-tests' in sys.argv:
-    tmax = 2.
-    deltax = 1000.
+    tmax = 10.
+    deltax = 240.
 else:
-    deltax = 250.
-    tmax = 1500.
+    deltax = 20. if recovered else 40.
+    tmax = 600.
 
-L = 10000.
-H = 10000.
-nlayers = int(H/deltax)
+L = 3600.
+h = 2400.
+nlayers = int(h/deltax)
 ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-diffusion = True
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
+degree = 0 if recovered else 1
+
+dirname = 'unsaturated_bubble'
+if recovered:
+    dirname += '_recovered'
+if hybridization:
+    dirname += '_hybridization'
+if diffusion:
+    dirname += '_diffusion'
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
-output = OutputParameters(dirname='unsaturated_bubble', dumpfreq=20, dumplist=['u', 'theta'], perturbation_fields=['theta', 'water_v'], log_level='INFO')
+output = OutputParameters(dirname=dirname, dumpfreq=20, dumplist=['u', 'rho', 'theta'],
+                          perturbation_fields=['theta', 'water_v', 'rho'], log_level='INFO')
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [Theta_e(), Temperature(), Dewpoint(), RelativeHumidity()]
+diagnostic_fields = [RelativeHumidity(), Theta_e()]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
+state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               family="CG",
               timestepping=timestepping,
               output=output,
@@ -44,54 +74,131 @@ rho0 = state.fields("rho")
 theta0 = state.fields("theta")
 water_v0 = state.fields("water_v", theta0.function_space())
 water_c0 = state.fields("water_c", theta0.function_space())
-moisture = ["water_v", "water_c"]
+rain0 = state.fields("rain", theta0.function_space())
+moisture = ["water_v", "water_c", "rain"]
 
 # spaces
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
 x, z = SpatialCoordinate(mesh)
-quadrature_degree = (5, 5)
+quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
+if recovered:
+    VDG1 = FunctionSpace(mesh, "DG", 1)
+    VCG1 = FunctionSpace(mesh, "CG", 1)
+    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+    Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
+    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+    u_spaces = (Vu_DG1, Vu_CG1, Vu)
+    rho_spaces = (VDG1, VCG1, Vr)
+    theta_spaces = (VDG1, VCG1, Vt_brok)
+
 # Define constant theta_e and water_t
-Tsurf = 300.0
-Ttop = 350.0
-humidity = 0.6
-theta_d = Function(Vt).interpolate(Tsurf + (Ttop - Tsurf) * (z / H) ** 2.0)
-RH = Function(Vt).assign(humidity)
+Tsurf = 283.0
+psurf = 85000.
+pi_surf = (psurf / state.parameters.p_0) ** state.parameters.kappa
+humidity = 0.2
+S = 1.3e-5
+theta_surf = thermodynamics.theta(state.parameters, Tsurf, psurf)
+theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
+H = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
-unsaturated_hydrostatic_balance(state, theta_d, RH)
+unsaturated_hydrostatic_balance(state, theta_d, H, pi_boundary=Constant(pi_surf))
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
 rho_b = Function(Vr).assign(rho0)
 water_vb = Function(Vt).assign(water_v0)
 
-# define perturbation
+# define perturbation to RH
 xc = L / 2
-zc = 2000.
-rc = 2000.
-Tdash = 2.0
-theta_pert = Function(Vt).interpolate(conditional(sqrt((x - xc) ** 2 + (z - zc) ** 2) > rc,
-                                                  0.0, Tdash *
-                                                  (cos(pi * sqrt(((x - xc) / rc) ** 2 + ((z - zc) / rc) ** 2) / 2.0))
-                                                  ** 2))
+zc = 800.
+r1 = 300.
+r2 = 200.
+r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
 
-# define initial theta
-theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
+H_expr = conditional(r > r1, 0.0,
+                     conditional(r > r2,
+                                 (1 - humidity) * cos(pi * (r - r2) /
+                                                      (2 * (r1 - r2))) ** 2,
+                                 1 - humidity))
+H_pert = Function(Vt).interpolate(H_expr)
+H.assign(H + H_pert)
 
-# find perturbed rho
+# now need to find perturbed rho, theta_vd and r_v
+# follow approach used in unsaturated hydrostatic setup
+rho_broken = Function(FunctionSpace(mesh, BrokenElement(Vt.ufl_element())))
+rho_averaged = Function(Vt)
+rho_recoverer = Recoverer(rho_broken, rho_averaged)
+rho_h = Function(Vr)
+w_h = Function(Vt)
+delta = 1.0
+
+R_d = state.parameters.R_d
+R_v = state.parameters.R_v
+epsilon = R_d / R_v
+
+# make expressions for determining water_v0
+pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+p = thermodynamics.p(state.parameters, pie)
+T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
+
+# make expressions to evaluate residual
+pi_ev = thermodynamics.pi(state.parameters, rho_averaged, theta0)
+p_ev = thermodynamics.p(state.parameters, pi_ev)
+T_ev = thermodynamics.T(state.parameters, theta0, pi_ev, water_v0)
+RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
+RH = Function(Vt)
+
+# set-up rho problem to keep Pi constant
 gamma = TestFunction(Vr)
 rho_trial = TrialFunction(Vr)
 a = gamma * rho_trial * dxp
 L = gamma * (rho_b * theta_b / theta0) * dxp
-rho_problem = LinearVariationalProblem(a, L, rho0)
+rho_problem = LinearVariationalProblem(a, L, rho_h)
 rho_solver = LinearVariationalSolver(rho_problem)
-rho_solver.solve()
+
+max_outer_solve_count = 20
+max_inner_solve_count = 10
+
+for i in range(max_outer_solve_count):
+    # calculate averaged rho
+    rho_broken.interpolate(rho0)
+    rho_recoverer.project()
+
+    RH.assign(RH_ev)
+    if errornorm(RH, H) < 1e-10:
+        break
+
+    # first solve for r_v
+    for j in range(max_inner_solve_count):
+        w_h.interpolate(r_v_expr)
+        water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
+
+        # compute theta_vd
+        theta0.assign(theta_d * (1 + water_v0 / epsilon))
+
+        # test quality of solution by re-evaluating expression
+        RH.assign(RH_ev)
+        if errornorm(RH, H) < 1e-10:
+            break
+
+    # now solve for rho with theta_vd and w_v guesses
+    rho_solver.solve()
+
+    # damp solution
+    rho0.assign(rho0 * (1 - delta) + delta * rho_h)
+
+    if i == max_outer_solve_count:
+        raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
 water_c0.assign(0.0)
+rain0.assign(0.0)
 
 # initialise fields
 state.initialise([('u', u0),
@@ -104,20 +211,31 @@ state.set_reference_profiles([('rho', rho_b),
                               ('water_v', water_vb)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+if recovered:
+    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", recovered_spaces=u_spaces)
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", recovered_spaces=rho_spaces)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", recovered_spaces=theta_spaces)
+    limiter = VertexBasedLimiter(VDG1)
+else:
+    ueqn = EulerPoincare(state, Vu)
+    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+    limiter = ThetaLimiter(thetaeqn)
 
-advected_fields = [('u', ThetaMethod(state, u0, ueqn)),
+u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
+euler_poincare = False if recovered else True
+
+advected_fields = [u_advection,
                    ('rho', SSPRK3(state, rho0, rhoeqn)),
                    ('theta', SSPRK3(state, theta0, thetaeqn)),
-                   ('water_v', SSPRK3(state, water_v0, thetaeqn)),
-                   ('water_c', SSPRK3(state, water_c0, thetaeqn))]
+                   ('water_v', SSPRK3(state, water_v0, thetaeqn, limiter=limiter)),
+                   ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
+                   ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
-linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+linear_solver = HybridizedCompressibleSolver(state, moisture=moisture) if hybridization else CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, moisture=moisture)
+compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
@@ -130,7 +248,7 @@ if diffusion:
                                                  mu=Constant(10./deltax), bcs=bcs)))
 
 # define condensation
-physics_list = [Condensation(state)]
+physics_list = [Fallout(state), Coalescence(state), Evaporation(state), Condensation(state)]
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

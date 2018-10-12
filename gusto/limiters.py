@@ -55,7 +55,7 @@ class ThetaLimiter(object):
         """
         Initialise limiter
 
-        :param space : equation, as we need the broken space attached to it
+        :param equation : an advection equation, as we need the broken space attached to it
         """
 
         self.Vt = equation.space
