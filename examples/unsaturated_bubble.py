@@ -1,3 +1,7 @@
+"""
+This test is similar to the one done by Grabowski and Clark (1991),
+featuring a moist thermal rising in an unsaturated atmosphere.
+"""
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
     SpatialCoordinate, conditional, cos, pi, sqrt, exp, \
@@ -39,7 +43,7 @@ m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
 degree = 0 if recovered else 1
 
-dirname = 'unsaturated_bubble_full'
+dirname = 'unsaturated_bubble'
 if recovered:
     dirname += '_recovered'
 if hybridization:
