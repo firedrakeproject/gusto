@@ -7,7 +7,7 @@ from firedrake import Interpolator, conditional, Function, \
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto import thermodynamics
-from scipy.special import gamma
+from math import gamma
 
 
 __all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation"]
