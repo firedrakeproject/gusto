@@ -150,23 +150,20 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
     if params is None:
-        params = {'pc_type': 'fieldsplit',
-                  'pc_fieldsplit_type': 'schur',
-                  'ksp_type': 'gmres',
-                  'ksp_monitor_true_residual': True,
-                  'ksp_max_it': 100,
-                  'ksp_gmres_restart': 50,
-                  'pc_fieldsplit_schur_fact_type': 'FULL',
-                  'pc_fieldsplit_schur_precondition': 'selfp',
-                  'fieldsplit_0_ksp_type': 'richardson',
-                  'fieldsplit_0_ksp_max_it': 5,
-                  'fieldsplit_0_pc_type': 'gamg',
-                  'fieldsplit_1_pc_gamg_sym_graph': True,
-                  'fieldsplit_1_mg_levels_ksp_type': 'chebyshev',
-                  'fieldsplit_1_mg_levels_ksp_chebyshev_esteig': True,
-                  'fieldsplit_1_mg_levels_ksp_max_it': 5,
-                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
-                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu'}
+        params = {'ksp_type': 'preonly',
+                  'pc_type': 'python',
+                  'mat_type': 'matfree',
+                  'pc_python_type': 'gusto.VerticalHybridizationPC',
+                  'vert_hybridization': {'ksp_type': 'cg',
+                                         'pc_type': 'gamg',
+                                         'pc_gamg_sym_graph': True,
+                                         'ksp_rtol': 1e-8,
+                                         'ksp_atol': 1e-8,
+                                         'mg_levels': {'ksp_type': 'chebyshev',
+                                                       'ksp_chebyshev_esteig': True,
+                                                       'ksp_max_it': 4,
+                                                       'pc_type': 'bjacobi',
+                                                       'sub_pc_type': 'ilu'}}}
 
     PiSolver = LinearVariationalSolver(PiProblem,
                                        solver_parameters=params)
