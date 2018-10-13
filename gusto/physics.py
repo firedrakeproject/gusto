@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
-from gusto.advection import SSPRK3, Recoverer
+from gusto.recovery import Recoverer
+from gusto.advection import SSPRK3
 from firedrake import Interpolator, conditional, Function, \
     min_value, max_value, as_vector, BrokenElement, FunctionSpace
 from gusto import thermodynamics
