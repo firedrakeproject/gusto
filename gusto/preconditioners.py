@@ -7,12 +7,13 @@ import numpy as np
 from firedrake import (dot, jump, dx, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector)
 
-from firedrake.matrix_free.preconditioners import PCBase
+from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_region, timed_function
 from pyop2.utils import as_tuple
+
 
 __all__ = ["VerticalHybridizationPC"]
 
