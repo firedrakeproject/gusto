@@ -118,33 +118,11 @@ theta_pert = deltaTheta*s*sin(2*pi*z/L_z)
 theta0.interpolate(theta_b)
 
 # Compute the balanced density
-rho_params = {
-    'pc_type': 'fieldsplit',
-    'pc_fieldsplit_type': 'schur',
-    'ksp_type': 'gmres',
-    'ksp_monitor_true_residual': True,
-    'ksp_max_it': 100,
-    'ksp_gmres_restart': 50,
-    'pc_fieldsplit_schur_fact_type': 'FULL',
-    'pc_fieldsplit_schur_precondition': 'selfp',
-    'fieldsplit_0': {'ksp_type': 'preonly',
-                     'pc_type': 'bjacobi',
-                     'sub_pc_type': 'ilu'},
-    'fieldsplit_1': {'ksp_type': 'cg',
-                     'pc_type': 'gamg',
-                     'pc_gamg_sym_graph': True,
-                     'mg_levels': {'ksp_type': 'chebyshev',
-                                   'ksp_chebyshev_esteig': True,
-                                   'ksp_max_it': 5,
-                                   'pc_type': 'bjacobi',
-                                   'sub_pc_type': 'ilu'}}
-}
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  top=False,
-                                 pi_boundary=(p/p_0)**kappa,
-                                 params=rho_params)
+                                 pi_boundary=(p/p_0)**kappa)
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
