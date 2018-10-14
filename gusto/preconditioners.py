@@ -66,14 +66,13 @@ class VerticalHybridizationPC(PCBase):
         # defined in cell interiors, however the degrees of freedom will only
         # be geometrically defined on edges. Arguments will only be used in
         # surface integrals
-        h_deg, _ = Vv.ufl_element().degree()
+        deg, _ = Vv.ufl_element().degree()
 
         # Assumes a tensor product cell (quads, cubes)
         # Only want the horizontal cell
         cell, _ = Vp.ufl_element().cell()._cells
 
-        # FIXME: Assumes RT family of tensor product elements for vertical HDiv space
-        DG = FiniteElement("DG", cell, h_deg - 1)
+        DG = FiniteElement("DG", cell, deg)
         CG = FiniteElement("CG", interval, 1)
         Vv_tr_element = TensorProductElement(DG, CG)
         Vv_tr = FunctionSpace(mesh, Vv_tr_element)
