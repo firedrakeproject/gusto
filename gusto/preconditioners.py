@@ -19,12 +19,30 @@ __all__ = ["VerticalHybridizationPC"]
 
 
 class VerticalHybridizationPC(PCBase):
-    """ A great docstring.
+    """ A Slate-based python preconditioner for solving
+    the hydrostatic pressure equation (after rewriting as
+    a mixed vertical HDiv x L2 system). This preconditioner
+    transforms the original mixed system by hybridizing
+    the equations in the vertical direction. Lagrange multipliers
+    are introduced on the top/bottom faces of each element are
+    condensed out via static condensation.
+
+    This PC assembled a condensed problem for the multipliers
+    and inverted using the provided solver options. The orginal
+    unknowns are recovered element-wise.
+
+    All elimination and recovery kernels are generated using
+    the Slate DSL in Firedrake.
     """
 
     @timed_function("VertHybridInit")
     def initialize(self, pc):
-        """ A great docstring.
+        """ Set up the problem context. Takes the original
+        mixed problem and transforms it into the equivalent
+        hybrid-mixed system.
+
+        A KSP object is created for the Lagrange multipliers
+        on the top/bottom faces of the mesh cells.
         """
 
         from firedrake import (FunctionSpace, Function, Constant,
@@ -217,6 +235,7 @@ class VerticalHybridizationPC(PCBase):
         :arg split_trace_op: a ``dict`` of split forms that make up the trace
                              contribution in the hybridized mixed system.
         """
+
         from firedrake.assemble import create_assembly_callable
 
         # We always eliminate the velocity block first
@@ -261,6 +280,7 @@ class VerticalHybridizationPC(PCBase):
         Note that the reconstruction calls are assumed to be
         initialized at this point.
         """
+
         # We assemble the unknown which is an expression
         # of the first eliminated variable.
         self._sub_unknown()
@@ -272,6 +292,7 @@ class VerticalHybridizationPC(PCBase):
         """Update by assembling into the operator. No need to
         reconstruct symbolic objects.
         """
+
         self._assemble_S()
         self.S.force_evaluation()
 
@@ -348,10 +369,12 @@ class VerticalHybridizationPC(PCBase):
 
     def applyTranspose(self, pc, x, y):
         """Apply the transpose of the preconditioner."""
+
         raise NotImplementedError("The transpose application of the PC is not implemented.")
 
     def view(self, pc, viewer=None):
         """Viewer calls for the various configurable objects in this PC."""
+
         super(VerticalHybridizationPC, self).view(pc, viewer)
         viewer.pushASCIITab()
         viewer.printfASCII("Solves K * P^-1 * K.T using local eliminations.\n")
