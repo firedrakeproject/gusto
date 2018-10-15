@@ -742,26 +742,18 @@ class ShallowWaterSolver(TimesteppingSolver):
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
-        state = self.state
-        H = state.parameters.H
-        g = state.parameters.g
-        beta = state.timestepping.dt*state.timestepping.alpha
+        eqns = self.equations
+        H = eqns.parameters.H
+        g = eqns.parameters.g
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs('xfields'))
+        x_in = split(state.xrhs('xfields'))
 
-        w, phi = TestFunctions(self.W)
-        u, D = TrialFunctions(self.W)
-
-        eqn = (
-            inner(w, u) - beta*g*div(w)*D
-            - inner(w, u_in)
-            + phi*D + beta*H*phi*div(u)
-            - phi*D_in
+        aeqn = (
+            eqns.mass_term(eqns.trials) - 
+            self.beta*eqns(eqns.trials, label="linear")
         )*dx
-
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+        Leqn = eqns.mass_term(x_in)
 
         # Place to put result of u rho solver
         self.uD = Function(self.W)
