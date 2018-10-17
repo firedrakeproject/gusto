@@ -6,8 +6,6 @@ class Term(object):
     :arg form: the form for this term
     """
 
-    labels = {}
-
     def __init__(self, form):
         self.__setattr__("form", form)
 
@@ -27,5 +25,5 @@ class Label(object):
     def __call__(self, q):
         if not isinstance(q, Term):
             q = Term(q)
-        q.labels[self.label] = getattr(self, self.label)
+        q.__setattr__(self.label, getattr(self, self.label))
         return q
