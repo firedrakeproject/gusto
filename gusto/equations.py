@@ -9,6 +9,25 @@ class Term(object):
     def __init__(self, form):
         self.__setattr__("form", form)
 
+    def __add__(self, other):
+        if isinstance(other, Term):
+            return Equation(self, other)
+        elif isinstance(other, Equation):
+            return Equation(self, *other.terms)
+
+
+class Equation(object):
+
+    def __init__(self, *terms):
+        self.terms = list(terms)
+
+    def __add__(self, other):
+        if isinstance(other, Equation):
+            self.terms.extend(other.terms)
+        else:
+            self.terms.append(other)
+        return self
+
 
 class Label(object):
     """
