@@ -73,18 +73,19 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     w1 = Function(WV)
 
     if params is None:
-        params = {'ksp_type': 'preonly',
-                  'pc_type': 'python',
-                  'mat_type': 'matfree',
-                  'pc_python_type': 'gusto.VerticalHybridizationPC',
-                  'vert_hybridization': {'ksp_type': 'cg',
-                                         'pc_type': 'gamg',
-                                         'ksp_rtol': 1e-8,
-                                         'ksp_atol': 1e-8,
-                                         'mg_levels': {'ksp_type': 'chebyshev',
-                                                       'ksp_max_it': 4,
-                                                       'pc_type': 'bjacobi',
-                                                       'sub_pc_type': 'ilu'}}}
+        params = {'ksp_type': 'gmres',
+                  'pc_type': 'fieldsplit',
+                  'pc_fieldsplit_type': 'schur',
+                  'pc_fieldsplit_schur_fact_type': 'full',
+                  'pc_fieldsplit_schur_precondition': 'selfp',
+                  'fieldsplit_1_ksp_type': 'preonly',
+                  'fieldsplit_1_pc_type': 'gamg',
+                  'fieldsplit_1_mg_levels_pc_type': 'bjacobi',
+                  'fieldsplit_1_mg_levels_sub_pc_type': 'ilu',
+                  'fieldsplit_0_ksp_type': 'richardson',
+                  'fieldsplit_0_ksp_max_it': 4,
+                  'ksp_atol': 1.e-08,
+                  'ksp_rtol': 1.e-08}
 
     solve(a == L, w1, bcs=bcs, solver_parameters=params)
 
