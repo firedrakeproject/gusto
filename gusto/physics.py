@@ -47,7 +47,7 @@ class Condensation(Physics):
     """
 
     def __init__(self, state, iterations=1):
-        super(Condensation, self).__init__(state)
+        super().__init__(state)
 
         self.iterations = iterations
         # obtain our fields
@@ -140,7 +140,7 @@ class Fallout(Physics):
     """
 
     def __init__(self, state, moments=1, limit=True):
-        super(Fallout, self).__init__(state)
+        super().__init__(state)
 
         # function spaces
         Vt = state.fields('rain').function_space()
@@ -242,7 +242,7 @@ class Coalescence(Physics):
     """
 
     def __init__(self, state, accretion=True, accumulation=True):
-        super(Coalescence, self).__init__(state)
+        super().__init__(state)
 
         # obtain our fields
         self.water_c = state.fields('water_c')
@@ -297,7 +297,7 @@ class Evaporation(Physics):
     """
 
     def __init__(self, state):
-        super(Evaporation, self).__init__(state)
+        super().__init__(state)
 
         # obtain our fields
         self.theta = state.fields('theta')
@@ -352,7 +352,7 @@ class Evaporation(Physics):
         f = Constant(5.4e5)
         g = Constant(2.55e6)
         h = Constant(0.525)
-        dot_r_evap = (((1 - self.water_v - w_sat) * C * (rho_averaged * self.rain) ** h)
+        dot_r_evap = (((1 - self.water_v / w_sat) * C * (rho_averaged * self.rain) ** h)
                       / (rho_averaged * (f + g / (p * w_sat))))
 
         # make evap_rate function, needs to be the same for all updates in one time step
