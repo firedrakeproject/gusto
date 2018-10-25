@@ -15,7 +15,7 @@ class Term(object):
 
     def has_label(self, *labels):
         if len(labels) == 1:
-            return labels[0].label in self.labels
+            return labels[0] in self.labels
         else:
             return tuple(self.has_label(l) for l in labels)
 
@@ -88,7 +88,9 @@ class Label(object):
         elif isinstance(target, ufl.Form):
             return Equation(Term(target, {self.label: self.value}))
         elif isinstance(target, Term):
-            return Term(target.form, target.labels.copy().update({self.label: self.value}))
+            new_labels = target.labels.copy()
+            new_labels.update({self.label: self.value})
+            return Term(target.form, new_labels)
         else:
             raise ValueError("Unable to label %s" % target)
 
