@@ -1,4 +1,5 @@
 import ufl
+import functools
 
 class Term(object):
     """
