@@ -38,8 +38,8 @@ def term(form):
 
 
 @pytest.fixture
-def eq(term):
-    return term + term
+def eq(term, label_a, label_x_is_y):
+    return label_a(term) + label_x_is_y(term)
 
 
 def test_label_form(label_a, labelled_form, form):
@@ -82,3 +82,8 @@ def test_add_term_and_equation(term, eq):
     a = term + eq
     assert(isinstance(a, Equation))
     assert(len(a) == 4)
+
+
+def test_label_map(eq, label_x_is_y, label_x_is_z):
+    new_eq = eq.label_map(lambda t: t.has_label(label_x_is_y), label_x_is_z)
+    assert(t.labels["x"] is "z" for t in new_eq if "x" in t.labels.keys())
