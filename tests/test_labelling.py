@@ -58,7 +58,7 @@ def test_label_term(label_a, term, form):
 def test_label_equation(labelled_form, label_a, label_x_is_y, label_x_is_z):
     eqn = label_x_is_y(labelled_form)
     assert(isinstance(eqn, Equation))
-    assert(eqn[0].has_label(label_a))
+    assert(eqn[0].has_label(label_a, label_x_is_y))
     assert(eqn[0].labels["x"] == "y")
     eqn = label_x_is_z(eqn)
     assert(eqn[0].labels["x"] == "z")

@@ -40,11 +40,14 @@ class Equation(object):
             self.terms = list(terms)
 
     def __add__(self, other):
-        if type(other) not in {Term, Equation}:
-            return NotImplemented
+        if type(other) is Term:
+            return Equation(*self, other)
+        elif type(other) is Equation:
+            return Equation(*self, *other)
         elif other is None:
             return self
-        return Equation(*self, *other)
+        else:
+            return NotImplemented
 
     def __iter__(self):
         return iter(self.terms)
