@@ -15,7 +15,7 @@ class Term(object):
 
     def has_label(self, *labels):
         if len(labels) == 1:
-            return labels[0] in self.labels
+            return labels[0].label in self.labels
         else:
             return tuple(self.has_label(l) for l in labels)
 

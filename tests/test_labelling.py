@@ -42,23 +42,23 @@ def eq(term):
     return term + term
 
 
-def test_label_form(labelled_form, form):
+def test_label_form(label_a, labelled_form, form):
     assert(isinstance(labelled_form, Equation))
-    assert(labelled_form[0].has_label("a"))
+    assert(labelled_form[0].has_label(label_a))
     assert(labelled_form[0].form == form)
 
 
 def test_label_term(label_a, term, form):
     labelled_term = label_a(term)
     assert(isinstance(labelled_term, Term))
-    assert(labelled_term.has_label("a"))
+    assert(labelled_term.has_label(label_a))
     assert(labelled_term.form == form)
 
 
-def test_label_equation(labelled_form, label_x_is_y, label_x_is_z):
+def test_label_equation(labelled_form, label_a, label_x_is_y, label_x_is_z):
     eqn = label_x_is_y(labelled_form)
     assert(isinstance(eqn, Equation))
-    assert(eqn[0].has_label("a"))
+    assert(eqn[0].has_label(label_a))
     assert(eqn[0].labels["x"] == "y")
     eqn = label_x_is_z(eqn)
     assert(eqn[0].labels["x"] == "z")
