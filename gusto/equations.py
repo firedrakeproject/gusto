@@ -1,6 +1,7 @@
 import ufl
 import functools
 
+
 class Term(object):
     """
     Term class, containing a form and its labels.
@@ -35,7 +36,7 @@ class Equation(object):
     __slots__ = ["terms"]
 
     def __init__(self, *terms):
-        if len(terms) == 1 and isinstance (terms[0], Equation):
+        if len(terms) == 1 and isinstance(terms[0], Equation):
             self.terms = terms[0].terms
         else:
             self.terms = list(terms)
@@ -68,6 +69,7 @@ class Equation(object):
         return Equation(functools.reduce(lambda x, y: x + y,
                                          (map_function(t) if term_filter(t) else t
                                           for t in self.terms)))
+
     @property
     def form(self):
         return functools.reduce(lambda x, y: x + y, (t.form for t in self.terms))
