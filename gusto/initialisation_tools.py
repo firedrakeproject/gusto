@@ -100,7 +100,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                                      params=None):
     """
     Compute a hydrostatically balanced density given a potential temperature
-    profile.
+    profile. By default, this uses a vertically-oriented hybridization
+    procedure for solving the resulting discrete systems.
 
     :arg state: The :class:`State` object.
     :arg theta0: :class:`.Function`containing the potential temperature.
