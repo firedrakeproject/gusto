@@ -53,6 +53,7 @@ class VerticalHybridizationPC(PCBase):
                                         create_assembly_callable)
         from firedrake.formmanipulation import split_form
         from ufl.algorithms.replace import replace
+        from ufl.cell import TensorProductCell
 
         # Extract PC context
         prefix = pc.getOptionsPrefix() + "vert_hybridization_"
@@ -86,7 +87,10 @@ class VerticalHybridizationPC(PCBase):
         # surface integrals
         deg, _ = Vv.ufl_element().degree()
 
-        # Assumes a tensor product cell (quads, cubes)
+        # Assumes a tensor product cell (quads, triangular-prisms, cubes)
+        if not isinstance(Vp.ufl_element().cell(), TensorProductCell):
+            raise NotImplementedError("Currently only implemented for tensor product discretizations")
+
         # Only want the horizontal cell
         cell, _ = Vp.ufl_element().cell()._cells
 
