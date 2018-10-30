@@ -69,7 +69,7 @@ moisture = ["water_v", "water_c"]
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
-x = SpatialCoordinate(mesh)
+x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
