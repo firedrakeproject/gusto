@@ -1,9 +1,9 @@
-from firedrake import split, LinearVariationalProblem, \
-    LinearVariationalSolver, TestFunctions, TrialFunctions, \
-    TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
-    div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad, \
-    Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace, \
-    assemble, LinearSolver, Tensor, AssembledVector
+from firedrake import (split, LinearVariationalProblem,
+                       LinearVariationalSolver, TestFunctions, TrialFunctions,
+                       TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad,
+                       Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace,
+                       assemble, LinearSolver, Tensor, AssembledVector)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
@@ -212,8 +212,8 @@ class CompressibleSolver(TimesteppingSolver):
         u, rho = self.urho.split()
         self.theta = Function(Vtheta)
 
-        theta_eqn = gamma*(theta - theta_in +
-                           dot(k, u)*dot(k, grad(thetabar))*beta)*dx
+        theta_eqn = gamma*(theta - theta_in
+                           + dot(k, u)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn),
                                                  rhs(theta_eqn),
@@ -520,8 +520,8 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         gamma = TestFunction(Vtheta)
 
         self.theta = Function(Vtheta)
-        theta_eqn = gamma*(theta - theta_in +
-                           dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta)*dx
+        theta_eqn = gamma*(theta - theta_in
+                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
@@ -686,8 +686,8 @@ class IncompressibleSolver(TimesteppingSolver):
         u, p = self.up.split()
         self.b = Function(Vb)
 
-        b_eqn = gamma*(b - b_in +
-                       dot(k, u)*dot(k, grad(bbar))*beta)*dx
+        b_eqn = gamma*(b - b_in
+                       + dot(k, u)*dot(k, grad(bbar))*beta)*dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
