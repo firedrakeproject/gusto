@@ -68,7 +68,7 @@ theta0 = state.fields("theta")
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
-x = SpatialCoordinate(mesh)
+x, z = SpatialCoordinate(mesh)
 
 if recovered:
     VDG1 = FunctionSpace(mesh, "DG", 1)
