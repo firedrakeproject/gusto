@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import FunctionSpace, as_vector, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, op2, sqrt
+from firedrake import (FunctionSpace, as_vector, VectorFunctionSpace,
+                       PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
+                       exp, pi, cos, Function, conditional, Mesh, sin, op2, sqrt)
 import sys
 
 dt = 5.0

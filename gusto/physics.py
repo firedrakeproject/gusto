@@ -2,11 +2,11 @@ from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
-from firedrake import Interpolator, conditional, Function, \
-    min_value, max_value, as_vector, BrokenElement, FunctionSpace, \
-    Constant, pi, Projector
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.limiters import ThetaLimiter, NoLimiter
+from firedrake import (Interpolator, conditional, Function,
+                       min_value, max_value, as_vector, BrokenElement, FunctionSpace,
+                       Constant, pi, Projector)
 from gusto import thermodynamics
 from math import gamma
 
@@ -94,9 +94,10 @@ class Condensation(Physics):
         w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
         # make appropriate condensation rate
-        dot_r_cond = ((self.water_v - w_sat) /
-                      (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
-                                    (cp * R_v * T ** 2.0)))))
+        dot_r_cond = ((self.water_v - w_sat)
+                      / (dt * (1.0 + ((L_v ** 2.0 * w_sat)
+                                      / (cp * R_v * T ** 2.0)))))
+        dot_r_cond = self.water_v - w_sat
 
         # make cond_rate function, that needs to be the same for all updates in one time step
         cond_rate = Function(Vt)
@@ -107,12 +108,12 @@ class Condensation(Physics):
                                                       min_value(dot_r_cond, self.water_v / dt)), cond_rate)
 
         # tell the prognostic fields what to update to
-        self.water_v_new = Interpolator(self.water_v - dt * cond_rate, Vt)
-        self.water_c_new = Interpolator(self.water_c + dt * cond_rate, Vt)
-        self.theta_new = Interpolator(self.theta *
-                                      (1.0 + dt * cond_rate *
-                                       (cv * L_v / (c_vml * cp * T) -
-                                        R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+        self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
+        self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
+        self.theta_new = Interpolator(self.theta
+                                      * (1.0 + dt * self.cond_rate
+                                         * (cv * L_v / (c_vml * cp * T)
+                                            - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
         self.rho_broken.assign(self.rho_interpolator.interpolate())
@@ -174,17 +175,17 @@ class Fallout(Physics):
             g = Constant(0.5)  # scaling of density correction
             # we keep mu in the expressions even though mu = 0
             threshold = Constant(10**-10)  # only do rainfall for r > threshold
-            Lambda = (N_r * pi * rho_w * gamma(4 + mu) /
-                      (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
-            Lambda0 = (N_r * pi * rho_w * gamma(4 + mu) /
-                       (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
+            Lambda = (N_r * pi * rho_w * gamma(4 + mu)
+                      / (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
+            Lambda0 = (N_r * pi * rho_w * gamma(4 + mu)
+                       / (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
             v_expression = conditional(self.rain > threshold,
-                                       (a * gamma(4 + b + mu) /
-                                        (gamma(4 + mu) * Lambda ** b) *
-                                        (rho0 / rho) ** g),
-                                       (a * gamma(4 + b + mu) /
-                                        (gamma(4 + mu) * Lambda0 ** b) *
-                                        (rho0 / rho) ** g))
+                                       (a * gamma(4 + b + mu)
+                                        / (gamma(4 + mu) * Lambda ** b)
+                                        * (rho0 / rho) ** g),
+                                       (a * gamma(4 + b + mu)
+                                        / (gamma(4 + mu) * Lambda0 ** b)
+                                        * (rho0 / rho) ** g))
         else:
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall')
 
@@ -367,10 +368,10 @@ class Evaporation(Physics):
         # tell the prognostic fields what to update to
         self.water_v_new = Interpolator(self.water_v + dt * evap_rate, Vt)
         self.rain_new = Interpolator(self.rain - dt * evap_rate, Vt)
-        self.theta_new = Interpolator(self.theta *
-                                      (1.0 - dt * evap_rate *
-                                       (cv * L_v / (c_vml * cp * T) -
-                                        R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+        self.theta_new = Interpolator(self.theta
+                                      * (1.0 - dt * evap_rate
+                                         * (cv * L_v / (c_vml * cp * T)
+                                            - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
         self.rho_broken.assign(self.rho_interpolator.interpolate())

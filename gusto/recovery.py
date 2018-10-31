@@ -2,9 +2,9 @@
 The recovery operators used for lowest-order advection schemes.
 """
 from gusto.configuration import logger
-from firedrake import expression, function, Function, FunctionSpace, Projector, \
-    VectorFunctionSpace, SpatialCoordinate, as_vector, Constant, dx, Interpolator, \
-    quadrilateral
+from firedrake import (expression, function, Function, FunctionSpace, Projector,
+                       VectorFunctionSpace, SpatialCoordinate, as_vector, Constant,
+                       dx, Interpolator, quadrilateral)
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, RW
 from pyop2 import ON_TOP, ON_BOTTOM

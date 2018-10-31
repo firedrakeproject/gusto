@@ -3,11 +3,11 @@ This test is similar to the one done by Grabowski and Clark (1991),
 featuring a moist thermal rising in an unsaturated atmosphere.
 """
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, exp, \
-    TestFunction, dx, TrialFunction, Constant, Function, \
-    LinearVariationalProblem, LinearVariationalSolver, DirichletBC, \
-    FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+                       SpatialCoordinate, conditional, cos, pi, sqrt,
+                       TestFunction, dx, TrialFunction, Constant, Function,
+                       LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
+                       FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -123,8 +123,8 @@ r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
 
 H_expr = conditional(r > r1, 0.0,
                      conditional(r > r2,
-                                 (1 - humidity) * cos(pi * (r - r2) /
-                                                      (2 * (r1 - r2))) ** 2,
+                                 (1 - humidity) * cos(pi * (r - r2)
+                                                      / (2 * (r1 - r2))) ** 2,
                                  1 - humidity))
 H_pert = Function(Vt).interpolate(H_expr)
 H.assign(H + H_pert)

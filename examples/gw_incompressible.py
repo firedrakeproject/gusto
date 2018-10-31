@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import as_vector,\
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    sin, SpatialCoordinate, Function
+from firedrake import (as_vector, VectorFunctionSpace,
+                       PeriodicIntervalMesh, ExtrudedMesh,
+                       sin, SpatialCoordinate, Function)
 import numpy as np
 import sys
 
