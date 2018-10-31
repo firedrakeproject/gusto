@@ -1,9 +1,9 @@
-from firedrake import SpatialCoordinate, TrialFunction, \
-    TestFunction, Function, DirichletBC, \
-    LinearVariationalProblem, LinearVariationalSolver, \
-    FunctionSpace, lhs, rhs, inner, div, dx, grad, dot, \
-    as_vector, as_matrix, dS_h, dS_v, Constant, avg, \
-    sqrt, jump, FacetNormal
+from firedrake import (SpatialCoordinate, TrialFunction,
+                       TestFunction, Function, DirichletBC,
+                       LinearVariationalProblem, LinearVariationalSolver,
+                       FunctionSpace, lhs, rhs, inner, div, dx, grad, dot,
+                       as_vector, as_matrix, dS_h, dS_v, Constant, avg,
+                       sqrt, jump, FacetNormal)
 from gusto import thermodynamics
 from gusto.diagnostics import DiagnosticField, Energy
 

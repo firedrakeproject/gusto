@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, PeriodicIntervalMesh, \
-    ExtrudedMesh, SpatialCoordinate, \
-    as_vector, VectorFunctionSpace, sin, exp, Function, FunctionSpace
+from firedrake import (IcosahedralSphereMesh, PeriodicIntervalMesh,
+                       ExtrudedMesh, SpatialCoordinate, as_vector,
+                       VectorFunctionSpace, sin, exp, Function, FunctionSpace)
 import pytest
 from math import pi
 

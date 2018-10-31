@@ -1,8 +1,8 @@
 from os import path
 from gusto import *
-from firedrake import as_vector, Constant, sin, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, sqrt, \
-    conditional, cos
+from firedrake import (as_vector, Constant, sin, PeriodicIntervalMesh,
+                       SpatialCoordinate, ExtrudedMesh, FunctionSpace,
+                       Function, sqrt, conditional, cos)
 from netCDF4 import Dataset
 from math import pi
 
@@ -80,9 +80,9 @@ def setup_condens(dirname):
     u_max = 20.0
 
     def u_evaluation(t):
-        psi_expr = ((-u_max * L / pi) *
-                    sin(2 * pi * x[0] / L) *
-                    sin(pi * x[1] / L)) * sin(2 * pi * t / tmax)
+        psi_expr = ((-u_max * L / pi)
+                    * sin(2 * pi * x[0] / L)
+                    * sin(pi * x[1] / L)) * sin(2 * pi * t / tmax)
 
         psi0 = Function(Vpsi).interpolate(psi_expr)
 
