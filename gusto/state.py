@@ -2,14 +2,13 @@ from os import path
 import itertools
 from netCDF4 import Dataset
 import time
-from gusto.diagnostics import Diagnostics, Perturbation, \
-    SteadyStateError
-from firedrake import FiniteElement, TensorProductElement, HDiv, \
-    FunctionSpace, MixedFunctionSpace, VectorFunctionSpace, \
-    interval, Function, Mesh, functionspaceimpl,\
-    File, SpatialCoordinate, sqrt, Constant, inner, \
-    dx, op2, par_loop, READ, WRITE, DumbCheckpoint, \
-    FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector
+from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
+from firedrake import (FiniteElement, TensorProductElement, HDiv,
+                       FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
+                       interval, Function, Mesh, functionspaceimpl,
+                       File, SpatialCoordinate, sqrt, Constant, inner,
+                       dx, op2, par_loop, READ, WRITE, DumbCheckpoint,
+                       FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 

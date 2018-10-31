@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, FunctionSpace, \
-    Function, conditional, sqrt
+from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
+                       SpatialCoordinate, ExtrudedMesh, FunctionSpace,
+                       Function, conditional, sqrt)
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme

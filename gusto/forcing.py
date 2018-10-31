@@ -1,8 +1,8 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, split, TrialFunction, TestFunction, \
-    FacetNormal, inner, dx, cross, div, jump, avg, dS_v, \
-    DirichletBC, LinearVariationalProblem, LinearVariationalSolver, \
-    dot, dS, Constant, as_vector, SpatialCoordinate
+from firedrake import (Function, split, TrialFunction, TestFunction,
+                       FacetNormal, inner, dx, cross, div, jump, avg, dS_v,
+                       DirichletBC, LinearVariationalProblem, LinearVariationalSolver,
+                       dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
 

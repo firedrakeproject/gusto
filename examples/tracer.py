@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, Constant, DirichletBC, cos, pi, Function, sqrt, \
-    conditional
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+                       SpatialCoordinate, Constant, DirichletBC,
+                       cos, pi, Function, sqrt, conditional)
 import sys
 
 if '--running-tests' in sys.argv:

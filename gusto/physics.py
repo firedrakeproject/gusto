@@ -2,8 +2,8 @@ from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
-from firedrake import Interpolator, conditional, Function, \
-    min_value, max_value, as_vector, BrokenElement, FunctionSpace
+from firedrake import (Interpolator, conditional, Function,
+                       min_value, max_value, as_vector, BrokenElement, FunctionSpace)
 from gusto import thermodynamics
 
 
@@ -84,9 +84,9 @@ class Condensation(Physics):
         w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
         # make appropriate condensation rate
-        dot_r_cond = ((self.water_v - w_sat) /
-                      (dt * (1.0 + ((L_v ** 2.0 * w_sat) /
-                                    (cp * R_v * T ** 2.0)))))
+        dot_r_cond = ((self.water_v - w_sat)
+                      / (dt * (1.0 + ((L_v ** 2.0 * w_sat)
+                                      / (cp * R_v * T ** 2.0)))))
         dot_r_cond = self.water_v - w_sat
 
         # make cond_rate function, that needs to be the same for all updates in one time step
@@ -101,10 +101,10 @@ class Condensation(Physics):
         # tell the prognostic fields what to update to
         self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
         self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
-        self.theta_new = Interpolator(self.theta *
-                                      (1.0 + dt * self.cond_rate *
-                                       (cv * L_v / (c_vml * cp * T) -
-                                        R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+        self.theta_new = Interpolator(self.theta
+                                      * (1.0 + dt * self.cond_rate
+                                         * (cv * L_v / (c_vml * cp * T)
+                                            - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
         self.rho_recoverer.project()
