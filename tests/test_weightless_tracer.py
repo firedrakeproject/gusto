@@ -1,7 +1,8 @@
 from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    Constant, SpatialCoordinate, pi, Function, sqrt, conditional, cos
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+                       Constant, SpatialCoordinate, pi, Function,
+                       sqrt, conditional, cos)
 from netCDF4 import Dataset
 import pytest
 

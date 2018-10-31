@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, Function, FunctionSpace, BrokenElement, VectorFunctionSpace
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Constant, Function,
+                       FunctionSpace, BrokenElement, VectorFunctionSpace)
 from os import path
 from netCDF4 import Dataset
 

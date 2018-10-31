@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, \
-    FunctionSpace
+from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
+                       as_vector, FunctionSpace)
 from math import pi
 import sys
 

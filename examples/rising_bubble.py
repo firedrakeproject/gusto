@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, Constant, pi, cos, Function, sqrt, conditional
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
+                       Constant, pi, cos, Function, sqrt, conditional)
 import sys
 
 dt = 1.

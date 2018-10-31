@@ -1,10 +1,9 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, TestFunction, TrialFunction, \
-    FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
-    ds, ds_v, ds_t, ds_b, \
-    outer, sign, cross, CellNormal, sqrt, Constant, \
-    curl, BrokenElement, FunctionSpace
+from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
+                       dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
+                       ds, ds_v, ds_t, ds_b,
+                       outer, sign, cross, CellNormal, sqrt, Constant,
+                       curl, BrokenElement, FunctionSpace)
 from gusto.configuration import DEBUG
 
 
@@ -127,8 +126,8 @@ class LinearAdvection(TransportEquation):
     def advection_term(self, q):
 
         if self.continuity:
-            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
-                 jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
+            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx
+                 + jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
             L = self.test*dot(self.ubar, self.state.k)*dot(self.state.k, grad(self.qbar))*dx
         return L

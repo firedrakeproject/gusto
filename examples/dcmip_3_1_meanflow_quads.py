@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import CubedSphereMesh, ExtrudedMesh, \
-    FunctionSpace, Function, SpatialCoordinate, as_vector
+from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
+                       Function, SpatialCoordinate, as_vector)
 from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan_2
 import sys
 
