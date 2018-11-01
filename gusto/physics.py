@@ -9,9 +9,10 @@ from firedrake import (Interpolator, conditional, Function,
                        Constant, pi, Projector)
 from gusto import thermodynamics
 from math import gamma
+from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation"]
+__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -125,22 +126,32 @@ class Condensation(Physics):
             self.water_c.assign(self.water_c_new.interpolate())
 
 
+class AdvectedMoments(Enum):
+    """
+    An Enum object storing moments of the rain drop
+    size distribution. This is then used in deciding
+    which to be advected in the Fallout step of the model.
+    """
+
+    M0 = 0  # don't advect the distribution -- advect all rain at the same speed
+    M3 = 1  # advect the mass of the distribution
+
+
 class Fallout(Physics):
     """
     The fallout process of hydrometeors.
 
     :arg state :class: `.State.` object.
-    :arg moments: an integer denoting which rainfall scheme to use.
-                  Corresponds to the number of moments of the raindrop
-                  distribution to be advected. Valid options:
-                  0 -- rainfall all at terminal velocity 5 m/s.
-                  1 -- droplet size depends upon density. Advect the mean
-                  of the droplet size distribution.
+    :arg moments: an AdvectedMoments Enum object, indicating which
+                rainfall scheme to use. Current valid values are:
+                AdvectedMoments.M0 -- advects all rain at constant speed;
+                AdvectedMoments.M3 -- advects mean mass of droplet distribution.
+                The default value is AdvectedMoments.M3.
     :arg limit: if True (the default value), applies a limiter to the
                 rainfall advection.
     """
 
-    def __init__(self, state, moments=1, limit=True):
+    def __init__(self, state, moments=AdvectedMoments.M3, limit=True):
         super().__init__(state)
 
         # function spaces
@@ -154,11 +165,11 @@ class Fallout(Physics):
         self.v = state.fields('rainfall_velocity', Vu)
         self.limit = limit
 
-        if moments == 0:
+        if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
             self.v.project(as_vector([0, -terminal_velocity]))
-        elif moments == 1:
+        elif moments == AdvectedMoments.M3:
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
             rho = state.fields('rho')
@@ -187,9 +198,9 @@ class Fallout(Physics):
                                         / (gamma(4 + mu) * Lambda0 ** b)
                                         * (rho0 / rho) ** g))
         else:
-            raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall')
+            raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
-        if moments > 0:
+        if moments != AdvectedMoments.M0:
             self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
 
         # determine whether to do recovered space advection scheme
@@ -220,7 +231,7 @@ class Fallout(Physics):
         self.advection_method = SSPRK3(state, self.rain, advection_equation, limiter=limiter)
 
     def apply(self):
-        if self.moments > 0:
+        if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
         self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
