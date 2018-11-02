@@ -4,7 +4,7 @@ featuring a moist thermal rising in an unsaturated atmosphere.
 """
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       SpatialCoordinate, conditional, cos, pi, sqrt,
+                       SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
                        FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm)
