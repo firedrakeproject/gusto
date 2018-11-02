@@ -109,10 +109,10 @@ class Condensation(Physics):
                                                       min_value(dot_r_cond, self.water_v / dt)), cond_rate)
 
         # tell the prognostic fields what to update to
-        self.water_v_new = Interpolator(self.water_v - dt * self.cond_rate, Vt)
-        self.water_c_new = Interpolator(self.water_c + dt * self.cond_rate, Vt)
+        self.water_v_new = Interpolator(self.water_v - dt * cond_rate, Vt)
+        self.water_c_new = Interpolator(self.water_c + dt * cond_rate, Vt)
         self.theta_new = Interpolator(self.theta
-                                      * (1.0 + dt * self.cond_rate
+                                      * (1.0 + dt * cond_rate
                                          * (cv * L_v / (c_vml * cp * T)
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
