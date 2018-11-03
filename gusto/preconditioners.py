@@ -22,14 +22,16 @@ class VerticalHybridizationPC(PCBase):
     """ A Slate-based python preconditioner for solving
     the hydrostatic pressure equation (after rewriting as
     a mixed vertical HDiv x L2 system). This preconditioner
-    transforms the original mixed system by hybridizing
-    the equations in the vertical direction. Lagrange multipliers
-    are introduced on the top/bottom faces of each element are
-    condensed out via static condensation.
+    hybridizes a mixed system in the vertical direction. This
+    means that velocities are rendered discontinuous in the
+    vertical and Lagrange multipliers are introduced
+    on the top/bottom facets to weakly enforce continuity
+    through the top/bottom faces of each cell.
 
-    This PC assembled a condensed problem for the multipliers
-    and inverted using the provided solver options. The orginal
-    unknowns are recovered element-wise.
+    This PC assembles a statically condensed problem for the
+    multipliers and inverts the resulting system using the provided
+    solver options. The original unknowns are recovered element-wise
+    by solving local linear systems.
 
     All elimination and recovery kernels are generated using
     the Slate DSL in Firedrake.
