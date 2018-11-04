@@ -101,30 +101,10 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
 # Calculate hydrostatic Pi
-piparams = {'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gmres',
-            'ksp_monitor_true_residual': True,
-            'ksp_max_it': 1000,
-            'ksp_gmres_restart': 50,
-            'pc_fieldsplit_schur_fact_type': 'FULL',
-            'pc_fieldsplit_schur_precondition': 'selfp',
-            'fieldsplit_0': {'ksp_type': 'preonly',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'},
-            'fieldsplit_1': {'ksp_type': 'preonly',
-                             'pc_type': 'gamg',
-                             'pc_gamg_sym_graph': True,
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 5,
-                                           'pc_type': 'bjacobi',
-                                           'sub_pc_type': 'ilu'}}}
 Pi = Function(Vr)
 rho_b = Function(Vr)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=0.5,
-                                 params=piparams)
+                                 top=True, pi_boundary=0.5)
 
 
 def minimum(f):
@@ -139,15 +119,13 @@ void minify(double *a, double *b) {
 
 p0 = minimum(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True,
-                                 params=piparams)
+                                 top=True)
 p1 = minimum(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=pi_top, solve_for_rho=True,
-                                 params=piparams)
+                                 top=True, pi_boundary=pi_top, solve_for_rho=True)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
