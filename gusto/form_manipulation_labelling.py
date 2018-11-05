@@ -31,6 +31,8 @@ class Term(object):
         else:
             return NotImplemented
 
+    __radd__ = __add__
+
 
 class LabelledForm(object):
     __slots__ = ["terms"]
