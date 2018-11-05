@@ -9,13 +9,8 @@ def label_a():
 
 
 @pytest.fixture
-def label_x_is_y():
-    return Label("x", "y")
-
-
-@pytest.fixture
-def label_x_is_z():
-    return Label("x", "z")
+def label_x():
+    return Label("x", value="y", validator=lambda arg: isinstance(arg, str))
 
 
 @pytest.fixture
@@ -58,16 +53,16 @@ def test_label_term(label_a, term, form):
     assert(labelled_term.form == form)
 
 
-def test_label_labelled_form(labelled_form, label_a, label_x_is_y, label_x_is_z):
+def test_label_labelled_form(labelled_form, label_a, label_x):
     """
     test that labelling a labelled_form returns a labelled_form with the
     correct labels and that the label can be changed.
     """
-    new = label_x_is_y(labelled_form)
+    new = label_x(labelled_form)
     assert(isinstance(new, LabelledForm))
-    assert([t.has_label(label_a, label_x_is_y) for t in new])
+    assert([t.has_label(label_a, label_x) for t in new])
     assert([t.labels["x"] == "y" for t in new])
-    new = label_x_is_z(new)
+    new = label_x(new, "z")
     assert([t.labels["x"] == "z" for t in new])
 
 
@@ -107,11 +102,11 @@ def test_add_labelled_form(term, labelled_form):
     assert(c == c)
 
 
-def test_label_map(labelled_form, label_x_is_y, label_x_is_z):
+def test_label_map(labelled_form, label_x):
     """
     test that label_map returns a labelled_form with the label_map correctly
     applied
     """
-    new = labelled_form.label_map(lambda t: t.has_label(label_x_is_y), label_x_is_z)
+    new = labelled_form.label_map(lambda t: t.has_label(label_x), lambda t: label_x(t, "z"))
     assert(isinstance(new, LabelledForm))
     assert(t.labels["x"] is "z" for t in new if "x" in t.labels.keys())

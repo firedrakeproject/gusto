@@ -1,5 +1,6 @@
 import ufl
 import functools
+from firedrake import Function
 
 
 class Term(object):
@@ -83,14 +84,19 @@ class Label(object):
 
     :arg label: str giving the name of the label.
     :arg value: str providing the value of the label. Defaults to True.
+    :arg validator: (optional) function to check the validity of any
+    value later passed to __call__
     """
-    __slots__ = ["label", "value"]
+    __slots__ = ["label", "value", "validator"]
 
-    def __init__(self, label, value=True):
+    def __init__(self, label, *, value=True, validator=None):
         self.label = label
         self.value = value
+        self.validator = validator
 
-    def __call__(self, target):
+    def __call__(self, target, value=None):
+        if value is not None and self.validator(value):
+            self.value = value
         if isinstance(target, LabelledForm):
             return LabelledForm(*(self(t) for t in target.terms))
         elif isinstance(target, ufl.Form):
@@ -116,3 +122,8 @@ class Label(object):
                 return target
         else:
             raise ValueError("Unable to unlabel %s" % target)
+
+
+time_derivative = Label("time_derivative")
+advection = Label("advection")
+advecting_velocity = Label("uadv", validator=lambda t: type(t) == Function)
