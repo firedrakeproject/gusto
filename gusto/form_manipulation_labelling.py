@@ -25,27 +25,27 @@ class Term(object):
         if other is None:
             return self
         elif isinstance(other, Term):
-            return Equation(self, other)
-        elif isinstance(other, Equation):
-            return Equation(self, *other.terms)
+            return LabelledForm(self, other)
+        elif isinstance(other, LabelledForm):
+            return LabelledForm(self, *other.terms)
         else:
             return NotImplemented
 
 
-class Equation(object):
+class LabelledForm(object):
     __slots__ = ["terms"]
 
     def __init__(self, *terms):
-        if len(terms) == 1 and isinstance(terms[0], Equation):
+        if len(terms) == 1 and isinstance(terms[0], LabelledForm):
             self.terms = terms[0].terms
         else:
             self.terms = list(terms)
 
     def __add__(self, other):
         if type(other) is Term:
-            return Equation(*self, other)
-        elif type(other) is Equation:
-            return Equation(*self, *other)
+            return LabelledForm(*self, other)
+        elif type(other) is LabelledForm:
+            return LabelledForm(*self, *other)
         elif other is None:
             return self
         else:
@@ -66,9 +66,9 @@ class Equation(object):
         `map_function`. Terms for which `term_filter` is false are
         included unaltered."""
 
-        return Equation(functools.reduce(lambda x, y: x + y,
-                                         (map_function(t) if term_filter(t) else t
-                                          for t in self.terms)))
+        return LabelledForm(functools.reduce(lambda x, y: x + y,
+                                             (map_function(t) if term_filter(t) else t
+                                              for t in self.terms)))
 
     @property
     def form(self):
@@ -89,10 +89,10 @@ class Label(object):
         self.value = value
 
     def __call__(self, target):
-        if isinstance(target, Equation):
-            return Equation(*(self(t) for t in target.terms))
+        if isinstance(target, LabelledForm):
+            return LabelledForm(*(self(t) for t in target.terms))
         elif isinstance(target, ufl.Form):
-            return Equation(Term(target, {self.label: self.value}))
+            return LabelledForm(Term(target, {self.label: self.value}))
         elif isinstance(target, Term):
             new_labels = target.labels.copy()
             new_labels.update({self.label: self.value})
@@ -102,9 +102,9 @@ class Label(object):
 
     def remove(self, target):
         """Remove any :form:`Label` with this `label` from
-        `target`. If called on an :class:`Equation`, act termwise."""
-        if isinstance(target, Equation):
-            return Equation(*(self.remove(t) for t in target.terms))
+        `target`. If called on an :class:`LabelledForm`, act termwise."""
+        if isinstance(target, LabelledForm):
+            return LabelledForm(*(self.remove(t) for t in target.terms))
         elif isinstance(target, Term):
             try:
                 d = target.labels.copy()
