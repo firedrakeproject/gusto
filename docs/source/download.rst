@@ -34,7 +34,7 @@ Testing your installation
 
 Try executing files from the ``examples`` directory using e.g., ::
 
-  python examples/embedded_DG.py
+  python examples/sk_nonlinear.py
 
 More description of these examples will appear here soon.
 
