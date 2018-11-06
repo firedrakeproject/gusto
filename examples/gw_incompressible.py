@@ -125,7 +125,6 @@ ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
-                         supg_params={"dg_direction": "horizontal"},
                          equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
