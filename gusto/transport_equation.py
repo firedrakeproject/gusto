@@ -1,10 +1,9 @@
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, TestFunction, TrialFunction, \
-    FacetNormal, \
-    dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner, \
-    ds, ds_v, ds_t, ds_b, \
-    outer, sign, cross, CellNormal, sqrt, Constant, \
-    curl, BrokenElement, FunctionSpace
+from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
+                       dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
+                       ds, ds_v, ds_t, ds_b,
+                       outer, sign, cross, CellNormal, sqrt, Constant,
+                       curl, BrokenElement, FunctionSpace)
 from gusto.configuration import DEBUG
 
 
@@ -127,8 +126,8 @@ class LinearAdvection(TransportEquation):
     def advection_term(self, q):
 
         if self.continuity:
-            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx +
-                 jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
+            L = (-dot(grad(self.test), self.ubar)*self.qbar*dx
+                 + jump(self.ubar*self.test, self.n)*avg(self.qbar)*self.dS)
         else:
             L = self.test*dot(self.ubar, self.state.k)*dot(self.state.k, grad(self.qbar))*dx
         return L
@@ -151,6 +150,8 @@ class AdvectionEquation(TransportEquation):
     advecting vector equations on manifolds.
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
+    :arg outflow: Boolean specifying whether advected quantity can be advected out
+                  of domain.
     """
     def __init__(self, state, V, *, ibp="once", equation_form="advective",
                  vector_manifold=False, solver_params=None, outflow=False):
@@ -228,9 +229,13 @@ class EmbeddedDGAdvection(AdvectionEquation):
                            [2]: a broken or discontinuous version of the original space.
                            The default for this option is None, in which case the method
                            will not be used.
+    :arg boundary_method: A string denoting which method to use for recovery at boundaries.
+                          Note, can only be used with the recovered space method.
+    :arg outflow: Boolean specifying whether advected quantity can be advected out of domain.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None, solver_params=None, recovered_spaces=None, outflow=False):
+    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None,
+                 solver_params=None, recovered_spaces=None, boundary_method=None, outflow=False):
 
         # give equation the property V0, the space that the function should live in
         # in the absence of Vdg, this is used to set up the space for advection
@@ -238,6 +243,7 @@ class EmbeddedDGAdvection(AdvectionEquation):
         self.V0 = V
 
         self.recovered = False
+        self.boundary_method = boundary_method
         if recovered_spaces is not None:
             # Vdg must be None to use recovered spaces
             if Vdg is not None:
@@ -250,6 +256,8 @@ class EmbeddedDGAdvection(AdvectionEquation):
                 self.V_rec = recovered_spaces[1]  # the recovered continuous space
                 self.V_brok = recovered_spaces[2]  # broken version of V0
                 self.recovered = True
+        elif boundary_method is not None:
+            raise ValueError('A boundary method can only be used with the recovered space method')
         elif Vdg is None:
             # Create broken space, functions and projector
             V_elt = BrokenElement(V.ufl_element())
@@ -295,6 +303,8 @@ class SUPGAdvection(AdvectionEquation):
                       in particular, the space is assumed to be continuous.
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
+    :arg outflow: Boolean specifying whether advected quantity can be advected out
+                  of domain.
     """
     def __init__(self, state, V, ibp="twice", equation_form="advective", supg_params=None, solver_params=None, outflow=False):
 

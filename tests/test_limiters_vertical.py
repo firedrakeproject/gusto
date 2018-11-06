@@ -1,8 +1,8 @@
 from os import path
 from gusto import *
-from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function, \
-    conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement
+from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
+                       SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function,
+                       conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
 

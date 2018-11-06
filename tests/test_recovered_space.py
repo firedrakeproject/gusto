@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import as_vector, Constant, PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, FunctionSpace, \
-    Function, conditional, sqrt
+from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
+                       SpatialCoordinate, ExtrudedMesh, FunctionSpace,
+                       Function, conditional, sqrt)
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
@@ -68,7 +68,8 @@ def setup_recovered_space(dirname):
                       ('tracer', tracer0)])
 
     # set up advection schemes
-    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity", recovered_spaces=[VDG1, VCG1, VDG0])
+    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
+                                    recovered_spaces=[VDG1, VCG1, VDG0], boundary_method='density')
 
     # build advection dictionary
     advected_fields = []

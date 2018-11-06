@@ -1,8 +1,8 @@
 from gusto import *
 from gusto import thermodynamics
-from firedrake import as_vector, SpatialCoordinate,\
-    PeriodicRectangleMesh, ExtrudedMesh, \
-    exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt
+from firedrake import (as_vector, SpatialCoordinate,
+                       PeriodicRectangleMesh, ExtrudedMesh,
+                       exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt)
 import sys
 
 day = 24.*60.*60.

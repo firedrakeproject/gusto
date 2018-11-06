@@ -1,9 +1,9 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, conditional, cos, pi, sqrt, \
-    TestFunction, dx, TrialFunction, Constant, Function, \
-    LinearVariationalProblem, LinearVariationalSolver, DirichletBC, \
-    FunctionSpace, BrokenElement, VectorFunctionSpace
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+                       SpatialCoordinate, conditional, cos, pi, sqrt,
+                       TestFunction, dx, TrialFunction, Constant, Function,
+                       LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
+                       FunctionSpace, BrokenElement, VectorFunctionSpace)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -68,7 +68,7 @@ theta0 = state.fields("theta")
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
-x = SpatialCoordinate(mesh)
+x, z = SpatialCoordinate(mesh)
 
 if recovered:
     VDG1 = FunctionSpace(mesh, "DG", 1)
@@ -97,10 +97,10 @@ xc = L / 2
 zc = 2000.
 rc = 2000.
 Tdash = 2.0
-theta_pert = Function(Vt).interpolate(conditional(sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2) > rc,
-                                                  0.0, Tdash *
-                                                  (cos(pi * sqrt(((x[0] - xc) / rc) ** 2 + ((x[1] - zc) / rc) ** 2) / 2.0))
-                                                  ** 2))
+r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
+theta_pert = Function(Vt).interpolate(conditional(r > rc,
+                                                  0.0,
+                                                  Tdash * (cos(pi * r / (2.0 * rc))) ** 2))
 
 # define initial theta
 theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))

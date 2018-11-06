@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, cos, sin, SpatialCoordinate, \
-    FunctionSpace
+from firedrake import (IcosahedralSphereMesh, cos, sin,
+                       SpatialCoordinate, FunctionSpace)
 import sys
 
 dt = 900.
