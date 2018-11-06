@@ -134,11 +134,11 @@ def test_advection_dg(geometry, error, state,
 
     # setup scalar fields
     scalar_fields = []
-    for ibp in ["once", "twice"]:
+    for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
         for equation_form in ["advective", "continuity"]:
             for time_discretisation in ["ssprk", "im"]:
                 # create functions and initialise them
-                fname = s.join(("f", ibp, equation_form, time_discretisation))
+                fname = s.join(("f", ibp.name, equation_form, time_discretisation))
                 f = state.fields(fname, fspace)
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
@@ -150,11 +150,11 @@ def test_advection_dg(geometry, error, state,
 
     # setup vector fields
     vector_fields = []
-    for ibp in ["once", "twice"]:
+    for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
         for equation_form in ["advective", "continuity"]:
             for time_discretisation in ["ssprk", "im"]:
                 # create functions and initialise them
-                fname = s.join(("vecf", ibp, equation_form, time_discretisation))
+                fname = s.join(("vecf", ibp.name, equation_form, time_discretisation))
                 f = state.fields(fname, vspace)
                 f.interpolate(vec_expr)
                 vector_fields.append(fname)
@@ -181,21 +181,20 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
 
     s = "_"
     advected_fields = []
+    opts = {"broken": EmbeddedDGOptions(),
+            "dg": EmbeddedDGOptions(embedding_space=state.spaces("DG"))}
 
     # setup scalar fields
     scalar_fields = []
-    for ibp in ["once", "twice"]:
+    for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
         for equation_form in ["advective", "continuity"]:
-            for broken in [True, False]:
+            for space in ["broken", "dg"]:
                 # create functions and initialise them
-                fname = s.join(("f", ibp, equation_form, str(broken)))
+                fname = s.join(("f", ibp.name, equation_form, space))
                 f = state.fields(fname, fspace)
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
-                if broken:
-                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form)
-                else:
-                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, Vdg=state.spaces("DG"))
+                eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, options=opts[space])
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
 
     end_fields = run(state, advected_fields, tmax)
@@ -261,15 +260,15 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
 
     # setup HDiv_v fields
     hdiv_v_fields = []
-    ibp = "twice"
+    ibp = IntegrateByParts.TWICE
     for equation_form in ["advective", "continuity"]:
         for time_discretisation in ["ssprk", "im"]:
             # create functions and initialise them
-            fname = s.join(("f", ibp, equation_form, time_discretisation))
+            fname = s.join(("f", ibp.name, equation_form, time_discretisation))
             f = state.fields(fname, fspace)
             f.interpolate(f_init)
             hdiv_v_fields.append(fname)
-            eqn = SUPGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, supg_params={"dg_direction": "horizontal"})
+            eqn = SUPGAdvection(state, fspace, ibp=ibp, equation_form=equation_form)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
@@ -277,15 +276,15 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
 
     # setup HDiv fields
     hdiv_fields = []
-    ibp = "twice"
+    ibp = IntegrateByParts.TWICE
     for equation_form in ["advective", "continuity"]:
         for time_discretisation in ["ssprk", "im"]:
             # create functions and initialise them
-            fname = s.join(("fvec", ibp, equation_form, time_discretisation))
+            fname = s.join(("fvec", ibp.name, equation_form, time_discretisation))
             f = state.fields(fname, vspace)
             f.project(vec_expr)
             hdiv_fields.append(fname)
-            eqn = SUPGAdvection(state, vspace, ibp=ibp, equation_form=equation_form, supg_params={"dg_direction": "horizontal"})
+            eqn = SUPGAdvection(state, vspace, ibp=ibp, equation_form=equation_form)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":

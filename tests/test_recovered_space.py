@@ -68,12 +68,15 @@ def setup_recovered_space(dirname):
                       ('tracer', tracer0)])
 
     # set up advection schemes
+    recovered_opts = RecoveredOptions(embedding_space=VDG1,
+                                      recovered_space=VCG1,
+                                      broken_space=VDG0,
+                                      boundary_method="density")
     tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
-                                    recovered_spaces=[VDG1, VCG1, VDG0], boundary_method='density')
+                                    options=recovered_opts)
 
     # build advection dictionary
     advected_fields = []
-    advected_fields.append(('u', NoAdvection(state, u0, None)))
     advected_fields.append(('tracer', SSPRK3(state, tracer0, tracereqn)))
 
     # build time stepper

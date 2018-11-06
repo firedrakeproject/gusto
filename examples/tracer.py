@@ -100,16 +100,16 @@ for delta, dt in res_dt.items():
     supg = True
     if supg:
         thetaeqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
         watereqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction": "horizontal"},
                                  equation_form="advective")
     else:
         thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective")
+                                       equation_form="advective",
+                                       options=EmbeddedDGOptions())
         watereqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective")
+                                       equation_form="advective",
+                                       options=EmbeddedDGOptions())
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))

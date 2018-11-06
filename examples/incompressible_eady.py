@@ -172,11 +172,11 @@ ueqn = AdvectionEquation(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
-                         supg_params={"dg_direction": "horizontal"},
                          equation_form="advective")
 else:
     beqn = EmbeddedDGAdvection(state, Vb,
-                               equation_form="advective")
+                               equation_form="advective",
+                               options=EmbeddedDGOptions())
 advected_fields = []
 advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
 advected_fields.append(("b", SSPRK3(state, b0, beqn)))
