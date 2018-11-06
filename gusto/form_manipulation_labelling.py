@@ -1,7 +1,10 @@
 import ufl
 import functools
+import operator
 from firedrake import Function
 
+identity = lambda t : t
+drop = lambda t: None
 
 class Term(object):
     """
@@ -63,19 +66,20 @@ class LabelledForm(object):
     def __getitem__(self, key):
         return self.terms[key]
 
-    def label_map(self, term_filter, map_function):
+    def label_map(self, term_filter, map_if_true=identity,
+                  map_if_false=identity):
         """Return a new equation in which terms for which
         `term_filter` is `True` are transformed by
-        `map_function`. Terms for which `term_filter` is false are
-        included unaltered."""
+        `map_if_true`; terms for which `term_filter` is false are
+        transformed by map_is_false."""
 
-        return LabelledForm(functools.reduce(lambda x, y: x + y,
-                                             (map_function(t) if term_filter(t) else t
-                                              for t in self.terms)))
+        return LabelledForm(functools.reduce(
+            operator.add, (map_if_true(t) if term_filter(t) else map_if_false(t)
+                           for t in self.terms)))
 
     @property
     def form(self):
-        return functools.reduce(lambda x, y: x + y, (t.form for t in self.terms))
+        return functools.reduce(operator.add, (t.form for t in self.terms))
 
 
 class Label(object):
