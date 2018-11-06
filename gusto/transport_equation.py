@@ -234,36 +234,19 @@ class EmbeddedDGAdvection(AdvectionEquation):
     :arg outflow: Boolean specifying whether advected quantity can be advected out of domain.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None,
-                 solver_params=None, recovered_spaces=None, boundary_method=None, outflow=False):
+    def __init__(self, state, V, ibp="once", equation_form="advective",
+                 vector_manifold=False,
+                 solver_params=None, outflow=False, options=None):
 
-        # give equation the property V0, the space that the function should live in
-        # in the absence of Vdg, this is used to set up the space for advection
-        # to take place in
-        self.V0 = V
-
-        self.recovered = False
-        self.boundary_method = boundary_method
-        if recovered_spaces is not None:
-            # Vdg must be None to use recovered spaces
-            if Vdg is not None:
-                raise ValueError('The recovered_spaces option is incompatible with the Vdg option')
-            else:
-                # check that the list or tuple of spaces is the right length
-                if len(recovered_spaces) != 3:
-                    raise ValueError('recovered_spaces must be a list or tuple containing three spaces')
-                self.space = recovered_spaces[0]  # the space in which advection happens
-                self.V_rec = recovered_spaces[1]  # the recovered continuous space
-                self.V_brok = recovered_spaces[2]  # broken version of V0
-                self.recovered = True
-        elif boundary_method is not None:
-            raise ValueError('A boundary method can only be used with the recovered space method')
-        elif Vdg is None:
-            # Create broken space, functions and projector
+        if options is None:
+            raise ValueError("Must provide an instance of the AdvectionOptions class")
+        else:
+            self.options = options
+        if options.name == "embedded_dg" and options.embedding_space is None:
             V_elt = BrokenElement(V.ufl_element())
             self.space = FunctionSpace(state.mesh, V_elt)
         else:
-            self.space = Vdg
+            self.space = options.embedding_space
 
         super().__init__(state=state,
                          V=self.space,

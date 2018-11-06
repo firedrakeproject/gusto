@@ -32,7 +32,7 @@ def setup_gaussian(dirname):
 
     state.initialise([("u", u0), ("D", D0)])
 
-    ueqn = EmbeddedDGAdvection(state, u0.function_space())
+    ueqn = EmbeddedDGAdvection(state, u0.function_space(), options=EmbeddedDGOptions())
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
     advected_fields.append(("u", SSPRK3(state, u0, ueqn, subcycles=2)))

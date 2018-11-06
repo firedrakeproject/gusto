@@ -70,18 +70,6 @@ Vt = theta0.function_space()
 Vr = rho0.function_space()
 x, z = SpatialCoordinate(mesh)
 
-if recovered:
-    VDG1 = FunctionSpace(mesh, "DG", 1)
-    VCG1 = FunctionSpace(mesh, "CG", 1)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-    Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
-    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-    Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
-
-    u_spaces = (Vu_DG1, Vu_CG1, Vu_brok)
-    rho_spaces = (VDG1, VCG1, Vr)
-    theta_spaces = (VDG1, VCG1, Vt_brok)
-
 # Define constant theta_e and water_t
 Tsurf = 300.0
 theta_b = Function(Vt).interpolate(Constant(Tsurf))
@@ -123,9 +111,26 @@ state.set_reference_profiles([('rho', rho_b),
 
 # Set up advection schemes
 if recovered:
-    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", recovered_spaces=u_spaces)
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", recovered_spaces=rho_spaces)
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", recovered_spaces=theta_spaces)
+    VDG1 = FunctionSpace(mesh, "DG", 1)
+    VCG1 = FunctionSpace(mesh, "CG", 1)
+    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+    Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
+    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+    Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
+
+    u_opts = RecoveredOptions(embedding_space=Vu_DG1,
+                              recovered_space=Vu_CG1,
+                              broken_space=Vu_brok)
+    rho_opts = RecoveredOptions(embedding_space=VDG1,
+                                recovered_space=VCG1,
+                                broken_space=Vr)
+    theta_opts = RecoveredOptions(embedding_space=VDG1,
+                                  recovered_space=VCG1,
+                                  broken_space=Vt_brok)
+
+    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
 else:
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")

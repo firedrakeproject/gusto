@@ -3,7 +3,6 @@ from firedrake import (Function, LinearVariationalProblem,
                        LinearVariationalSolver, Projector, Interpolator)
 from firedrake.utils import cached_property
 from gusto.configuration import DEBUG
-from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer
 
 
@@ -16,27 +15,21 @@ def embedded_dg(original_apply):
     DG advection.
     """
     def get_apply(self, x_in, x_out):
-        if self.embedded_dg:
+
+        if self.discretisation_option in ["embedded_dg", "recovered"]:
+
             def new_apply(self, x_in, x_out):
-                if self.recovered:
-                    recovered_apply(self, x_in)
-                    original_apply(self, self.xdg_in, self.xdg_out)
-                    recovered_project(self)
-                else:
-                    # try to interpolate to x_in but revert to projection
-                    # if interpolation is not implemented for this
-                    # function space
-                    try:
-                        self.xdg_in.interpolate(x_in)
-                    except NotImplementedError:
-                        self.xdg_in.project(x_in)
-                    original_apply(self, self.xdg_in, self.xdg_out)
-                    self.Projector.project()
-                x_out.assign(self.x_projected)
+
+                self.pre_apply(x_in, self.discretisation_option)
+                original_apply(self, self.xdg_in, self.xdg_out)
+                self.post_apply(x_out, self.discretisation_option)
+
             return new_apply(self, x_in, x_out)
 
         else:
+
             return original_apply(self, x_in, x_out)
+
     return get_apply
 
 
@@ -50,6 +43,7 @@ class Advection(object, metaclass=ABCMeta):
     that field satisfies
     :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
+    :arg options: :class:`.AdvectionOptions` object
     """
 
     def __init__(self, state, field, equation=None, *, solver_parameters=None,
@@ -74,46 +68,91 @@ class Advection(object, metaclass=ABCMeta):
 
             self.limiter = limiter
 
-        # check to see if we are using an embedded DG method - if we are then
-        # the projector and output function will have been set up in the
-        # equation class and we can get the correct function space from
-        # the output function.
-        if isinstance(equation, EmbeddedDGAdvection):
-            # check that the field and the equation are compatible
-            if equation.V0 != field.function_space():
-                raise ValueError('The field to be advected is not compatible with the equation used.')
-            self.embedded_dg = True
-            fs = equation.space
-            self.xdg_in = Function(fs)
-            self.xdg_out = Function(fs)
+            if hasattr(equation, "options"):
+                self.discretisation_option = equation.options.name
+                self._setup(state, field, equation.options)
+            else:
+                self.discretisation_option = None
+                self.fs = field.function_space()
+
+            # setup required functions
+            self.dq = Function(self.fs)
+            self.q1 = Function(self.fs)
+
+    def _setup(self, state, field, options):
+
+        if options.name in ["embedded_dg", "recovered"]:
+            self.fs = options.embedding_space or self.equation.space
+            self.xdg_in = Function(self.fs)
+            self.xdg_out = Function(self.fs)
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
-            self.recovered = equation.recovered
-            if self.recovered:
-                # set up the necessary functions
-                self.x_in = Function(field.function_space())
-                x_rec = Function(equation.V_rec)
-                x_brok = Function(equation.V_brok)
 
-                # set up interpolators and projectors
-                self.x_recoverer = Recoverer(self.x_in, x_rec, VDG=fs, boundary_method=equation.boundary_method)  # recover function
-                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back to broken space
-                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)  # build function to be advected
-                if self.limiter is not None:
-                    self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
-                    self.x_out_projector = Recoverer(x_brok, self.x_projected)
-        else:
-            self.embedded_dg = False
-            fs = field.function_space()
+        if options.name is "recovered":
+            V_rec = options.recovered_space
+            V_brok = options.broken_space
 
-        # setup required functions
-        self.fs = fs
-        self.dq = Function(fs)
-        self.q1 = Function(fs)
+            # set up the necessary functions
+            self.x_in = Function(field.function_space())
+            x_adv = Function(self.fs)
+            x_rec = Function(V_rec)
+            x_brok = Function(V_brok)
+
+            # set up interpolators and projectors
+            self.x_adv_interpolator = Interpolator(self.x_in, x_adv)  # interpolate before recovery
+            self.x_rec_projector = Recoverer(x_adv, x_rec)  # recovered function
+            # when the "average" method comes into firedrake master, this will be
+            # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
+            self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
+            self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
+            if self.limiter is not None:
+                self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
+                self.x_out_projector = Recoverer(x_brok, self.x_projected)
+                # when the "average" method comes into firedrake master, this will be
+                # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
+
+    def pre_apply(self, x_in, discretisation_option):
+        """
+        Extra steps to the apply method for the recovered advection scheme.
+        This provides an advection scheme for the lowest-degree family
+        of spaces, but which has second order numerical accuracy.
+
+        :arg x_in: the input set of prognostic fields.
+        """
+        if discretisation_option == "embedded_dg":
+            try:
+                self.xdg_in.interpolate(x_in)
+            except NotImplementedError:
+                self.xdg_in.project(x_in)
+
+        elif discretisation_option == "recovered":
+            self.x_in.assign(x_in)
+            self.x_adv_interpolator.interpolate()
+            self.x_rec_projector.project()
+            self.x_brok_projector.project()
+            self.xdg_interpolator.interpolate()
+
+    def post_apply(self, x_out, discretisation_option):
+        """
+        The projection steps for the recovered advection scheme,
+        used for the lowest-degree sets of spaces. This returns the
+        field to its original space, from the space the embedded DG
+        advection happens in. This step acts as a limiter.
+        """
+        if discretisation_option == "embedded_dg":
+            self.Projector.project()
+
+        elif discretisation_option == "recovered":
+            if self.limiter is not None:
+                self.x_brok_interpolator.interpolate()
+                self.x_out_projector.project()
+            else:
+                self.Projector.project()
+        x_out.assign(self.x_projected)
 
     @abstractproperty
     def lhs(self):

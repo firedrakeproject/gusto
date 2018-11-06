@@ -181,21 +181,20 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
 
     s = "_"
     advected_fields = []
+    opts = {"broken": EmbeddedDGOptions(),
+            "dg": EmbeddedDGOptions(embedding_space=state.spaces("DG"))}
 
     # setup scalar fields
     scalar_fields = []
     for ibp in ["once", "twice"]:
         for equation_form in ["advective", "continuity"]:
-            for broken in [True, False]:
+            for space in ["broken", "dg"]:
                 # create functions and initialise them
-                fname = s.join(("f", ibp, equation_form, str(broken)))
+                fname = s.join(("f", ibp, equation_form, space))
                 f = state.fields(fname, fspace)
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
-                if broken:
-                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form)
-                else:
-                    eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, Vdg=state.spaces("DG"))
+                eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, options=opts[space])
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
 
     end_fields = run(state, advected_fields, tmax)
