@@ -3,8 +3,9 @@ import functools
 import operator
 from firedrake import Function
 
-identity = lambda t : t
+identity = lambda t: t
 drop = lambda t: None
+
 
 class Term(object):
     """
