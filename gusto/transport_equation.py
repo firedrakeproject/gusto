@@ -386,7 +386,7 @@ class VectorInvariant(TransportEquation):
             perp = self.state.perp
             if self.state.on_sphere:
                 outward_normals = CellNormal(self.state.mesh)
-                perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + self.Upwind('-')*cross(outward_normals('-'), q('-'))
+                perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
             else:
                 perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
             gradperp = lambda u: perp(grad(u))
