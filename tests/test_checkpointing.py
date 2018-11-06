@@ -71,7 +71,7 @@ def setup_sk(dirname):
     # Set up advection schemes
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
+    thetaeqn = SUPGAdvection(state, Vt)
     advected_fields = []
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
