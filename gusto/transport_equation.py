@@ -7,7 +7,7 @@ from firedrake import (Function, TestFunction, FacetNormal,
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject, time_derivative, all_terms
 
 
-__all__ = ["IntegrateByParts", "advection_equation"]
+__all__ = ["IntegrateByParts", "advection_equation", "continuity_equation"]
 
 
 class IntegrateByParts(Enum):
