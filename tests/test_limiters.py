@@ -114,7 +114,7 @@ def setup_limiters(dirname, direction, grid_params, ic_params):
 
     # build advection dictionary
     advected_fields = []
-    advected_fields.append(('theta1', SSPRK3(state, theta1, thetaeqn1, limiter=ThetaLimiter(thetaeqn1))))
+    advected_fields.append(('theta1', SSPRK3(state, theta1, thetaeqn1, limiter=ThetaLimiter(V1))))
     advected_fields.append(('theta0', SSPRK3(state, theta0, thetaeqn0, limiter=VertexBasedLimiter(VDG1))))
 
     # build time stepper

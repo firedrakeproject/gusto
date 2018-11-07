@@ -142,7 +142,7 @@ if limit:
     if recovered:
         limiter = VertexBasedLimiter(VDG1)
     else:
-        limiter = ThetaLimiter(thetaeqn)
+        limiter = ThetaLimiter(Vt)
 else:
     limiter = None
 
