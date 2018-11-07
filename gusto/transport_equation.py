@@ -38,7 +38,7 @@ def surface_measures(V, direction=None):
             return dS, ds
 
 
-def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE):
+def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     """
     The equation is assumed to be in the form:
 
@@ -74,6 +74,9 @@ def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE):
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
+
+    if outflow is not None:
+        L += test*un*q*ds
 
     eqn = time_derivative(mass_term) + advection(advecting_velocity(L, ubar))
     eqn = eqn.label_map(all_terms, lambda t: subject(t, q))
@@ -119,19 +122,6 @@ def advection_vector_manifold_equation(state, V):
     u = Function(V)
     L = un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))*dS
     L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))*dS
-    return L
-
-
-def outflow_form(state, V):
-    ubar = Function(state.spaces("HDiv"))
-    test = TestFunction(V)
-    q = Function(V)
-
-    dS, ds = surface_measures(V)
-
-    n = FacetNormal(state.mesh)
-    un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
-    L = test*un*q*ds
     return L
 
 
