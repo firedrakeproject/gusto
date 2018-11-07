@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.transport_equation import advection_equation
 from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
 from gusto.configuration import EmbeddedDGOptions
@@ -137,8 +137,9 @@ class Fallout(Physics):
         self.v.project(as_vector([0, -terminal_velocity]))
 
         # sedimentation will happen using a full advection method
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, options=EmbeddedDGOptions())
-        self.advection_method = SSPRK3(state, self.rain, advection_equation)
+        eqn = advection_equation(state, Vt, outflow=True)
+        self.advection_method = SSPRK3(state, self.rain, eqn,
+                                       options=EmbeddedDGOptions())
 
     def apply(self):
         for k in range(self.state.timestepping.maxk):

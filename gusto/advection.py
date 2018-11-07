@@ -1,8 +1,12 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, LinearVariationalProblem,
-                       LinearVariationalSolver, Projector, Interpolator)
+                       LinearVariationalSolver, Projector, Interpolator,
+                       TestFunction, TrialFunction, FunctionSpace,
+                       BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
-from gusto.configuration import DEBUG
+import ufl
+from gusto.form_manipulation_labelling import (Term, all_terms, advection,
+                                               time_derivative, drop)
 from gusto.recovery import Recoverer
 
 
@@ -47,44 +51,60 @@ class Advection(object, metaclass=ABCMeta):
     """
 
     def __init__(self, state, field, equation=None, *, solver_parameters=None,
-                 limiter=None):
+                 limiter=None, options=None):
 
         if equation is not None:
 
             self.state = state
             self.field = field
             self.equation = equation
-            # get ubar from the equation class
-            self.ubar = self.equation.ubar
-            self.dt = self.state.timestepping.dt
 
-            # get default solver options if none passed in
-            if solver_parameters is None:
-                self.solver_parameters = equation.solver_parameters
-            else:
-                self.solver_parameters = solver_parameters
-                if state.output.log_level == DEBUG:
-                    self.solver_parameters["ksp_monitor_true_residual"] = True
+            self.ubar = Function(state.spaces("HDiv"))
+            self.dt = state.timestepping.dt
+
+            self.solver_parameters = (
+                solver_parameters or {'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
+            )
 
             self.limiter = limiter
 
-            if hasattr(equation, "options"):
-                self.discretisation_option = equation.options.name
-                self._setup(state, field, equation.options)
+            if options is not None:
+                self.discretisation_option = options.name
+                self._setup(state, field, options)
             else:
                 self.discretisation_option = None
                 self.fs = field.function_space()
 
+            if self.discretisation_option is not None:
+
+                def replace_test(t):
+                    test = t.form.arguments()[0]
+                    form = ufl.replace(t.form, {test: self.test})
+                    return Term(form, t.labels)
+
+                self.equation = equation.label_map(all_terms, replace_test)
+
+            else:
+                self.equation = equation
+
             # setup required functions
+            self.trial = TrialFunction(self.fs)
             self.dq = Function(self.fs)
             self.q1 = Function(self.fs)
 
     def _setup(self, state, field, options):
 
         if options.name in ["embedded_dg", "recovered"]:
-            self.fs = options.embedding_space or self.equation.space
+            if options.embedding_space is None:
+                V_elt = BrokenElement(field.function_space().ufl_element())
+                self.fs = FunctionSpace(state.mesh, V_elt)
+            else:
+                self.fs = options.embedding_space
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
+            self.test = TestFunction(self.fs)
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
@@ -114,6 +134,25 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
                 # when the "average" method comes into firedrake master, this will be
                 # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
+        elif options.name == "supg":
+            self.fs = field.function_space()
+            self.solver_parameters['ksp_type'] = 'gmres'
+
+            dim = state.mesh.topological_dimension()
+            if options.tau is not None:
+                tau = options.tau
+                assert tau.ufl_shape == (dim, dim)
+            else:
+                vals = [options.default*self.dt]*dim
+                for component, value in options.tau_components:
+                    vals[state.components.component] = value
+                tau = Constant(tuple([
+                    tuple(
+                        [vals[j] if i == j else 0. for i, v in enumerate(vals)]
+                    ) for j in range(dim)])
+                )
+            test = TestFunction(self.fs)
+            self.test = test + dot(dot(self.ubar, tau), grad(test))
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -156,11 +195,27 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def lhs(self):
-        return self.equation.mass_term(self.equation.trial)
+
+        def replace_subject_with_trial(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: self.trial})
+            return Term(form, t.labels)
+
+        return self.equation.label_map(lambda t: t.has_label(time_derivative),
+                                       map_if_true=replace_subject_with_trial,
+                                       map_if_false=drop).form
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+
+        def replace_uadv(t):
+            form = -self.dt*ufl.replace(t.form, {t.labels["uadv"]: self.ubar})
+            return Term(form, t.labels)
+
+        def replace_subject(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: self.q1})
+            return Term(form, t.labels)
+
+        return self.equation.label_map(all_terms, replace_subject).label_map(lambda t: t.has_label(advection), replace_uadv).form
 
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
@@ -218,9 +273,10 @@ class ExplicitAdvection(Advection):
     """
 
     def __init__(self, state, field, equation=None, *, subcycles=None,
-                 solver_parameters=None, limiter=None):
+                 solver_parameters=None, limiter=None, options=None):
         super().__init__(state, field, equation,
-                         solver_parameters=solver_parameters, limiter=limiter)
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt

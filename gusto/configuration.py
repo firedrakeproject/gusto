@@ -8,7 +8,7 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "XYComponents", "XZComponents", "XYZComponents"]
+__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "XYComponents", "XZComponents", "XYZComponents"]
 
 logger = logging.getLogger("gusto")
 
