@@ -82,7 +82,7 @@ class Advection(object, metaclass=ABCMeta):
     def _setup(self, state, field, options):
 
         if options.name in ["embedded_dg", "recovered"]:
-            self.fs = options.embedding_space or self.equation.space
+            self.fs = options.embedding_space
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
             self.x_projected = Function(field.function_space())
@@ -92,36 +92,28 @@ class Advection(object, metaclass=ABCMeta):
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
 
-        if options.name is "recovered":
-            V_rec = options.recovered_space
-            V_brok = options.broken_space
-
+        if options.name == "recovered":
             # set up the necessary functions
             self.x_in = Function(field.function_space())
-            x_adv = Function(self.fs)
-            x_rec = Function(V_rec)
-            x_brok = Function(V_brok)
+            x_rec = Function(options.recovered_space)
+            x_brok = Function(options.broken_space)
 
             # set up interpolators and projectors
-            self.x_adv_interpolator = Interpolator(self.x_in, x_adv)  # interpolate before recovery
-            self.x_rec_projector = Recoverer(x_adv, x_rec)  # recovered function
-            # when the "average" method comes into firedrake master, this will be
-            # self.x_rec_projector = Projector(self.x_in, equation.Vrec, method="average")
+            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
             self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
             if self.limiter is not None:
                 self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
-                # when the "average" method comes into firedrake master, this will be
-                # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
 
     def pre_apply(self, x_in, discretisation_option):
         """
-        Extra steps to the apply method for the recovered advection scheme.
-        This provides an advection scheme for the lowest-degree family
-        of spaces, but which has second order numerical accuracy.
+        Extra steps to advection if using an embedded method,
+        which might be either the plain embedded method or the
+        recovered space advection scheme.
 
         :arg x_in: the input set of prognostic fields.
+        :arg discretisation option: string specifying which scheme to use.
         """
         if discretisation_option == "embedded_dg":
             try:
@@ -131,17 +123,19 @@ class Advection(object, metaclass=ABCMeta):
 
         elif discretisation_option == "recovered":
             self.x_in.assign(x_in)
-            self.x_adv_interpolator.interpolate()
             self.x_rec_projector.project()
             self.x_brok_projector.project()
             self.xdg_interpolator.interpolate()
 
     def post_apply(self, x_out, discretisation_option):
         """
-        The projection steps for the recovered advection scheme,
-        used for the lowest-degree sets of spaces. This returns the
-        field to its original space, from the space the embedded DG
-        advection happens in. This step acts as a limiter.
+        The projection steps, returning a field to its original space
+        for an embedded DG advection scheme. For the case of the
+        recovered scheme, there are two options dependent on whether
+        the scheme is limited or not.
+
+        :arg x_out: the outgoing field.
+        :arg discretisation_option: string specifying which option to use.
         """
         if discretisation_option == "embedded_dg":
             self.Projector.project()
@@ -361,31 +355,3 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
-
-
-def recovered_apply(self, x_in):
-    """
-    Extra steps to the apply method for the recovered advection scheme.
-    This provides an advection scheme for the lowest-degree family
-    of spaces, but which has second order numerical accuracy.
-
-    :arg x_in: the input set of prognostic fields.
-    """
-    self.x_in.assign(x_in)
-    self.x_recoverer.project()
-    self.x_brok_projector.project()
-    self.xdg_interpolator.interpolate()
-
-
-def recovered_project(self):
-    """
-    The projection steps for the recovered advection scheme,
-    used for the lowest-degree sets of spaces. This returns the
-    field to its original space, from the space the embedded DG
-    advection happens in. This step acts as a limiter.
-    """
-    if self.limiter is not None:
-        self.x_brok_interpolator.interpolate()
-        self.x_out_projector.project()
-    else:
-        self.Projector.project()

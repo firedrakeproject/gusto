@@ -216,22 +216,11 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         Default is "advective"
     :arg vector_manifold: Boolean. If true adds extra terms that are needed for
     advecting vector equations on manifolds.
-    :arg Vdg: (optional) :class:`.FunctionSpace object. The embedding function
-              space. Defaults to None which means that a broken space is
-              constructed for you.
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
-    :arg recovered_spaces: A list or tuple of function spaces to be used for the
-                           recovered space advection method. The must be three
-                           spaces, indexed in the following order:
-                           [0]: the embedded space in which the advection takes place.
-                           [1]: the continuous recovered space.
-                           [2]: a broken or discontinuous version of the original space.
-                           The default for this option is None, in which case the method
-                           will not be used.
-    :arg boundary_method: A string denoting which method to use for recovery at boundaries.
-                          Note, can only be used with the recovered space method.
     :arg outflow: Boolean specifying whether advected quantity can be advected out of domain.
+    :arg options: an instance of the AdvectionOptions class specifying which options to use
+                  with the embedded DG scheme.
     """
 
     def __init__(self, state, V, ibp="once", equation_form="advective",
@@ -244,12 +233,10 @@ class EmbeddedDGAdvection(AdvectionEquation):
             self.options = options
         if options.name == "embedded_dg" and options.embedding_space is None:
             V_elt = BrokenElement(V.ufl_element())
-            self.space = FunctionSpace(state.mesh, V_elt)
-        else:
-            self.space = options.embedding_space
+            options.embedding_space = FunctionSpace(state.mesh, V_elt)
 
         super().__init__(state=state,
-                         V=self.space,
+                         V=options.embedding_space,
                          ibp=ibp,
                          equation_form=equation_form,
                          vector_manifold=vector_manifold,
