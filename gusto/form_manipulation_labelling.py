@@ -1,10 +1,11 @@
 import ufl
 import functools
 import operator
-from firedrake import Function
+from firedrake import Function, TrialFunction
 
 identity = lambda t: t
 drop = lambda t: None
+all_terms = lambda t: True
 
 
 class Term(object):
@@ -132,3 +133,4 @@ class Label(object):
 time_derivative = Label("time_derivative")
 advection = Label("advection")
 advecting_velocity = Label("uadv", validator=lambda t: type(t) == Function)
+subject = Label("subject", validator=lambda t: type(t) in [TrialFunction, Function])
