@@ -207,7 +207,6 @@ class Fallout(Physics):
             self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
 
         # determine whether to do recovered space advection scheme
-        spaces = None
         # if horizontal and vertical degrees are 0 do recovered space
         if state.horizontal_degree == 0 and state.vertical_degree == 0:
             VDG1 = FunctionSpace(Vt.mesh(), "DG", 1)
