@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
+from gusto.configuration import EmbeddedDGOptions
 from firedrake import (Interpolator, conditional, Function,
                        min_value, max_value, as_vector, BrokenElement, FunctionSpace)
 from gusto import thermodynamics
@@ -138,7 +139,7 @@ class Fallout(Physics):
         self.v.project(as_vector([0, -terminal_velocity]))
 
         # sedimentation will happen using a full advection method
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True)
+        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, options=EmbeddedDGOptions())
         self.advection_method = SSPRK3(state, self.rain, advection_equation)
 
     def apply(self):
