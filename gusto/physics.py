@@ -4,6 +4,7 @@ from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.limiters import ThetaLimiter, NoLimiter
+from gusto.configuration import EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function,
                        min_value, max_value, as_vector, BrokenElement, FunctionSpace,
                        Constant, pi, Projector)
@@ -67,10 +68,13 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
+        if state.vertical_degree == 0:
+            boundary_method = 'physics'
+        else:
+            boundary_method = None
+        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
-        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.timestepping.dt
@@ -117,7 +121,6 @@ class Condensation(Physics):
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
-        self.rho_broken.assign(self.rho_interpolator.interpolate())
         self.rho_recoverer.project()
         for i in range(self.iterations):
             self.lim_cond_rate.interpolate()
@@ -210,17 +213,21 @@ class Fallout(Physics):
             VDG1 = FunctionSpace(Vt.mesh(), "DG", 1)
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            spaces = (VDG1, VCG1, Vbrok)
+            advect_options = RecoveredOptions(embedding_space=VDG1,
+                                              recovered_space=VCG1,
+                                              broken_space=Vbrok)
+        else:
+            advect_options = EmbeddedDGOptions()
 
         # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, recovered_spaces=spaces)
+        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, options=advect_options)
 
         # decide which limiter to use
         if self.limit:
             if state.horizontal_degree == 0 and state.vertical_degree == 0:
                 limiter = VertexBasedLimiter(VDG1)
             elif state.horizontal_degree == 1 and state.vertical_degree == 1:
-                limiter = ThetaLimiter(advection_equation)
+                limiter = ThetaLimiter(Vt)
             else:
                 state.logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
                 limiter = NoLimiter()
@@ -327,10 +334,13 @@ class Evaporation(Physics):
 
         # make rho variables
         # we recover rho into theta space
+        if state.vertical_degree == 0:
+            boundary_method = 'physics'
+        else:
+            boundary_method = None
+        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
-        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.timestepping.dt
@@ -385,7 +395,6 @@ class Evaporation(Physics):
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
-        self.rho_broken.assign(self.rho_interpolator.interpolate())
         self.rho_recoverer.project()
         self.lim_evap_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())

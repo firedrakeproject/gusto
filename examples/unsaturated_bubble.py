@@ -81,20 +81,30 @@ moisture = ["water_v", "water_c", "rain"]
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
+Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
+physics_boundary_method = None
 
 if recovered:
     VDG1 = FunctionSpace(mesh, "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
     Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
     Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
-    u_spaces = (Vu_DG1, Vu_CG1, Vu)
-    rho_spaces = (VDG1, VCG1, Vr)
-    theta_spaces = (VDG1, VCG1, Vt_brok)
+    u_opts = RecoveredOptions(embedding_space=Vu_DG1,
+                              recovered_space=Vu_CG1,
+                              broken_space=Vu,
+                              boundary_method='velocity')
+    rho_opts = RecoveredOptions(embedding_space=VDG1,
+                                recovered_space=VCG1,
+                                broken_space=Vr,
+                                boundary_method='density')
+    theta_opts = RecoveredOptions(embedding_space=VDG1,
+                                  recovered_space=VCG1,
+                                  broken_space=Vt_brok)
+    physics_boundary_method = 'physics'
 
 # Define constant theta_e and water_t
 Tsurf = 283.0
@@ -131,9 +141,8 @@ H.assign(H + H_pert)
 
 # now need to find perturbed rho, theta_vd and r_v
 # follow approach used in unsaturated hydrostatic setup
-rho_broken = Function(FunctionSpace(mesh, BrokenElement(Vt.ufl_element())))
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(rho_broken, rho_averaged)
+rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok, boundary_method=physics_boundary_method)
 rho_h = Function(Vr)
 w_h = Function(Vt)
 delta = 1.0
@@ -168,7 +177,6 @@ max_inner_solve_count = 10
 
 for i in range(max_outer_solve_count):
     # calculate averaged rho
-    rho_broken.interpolate(rho0)
     rho_recoverer.project()
 
     RH.assign(RH_ev)
@@ -212,15 +220,15 @@ state.set_reference_profiles([('rho', rho_b),
 
 # Set up advection schemes
 if recovered:
-    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", recovered_spaces=u_spaces)
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", recovered_spaces=rho_spaces)
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", recovered_spaces=theta_spaces)
+    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
     limiter = VertexBasedLimiter(VDG1)
 else:
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-    limiter = ThetaLimiter(thetaeqn)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+    limiter = ThetaLimiter(Vt)
 
 u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
 euler_poincare = False if recovered else True

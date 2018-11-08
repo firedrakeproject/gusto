@@ -216,57 +216,27 @@ class EmbeddedDGAdvection(AdvectionEquation):
                         Default is "advective"
     :arg vector_manifold: Boolean. If true adds extra terms that are needed for
     advecting vector equations on manifolds.
-    :arg Vdg: (optional) :class:`.FunctionSpace object. The embedding function
-              space. Defaults to None which means that a broken space is
-              constructed for you.
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
-    :arg recovered_spaces: A list or tuple of function spaces to be used for the
-                           recovered space advection method. The must be three
-                           spaces, indexed in the following order:
-                           [0]: the embedded space in which the advection takes place.
-                           [1]: the continuous recovered space.
-                           [2]: a broken or discontinuous version of the original space.
-                           The default for this option is None, in which case the method
-                           will not be used.
-    :arg boundary_method: A string denoting which method to use for recovery at boundaries.
-                          Note, can only be used with the recovered space method.
     :arg outflow: Boolean specifying whether advected quantity can be advected out of domain.
+    :arg options: an instance of the AdvectionOptions class specifying which options to use
+                  with the embedded DG scheme.
     """
 
-    def __init__(self, state, V, ibp="once", equation_form="advective", vector_manifold=False, Vdg=None,
-                 solver_params=None, recovered_spaces=None, boundary_method=None, outflow=False):
+    def __init__(self, state, V, ibp="once", equation_form="advective",
+                 vector_manifold=False,
+                 solver_params=None, outflow=False, options=None):
 
-        # give equation the property V0, the space that the function should live in
-        # in the absence of Vdg, this is used to set up the space for advection
-        # to take place in
-        self.V0 = V
-
-        self.recovered = False
-        self.boundary_method = boundary_method
-        if recovered_spaces is not None:
-            # Vdg must be None to use recovered spaces
-            if Vdg is not None:
-                raise ValueError('The recovered_spaces option is incompatible with the Vdg option')
-            else:
-                # check that the list or tuple of spaces is the right length
-                if len(recovered_spaces) != 3:
-                    raise ValueError('recovered_spaces must be a list or tuple containing three spaces')
-                self.space = recovered_spaces[0]  # the space in which advection happens
-                self.V_rec = recovered_spaces[1]  # the recovered continuous space
-                self.V_brok = recovered_spaces[2]  # broken version of V0
-                self.recovered = True
-        elif boundary_method is not None:
-            raise ValueError('A boundary method can only be used with the recovered space method')
-        elif Vdg is None:
-            # Create broken space, functions and projector
-            V_elt = BrokenElement(V.ufl_element())
-            self.space = FunctionSpace(state.mesh, V_elt)
+        if options is None:
+            raise ValueError("Must provide an instance of the AdvectionOptions class")
         else:
-            self.space = Vdg
+            self.options = options
+        if options.name == "embedded_dg" and options.embedding_space is None:
+            V_elt = BrokenElement(V.ufl_element())
+            options.embedding_space = FunctionSpace(state.mesh, V_elt)
 
         super().__init__(state=state,
-                         V=self.space,
+                         V=options.embedding_space,
                          ibp=ibp,
                          equation_form=equation_form,
                          vector_manifold=vector_manifold,
