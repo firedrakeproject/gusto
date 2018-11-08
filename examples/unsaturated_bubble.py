@@ -106,7 +106,8 @@ state.set_reference_profiles([('rho', rho_b),
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                               options=EmbeddedDGOptions())
 
 advected_fields = [('u', ThetaMethod(state, u0, ueqn)),
                    ('rho', SSPRK3(state, rho0, rhoeqn)),

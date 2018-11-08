@@ -5,18 +5,34 @@ from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
                        conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
+import pytest
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
 
 
-def setup_hori_limiters(dirname):
+@pytest.fixture
+def grid_params(direction):
+    "returns L, H, ncolumns, nlayers"
+    if direction == "horizontal":
+        return 400., 400., 40, 40
+    elif direction == "vertical":
+        return 200., 800., 10, 40
+
+
+@pytest.fixture
+def ic_params(direction):
+    "returns Tsurf, xc, zc, rc, u_max"
+    if direction == "horizontal":
+        return 300., 200., 200., 100., 10.
+    elif direction == "vertical":
+        return 0., 100., 700., 80., 5.
+
+
+def setup_limiters(dirname, direction, grid_params, ic_params):
 
     # declare grid shape
-    L = 400.
-    H = L
-    ncolumns = int(L / 10.)
-    nlayers = ncolumns
+    L, H, ncolumns, nlayers = grid_params
 
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
@@ -24,8 +40,8 @@ def setup_hori_limiters(dirname):
     x, z = SpatialCoordinate(mesh)
 
     fieldlist = ['u']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+"/limiting_hori",
+    timestepping = TimesteppingParameters(dt=1.0)
+    output = OutputParameters(dirname=dirname,
                               dumpfreq=5,
                               dumplist=['u'],
                               perturbation_fields=['theta0', 'theta1'])
@@ -49,34 +65,24 @@ def setup_hori_limiters(dirname):
     V1_element = TensorProductElement(DG1_element, CG2_element)
 
     # spaces
-    Vpsi = FunctionSpace(mesh, "CG", 2)
     VDG1 = FunctionSpace(mesh, "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
     V0 = FunctionSpace(mesh, V0_element)
     V1 = FunctionSpace(mesh, V1_element)
-
     V0_brok = FunctionSpace(mesh, BrokenElement(V0.ufl_element()))
-
-    V0_spaces = (VDG1, VCG1, V0_brok)
 
     # declare initial fields
     u0 = state.fields("u")
     theta0 = state.fields("theta0", V0)
     theta1 = state.fields("theta1", V1)
-
-    # make a gradperp
-    gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
+    Tsurf, xc, zc, rc, u_max = ic_params
 
     # Isentropic background state
-    Tsurf = 300.
     thetab = Constant(Tsurf)
     theta_b1 = Function(V1).interpolate(thetab)
     theta_b0 = Function(V0).interpolate(thetab)
 
     # set up bubble
-    xc = 200.
-    zc = 200.
-    rc = 100.
     theta_expr = conditional(sqrt((x - xc) ** 2.0) < rc,
                              conditional(sqrt((z - zc) ** 2.0) < rc,
                                          Constant(2.0),
@@ -84,13 +90,14 @@ def setup_hori_limiters(dirname):
     theta_pert1 = Function(V1).interpolate(theta_expr)
     theta_pert0 = Function(V0).interpolate(theta_expr)
 
-    # set up velocity field
-    u_max = Constant(10.0)
-
-    psi_expr = - u_max * z
-
-    psi0 = Function(Vpsi).interpolate(psi_expr)
-    u0.project(gradperp(psi0))
+    if direction == "horizontal":
+        Vpsi = FunctionSpace(mesh, "CG", 2)
+        psi_expr = - u_max * z
+        psi0 = Function(Vpsi).interpolate(psi_expr)
+        gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
+        u0.project(gradperp(psi0))
+    elif direction == "vertical":
+        u0.project(as_vector([0, -u_max]))
     theta0.interpolate(theta_b0 + theta_pert0)
     theta1.interpolate(theta_b1 + theta_pert1)
 
@@ -98,13 +105,16 @@ def setup_hori_limiters(dirname):
     state.set_reference_profiles([('theta1', theta_b1), ('theta0', theta_b0)])
 
     # set up advection schemes
-    thetaeqn1 = EmbeddedDGAdvection(state, V1, equation_form="advective")
-    thetaeqn0 = EmbeddedDGAdvection(state, V0, equation_form="advective", recovered_spaces=V0_spaces)
+    dg_opts = EmbeddedDGOptions()
+    recovered_opts = RecoveredOptions(embedding_space=VDG1,
+                                      recovered_space=VCG1,
+                                      broken_space=V0_brok)
+    thetaeqn1 = EmbeddedDGAdvection(state, V1, equation_form="advective", options=dg_opts)
+    thetaeqn0 = EmbeddedDGAdvection(state, V0, equation_form="advective", options=recovered_opts)
 
     # build advection dictionary
     advected_fields = []
-    advected_fields.append(('u', NoAdvection(state, u0, None)))
-    advected_fields.append(('theta1', SSPRK3(state, theta1, thetaeqn1, limiter=ThetaLimiter(thetaeqn1))))
+    advected_fields.append(('theta1', SSPRK3(state, theta1, thetaeqn1, limiter=ThetaLimiter(V1))))
     advected_fields.append(('theta0', SSPRK3(state, theta0, thetaeqn0, limiter=VertexBasedLimiter(VDG1))))
 
     # build time stepper
@@ -113,17 +123,18 @@ def setup_hori_limiters(dirname):
     return stepper, 40.0
 
 
-def run_hori_limiters(dirname):
+def run_limiters(dirname, direction, grid_params, ic_params):
 
-    stepper, tmax = setup_hori_limiters(dirname)
+    stepper, tmax = setup_limiters(dirname, direction, grid_params, ic_params)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_hori_limiters_setup(tmpdir):
+@pytest.mark.parametrize("direction", ["horizontal", "vertical"])
+def test_limiters(tmpdir, direction, grid_params, ic_params):
 
     dirname = str(tmpdir)
-    run_hori_limiters(dirname)
-    filename = path.join(dirname, "limiting_hori/diagnostics.nc")
+    run_limiters(dirname, direction, grid_params, ic_params)
+    filename = path.join(dirname, "diagnostics.nc")
     data = Dataset(filename, "r")
 
     theta1 = data.groups["theta1_perturbation"]
