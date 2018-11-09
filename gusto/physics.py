@@ -102,7 +102,6 @@ class Condensation(Physics):
         dot_r_cond = ((self.water_v - w_sat)
                       / (dt * (1.0 + ((L_v ** 2.0 * w_sat)
                                       / (cp * R_v * T ** 2.0)))))
-        dot_r_cond = self.water_v - w_sat
 
         # make cond_rate function, that needs to be the same for all updates in one time step
         cond_rate = Function(Vt)
