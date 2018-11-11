@@ -317,10 +317,14 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
 
+    if state.vertical_degree == 0:
+        boundary_method = 'physics'
+    else:
+        boundary_method = None
     rho_h = Function(Vr)
+    Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
     rho_averaged = Function(Vt)
-    rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-    rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
     w_h = Function(Vt)
     theta_h = Function(Vt)
     theta_e_test = Function(Vt)
@@ -347,7 +351,6 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
             break
 
         # calculate averaged rho
-        rho_broken.interpolate(rho0)
         rho_recoverer.project()
 
         # now solve for r_v
@@ -425,10 +428,14 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
 
+    if state.vertical_degree == 0:
+        method = 'physics'
+    else:
+        method = None
     rho_h = Function(Vr)
     rho_averaged = Function(Vt)
-    rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-    rho_recoverer = Recoverer(rho_broken, rho_averaged)
+    Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
+    rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_broken, boundary_method=method)
     w_h = Function(Vt)
     delta = 1.0
 
@@ -455,7 +462,6 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
         # calculate averaged rho
-        rho_broken.interpolate(rho0)
         rho_recoverer.project()
 
         RH.assign(RH_ev)

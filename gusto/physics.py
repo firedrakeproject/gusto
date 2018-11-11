@@ -54,10 +54,13 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
+        if state.vertical_degree == 0:
+            boundary_method = 'physics'
+        else:
+            boundary_method = None
+        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element())))
-        self.rho_interpolator = Interpolator(rho, self.rho_broken.function_space())
-        self.rho_recoverer = Recoverer(self.rho_broken, rho_averaged)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.timestepping.dt
@@ -105,7 +108,6 @@ class Condensation(Physics):
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
-        self.rho_broken.assign(self.rho_interpolator.interpolate())
         self.rho_recoverer.project()
         self.lim_cond_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())
