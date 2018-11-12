@@ -170,7 +170,10 @@ class Fallout(Physics):
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            self.v.project(as_vector([0, -terminal_velocity]))
+            if state.mesh.geometric_dimension() == 2:
+                self.v.project(as_vector([0, -terminal_velocity]))
+            elif state.mesh.geometric_dimension() == 3:
+                self.v.project(as_vector([0, 0, -terminal_velocity]))
         elif moments == AdvectedMoments.M3:
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
@@ -203,7 +206,10 @@ class Fallout(Physics):
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
+            if state.mesh.geometric_dimension() == 2:
+                self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
+            elif state.mesh.geometric_dimension() == 3:
+                self.determine_v = Projector(as_vector([0, 0, -v_expression]), self.v)
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered space
