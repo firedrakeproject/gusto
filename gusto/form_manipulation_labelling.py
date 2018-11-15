@@ -76,8 +76,7 @@ class LabelledForm(object):
         transformed by map_is_false."""
 
         return LabelledForm(functools.reduce(
-            operator.add, (map_if_true(t) if term_filter(t) else map_if_false(t)
-                           for t in self.terms)))
+            operator.add, filter(lambda t: t is not None, (map_if_true(t) if term_filter(t) else map_if_false(t) for t in self.terms))))
 
     @property
     def form(self):
@@ -101,7 +100,9 @@ class Label(object):
         self.validator = validator
 
     def __call__(self, target, value=None):
-        if value is not None and self.validator(value):
+        if value is not None:
+            assert(self.validator)
+            assert(self.validator(value))
             self.value = value
         if isinstance(target, LabelledForm):
             return LabelledForm(*(self(t) for t in target.terms))
@@ -134,3 +135,4 @@ time_derivative = Label("time_derivative")
 advection = Label("advection")
 advecting_velocity = Label("uadv", validator=lambda t: type(t) == Function)
 subject = Label("subject", validator=lambda t: type(t) in [TrialFunction, Function])
+prognostic_variable = Label("prognostic_variable", validator=lambda t: isinstance(t, str))

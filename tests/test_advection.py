@@ -23,7 +23,6 @@ def state(tmpdir, geometry):
         mesh.init_cell_orientations(x)
         family = "BDM"
         vertical_degree = None
-        fieldlist = ["u", "D"]
         dt = pi/3. * 0.01
         uexpr = as_vector([-x[1], x[0], 0.0])
 
@@ -32,22 +31,19 @@ def state(tmpdir, geometry):
         mesh = ExtrudedMesh(m, layers=15, layer_height=1./15.)
         family = "CG"
         vertical_degree = 1
-        fieldlist = ["u", "rho", "theta"]
         dt = 0.01
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([1.0, 0.0])
 
     timestepping = TimesteppingParameters(dt=dt)
     state = State(mesh,
-                  vertical_degree=vertical_degree,
-                  horizontal_degree=1,
-                  family=family,
                   timestepping=timestepping,
-                  output=output,
-                  fieldlist=fieldlist)
+                  output=output)
 
-    u0 = state.fields("u")
-    u0.project(uexpr)
+    build_spaces(state, family, 1, vertical_degree)
+    u = Function(state.spaces("HDiv")).project(uexpr)
+    state.fields("u", u)
+
     return state
 
 
@@ -94,7 +90,7 @@ def error(geometry):
 
 def run(state, advected_fields, tmax):
 
-    timestepper = AdvectionDiffusion(state, advected_fields)
+    timestepper = AdvectionDiffusion(state, advected_fields=advected_fields)
     timestepper.run(0, tmax)
     return timestepper.state.fields
 
@@ -135,11 +131,10 @@ def test_advection_dg(geometry, error, state,
     # setup scalar fields
     scalar_fields = []
     for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
-        for time_discretisation in ["ssprk"]:
+        for time_discretisation in ["im"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, time_discretisation))
-            f = state.fields(fname, fspace)
-            f.interpolate(f_init)
+            f = state.fields(fname, fspace).interpolate(f_init)
             scalar_fields.append(fname)
             eqn = advection_equation(state, fspace, ibp=ibp)
             if time_discretisation == "ssprk":
@@ -150,11 +145,10 @@ def test_advection_dg(geometry, error, state,
     # setup vector fields
     vector_fields = []
     for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
-        for time_discretisation in ["ssprk"]:
+        for time_discretisation in ["im"]:
             # create functions and initialise them
             fname = s.join(("vecf", ibp.name, time_discretisation))
-            f = state.fields(fname, vspace)
-            f.interpolate(vec_expr)
+            f = state.fields(fname, vspace).interpolate(vec_expr)
             vector_fields.append(fname)
             eqn = advection_equation(state, vspace, ibp=ibp)
             if time_discretisation == "ssprk":

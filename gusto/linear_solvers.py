@@ -743,9 +743,10 @@ class ShallowWaterSolver(TimesteppingSolver):
         beta = state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        W = state.spaces("W")
+        self.xrhs = Function(W)
+        u_in, D_in = split(self.xrhs)
 
-        W = state.W
         w, phi = TestFunctions(W)
         u, D = TrialFunctions(W)
 
@@ -763,17 +764,19 @@ class ShallowWaterSolver(TimesteppingSolver):
         self.uD = Function(W)
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
+        self.dy = Function(W)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
                                                  options_prefix='SWimplicit')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
+        self.xrhs.assign(xrhs)
         self.uD_solver.solve()
+        dy.assign(self.dy)

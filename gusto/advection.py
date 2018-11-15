@@ -57,7 +57,8 @@ class Advection(object, metaclass=ABCMeta):
 
             self.state = state
             self.field = field
-            self.equation = equation
+
+            self.equation = equation.label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
             self.ubar = Function(state.spaces("HDiv"))
             self.dt = state.timestepping.dt
@@ -84,10 +85,7 @@ class Advection(object, metaclass=ABCMeta):
                     form = ufl.replace(t.form, {test: self.test})
                     return Term(form, t.labels)
 
-                self.equation = equation.label_map(all_terms, replace_test)
-
-            else:
-                self.equation = equation
+                self.equation = self.equation.label_map(all_terms, replace_test)
 
             # setup required functions
             self.trial = TrialFunction(self.fs)
@@ -217,10 +215,8 @@ class Advection(object, metaclass=ABCMeta):
 
         return self.equation.label_map(all_terms, replace_subject).label_map(lambda t: t.has_label(advection), replace_uadv).form
 
-    def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
+    def update_ubar(self, uadv):
+        self.ubar.assign(uadv)
 
     @cached_property
     def solver(self):
@@ -404,14 +400,30 @@ class ThetaMethod(Advection):
 
     @cached_property
     def lhs(self):
-        eqn = self.equation
-        trial = eqn.trial
-        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
+
+        def replace_subject_with_trial(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: self.trial})
+            return Term(form, t.labels)
+
+        def replace_uadv(t):
+            form = Constant(self.theta*self.dt)*ufl.replace(
+                t.form, {t.labels["uadv"]: self.ubar})
+            return Term(form, t.labels)
+
+        return self.equation.label_map(all_terms, replace_subject_with_trial).label_map(lambda t: t.has_label(advection), replace_uadv).form
 
     @cached_property
     def rhs(self):
-        eqn = self.equation
-        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
+
+        def replace_uadv(t):
+            form = Constant(-(1-self.theta)*self.dt)*ufl.replace(t.form, {t.labels["uadv"]: self.ubar})
+            return Term(form, t.labels)
+
+        def replace_subject(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: self.q1})
+            return Term(form, t.labels)
+
+        return self.equation.label_map(all_terms, replace_subject).label_map(lambda t: t.has_label(advection), replace_uadv).form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

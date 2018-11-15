@@ -20,9 +20,8 @@ def setup_sw(dirname, euler_poincare):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=1500.)
-    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    output = OutputParameters(dirname=dirname+"/sw", steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
     diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
                          PotentialVorticity(),
@@ -40,13 +39,13 @@ def setup_sw(dirname, euler_poincare):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_AbsoluteVorticity')]
 
-    state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+                  diagnostic_fields=diagnostic_fields)
+
+    eqns = shallow_water_equations(state, family="BDM", degree=1)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -67,23 +66,21 @@ def setup_sw(dirname, euler_poincare):
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    if euler_poincare:
-        ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
-    else:
-        ueqn = VectorInvariant(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
-
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
+    ueqn = eqns.label_map(lambda t: t.labels["prognostic_variable"] == "u",
+                          map_if_false=drop)
+    Deqn = eqns.label_map(lambda t: t.labels["prognostic_variable"] == "D",
+                          map_if_false=drop)
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    equations = []
+    equations.append(("u", ueqn))
+    equations.append(("D", Deqn))
+    stepper = CrankNicolson(state, equations, advected_fields, linear_solver)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
@@ -103,7 +100,7 @@ def run_sw(dirname, euler_poincare):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("euler_poincare", [True, False])
+@pytest.mark.parametrize("euler_poincare", [False])
 def test_sw_setup(tmpdir, euler_poincare):
 
     dirname = str(tmpdir)
