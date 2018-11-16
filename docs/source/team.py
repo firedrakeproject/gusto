@@ -6,9 +6,12 @@ team = OrderedDict([
     ("Jemma Shipton", "http://www.imperial.ac.uk/people/j.shipton"),
     ("Hiroe Yamazaki", "http://www.imperial.ac.uk/people/h.yamazaki"),
     ("Lawrence Mitchell",
-     "http://www.imperial.ac.uk/people/lawrence.mitchell"),
-    ("Andrew McRae", "http://people.bath.ac.uk/attm20/"),
-    ("David Ham", "http://www.imperial.ac.uk/people/david.ham")
+     "https://www.dur.ac.uk/computer.science/staff/profile/?id=17243"),
+    ("Andrew McRae", "https://www2.physics.ox.ac.uk/contacts/people/mcraea"),
+    ("David Ham", "http://www.imperial.ac.uk/people/david.ham"),
+    ("Tom Bendall", "https://www.imperial.ac.uk/people/t.bendall15"),
+    ("Thomas Gibson", "http://www.imperial.ac.uk/people/t.gibson15"),
+    ("Golo Wimmer", "http://www.imperial.ac.uk/people/g.wimmer16")
 ])
 
 cols = 4
