@@ -302,18 +302,33 @@ class State(object):
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
+
+        # setup output directory and check that it does not already exist
         self.dumpdir = path.join("results", self.output.dirname)
-        outfile = path.join(self.dumpdir, "field_output.pvd")
         if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
            and path.exists(self.dumpdir) and not pickup:
             raise IOError("results directory '%s' already exists" % self.dumpdir)
-        self.dumpcount = itertools.count()
-        self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
+
+        # setup pvd output file
+        outfile = path.join(self.dumpdir, "field_output.pvd")
+        self.dumpfile = File(
+            outfile, project_output=self.output.project_fields,
+            comm=self.mesh.comm)
+
+        # if we want to checkpoint and are not picking up from a previous
+        # checkpoint file, setup the dumb checkpointing
         if self.output.checkpoint and not pickup:
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                        mode=FILE_CREATE)
+            # make list of fields to pickup (this doesn't include
+            # diagnostic fields)
+            self.to_pickup = [field for field in self.fields if field.pickup]
 
         # make list of fields to dump
         self.to_dump = [field for field in self.fields if field.dump]
+
+        # make dump counter
+        self.dumpcount = itertools.count()
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -324,15 +339,15 @@ class State(object):
                                     project_output=self.output.project_fields,
                                     comm=self.mesh.comm)
 
-        # make list of fields to pickup (this doesn't include diagnostic fields)
-        self.to_pickup = [field for field in self.fields if field.pickup]
-
-        # make functions on latlon mesh, as specified by dumplist_latlon
-        self.to_dump_latlon = []
-        for name in self.output.dumplist_latlon:
-            f = self.fields(name)
-            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(field)
+            # make functions on latlon mesh, as specified by dumplist_latlon
+            self.to_dump_latlon = []
+            for name in self.output.dumplist_latlon:
+                f = self.fields(name)
+                field = Function(
+                    functionspaceimpl.WithGeometry(
+                        f.function_space(), mesh_ll),
+                    val=f.topological, name=name+'_ll')
+                self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
@@ -376,6 +391,7 @@ class State(object):
                 raise ValueError("Must set checkpoint True if pickup")
         else:
 
+            # Diagnostics:
             if self.output.dump_diagnostics:
                 # Compute diagnostic fields
                 for field in self.diagnostic_fields:
