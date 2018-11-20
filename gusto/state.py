@@ -303,32 +303,29 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
 
-        # setup output directory and check that it does not already exist
-        self.dumpdir = path.join("results", self.output.dirname)
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
-           and path.exists(self.dumpdir) and not pickup:
-            raise IOError("results directory '%s' already exists" % self.dumpdir)
+        if self.output.dump_data:
+            # setup output directory and check that it does not already exist
+            self.dumpdir = path.join("results", self.output.dirname)
+            if self.mesh.comm.rank == 0 \
+               and "pytest" not in self.output.dirname \
+               and path.exists(self.dumpdir) and not pickup:
+                raise IOError("results directory '%s' already exists"
+                              % self.dumpdir)
 
-        # setup pvd output file
-        outfile = path.join(self.dumpdir, "field_output.pvd")
-        self.dumpfile = File(
-            outfile, project_output=self.output.project_fields,
-            comm=self.mesh.comm)
+            # setup pvd output file
+            outfile = path.join(self.dumpdir, "field_output.pvd")
+            self.dumpfile = File(
+                outfile, project_output=self.output.project_fields,
+                comm=self.mesh.comm)
 
-        # if we want to checkpoint and are not picking up from a previous
-        # checkpoint file, setup the dumb checkpointing
-        if self.output.checkpoint and not pickup:
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                        mode=FILE_CREATE)
-            # make list of fields to pickup (this doesn't include
-            # diagnostic fields)
-            self.to_pickup = [field for field in self.fields if field.pickup]
+            # make list of fields to dump
+            self.to_dump = [field for field in self.fields if field.dump]
 
-        # make list of fields to dump
-        self.to_dump = [field for field in self.fields if field.dump]
+            # make dump counter
+            self.dumpcount = itertools.count()
 
-        # make dump counter
-        self.dumpcount = itertools.count()
+            # dump initial fields
+            self.dump(t)
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -360,7 +357,6 @@ class State(object):
 
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
-
             ndt = int(tmax/self.timestepping.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
@@ -368,7 +364,14 @@ class State(object):
                                                     self.fields,
                                                     create=not pickup)
 
-        self.dump(t)
+        # if we want to checkpoint and are not picking up from a previous
+        # checkpoint file, setup the dumb checkpointing
+        if self.output.checkpoint and not pickup:
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                        mode=FILE_CREATE)
+            # make list of fields to pickup (this doesn't include
+            # diagnostic fields)
+            self.to_pickup = [field for field in self.fields if field.pickup]
 
     def pickup_from_checkpoint(self):
         """
@@ -394,8 +397,10 @@ class State(object):
         """
         Dump output
         """
+        output = self.output
+
         # Diagnostics:
-        if self.output.dump_diagnostics:
+        if output.dump_diagnostics:
             # Compute diagnostic fields
             for field in self.diagnostic_fields:
                 field(self)
@@ -403,22 +408,22 @@ class State(object):
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
 
-        if len(self.output.point_data) > 0:
+        if len(output.point_data) > 0:
             # Output pointwise data
             self.pointdata_output.dump(self.fields, t)
 
         # Dump all the fields to the checkpointing file (backup version)
-        if self.output.checkpoint:
+        if output.checkpoint:
             for field in self.to_pickup:
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
 
-        if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+        if output.dumpdata and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
             self.dumpfile.write(*self.to_dump)
 
             # dump fields on latlon mesh
-            if len(self.output.dumplist_latlon) > 0:
+            if len(output.dumplist_latlon) > 0:
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
     def initialise(self, initial_conditions):
