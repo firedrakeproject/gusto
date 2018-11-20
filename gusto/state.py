@@ -361,6 +361,8 @@ class State(object):
                                                     self.fields,
                                                     create=not pickup)
 
+        self.mesh.comm.barrier()
+
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the dumb checkpointing
         if self.output.checkpoint and not pickup:
