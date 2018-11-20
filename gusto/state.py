@@ -324,9 +324,6 @@ class State(object):
             # make dump counter
             self.dumpcount = itertools.count()
 
-            # dump initial fields
-            self.dump(t)
-
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
@@ -373,6 +370,9 @@ class State(object):
             # diagnostic fields)
             self.to_pickup = [field for field in self.fields if field.pickup]
 
+        # dump initial fields
+        self.dump(t)
+
     def pickup_from_checkpoint(self):
         """
         :arg t: the current model time (default is zero).
@@ -418,7 +418,7 @@ class State(object):
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
 
-        if output.dumpdata and (next(self.dumpcount) % output.dumpfreq) == 0:
+        if output.dump_data and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
             self.dumpfile.write(*self.to_dump)
 
