@@ -291,7 +291,7 @@ class State(object):
             diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, tmax, pickup=False):
+    def setup_dump(self, t, tmax, pickup=False):
         """
         Setup dump files
         Check for existence of directory so as not to overwrite
@@ -368,57 +368,58 @@ class State(object):
                                                     self.fields,
                                                     create=not pickup)
 
-    def dump(self, t=0, pickup=False):
+        self.dump(t)
+
+    def pickup_from_checkpoint(self):
         """
-        Dump output
         :arg t: the current model time (default is zero).
-        :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk. (default is False).
         """
-        if pickup:
-            if self.output.checkpoint:
-                # Open the checkpointing file for writing
-                chkfile = path.join(self.dumpdir, "chkpt")
-                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                    # Recover all the fields from the checkpoint
-                    for field in self.to_pickup:
-                        chk.load(field)
-                    t = chk.read_attribute("/", "time")
-                    next(self.dumpcount)
-                # Setup new checkpoint
-                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
-            else:
-                raise ValueError("Must set checkpoint True if pickup")
-        else:
-
-            # Diagnostics:
-            if self.output.dump_diagnostics:
-                # Compute diagnostic fields
-                for field in self.diagnostic_fields:
-                    field(self)
-
-                # Output diagnostic data
-                self.diagnostic_output.dump(self, t)
-
-            if len(self.output.point_data) > 0:
-                # Output pointwise data
-                self.pointdata_output.dump(self.fields, t)
-
-            # Dump all the fields to the checkpointing file (backup version)
-            if self.output.checkpoint:
+        if self.output.checkpoint:
+            # Open the checkpointing file for writing
+            chkfile = path.join(self.dumpdir, "chkpt")
+            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
-                    self.chkpt.store(field)
-                self.chkpt.write_attribute("/", "time", t)
-
-            if (next(self.dumpcount) % self.output.dumpfreq) == 0:
-                # dump fields
-                self.dumpfile.write(*self.to_dump)
-
-                # dump fields on latlon mesh
-                if len(self.output.dumplist_latlon) > 0:
-                    self.dumpfile_ll.write(*self.to_dump_latlon)
+                    chk.load(field)
+                t = chk.read_attribute("/", "time")
+                next(self.dumpcount)
+            # Setup new checkpoint
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+        else:
+            raise ValueError("Must set checkpoint True if pickup")
 
         return t
+
+    def dump(self, t):
+        """
+        Dump output
+        """
+        # Diagnostics:
+        if self.output.dump_diagnostics:
+            # Compute diagnostic fields
+            for field in self.diagnostic_fields:
+                field(self)
+
+            # Output diagnostic data
+            self.diagnostic_output.dump(self, t)
+
+        if len(self.output.point_data) > 0:
+            # Output pointwise data
+            self.pointdata_output.dump(self.fields, t)
+
+        # Dump all the fields to the checkpointing file (backup version)
+        if self.output.checkpoint:
+            for field in self.to_pickup:
+                self.chkpt.store(field)
+            self.chkpt.write_attribute("/", "time", t)
+
+        if (next(self.dumpcount) % self.output.dumpfreq) == 0:
+            # dump fields
+            self.dumpfile.write(*self.to_dump)
+
+            # dump fields on latlon mesh
+            if len(self.output.dumplist_latlon) > 0:
+                self.dumpfile_ll.write(*self.to_dump_latlon)
 
     def initialise(self, initial_conditions):
         """
