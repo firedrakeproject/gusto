@@ -165,6 +165,7 @@ class DiagnosticsOutput(object):
                     diagnostic = getattr(self.diagnostics, dname)
                     diagnostic(field)
 
+
 class State(object):
     """
     Build a model state to keep the variables in, and specify parameters.
