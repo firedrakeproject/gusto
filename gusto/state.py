@@ -113,7 +113,7 @@ class PointDataOutput(object):
 
 
 class DiagnosticsOutput(object):
-    def __init__(self, filename, diagnostics, description, create=True):
+    def __init__(self, filename, diagnostics, description, rank, create=True):
         """Create a dump file that stores diagnostics.
 
         :arg filename: The filename.
@@ -123,19 +123,21 @@ class DiagnosticsOutput(object):
         """
         self.filename = filename
         self.diagnostics = diagnostics
+        self.rank = rank
         if not create:
             return
-        with Dataset(filename, "w") as dataset:
-            dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
-            dataset.history = "Created {t}".format(t=time.ctime())
-            dataset.source = "Output from Gusto model"
-            dataset.createDimension("time", None)
-            var = dataset.createVariable("time", np.float64, ("time", ))
-            var.units = "seconds"
-            for name in diagnostics.fields:
-                group = dataset.createGroup(name)
-                for diagnostic in diagnostics.available_diagnostics:
-                    group.createVariable(diagnostic, np.float64, ("time", ))
+        if self.rank == 0:
+            with Dataset(filename, "w") as dataset:
+                dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
+                dataset.history = "Created {t}".format(t=time.ctime())
+                dataset.source = "Output from Gusto model"
+                dataset.createDimension("time", None)
+                var = dataset.createVariable("time", np.float64, ("time", ))
+                var.units = "seconds"
+                for name in diagnostics.fields:
+                    group = dataset.createGroup(name)
+                    for diagnostic in diagnostics.available_diagnostics:
+                        group.createVariable(diagnostic, np.float64, ("time", ))
 
     def dump(self, state, t):
         """Dump diagnostics.
@@ -143,17 +145,25 @@ class DiagnosticsOutput(object):
         :arg state: The :class:`State` at which to compute the diagnostic.
         :arg t: The current time.
         """
-        with Dataset(self.filename, "a") as dataset:
-            idx = dataset.dimensions["time"].size
-            dataset.variables["time"][idx:idx + 1] = t
+# All MPI processes need to participate in calculating diagnostics but only the
+# rank 0 process writes to the netCDF file
+        if self.rank == 0:
+            with Dataset(self.filename, "a") as dataset:
+                idx = dataset.dimensions["time"].size
+                dataset.variables["time"][idx:idx + 1] = t
+                for name in self.diagnostics.fields:
+                    field = state.fields(name)
+                    group = dataset.groups[name]
+                    for dname in self.diagnostics.available_diagnostics:
+                        diagnostic = getattr(self.diagnostics, dname)
+                        var = group.variables[dname]
+                        var[idx:idx + 1] = diagnostic(field)
+        else:
             for name in self.diagnostics.fields:
                 field = state.fields(name)
-                group = dataset.groups[name]
                 for dname in self.diagnostics.available_diagnostics:
                     diagnostic = getattr(self.diagnostics, dname)
-                    var = group.variables[dname]
-                    var[idx:idx + 1] = diagnostic(field)
-
+                    diagnostic(field)
 
 class State(object):
     """
@@ -350,6 +360,7 @@ class State(object):
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
+                                                       self.mesh.comm.rank,
                                                        create=not pickup)
 
         if len(self.output.point_data) > 0:
@@ -360,8 +371,6 @@ class State(object):
                                                     self.output.dirname,
                                                     self.fields,
                                                     create=not pickup)
-
-        self.mesh.comm.barrier()
 
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the dumb checkpointing
