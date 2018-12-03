@@ -113,7 +113,7 @@ class PointDataOutput(object):
 
 
 class DiagnosticsOutput(object):
-    def __init__(self, filename, diagnostics, description, rank, create=True):
+    def __init__(self, filename, diagnostics, description, comm, create=True):
         """Create a dump file that stores diagnostics.
 
         :arg filename: The filename.
@@ -123,10 +123,10 @@ class DiagnosticsOutput(object):
         """
         self.filename = filename
         self.diagnostics = diagnostics
-        self.rank = rank
+        self.comm = comm
         if not create:
             return
-        if self.rank == 0:
+        if self.comm.rank == 0:
             with Dataset(filename, "w") as dataset:
                 dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
                 dataset.history = "Created {t}".format(t=time.ctime())
@@ -145,25 +145,22 @@ class DiagnosticsOutput(object):
         :arg state: The :class:`State` at which to compute the diagnostic.
         :arg t: The current time.
         """
-# All MPI processes need to participate in calculating diagnostics but only the
-# rank 0 process writes to the netCDF file
-        if self.rank == 0:
+
+        diagnostics = []
+        for fname in self.diagnostics.fields:
+            field = state.fields(fname)
+            for dname in self.diagnostics.available_diagnostics:
+                diagnostic = getattr(self.diagnostics, dname)
+                diagnostics.append((fname, dname, diagnostic(field)))
+
+        if self.comm.rank == 0:
             with Dataset(self.filename, "a") as dataset:
                 idx = dataset.dimensions["time"].size
                 dataset.variables["time"][idx:idx + 1] = t
-                for name in self.diagnostics.fields:
-                    field = state.fields(name)
-                    group = dataset.groups[name]
-                    for dname in self.diagnostics.available_diagnostics:
-                        diagnostic = getattr(self.diagnostics, dname)
-                        var = group.variables[dname]
-                        var[idx:idx + 1] = diagnostic(field)
-        else:
-            for name in self.diagnostics.fields:
-                field = state.fields(name)
-                for dname in self.diagnostics.available_diagnostics:
-                    diagnostic = getattr(self.diagnostics, dname)
-                    diagnostic(field)
+                for fname, dname, value in diagnostics:
+                    group = dataset.groups[fname]
+                    var = group.variables[dname]
+                    var[idx:idx + 1] = value
 
 
 class State(object):
@@ -361,7 +358,7 @@ class State(object):
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
-                                                       self.mesh.comm.rank,
+                                                       self.mesh.comm,
                                                        create=not pickup)
 
         if len(self.output.point_data) > 0:
