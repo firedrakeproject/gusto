@@ -55,7 +55,7 @@ class FieldCreator(object):
 
 class PointDataOutput(object):
     def __init__(self, filename, ndt, field_points, description,
-                 field_creator, create=True):
+                 field_creator, comm, create=True):
         """Create a dump file that stores fields evaluated at points.
 
         :arg filename: The filename.
@@ -69,30 +69,32 @@ class PointDataOutput(object):
         self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
+        self.comm = comm
         if not create:
             return
-        with Dataset(filename, "w") as dataset:
-            dataset.description = "Point data for simulation {desc}".format(desc=description)
-            dataset.history = "Created {t}".format(t=time.ctime())
-            # FIXME add versioning information.
-            dataset.source = "Output from Gusto model"
-            # Appendable dimension, timesteps in the model
-            dataset.createDimension("time", ndt+1)
+        if self.comm.rank == 0:
+            with Dataset(filename, "w") as dataset:
+                dataset.description = "Point data for simulation {desc}".format(desc=description)
+                dataset.history = "Created {t}".format(t=time.ctime())
+                # FIXME add versioning information.
+                dataset.source = "Output from Gusto model"
+                # Appendable dimension, timesteps in the model
+                dataset.createDimension("time", ndt+1)
 
-            var = dataset.createVariable("time", np.float64, ("time"))
-            var.units = "seconds"
-            # Now create the variable group for each field
-            for field_name, points in field_points:
-                group = dataset.createGroup(field_name)
-                npts, dim = points.shape
-                group.createDimension("points", npts)
-                group.createDimension("geometric_dimension", dim)
-                var = group.createVariable("points", points.dtype,
-                                           ("points", "geometric_dimension"))
-                var[:] = points
-                group.createVariable(field_name,
-                                     field_creator(field_name).dat.dtype,
-                                     ("time", "points"))
+                var = dataset.createVariable("time", np.float64, ("time"))
+                var.units = "seconds"
+                # Now create the variable group for each field
+                for field_name, points in field_points:
+                    group = dataset.createGroup(field_name)
+                    npts, dim = points.shape
+                    group.createDimension("points", npts)
+                    group.createDimension("geometric_dimension", dim)
+                    var = group.createVariable("points", points.dtype,
+                                               ("points", "geometric_dimension"))
+                    var[:] = points
+                    group.createVariable(field_name,
+                                         field_creator(field_name).dat.dtype,
+                                         ("time", "points"))
 
     def dump(self, field_creator, t):
         """Evaluate and dump field data at points.
@@ -101,14 +103,20 @@ class PointDataOutput(object):
             fields.
         :arg t: Simulation time at which dump occurs.
         """
-        with Dataset(self.filename, "a") as dataset:
-            # Add new time index
-            dataset.variables["time"][self.dump_count] = t
-            for field_name, points in self.field_points:
-                vals = np.asarray(field_creator(field_name).at(points))
-                group = dataset.groups[field_name]
-                var = group.variables[field_name]
-                var[self.dump_count, :] = vals
+
+        val_list = []
+        for field_name, points in self.field_points:
+            val_list.append((field_name, np.asarray(field_creator(field_name).at(points))))
+
+        if self.comm.rank == 0:
+            with Dataset(self.filename, "a") as dataset:
+                # Add new time index
+                dataset.variables["time"][self.dump_count] = t
+                for field_name, vals in val_list:
+                    group = dataset.groups[field_name]
+                    var = group.variables[field_name]
+                    var[self.dump_count, :] = vals
+
         self.dump_count += 1
 
 
@@ -368,6 +376,7 @@ class State(object):
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     self.fields,
+                                                    self.mesh.comm,
                                                     create=not pickup)
 
         # if we want to checkpoint and are not picking up from a previous
