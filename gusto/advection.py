@@ -58,7 +58,7 @@ class Advection(object, metaclass=ABCMeta):
             self.state = state
             self.field = field
 
-            self.equation = equation.label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
+            self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
             self.ubar = Function(state.spaces("HDiv"))
             self.dt = state.timestepping.dt

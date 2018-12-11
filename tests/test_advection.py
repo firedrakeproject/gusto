@@ -134,9 +134,9 @@ def test_advection_dg(geometry, error, state,
         for time_discretisation in ["im"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, time_discretisation))
+            eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
             f = state.fields(fname, fspace).interpolate(f_init)
             scalar_fields.append(fname)
-            eqn = advection_equation(state, fspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
@@ -148,9 +148,9 @@ def test_advection_dg(geometry, error, state,
         for time_discretisation in ["im"]:
             # create functions and initialise them
             fname = s.join(("vecf", ibp.name, time_discretisation))
+            eqn = AdvectionEquation(state, fname, vspace, ibp=ibp)
             f = state.fields(fname, vspace).interpolate(vec_expr)
             vector_fields.append(fname)
-            eqn = advection_equation(state, vspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
@@ -183,10 +183,10 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
             for space in ["broken", "dg"]:
                 # create functions and initialise them
                 fname = s.join(("f", ibp.name, equation_form, space))
+                eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
                 f = state.fields(fname, fspace)
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
-                eqn = advection_equation(state, fspace, ibp=ibp)
                 advected_fields.append((fname, SSPRK3(state, f, eqn, options=opts[space])))
 
     end_fields = run(state, advected_fields, tmax)
@@ -228,10 +228,10 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("f", equation_form, time_discretisation))
+            eqn = AdvectionEquation(state, fname, cgspace, ibp=ibp)
             f = state.fields(fname, cgspace)
             f.interpolate(f_init)
             cg_scalar_fields.append(fname)
-            eqn = advection_equation(state, cgspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn, options=supg_opts)))
             elif time_discretisation == "im":
@@ -244,10 +244,10 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("fvec", equation_form, time_discretisation))
+            eqn = AdvectionEquation(state, fname, vcgspace, ibp=ibp)
             f = state.fields(fname, vcgspace)
             f.interpolate(vec_expr)
             cg_vector_fields.append(fname)
-            eqn = advection_equation(state, vcgspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn, options=supg_opts)))
             elif time_discretisation == "im":
@@ -260,10 +260,10 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, equation_form, time_discretisation))
+            eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
             f = state.fields(fname, fspace)
             f.interpolate(f_init)
             hdiv_v_fields.append(fname)
-            eqn = advection_equation(state, fspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn, options=supg_opts)))
             elif time_discretisation == "im":
@@ -276,10 +276,10 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("fvec", ibp.name, equation_form, time_discretisation))
+            eqn = AdvectionEquation(state, fname, vspace, ibp=ibp)
             f = state.fields(fname, vspace)
             f.project(vec_expr)
             hdiv_fields.append(fname)
-            eqn = advection_equation(state, vspace, ibp=ibp)
             if time_discretisation == "ssprk":
                 advected_fields.append((fname, SSPRK3(state, f, eqn, options=supg_opts)))
             elif time_discretisation == "im":

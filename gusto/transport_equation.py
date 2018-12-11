@@ -7,7 +7,7 @@ from firedrake import (Function, TestFunction, FacetNormal,
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject, time_derivative, all_terms
 
 
-__all__ = ["IntegrateByParts", "advection_equation", "continuity_equation"]
+__all__ = ["IntegrateByParts", "advection_form", "continuity_form"]
 
 
 class IntegrateByParts(Enum):
@@ -38,7 +38,7 @@ def surface_measures(V, direction=None):
             return dS, ds
 
 
-def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
+def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     """
     The equation is assumed to be in the form:
 
@@ -58,8 +58,6 @@ def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
 
     dS, ds = surface_measures(V)
 
-    mass_term = inner(test, q)*dx
-
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
     else:
@@ -78,12 +76,11 @@ def advection_equation(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     if outflow is not None:
         L += test*un*q*ds
 
-    eqn = time_derivative(mass_term) + advection(advecting_velocity(L, ubar))
-    eqn = eqn.label_map(all_terms, lambda t: subject(t, q))
-    return eqn
+    form = subject(advection(advecting_velocity(L, ubar)), q)
+    return form
 
 
-def continuity_equation(state, V, *, ibp=IntegrateByParts.ONCE):
+def continuity_form(state, V, *, ibp=IntegrateByParts.ONCE):
     ubar = Function(state.spaces("HDiv"))
     test = TestFunction(V)
     q = Function(V)
@@ -107,12 +104,11 @@ def continuity_equation(state, V, *, ibp=IntegrateByParts.ONCE):
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
-    eqn = time_derivative(mass_term) + advection(advecting_velocity(L, ubar))
-    eqn = eqn.label_map(all_terms, lambda t: subject(t, q))
-    return eqn
+    form = subject(advection(advecting_velocity(L, ubar)), q)
+    return form
 
 
-def advection_vector_manifold_equation(state, V):
+def advection_vector_manifold_form(state, V):
     ubar = Function(state.spaces("HDiv"))
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
@@ -125,7 +121,7 @@ def advection_vector_manifold_equation(state, V):
     return L
 
 
-def vector_invariant_equation(state, V, *, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
     """
     Defines the vector invariant form of the vector advection term.
 
@@ -142,8 +138,6 @@ def vector_invariant_equation(state, V, *, ibp=IntegrateByParts.ONCE):
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
-
-    mass_term = inner(test, q)*dx
 
     if state.mesh.topological_dimension() == 3:
         if ibp != IntegrateByParts.ONCE:
@@ -187,9 +181,8 @@ def vector_invariant_equation(state, V, *, ibp=IntegrateByParts.ONCE):
             )
 
     L -= 0.5*div(test)*inner(q, ubar)*dx
-    eqn = time_derivative(mass_term) + advection(advecting_velocity(L, ubar))
-    eqn = eqn.label_map(all_terms, lambda t: subject(t, q))
-    return eqn
+    form = subject(advection(advecting_velocity(L, ubar)), q)
+    return form
 
 
 def advection_equation_circulation_form(state, V, *, ibp=IntegrateByParts.ONCE):
@@ -204,6 +197,6 @@ def advection_equation_circulation_form(state, V, *, ibp=IntegrateByParts.ONCE):
     test = TestFunction(V)
     ubar = Function(state.spaces("HDiv"))
     q = Function(V)
-    eqn = vector_invariant_equation(state, V, ibp)
-    eqn -= advection(advecting_velocity(subject(0.5*div(test)*inner(q, ubar)*dx, q), ubar))
-    return eqn
+    form = vector_invariant_form(state, V, ibp)
+    form -= subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), q)
+    return form
