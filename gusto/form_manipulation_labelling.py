@@ -21,6 +21,9 @@ class Term(object):
         self.form = form
         self.labels = label_dict or {}
 
+    def get(self, key, default=None):
+        return self.labels.get(key)
+
     def has_label(self, *labels):
         if len(labels) == 1:
             return labels[0].label in self.labels
@@ -64,9 +67,6 @@ class LabelledForm(object):
 
     def __len__(self):
         return len(self.terms)
-
-    def __getitem__(self, key):
-        return self.terms[key]
 
     def label_map(self, term_filter, map_if_true=identity,
                   map_if_false=identity):
