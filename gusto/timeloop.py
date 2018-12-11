@@ -30,10 +30,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.state = state
 
-        if equations is None:
-            self.equations = ()
-        else:
-            self.equations = tuple(equations)
         if advected_fields is None:
             self.advected_fields = ()
         else:
@@ -51,14 +47,16 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             self.prescribed_fields = []
 
-        self.fieldlist = [f for f, _ in self.equations]
+        state.xn = FieldCreator()
+        state.xnp1 = FieldCreator()
 
-        if len(self.fieldlist) > 0:
-            state.xn = FieldCreator(self.fieldlist, state.spaces("W"))
-            state.xnp1 = FieldCreator(self.fieldlist, state.spaces("W"))
+        if equations is not None:
+            self.fieldlist = equations.fieldlist
+            state.xn(self.fieldlist, state.spaces.W, dump=False, pickup=False)
+            state.xnp1(self.fieldlist, state.spaces.W, dump=False, pickup=False)
         else:
-            state.xn = FieldCreator()
-            state.xnp1 = FieldCreator()
+            self.fieldlist = []
+
         additional_fields = set([f for f, _ in self.advected_fields + self.diffused_fields]).difference(set(self.fieldlist))
         for field in additional_fields:
             state.xn(field, state.fields(field).function_space())
@@ -187,8 +185,10 @@ class CrankNicolson(BaseTimestepper):
         self.linear_solver = linear_solver
         self.forcing = Forcing(state, equations)
 
-        self.xstar = FieldCreator(self.fieldlist, state.spaces("W"))
-        self.xp = FieldCreator(self.fieldlist, state.spaces("W"))
+        self.xstar = FieldCreator()
+        self.xstar(self.fieldlist, state.spaces("W"))
+        self.xp = FieldCreator()
+        self.xp(self.fieldlist, state.spaces("W"))
 
         self.xrhs = Function(state.spaces("W"))
         self.dy = Function(state.spaces("W"))
@@ -197,7 +197,7 @@ class CrankNicolson(BaseTimestepper):
         self.active_advection = [
             (name, scheme)
             for name, scheme in advected_fields
-            if name in dict(equations).keys()]
+            if name in self.fieldlist]
 
     @property
     def advecting_velocity(self):
@@ -214,12 +214,10 @@ class CrankNicolson(BaseTimestepper):
         """
         return [(name, scheme)
                 for name, scheme in self.advected_fields
-                if name not in dict(self.equations).keys()]
+                if name not in self.fieldlist]
 
     def semi_implicit_step(self):
         state = self.state
-
-        alpha = state.timestepping.alpha
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(state.xn.X, state.xn.X,

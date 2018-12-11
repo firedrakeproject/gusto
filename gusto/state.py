@@ -28,27 +28,30 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, mixed_space=None):
+    def __init__(self):
         self.fields = []
-        if fieldlist is not None:
-            self.X = Function(mixed_space)
-            for name, func in zip(fieldlist, self.X.split()):
-                setattr(self, name, func)
-                func.dump = True
-                func.pickup = True
-                func.rename(name)
-                self.fields.append(func)
+
+    def add_field(self, name, value, dump, pickup):
+        setattr(self, name, value)
+        value.dump = dump
+        value.pickup = pickup
+        value.rename(name)
+        self.fields.append(value)
 
     def __call__(self, name, space=None, dump=True, pickup=True):
-        try:
-            return getattr(self, name)
-        except AttributeError:
-            value = Function(space, name=name)
-            setattr(self, name, value)
-            value.dump = dump
-            value.pickup = pickup
-            self.fields.append(value)
-            return value
+        if type(name) is str:
+            try:
+                return getattr(self, name)
+            except AttributeError:
+                value = Function(space)
+                self.add_field(name, value, dump, pickup)
+                return value
+        else:
+            if len(space) > 1:
+                self.X = Function(space)
+                for fname, value in zip(name, self.X.split()):
+                    self.add_field(fname, value, dump, pickup)
+            return self.X
 
     def __iter__(self):
         return iter(self.fields)

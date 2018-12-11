@@ -1,9 +1,8 @@
-from firedrake import (TrialFunction,
+from firedrake import (TestFunctions, TrialFunctions, Function,
                        DirichletBC, LinearVariationalProblem,
                        LinearVariationalSolver, Constant)
 from gusto.configuration import DEBUG
-from gusto.form_manipulation_labelling import Term, drop, time_derivative, advection
-from gusto.state import FieldCreator
+from gusto.form_manipulation_labelling import Term, drop, time_derivative, advection, all_terms
 import ufl
 
 
@@ -24,30 +23,38 @@ class Forcing(object):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, equations):
+    def __init__(self, state, equation):
 
-        self.equations = equations
-        fieldlist = [f for f, _ in equations]
+        fieldlist = equation.fieldlist
 
         # this is the function that the forcing term is applied to
-        self.x0 = FieldCreator(fieldlist, state.spaces("W"))
-        self.xF = FieldCreator(fieldlist, state.spaces("W"))
+        self.x0 = Function(state.spaces("W"))
+        self.xF = Function(state.spaces("W"))
 
-        self.solvers = {"explicit": {}, "implicit": {}}
-        for field, equation in equations:
-            eqn = equation.label_map(lambda t: t.has_label(advection),
-                                     drop)
-            if len(eqn) > 1:
-                self._build_forcing_solver(state, field, eqn)
+        eqn = equation().label_map(lambda t: t.has_label(advection), drop)
 
-    def _build_forcing_solver(self, state, field, equation):
+        tests = TestFunctions(state.spaces("W"))
 
-        V = state.fields(field).function_space()
-        trial = TrialFunction(V)
+        def replace_test(t):
+            field = t.labels["prognostic_variable"]
+            test = t.form.arguments()[0]
+            form = ufl.replace(t.form, {test: tests[fieldlist.index(field)]})
+            return Term(form, t.labels)
+
+        eqn = eqn.label_map(all_terms, replace_test)
+        if len(eqn) > 1:
+            self._build_forcing_solver(state, fieldlist, eqn)
+
+    def _build_forcing_solver(self, state, fieldlist, equation):
+
+        W = state.spaces.W
+        trials = TrialFunctions(W)
         alpha = state.timestepping.alpha
         dt = state.timestepping.dt
 
         def replace_subject_with_trial(t):
+            field = t.labels["subject"]
+            trial = trials[fieldlist.index(field.name())]
             form = ufl.replace(t.form, {t.labels["subject"]: trial})
             return Term(form, t.labels)
 
@@ -58,9 +65,10 @@ class Forcing(object):
                 const = Constant(alpha*dt)
 
             def replacer(t):
+                field = t.labels["subject"]
+                x = self.x0.split()[fieldlist.index(field.name())]
                 form = const*ufl.replace(t.form,
-                                         {t.labels["subject"]:
-                                          self.x0(t.labels["subject"].name())})
+                                         {t.labels["subject"]: x})
                 return Term(form, t.labels)
             return replacer
 
@@ -76,33 +84,35 @@ class Forcing(object):
             replace_subject("implicit"),
             drop)
 
-        if V.extruded:
-            bcs = [DirichletBC(V, 0.0, "bottom"),
-                   DirichletBC(V, 0.0, "top")]
+        Vu = W.split()[0]
+        if Vu.extruded:
+            bcs = [DirichletBC(Vu, 0.0, "bottom"),
+                   DirichletBC(Vu, 0.0, "top")]
         else:
             bcs = None
 
         explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF(field), bcs=bcs
+            a.form, L_explicit.form, self.xF, bcs=bcs
         )
 
         implicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_implicit.form, self.xF(field), bcs=bcs
+            a.form, L_implicit.form, self.xF, bcs=bcs
         )
 
         solver_parameters = {}
         if state.output.log_level == DEBUG:
             solver_parameters["ksp_monitor_true_residual"] = True
 
-        self.solvers["explicit"][field] = LinearVariationalSolver(
+        self.solvers = {}
+        self.solvers["explicit"] = LinearVariationalSolver(
             explicit_forcing_problem,
             solver_parameters=solver_parameters,
-            options_prefix=field+"ExplicitForcingSolver"
+            options_prefix="ExplicitForcingSolver"
         )
-        self.solvers["implicit"][field] = LinearVariationalSolver(
+        self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
             solver_parameters=solver_parameters,
-            options_prefix=field+"ImplicitForcingSolver"
+            options_prefix="ImplicitForcingSolver"
         )
 
     def apply(self, x_in, x_nl, x_out, label):
@@ -116,10 +126,9 @@ class Forcing(object):
         :arg x_out: :class:`.Function` object
         """
 
-        self.x0.X.assign(x_nl)
+        self.x0.assign(x_nl)
         x_out.assign(x_in)
 
-        for field, solver in self.solvers[label].items():
-            solver.solve()
+        self.solvers[label].solve()
         x = x_out
-        x += self.xF.X
+        x += self.xF

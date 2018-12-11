@@ -2,19 +2,24 @@ from abc import ABCMeta, abstractproperty
 from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace)
-from gusto.form_manipulation_labelling import subject, time_derivative
-from gusto.transport_equation import (IntegrateByParts, vector_invariant_form,
+from gusto.form_manipulation_labelling import subject, time_derivative, prognostic_variable
+from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form)
 from gusto.state import build_spaces
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
 
-    def __init__(self, state, field_name, function_space):
+    def __init__(self, state, function_space, *field_names):
         self.state = state
         self.function_space = function_space
-        state.fields(field_name, function_space)
-        state.diagnostics.register(field_name)
+
+        if len(field_names) == 1:
+            state.fields(field_names[0], function_space)
+        else:
+            state.fields(field_names, function_space)
+
+        state.diagnostics.register(*field_names)
 
     def mass_term(self):
         test = TestFunction(self.function_space)
@@ -32,7 +37,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 class AdvectionEquation(PrognosticEquation):
 
     def __init__(self, state, field_name, function_space, **kwargs):
-        super().__init__(state, field_name, function_space)
+        super().__init__(state, function_space, field_name)
         self.kwargs = kwargs
 
     def form(self):
@@ -49,33 +54,45 @@ class ContinuityEquation(PrognosticEquation):
         return continuity_form(self.state, self.function_space, **self.kwargs)
 
 
-def shallow_water_equations(state, family, degree):
+class ShallowWaterEquations(PrognosticEquation):
 
-    g = state.parameters.g
-    Omega = state.parameters.Omega
-    x = SpatialCoordinate(state.mesh)
-    R = sqrt(inner(x, x))
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(state.mesh, "CG", 1)
-    f = Function(V).interpolate(fexpr)
-    state.fields("coriolis", f)
+    def __init__(self, state, family, degree):
+        self.Vu, self.VD = build_spaces(state, family, degree)
+        state.spaces.W = MixedFunctionSpace((self.Vu, self.VD))
 
-    Vu, VD = build_spaces(state, family, degree)
-    state.spaces.W = MixedFunctionSpace((Vu, VD))
-    u = state.fields("u", Vu)
-    D = state.fields("D", VD)
-    state.diagnostics.register("u")
-    state.diagnostics.register("D")
+        self.fieldlist = ['u', 'D']
+        super().__init__(state, state.spaces.W, *self.fieldlist)
+        Omega = state.parameters.Omega
+        x = SpatialCoordinate(state.mesh)
+        R = sqrt(inner(x, x))
+        fexpr = 2*Omega*x[2]/R
+        V = FunctionSpace(state.mesh, "CG", 1)
+        f = Function(V).interpolate(fexpr)
+        state.fields("coriolis", f)
 
-    
-    u_adv = prognostic_variable(vector_invariant_form(state, Vu), "u")
+    def mass_term(self):
+        test_u = TestFunction(self.Vu)
+        u = self.state.fields("u")
+        test_D = TestFunction(self.VD)
+        D = self.state.fields("D")
+        umass = prognostic_variable(subject(time_derivative(inner(u, test_u)*dx), u), "u")
+        Dmass = prognostic_variable(subject(time_derivative(inner(D, test_D)*dx), D), "D")
+        return umass + Dmass
 
-    w = TestFunction(Vu)
-    coriolis_term = prognostic_variable(subject(-f*inner(w, state.perp(u))*dx, u), "u")
-    pressure_gradient_term = prognostic_variable(subject(g*div(w)*D*dx, D), "u")
+    def form(self):
+        state = self.state
+        g = state.parameters.g
+        f = state.fields("coriolis")
+        u_adv = prognostic_variable(vector_invariant_form(state, self.Vu), "u")
 
-    u_eqn = u_adv + coriolis_term + pressure_gradient_term
+        w = TestFunction(self.Vu)
+        u = self.state.fields("u")
+        D = self.state.fields("D")
+        coriolis_term = prognostic_variable(subject(-f*inner(w, state.perp(u))*dx, u), "u")
+        pressure_gradient_term = prognostic_variable(subject(g*div(w)*D*dx, D), "u")
 
-    D_eqn = prognostic_variable(continuity_form(state, VD), "D")
+        u_eqn = u_adv + coriolis_term + pressure_gradient_term
 
-    return u_eqn + D_eqn
+        D_eqn = prognostic_variable(continuity_form(state, self.VD), "D")
+
+        return u_eqn + D_eqn

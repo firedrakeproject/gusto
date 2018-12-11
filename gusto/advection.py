@@ -50,15 +50,22 @@ class Advection(object, metaclass=ABCMeta):
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, field, equation=None, *, solver_parameters=None,
+    def __init__(self, state, fieldname, equation=None, *,
+                 solver_parameters=None,
                  limiter=None, options=None):
 
         if equation is not None:
 
             self.state = state
-            self.field = field
+            self.field = state.fields(fieldname)
 
-            self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
+            if any([t.get("prognostic_variable") for t in equation()]):
+                equation = equation().label_map(
+                    lambda t: t.get("prognostic_variable") == fieldname,
+                    map_if_false=drop)
+            else:
+                equation = equation()
+            self.equation = equation.label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
             self.ubar = Function(state.spaces("HDiv"))
             self.dt = state.timestepping.dt
@@ -73,10 +80,10 @@ class Advection(object, metaclass=ABCMeta):
 
             if options is not None:
                 self.discretisation_option = options.name
-                self._setup(state, field, options)
+                self._setup(state, self.field, options)
             else:
                 self.discretisation_option = None
-                self.fs = field.function_space()
+                self.fs = self.field.function_space()
 
             if self.discretisation_option is not None:
 

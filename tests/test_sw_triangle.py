@@ -1,7 +1,7 @@
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, Function)
+                       as_vector, FunctionSpace)
 from math import pi
 from netCDF4 import Dataset
 import pytest
@@ -45,7 +45,7 @@ def setup_sw(dirname, euler_poincare):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
-    eqns = shallow_water_equations(state, family="BDM", degree=1)
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -55,11 +55,6 @@ def setup_sw(dirname, euler_poincare):
     Omega = parameters.Omega
     g = parameters.g
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
@@ -67,23 +62,17 @@ def setup_sw(dirname, euler_poincare):
                       ('D', D0)])
 
     advected_fields = []
-    ueqn = eqns.label_map(lambda t: t.labels["prognostic_variable"] == "u",
-                          map_if_false=drop)
-    Deqn = eqns.label_map(lambda t: t.labels["prognostic_variable"] == "D",
-                          map_if_false=drop)
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    advected_fields.append(("u", ThetaMethod(state, "u", eqns)))
+    advected_fields.append(("D", SSPRK3(state, "D", eqns)))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    equations = []
-    equations.append(("u", ueqn))
-    equations.append(("D", Deqn))
-    stepper = CrankNicolson(state, equations, advected_fields, linear_solver)
+    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
+    f = state.fields("coriolis")
     vrel_analytical = state.fields("AnalyticalRelativeVorticity", vspace)
     vrel_analytical.interpolate(vexpr)
     vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", vspace)
