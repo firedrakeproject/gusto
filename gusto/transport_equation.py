@@ -4,7 +4,7 @@ from firedrake import (Function, TestFunction, FacetNormal,
                        ds, ds_v, ds_t, ds_b,
                        outer, sign, cross, CellNormal,
                        curl)
-from gusto.form_manipulation_labelling import advection, advecting_velocity, subject, time_derivative, all_terms
+from gusto.form_manipulation_labelling import advection, advecting_velocity, subject
 
 
 __all__ = ["IntegrateByParts", "advection_form", "continuity_form"]
@@ -86,8 +86,6 @@ def continuity_form(state, V, *, ibp=IntegrateByParts.ONCE):
     q = Function(V)
 
     dS, ds = surface_measures(V)
-
-    mass_term = inner(test, q)*dx
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
