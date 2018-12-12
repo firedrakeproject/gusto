@@ -9,8 +9,10 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import DEBUG
+from gusto.form_manipulation_labelling import drop, time_derivative, linearisation, Term
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
+import ufl
 
 
 __all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
@@ -30,10 +32,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, equation, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.equation = equation
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -738,34 +741,56 @@ class ShallowWaterSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state
-        H = state.parameters.H
-        g = state.parameters.g
+        equation = self.equation()
+
         beta = state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
         W = state.spaces("W")
         self.xrhs = Function(W)
-        u_in, D_in = split(self.xrhs)
+        tests = TestFunctions(W)
+        trials = TrialFunctions(W)
 
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        def replace_with_mixed_trials(t):
+            field = t.labels["subject"]
+            idx = self.equation.fieldlist.index(field.name())
+            test = t.form.arguments()[0]
+            form = ufl.replace(t.form, {field: trials[idx], test: tests[idx]})
+            return Term(form, t.labels)
 
-        eqn = (
-            inner(w, u) - beta*g*div(w)*D
-            - inner(w, u_in)
-            + phi*D + beta*H*phi*div(u)
-            - phi*D_in
-        )*dx
+        aeqn = equation.label_map(lambda t: t.has_label(time_derivative),
+                                  replace_with_mixed_trials,
+                                  drop)
 
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+        def linearise(t):
+            linear_form = t.get("linearisation")
+            field = linear_form.terms[0].labels["subject"]
+            idx = self.equation.fieldlist.index(field.name())
+            form = beta*ufl.replace(linear_form.form, {field: trials[idx]})
+            return Term(form, t.labels)
+
+        aeqn += equation.label_map(lambda t: t.has_label(linearisation),
+                                   linearise,
+                                   drop)
+
+        def replace_with_mixed_fns(t):
+            field = t.labels["subject"]
+            idx = self.equation.fieldlist.index(field.name())
+            test = t.form.arguments()[0]
+            x = self.xrhs.split()[idx]
+            form = ufl.replace(t.form, {field: x, test: tests[idx]})
+            return Term(form, t.labels)
+
+        Leqn = equation.label_map(lambda t: t.has_label(time_derivative),
+                                  replace_with_mixed_fns,
+                                  drop)
 
         # Place to put result of u rho solver
         self.uD = Function(W)
 
         # Solver for u, D
         self.dy = Function(W)
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.dy)
+        uD_problem = LinearVariationalProblem(aeqn.form, Leqn.form, self.dy)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,

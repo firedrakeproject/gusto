@@ -1,8 +1,10 @@
 from abc import ABCMeta, abstractproperty
 from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
-                       MixedFunctionSpace)
-from gusto.form_manipulation_labelling import subject, time_derivative, prognostic_variable
+                       MixedFunctionSpace, TestFunctions)
+from gusto.form_manipulation_labelling import (subject, time_derivative,
+                                               prognostic_variable,
+                                               linearisation)
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form)
 from gusto.state import build_spaces
@@ -82,17 +84,21 @@ class ShallowWaterEquations(PrognosticEquation):
     def form(self):
         state = self.state
         g = state.parameters.g
+        H = state.parameters.H
         f = state.fields("coriolis")
         u_adv = prognostic_variable(vector_invariant_form(state, self.Vu), "u")
 
         w = TestFunction(self.Vu)
         u = self.state.fields("u")
         D = self.state.fields("D")
-        coriolis_term = prognostic_variable(subject(-f*inner(w, state.perp(u))*dx, u), "u")
-        pressure_gradient_term = prognostic_variable(subject(g*div(w)*D*dx, D), "u")
+        wm, phim = TestFunctions(state.spaces.W)
 
-        u_eqn = u_adv + coriolis_term + pressure_gradient_term
+        coriolis_term = linearisation(prognostic_variable(subject(-f*inner(w, state.perp(u))*dx, u), "u"), subject(-f*inner(wm, state.perp(u))*dx, u))
 
-        D_eqn = prognostic_variable(continuity_form(state, self.VD), "D")
+        pressure_gradient_term = linearisation(prognostic_variable(subject(g*div(w)*D*dx, D), "u"), subject(-g*div(wm)*D*dx, D))
 
-        return u_eqn + D_eqn
+        u_form = u_adv + coriolis_term + pressure_gradient_term
+
+        D_form = linearisation(prognostic_variable(continuity_form(state, self.VD), "D"), subject(H*phim*div(u)*dx, u))
+
+        return u_form + D_form
