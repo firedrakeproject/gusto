@@ -42,8 +42,8 @@ class Forcing(object):
             return Term(form, t.labels)
 
         eqn = eqn.label_map(all_terms, replace_test)
-        if len(eqn) > 1:
-            self._build_forcing_solver(state, fieldlist, eqn)
+        assert len(eqn) > 1
+        self._build_forcing_solver(state, fieldlist, eqn)
 
     def _build_forcing_solver(self, state, fieldlist, equation):
 
