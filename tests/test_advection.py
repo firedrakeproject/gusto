@@ -131,7 +131,7 @@ def test_advection_dg(geometry, error, state,
     # setup scalar fields
     scalar_fields = []
     for ibp in [IntegrateByParts.ONCE, IntegrateByParts.TWICE]:
-        for time_discretisation in ["im"]:
+        for time_discretisation in ["ssprk", "im"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, time_discretisation))
             eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
