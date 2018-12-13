@@ -68,7 +68,9 @@ def setup_sw(dirname, euler_poincare):
     linear_solver = ShallowWaterSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
+    stepper = CrankNicolson(state, equations=eqns,
+                            advected_fields=advected_fields,
+                            linear_solver=linear_solver)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R

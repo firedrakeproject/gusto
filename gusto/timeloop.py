@@ -178,11 +178,14 @@ class CrankNicolson(BaseTimestepper):
          function that returns the field as a function of time.
     """
 
-    def __init__(self, state, equations, advected_fields, linear_solver,
+    def __init__(self, state, *, equations, advected_fields, linear_solver,
                  diffused_fields=None, physics_list=None, prescribed_fields=None):
 
-        super().__init__(state, equations, advected_fields,
-                         diffused_fields, physics_list, prescribed_fields)
+        super().__init__(state, equations=equations,
+                         advected_fields=advected_fields,
+                         diffused_fields=diffused_fields,
+                         physics_list=physics_list,
+                         prescribed_fields=prescribed_fields)
         self.linear_solver = linear_solver
         self.forcing = Forcing(state, equations)
 
