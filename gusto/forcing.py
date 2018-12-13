@@ -1,10 +1,11 @@
 from firedrake import (TestFunctions, TrialFunctions, Function,
                        DirichletBC, LinearVariationalProblem,
-                       LinearVariationalSolver, Constant)
+                       LinearVariationalSolver)
 from gusto.configuration import DEBUG
-from gusto.form_manipulation_labelling import Term, drop, time_derivative, advection, all_terms
-import ufl
-
+from gusto.form_manipulation_labelling import (drop, time_derivative,
+                                               advection, all_terms,
+                                               replace_test,
+                                               replace_labelled, idx)
 
 __all__ = ["Forcing"]
 
@@ -35,13 +36,7 @@ class Forcing(object):
 
         tests = TestFunctions(state.spaces("W"))
 
-        def replace_test(t):
-            field = t.labels["prognostic_variable"]
-            test = t.form.arguments()[0]
-            form = ufl.replace(t.form, {test: tests[fieldlist.index(field)]})
-            return Term(form, t.labels)
-
-        eqn = eqn.label_map(all_terms, replace_test)
+        eqn = eqn.label_map(all_terms, replace_test(tests, idx(fieldlist)))
         assert len(eqn) > 1
         self._build_forcing_solver(state, fieldlist, eqn)
 
@@ -52,36 +47,16 @@ class Forcing(object):
         alpha = state.timestepping.alpha
         dt = state.timestepping.dt
 
-        def replace_subject_with_trial(t):
-            field = t.labels["subject"]
-            trial = trials[fieldlist.index(field.name())]
-            form = ufl.replace(t.form, {t.labels["subject"]: trial})
-            return Term(form, t.labels)
-
-        def replace_subject(label):
-            if label == "explicit":
-                const = Constant((1-alpha)*dt)
-            elif label == "implicit":
-                const = Constant(alpha*dt)
-
-            def replacer(t):
-                field = t.labels["subject"]
-                x = self.x0.split()[fieldlist.index(field.name())]
-                form = const*ufl.replace(t.form,
-                                         {t.labels["subject"]: x})
-                return Term(form, t.labels)
-            return replacer
-
         a = equation.label_map(lambda t: t.has_label(time_derivative),
-                               replace_subject_with_trial,
+                               replace_labelled("subject", trials, idx=idx(fieldlist)),
                                drop)
         L_explicit = equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_subject("explicit"),
+            replace_labelled("subject", self.x0.split(), (1-alpha)*dt, idx(fieldlist, "subject")),
             drop)
         L_implicit = equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_subject("implicit"),
+            replace_labelled("subject", self.x0.split(), alpha*dt, idx(fieldlist, "subject")),
             drop)
 
         Vu = W.split()[0]

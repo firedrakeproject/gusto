@@ -1,11 +1,14 @@
 import ufl
 import functools
 import operator
-from firedrake import Function, TrialFunction
+from firedrake import Function, TrialFunction, Constant
 
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
+idx = lambda fieldlist, label="prognostic_variable": lambda t: fieldlist.index(t.labels[label]) if label == "prognostic_variable" else fieldlist.index(t.labels[label].name())
+replace_test = lambda new_test, idx=None: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test}), t.labels) if idx is None else Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test[idx(t)]}), t.labels)
+replace_labelled = lambda label, replacer, const=1., idx=None: lambda t: Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer}), t.labels) if idx is None else Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer[idx(t)]}), t.labels)
 
 
 class Term(object):

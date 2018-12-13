@@ -4,8 +4,7 @@ from firedrake import (TestFunction, TrialFunction, Function,
                        LinearVariationalSolver)
 from gusto.form_manipulation_labelling import (drop,
                                                subject, time_derivative,
-                                               diffusion, Term)
-import ufl
+                                               diffusion, replace_labelled)
 
 
 __all__ = ["Diffusion", "interior_penalty_diffusion_form"]
@@ -26,22 +25,10 @@ class Diffusion(object):
         self.phi = Function(field.function_space())
         self.phi1 = Function(field.function_space())
 
-        def replace_subject_with_trial(t):
-            form = ufl.replace(t.form, {t.labels["subject"]: trial})
-            return Term(form, t.labels)
+        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", trial), drop)
+        a += equation().label_map(lambda t: t.has_label(diffusion), replace_labelled("subject", trial, dt), drop)
 
-        def replace_subject_with_dt_trial(t):
-            form = dt*ufl.replace(t.form, {t.labels["subject"]: trial})
-            return Term(form, t.labels)
-
-        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_subject_with_trial, drop)
-        a += equation().label_map(lambda t: t.has_label(diffusion), replace_subject_with_dt_trial, drop)
-
-        def replace_subject(t):
-            form = ufl.replace(t.form, {t.labels["subject"]: self.phi})
-            return Term(form, t.labels)
-
-        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_subject, drop)
+        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", self.phi), drop)
 
         problem = LinearVariationalProblem(a.form, L.form, self.phi1)
         self.solver = LinearVariationalSolver(problem)
