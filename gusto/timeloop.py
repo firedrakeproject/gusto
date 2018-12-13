@@ -24,7 +24,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
          function that returns the field as a function of time.
     """
 
-    def __init__(self, state, equations=None,
+    def __init__(self, state, *, equations=None,
                  advected_fields=None, diffused_fields=None,
                  physics_list=None, prescribed_fields=None):
 
@@ -140,7 +140,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             with timed_stage("Diffusion"):
                 for name, diffusion in self.diffused_fields:
-                    field = getattr(state.fields, name)
+                    field = state.xnp1(field.name())
                     diffusion.apply(field, field)
 
             with timed_stage("Physics"):
@@ -148,6 +148,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     physics.apply()
 
             for field in state.xnp1:
+                state.xn(field.name()).assign(field)
                 state.fields(field.name()).assign(field)
 
             with timed_stage("Dump output"):

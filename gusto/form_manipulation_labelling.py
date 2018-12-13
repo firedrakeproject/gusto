@@ -133,6 +133,7 @@ class Label(object):
 
 time_derivative = Label("time_derivative")
 advection = Label("advection")
+diffusion = Label("diffusion")
 advecting_velocity = Label("uadv", validator=lambda t: type(t) == Function)
 subject = Label("subject", validator=lambda t: type(t) in [TrialFunction, Function])
 prognostic_variable = Label("prognostic_variable", validator=lambda t: isinstance(t, str))

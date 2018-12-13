@@ -1,24 +1,51 @@
-from abc import ABCMeta, abstractmethod
 from firedrake import (TestFunction, TrialFunction, Function,
                        inner, outer, grad, avg, dx, dS_h, dS_v,
                        FacetNormal, LinearVariationalProblem,
-                       LinearVariationalSolver, action)
+                       LinearVariationalSolver)
+from gusto.form_manipulation_labelling import (drop,
+                                               subject, time_derivative,
+                                               diffusion, Term)
+import ufl
 
 
-__all__ = ["InteriorPenalty"]
+__all__ = ["Diffusion", "interior_penalty_diffusion_form"]
 
 
-class Diffusion(object, metaclass=ABCMeta):
+class Diffusion(object):
     """
     Base class for diffusion schemes for gusto.
 
     :arg state: :class:`.State` object.
     """
 
-    def __init__(self, state):
-        self.state = state
+    def __init__(self, state, fieldname, equation):
 
-    @abstractmethod
+        dt = state.timestepping.dt
+        field = state.fields(fieldname)
+        trial = TrialFunction(field.function_space())
+        self.phi = Function(field.function_space())
+        self.phi1 = Function(field.function_space())
+
+        def replace_subject_with_trial(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: trial})
+            return Term(form, t.labels)
+
+        def replace_subject_with_dt_trial(t):
+            form = dt*ufl.replace(t.form, {t.labels["subject"]: trial})
+            return Term(form, t.labels)
+
+        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_subject_with_trial, drop)
+        a += equation().label_map(lambda t: t.has_label(diffusion), replace_subject_with_dt_trial, drop)
+
+        def replace_subject(t):
+            form = ufl.replace(t.form, {t.labels["subject"]: self.phi})
+            return Term(form, t.labels)
+
+        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_subject, drop)
+
+        problem = LinearVariationalProblem(a.form, L.form, self.phi1)
+        self.solver = LinearVariationalSolver(problem)
+
     def apply(self, x, x_out):
         """
         Function takes x as input, computes F(x) and returns x_out
@@ -27,10 +54,12 @@ class Diffusion(object, metaclass=ABCMeta):
         :arg x: :class:`.Function` object, the input Function.
         :arg x_out: :class:`.Function` object, the output Function.
         """
-        pass
+        self.phi.assign(x)
+        self.solver.solve()
+        x_out.assign(self.phi1)
 
 
-class InteriorPenalty(Diffusion):
+def interior_penalty_diffusion_form(state, V, *, kappa, mu):
     """
     Interior penalty diffusion method
 
@@ -44,30 +73,20 @@ class InteriorPenalty(Diffusion):
 
     """
 
-    def __init__(self, state, V, kappa, mu, bcs=None):
-        super(InteriorPenalty, self).__init__(state)
+    gamma = TestFunction(V)
+    phi = Function(V)
+    n = FacetNormal(state.mesh)
 
-        dt = state.timestepping.dt
-        gamma = TestFunction(V)
-        phi = TrialFunction(V)
-        self.phi1 = Function(V)
-        n = FacetNormal(state.mesh)
-        a = inner(gamma, phi)*dx + dt*inner(grad(gamma), grad(phi)*kappa)*dx
+    form = subject(inner(grad(gamma), grad(phi)*kappa)*dx, phi)
 
-        def get_flux_form(dS, M):
+    def get_flux_form(dS, M):
 
-            fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
-                      - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
-                      + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
-            return fluxes
+        fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
+                  - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
+                  + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
+        return fluxes
 
-        a += dt*get_flux_form(dS_v, kappa)
-        a += dt*get_flux_form(dS_h, kappa)
-        L = inner(gamma, phi)*dx
-        problem = LinearVariationalProblem(a, action(L, self.phi1), self.phi1, bcs=bcs)
-        self.solver = LinearVariationalSolver(problem)
+    form += subject(get_flux_form(dS_v, kappa), phi)
+    form += subject(get_flux_form(dS_h, kappa), phi)
 
-    def apply(self, x_in, x_out):
-        self.phi1.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.phi1)
+    return diffusion(form)

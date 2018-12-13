@@ -11,19 +11,15 @@ def setup_IPdiffusion(dirname, vector, DG):
     m = PeriodicIntervalMesh(50, L)
     mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
 
-    fieldlist = ['u', 'D']
     timestepping = TimesteppingParameters(dt=dt)
-    parameters = CompressibleParameters()
     output = OutputParameters(dirname=dirname)
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   timestepping=timestepping,
-                  parameters=parameters,
-                  output=output,
-                  fieldlist=fieldlist)
+                  output=output)
 
     x = SpatialCoordinate(mesh)
+    build_spaces(state, "CG", 1, 1)
     if vector:
         kappa = Constant([[0.05, 0.], [0., 0.05]])
         if DG:
@@ -46,8 +42,8 @@ def setup_IPdiffusion(dirname, vector, DG):
         f.project(fexpr)
 
     mu = 5.
-    f_diffusion = InteriorPenalty(state, f.function_space(), kappa=kappa, mu=mu)
-    diffused_fields = [("f", f_diffusion)]
+    eqn = DiffusionEquation(state, f.name(), f.function_space(), kappa=kappa, mu=mu)
+    diffused_fields = [(f.name(), Diffusion(state, f.name(), eqn))]
     stepper = AdvectionDiffusion(state, diffused_fields=diffused_fields)
     return stepper
 

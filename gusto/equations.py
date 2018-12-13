@@ -5,6 +5,7 @@ from firedrake import (Function, TestFunction, inner, dx, div,
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                prognostic_variable,
                                                linearisation)
+from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form)
 from gusto.state import build_spaces
@@ -54,6 +55,16 @@ class ContinuityEquation(PrognosticEquation):
 
     def form(self):
         return continuity_form(self.state, self.function_space, **self.kwargs)
+
+
+class DiffusionEquation(PrognosticEquation):
+
+    def __init__(self, state, field_name, function_space, **kwargs):
+        super().__init__(state, function_space, field_name)
+        self.kwargs = kwargs
+
+    def form(self):
+        return interior_penalty_diffusion_form(self.state, self.function_space, **self.kwargs)
 
 
 class ShallowWaterEquations(PrognosticEquation):
