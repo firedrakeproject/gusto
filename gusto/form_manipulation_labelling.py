@@ -7,7 +7,7 @@ from firedrake.formmanipulation import split_form
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
-replace_test = lambda new_test: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test[t.labels["subject"].function_space().index]}), t.labels)
+replace_test = lambda new_test: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test}), t.labels)
 replace_labelled = lambda label, replacer, const=1., single=False: lambda t: Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer}), t.labels) if single else Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer[t.labels[label].function_space().index]}), t.labels)
 linearise = lambda const=1: lambda t: functools.reduce(operator.add, [Term(Constant(const)*l.form, dict(t.labels, **l.labels)) for l in t.get("linearisation")])
 extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
