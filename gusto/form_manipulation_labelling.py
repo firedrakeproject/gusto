@@ -2,13 +2,15 @@ import ufl
 import functools
 import operator
 from firedrake import Function, TrialFunction, Constant
+from firedrake.formmanipulation import split_form
 
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
-idx = lambda fieldlist, label="prognostic_variable": lambda t: fieldlist.index(t.labels[label]) if label == "prognostic_variable" else fieldlist.index(t.labels[label].name())
-replace_test = lambda new_test, idx=None: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test}), t.labels) if idx is None else Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test[idx(t)]}), t.labels)
-replace_labelled = lambda label, replacer, const=1., idx=None: lambda t: Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer}), t.labels) if idx is None else Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer[idx(t)]}), t.labels)
+replace_test = lambda new_test: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test[t.labels["subject"].function_space().index]}), t.labels)
+replace_labelled = lambda label, replacer, const=1., single=False: lambda t: Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer}), t.labels) if single else Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer[t.labels[label].function_space().index]}), t.labels)
+linearise = lambda const=1: lambda t: functools.reduce(operator.add, [Term(Constant(const)*l.form, dict(t.labels, **l.labels)) for l in t.get("linearisation")])
+extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
 
 
 class Term(object):
@@ -88,7 +90,7 @@ class LabelledForm(object):
 
 class Label(object):
     """
-    Class provinding labelling functionality for Gusto terms and equations
+    Class providing labelling functionality for Gusto terms and equations
 
     :arg label: str giving the name of the label.
     :arg value: str providing the value of the label. Defaults to True.
@@ -138,6 +140,5 @@ time_derivative = Label("time_derivative")
 advection = Label("advection")
 diffusion = Label("diffusion")
 advecting_velocity = Label("uadv", validator=lambda t: type(t) == Function)
-subject = Label("subject", validator=lambda t: type(t) in [TrialFunction, Function])
-prognostic_variable = Label("prognostic_variable", validator=lambda t: isinstance(t, str))
+subject = Label("subject", validator=lambda t: type(t) in [TrialFunction, Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])
 linearisation = Label("linearisation", validator=lambda t: isinstance(t, LabelledForm))

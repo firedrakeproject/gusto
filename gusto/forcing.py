@@ -1,11 +1,10 @@
-from firedrake import (TestFunctions, TrialFunctions, Function,
+from firedrake import (TrialFunctions, Function,
                        DirichletBC, LinearVariationalProblem,
                        LinearVariationalSolver)
 from gusto.configuration import DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
-                                               advection, all_terms,
-                                               replace_test,
-                                               replace_labelled, idx)
+                                               advection,
+                                               replace_labelled)
 
 __all__ = ["Forcing"]
 
@@ -33,10 +32,6 @@ class Forcing(object):
         self.xF = Function(state.spaces("W"))
 
         eqn = equation().label_map(lambda t: t.has_label(advection), drop)
-
-        tests = TestFunctions(state.spaces("W"))
-
-        eqn = eqn.label_map(all_terms, replace_test(tests, idx(fieldlist)))
         assert len(eqn) > 1
         self._build_forcing_solver(state, fieldlist, eqn)
 
@@ -48,15 +43,15 @@ class Forcing(object):
         dt = state.timestepping.dt
 
         a = equation.label_map(lambda t: t.has_label(time_derivative),
-                               replace_labelled("subject", trials, idx=idx(fieldlist)),
+                               replace_labelled("subject", trials),
                                drop)
         L_explicit = equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled("subject", self.x0.split(), (1-alpha)*dt, idx(fieldlist, "subject")),
+            replace_labelled("subject", self.x0.split(), (1-alpha)*dt),
             drop)
         L_implicit = equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled("subject", self.x0.split(), alpha*dt, idx(fieldlist, "subject")),
+            replace_labelled("subject", self.x0.split(), alpha*dt),
             drop)
 
         Vu = W.split()[0]

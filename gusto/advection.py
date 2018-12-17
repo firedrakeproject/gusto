@@ -6,7 +6,8 @@ from firedrake import (Function, LinearVariationalProblem,
 from firedrake.utils import cached_property
 from gusto.form_manipulation_labelling import (all_terms, advection,
                                                time_derivative, drop,
-                                               replace_test, replace_labelled)
+                                               replace_test, replace_labelled,
+                                               extract)
 from gusto.recovery import Recoverer
 
 
@@ -58,14 +59,11 @@ class Advection(object, metaclass=ABCMeta):
 
             self.state = state
             self.field = state.fields(fieldname)
+            self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
-            if any([t.get("prognostic_variable") for t in equation()]):
-                equation = equation().label_map(
-                    lambda t: t.get("prognostic_variable") == fieldname,
-                    map_if_false=drop)
-            else:
-                equation = equation()
-            self.equation = equation.label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
+            if len(equation.function_space) > 1:
+                idx = self.field.function_space().index
+                self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
             self.ubar = Function(state.spaces("HDiv"))
             self.dt = state.timestepping.dt
@@ -197,13 +195,13 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
 
         return self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                       map_if_true=replace_labelled("subject", self.trial),
+                                       map_if_true=replace_labelled("subject", self.trial, single=True),
                                        map_if_false=drop).form
 
     @abstractproperty
     def rhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -self.dt)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -self.dt, single=True)).form
 
     def update_ubar(self, uadv):
         self.ubar.assign(uadv)
@@ -391,12 +389,12 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.trial)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, self.theta*self.dt)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, self.theta*self.dt, single=True)).form
 
     @cached_property
     def rhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -(1-self.theta)*self.dt)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -(1-self.theta)*self.dt, single=True)).form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

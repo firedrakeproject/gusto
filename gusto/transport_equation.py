@@ -1,5 +1,5 @@
 from enum import Enum
-from firedrake import (Function, TestFunction, FacetNormal,
+from firedrake import (Function, TestFunction, TestFunctions, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
                        ds, ds_v, ds_t, ds_b,
                        outer, sign, cross, CellNormal,
@@ -80,12 +80,17 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     return form
 
 
-def continuity_form(state, V, *, ibp=IntegrateByParts.ONCE):
+def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     ubar = Function(state.spaces("HDiv"))
-    test = TestFunction(V)
-    q = Function(V)
 
-    dS, ds = surface_measures(V)
+    if len(V) > 1:
+        test = TestFunctions(V)[idx]
+        q = Function(V).split()[idx]
+    else:
+        test = TestFunction(V)
+        q = Function(V)
+
+    dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
@@ -119,7 +124,7 @@ def advection_vector_manifold_form(state, V):
     return L
 
 
-def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     """
     Defines the vector invariant form of the vector advection term.
 
@@ -129,10 +134,14 @@ def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
               take the value None, "once" or "twice". Defaults to "once".
     """
     ubar = Function(state.spaces("HDiv"))
-    test = TestFunction(V)
-    q = Function(V)
+    if len(V) > 1:
+        test = TestFunctions(V)[idx]
+        q = Function(V).split()[idx]
+    else:
+        test = TestFunction(V)
+        q = Function(V)
 
-    dS, ds = surface_measures(V)
+    dS, ds = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)

@@ -9,10 +9,9 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import DEBUG
-from gusto.form_manipulation_labelling import drop, time_derivative, linearisation, Term
+from gusto.form_manipulation_labelling import drop, time_derivative, linearisation, all_terms, replace_labelled, linearise
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
-import ufl
 
 
 __all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
@@ -747,42 +746,20 @@ class ShallowWaterSolver(TimesteppingSolver):
 
         # Split up the rhs vector (symbolically)
         W = state.spaces("W")
-        self.xrhs = Function(W)
-        tests = TestFunctions(W)
         trials = TrialFunctions(W)
-
-        def replace_with_mixed_trials(t):
-            field = t.labels["subject"]
-            idx = self.equation.fieldlist.index(field.name())
-            test = t.form.arguments()[0]
-            form = ufl.replace(t.form, {field: trials[idx], test: tests[idx]})
-            return Term(form, t.labels)
+        self.xrhs = Function(W)
 
         aeqn = equation.label_map(lambda t: t.has_label(time_derivative),
-                                  replace_with_mixed_trials,
-                                  drop)
-
-        def linearise(t):
-            linear_form = t.get("linearisation")
-            field = linear_form.terms[0].labels["subject"]
-            idx = self.equation.fieldlist.index(field.name())
-            form = beta*ufl.replace(linear_form.form, {field: trials[idx]})
-            return Term(form, t.labels)
+                                  map_if_false=drop)
 
         aeqn += equation.label_map(lambda t: t.has_label(linearisation),
-                                   linearise,
+                                   linearise(beta),
                                    drop)
 
-        def replace_with_mixed_fns(t):
-            field = t.labels["subject"]
-            idx = self.equation.fieldlist.index(field.name())
-            test = t.form.arguments()[0]
-            x = self.xrhs.split()[idx]
-            form = ufl.replace(t.form, {field: x, test: tests[idx]})
-            return Term(form, t.labels)
+        aeqn = aeqn.label_map(all_terms, replace_labelled("subject", trials))
 
         Leqn = equation.label_map(lambda t: t.has_label(time_derivative),
-                                  replace_with_mixed_fns,
+                                  replace_labelled("subject", self.xrhs.split()),
                                   drop)
 
         # Place to put result of u rho solver
