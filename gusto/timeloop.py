@@ -203,6 +203,8 @@ class CrankNicolson(BaseTimestepper):
             for name, scheme in advected_fields
             if name in self.fieldlist]
 
+        self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(advected_fields).keys()))]
+
     @property
     def advecting_velocity(self):
         un = self.state.xn("u")
@@ -235,6 +237,8 @@ class CrankNicolson(BaseTimestepper):
                     advection.update_ubar(self.advecting_velocity)
                     # advects a field from xstar and puts result in xp
                     advection.apply(self.xstar(name), self.xp(name))
+                for name in self.non_advected_fields:
+                    self.xp(name).assign(self.xstar(name))
 
             self.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 

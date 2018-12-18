@@ -5,10 +5,12 @@ from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
-                                               linearisation)
+                                               linearisation, linearise,
+                                               all_terms, drop)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
-                                      continuity_form, advection_form)
+                                      continuity_form, advection_form,
+                                      linear_advection_form)
 from gusto.state import build_spaces
 
 
@@ -79,9 +81,11 @@ class DiffusionEquation(PrognosticEquation):
 
 class ShallowWaterEquations(PrognosticEquation):
 
-    def __init__(self, state, family, degree):
-        self.Vu, self.VD = build_spaces(state, family, degree)
-        state.spaces.W = MixedFunctionSpace((self.Vu, self.VD))
+    def __init__(self, state, family, degree, linear=False):
+
+        self.linear = linear
+        Vu, VD = build_spaces(state, family, degree)
+        state.spaces.W = MixedFunctionSpace((Vu, VD))
         self.function_space = state.spaces.W
 
         self.fieldlist = ['u', 'D']
@@ -109,10 +113,13 @@ class ShallowWaterEquations(PrognosticEquation):
 
         coriolis_term = linearisation(subject(-f*inner(w, state.perp(u))*dx, u), subject(-f*inner(w, state.perp(u))*dx, u))
 
-        pressure_gradient_term = linearisation(subject(g*div(w)*D*dx, D), subject(-g*div(w)*D*dx, D))
+        pressure_gradient_term = linearisation(subject(g*div(w)*D*dx, D), subject(g*div(w)*D*dx, D))
 
         u_form = u_adv + coriolis_term + pressure_gradient_term
 
-        D_form = linearisation(continuity_form(state, W, 1), subject(H*phi*div(u)*dx, u))
+        D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, H))
 
-        return u_form + D_form
+        if self.linear:
+            return u_form.label_map(lambda t: t.has_label(linearisation), linearise(), drop) + D_form.label_map(all_terms, linearise())
+        else:
+            return u_form + D_form

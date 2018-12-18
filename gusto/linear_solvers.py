@@ -9,7 +9,10 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import DEBUG
-from gusto.form_manipulation_labelling import drop, time_derivative, linearisation, all_terms, replace_labelled, linearise
+from gusto.form_manipulation_labelling import (drop, time_derivative,
+                                               linearisation, linearise,
+                                               replace_labelled,
+                                               advecting_velocity)
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -742,7 +745,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         state = self.state
         equation = self.equation()
 
-        beta = state.timestepping.dt*state.timestepping.alpha
+        beta = -state.timestepping.dt*state.timestepping.alpha
 
         # Split up the rhs vector (symbolically)
         W = state.spaces("W")
@@ -756,7 +759,7 @@ class ShallowWaterSolver(TimesteppingSolver):
                                    linearise(beta),
                                    drop)
 
-        aeqn = aeqn.label_map(all_terms, replace_labelled("subject", trials))
+        aeqn = aeqn.label_map(lambda t: t.has_label(advecting_velocity), replace_labelled("uadv", trials), replace_labelled("subject", trials))
 
         Leqn = equation.label_map(lambda t: t.has_label(time_derivative),
                                   replace_labelled("subject", self.xrhs.split()),

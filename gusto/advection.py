@@ -11,7 +11,7 @@ from gusto.form_manipulation_labelling import (all_terms, advection,
 from gusto.recovery import Recoverer
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["ForwardEuler", "SSPRK3", "ThetaMethod"]
 
 
 def embedded_dg(original_apply):
@@ -51,46 +51,44 @@ class Advection(object, metaclass=ABCMeta):
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, fieldname, equation=None, *,
+    def __init__(self, state, fieldname, equation, *,
                  solver_parameters=None,
                  limiter=None, options=None):
 
-        if equation is not None:
+        self.state = state
+        self.field = state.fields(fieldname)
+        self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
-            self.state = state
-            self.field = state.fields(fieldname)
-            self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
+        if len(equation.function_space) > 1:
+            idx = self.field.function_space().index
+            self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
-            if len(equation.function_space) > 1:
-                idx = self.field.function_space().index
-                self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
+        self.ubar = Function(state.spaces("HDiv"))
+        self.dt = state.timestepping.dt
 
-            self.ubar = Function(state.spaces("HDiv"))
-            self.dt = state.timestepping.dt
+        self.solver_parameters = (
+            solver_parameters or {'ksp_type': 'cg',
+                                  'pc_type': 'bjacobi',
+                                  'sub_pc_type': 'ilu'}
+        )
 
-            self.solver_parameters = (
-                solver_parameters or {'ksp_type': 'cg',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
-            )
+        self.limiter = limiter
 
-            self.limiter = limiter
+        if options is not None:
+            self.discretisation_option = options.name
+            self._setup(state, self.field, options)
+        else:
+            self.discretisation_option = None
+            self.fs = self.field.function_space()
 
-            if options is not None:
-                self.discretisation_option = options.name
-                self._setup(state, self.field, options)
-            else:
-                self.discretisation_option = None
-                self.fs = self.field.function_space()
+        if self.discretisation_option is not None:
+            self.equation = self.equation.label_map(all_terms,
+                                                    replace_test(self.test))
 
-            if self.discretisation_option is not None:
-                self.equation = self.equation.label_map(
-                    all_terms, replace_test(self.test))
-
-            # setup required functions
-            self.trial = TrialFunction(self.fs)
-            self.dq = Function(self.fs)
-            self.q1 = Function(self.fs)
+        # setup required functions
+        self.trial = TrialFunction(self.fs)
+        self.dq = Function(self.fs)
+        self.q1 = Function(self.fs)
 
     def _setup(self, state, field, options):
 
@@ -201,7 +199,7 @@ class Advection(object, metaclass=ABCMeta):
     @abstractproperty
     def rhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -self.dt, single=True)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, self.dt, single=True)).form
 
     def update_ubar(self, uadv):
         self.ubar.assign(uadv)
@@ -223,24 +221,6 @@ class Advection(object, metaclass=ABCMeta):
         :arg x_out: :class:`.Function` object, the output Function.
         """
         pass
-
-
-class NoAdvection(Advection):
-    """
-    An non-advection scheme that does nothing.
-    """
-
-    def lhs(self):
-        pass
-
-    def rhs(self):
-        pass
-
-    def update_ubar(self, xn, xnp1, alpha):
-        pass
-
-    def apply(self, x_in, x_out):
-        x_out.assign(x_in)
 
 
 class ExplicitAdvection(Advection):
@@ -389,12 +369,12 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, self.theta*self.dt, single=True)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -self.theta*self.dt, single=True)).form
 
     @cached_property
     def rhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -(1-self.theta)*self.dt, single=True)).form
+        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, (1-self.theta)*self.dt, single=True)).form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
