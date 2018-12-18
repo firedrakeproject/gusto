@@ -392,9 +392,10 @@ class Perturbation(Difference):
     def name(self):
         return self.field1+"_perturbation"
 
+
 class ThermodynamicDiagnostic(DiagnosticField):
     name = "thermodynamic_diagnostic"
-    
+
     def setup(self, state):
         if not self._initialised:
             space = state.fields("theta").function_space()
