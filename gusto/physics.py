@@ -238,7 +238,7 @@ class Fallout(Physics):
         # sedimentation will happen using a full advection method
         eqn = AdvectionEquation(state, Vt, outflow=True)
         self.advection_method = SSPRK3(state, self.rain, eqn,
-                                       options=EmbeddedDGOptions(),
+                                       options=advect_options,
                                        limiter=limiter)
 
     def apply(self):
@@ -397,7 +397,6 @@ class Evaporation(Physics):
                                       * (1.0 - dt * evap_rate
                                          * (cv * L_v / (c_vml * cp * T)
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
->>>>>>> ab0fbdfd56a83c908c435978b8e720117d3880d0
 
     def apply(self):
         self.rho_recoverer.project()
