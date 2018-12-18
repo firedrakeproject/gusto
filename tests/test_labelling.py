@@ -38,8 +38,8 @@ def test_label_form(label_a, labelled_form, form):
     label and form
     """
     assert(isinstance(labelled_form, LabelledForm))
-    assert(labelled_form[0].has_label(label_a))
-    assert(labelled_form[0].form == form)
+    assert(labelled_form.terms[0].has_label(label_a))
+    assert(labelled_form.terms[0].form == form)
 
 
 def test_label_term(label_a, term, form):
