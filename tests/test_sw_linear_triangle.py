@@ -45,7 +45,7 @@ def setup_sw(dirname):
                       ('D', D0)])
 
     advected_fields = []
-    advected_fields.append(("D", ForwardEuler(state, "D", eqns)))
+    advected_fields.append(("D", ForwardEuler(state, D0, eqns)))
 
     linear_solver = ShallowWaterSolver(state, eqns)
 

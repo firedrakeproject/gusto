@@ -51,12 +51,12 @@ class Advection(object, metaclass=ABCMeta):
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, fieldname, equation, *,
+    def __init__(self, state, field, equation, *,
                  solver_parameters=None,
                  limiter=None, options=None):
 
         self.state = state
-        self.field = state.fields(fieldname)
+        self.field = field
         self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
 
         if len(equation.function_space) > 1:
