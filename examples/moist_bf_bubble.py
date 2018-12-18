@@ -7,18 +7,30 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 import sys
 
+if '--hybridization' in sys.argv:
+    hybridization = True
+else:
+    hybridization = False
+if '--recovered' in sys.argv:
+    recovered = True
+else:
+    recovered = False
+if '--limit' in sys.argv:
+    limit = True
+else:
+    limit = False
+if '--diffusion' in sys.argv:
+    diffusion = True
+else:
+    diffusion = False
+
 dt = 1.0
 if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100.
+    deltax = 100. if recovered else 200
     tmax = 1000.
-
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 L = 10000.
 H = 10000.
@@ -27,8 +39,6 @@ ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-diffusion = False
-recovered = True
 degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
@@ -37,6 +47,12 @@ timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 dirname = 'moist_bf'
 if hybridization:
     dirname += '_hybridization'
+if recovered:
+    dirname += '_recovered'
+if limit:
+    dirname += '_limit'
+if diffusion:
+    dirname += '_diffusion'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
@@ -114,11 +130,18 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
+physics_boundary_method = 'physics' if recovered else None
+
 # find perturbed water_v
 w_v = Function(Vt)
 phi = TestFunction(Vt)
+rho_averaged = Function(Vt)
+rho_recoverer = Recoverer(rho0, rho_averaged,
+                          VDG=FunctionSpace(mesh, BrokenElement(Vt.ufl_element())),
+                          boundary_method=physics_boundary_method)
+rho_recoverer.project()
 
-pi = thermodynamics.pi(state.parameters, rho0, theta0)
+pi = thermodynamics.pi(state.parameters, rho_averaged, theta0)
 p = thermodynamics.p(state.parameters, pi)
 T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
 w_sat = thermodynamics.r_sat(state.parameters, T, p)
@@ -141,6 +164,17 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
                               ('water_v', water_vb)])
 
+
+# set up limiter
+if limit:
+    if recovered:
+        limiter = VertexBasedLimiter(VDG1)
+    else:
+        limiter = ThetaLimiter(Vt)
+else:
+    limiter = None
+
+
 # Set up advection schemes
 if recovered:
     VDG1 = FunctionSpace(mesh, "DG", 1)
@@ -151,10 +185,12 @@ if recovered:
 
     u_opts = RecoveredOptions(embedding_space=Vu_DG1,
                               recovered_space=Vu_CG1,
-                              broken_space=Vu)
+                              broken_space=Vu,
+                              boundary_method='velocity')
     rho_opts = RecoveredOptions(embedding_space=VDG1,
                                 recovered_space=VCG1,
-                                broken_space=Vr)
+                                broken_space=Vr,
+                                boundary_method='density')
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)
@@ -165,16 +201,16 @@ if recovered:
 else:
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
-advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
-                   ('theta', SSPRK3(state, theta0, thetaeqn)),
-                   ('water_v', SSPRK3(state, water_v0, thetaeqn)),
-                   ('water_c', SSPRK3(state, water_c0, thetaeqn))]
-if recovered:
-    advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
-else:
-    advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
+u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
+euler_poincare = False if recovered else True
+
+advected_fields = [u_advection,
+                   ('rho', SSPRK3(state, rho0, rhoeqn)),
+                   ('theta', SSPRK3(state, theta0, thetaeqn, limiter=limiter)),
+                   ('water_v', SSPRK3(state, water_v0, thetaeqn, limiter=limiter)),
+                   ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter))]
 
 # Set up linear solver
 if hybridization:
@@ -183,10 +219,7 @@ else:
     linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
-if recovered:
-    compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
-else:
-    compressible_forcing = CompressibleForcing(state, moisture=moisture)
+compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

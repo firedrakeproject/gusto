@@ -19,6 +19,14 @@ if '--hybridization' in sys.argv:
     hybridization = True
 else:
     hybridization = False
+if '--recovered' in sys.argv:
+    recovered = True
+else:
+    recovered = False
+if '--limit' in sys.argv:
+    limit = True
+else:
+    limit = False
 
 # make mesh
 L = 10000.
@@ -29,9 +37,7 @@ m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
-limit = False
 diffusion = False
-recovered = True
 degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
@@ -40,6 +46,10 @@ timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 dirname = 'dry_bf_bubble'
 if hybridization:
     dirname += '_hybridization'
+if recovered:
+    dirname += '_recovered'
+if limit:
+    dirname += '_limit'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
@@ -134,7 +144,7 @@ if recovered:
 else:
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
 
 # set up limiter
@@ -142,7 +152,7 @@ if limit:
     if recovered:
         limiter = VertexBasedLimiter(VDG1)
     else:
-        limiter = ThetaLimiter(thetaeqn)
+        limiter = ThetaLimiter(Vt)
 else:
     limiter = None
 

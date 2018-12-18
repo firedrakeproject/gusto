@@ -4,7 +4,8 @@ The recovery operators used for lowest-order advection schemes.
 from gusto.configuration import logger
 from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        VectorFunctionSpace, SpatialCoordinate, as_vector, Constant,
-                       dx, Interpolator, quadrilateral)
+                       dx, Interpolator, quadrilateral, BrokenElement, interval,
+                       TensorProductElement, FiniteElement)
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, RW
 from pyop2 import ON_TOP, ON_BOTTOM
@@ -105,22 +106,43 @@ class Boundary_Recoverer(object):
              constraints. Should be in CG1 and is the field
              output by the initial recovery process.
     :arg v_out: the function to be output. Should be in DG1.
+    :arg method: string giving the method used for the recovery.
+             Valid options are 'density' and 'physics'.
     """
 
-    def __init__(self, v0, v1, v_out):
+    def __init__(self, v0, v1, v_out, method='density'):
 
         self.v_out = v_out
         self.v0 = v0
         self.v1 = v1
-        VDG0 = FunctionSpace(v_out.function_space().mesh(), "DG", 0)
+        self.method = method
+        mesh = v0.function_space().mesh()
+        VDG0 = FunctionSpace(mesh, "DG", 0)
 
         # check function spaces of functions -- this only works for a particular set
         if v0.function_space() != VDG0:
             raise NotImplementedError("We can currently only do boundary recovery when v0 is in DG0.")
-        if v1.function_space() != FunctionSpace(v1.function_space().mesh(), "CG", 1):
-            raise NotImplementedError("We can currently only do boundary recovery when v1 is in CG1.")
-        if v_out.function_space() != FunctionSpace(v_out.function_space().mesh(), "DG", 1):
-            raise NotImplementedError("We can currently only do boundary recovery when v_out is in DG1.")
+        if self.method == 'density':
+            if v1.function_space() != FunctionSpace(mesh, "CG", 1):
+                raise NotImplementedError("This boundary recovery method requires v1 to be in CG1.")
+            if v_out.function_space() != FunctionSpace(mesh, "DG", 1):
+                raise NotImplementedError("This boundary recovery method requires v_out to be in DG1.")
+        elif self.method == 'physics':
+            # base spaces
+            cell = mesh._base_mesh.ufl_cell().cellname()
+            w_hori = FiniteElement("DG", cell, 0)
+            w_vert = FiniteElement("CG", interval, 1)
+            # build element
+            theta_element = TensorProductElement(w_hori, w_vert)
+            # spaces
+            Vtheta = FunctionSpace(mesh, theta_element)
+            Vtheta_broken = FunctionSpace(mesh, BrokenElement(theta_element))
+            if v1.function_space() != Vtheta:
+                raise ValueError("This boundary recovery method requires v1 to be in DG0xCG1 TensorProductSpace.")
+            if v_out.function_space() != Vtheta_broken:
+                raise ValueError("This boundary recovery method requires v_out to be in the broken DG0xCG1 TensorProductSpace.")
+        else:
+            raise ValueError("Specified boundary_method % not valid" % self.method)
 
         VuDG1 = VectorFunctionSpace(VDG0.mesh(), "DG", 1)
         x, z = SpatialCoordinate(VDG0.mesh())
@@ -133,72 +155,85 @@ class Boundary_Recoverer(object):
 
         logger.warning('This boundary recovery method is bespoke: it should only be used extruded meshes based on a periodic interval in 2D.')
 
-        # make DG0 field that is one in rightmost cells, but zero otherwise
-        # this is done as the DOF numbering is different in the rightmost cells
-        max_coord = Function(VDG0).interpolate(Constant(np.max(self.coords.dat.data[:, 0])))
         self.right = Function(VDG0)
-        right_kernel = """
-        if (fmax(COORDS[0][0], fmax(COORDS[1][0], COORDS[2][0])) == MAX[0][0])
+
+        if self.method == 'density':
+            # make DG0 field that is one in rightmost cells, but zero otherwise
+            # this is done as the DOF numbering is different in the rightmost cells
+            max_coord = Function(VDG0).interpolate(Constant(np.max(self.coords.dat.data[:, 0])))
+
+            right_kernel = """
+            if (fmax(COORDS[0][0], fmax(COORDS[1][0], COORDS[2][0])) == MAX[0][0])
             RIGHT[0][0] = 1.0;
-        """
-        par_loop(right_kernel, dx,
-                 args={"COORDS": (self.coords, READ),
-                       "MAX": (max_coord, READ),
-                       "RIGHT": (self.right, RW)})
+            """
+            par_loop(right_kernel, dx,
+                     args={"COORDS": (self.coords, READ),
+                           "MAX": (max_coord, READ),
+                           "RIGHT": (self.right, RW)})
 
-        self.bottom_kernel = """
-        if (RIGHT[0][0] == 1.0)
-        {
-        float x = COORDS[2][0] - COORDS[0][0];
-        float y = COORDS[1][1] - COORDS[0][1];
-        float a = CG1[3][0];
-        float b = CG1[1][0];
-        float c = DG0[0][0];
-        DG1[1][0] = a;
-        DG1[3][0] = b;
-        DG1[2][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-        DG1[0][0] = 4.0 * c - b - a - DG1[2][0];
-        }
-        else
-        {
-        float x = COORDS[1][0] - COORDS[3][0];
-        float y = COORDS[3][1] - COORDS[2][1];
-        float a = CG1[1][0];
-        float b = CG1[3][0];
-        float c = DG0[0][0];
-        DG1[3][0] = a;
-        DG1[1][0] = b;
-        DG1[0][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-        DG1[2][0] = 4.0 * c - b - a - DG1[0][0];
-        }
-        """
+            self.bottom_kernel = """
+            if (RIGHT[0][0] == 1.0)
+            {
+            float x = COORDS[2][0] - COORDS[0][0];
+            float y = COORDS[1][1] - COORDS[0][1];
+            float a = CG1[3][0];
+            float b = CG1[1][0];
+            float c = DG0[0][0];
+            DG1[1][0] = a;
+            DG1[3][0] = b;
+            DG1[2][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[0][0] = 4.0 * c - b - a - DG1[2][0];
+            }
+            else
+            {
+            float x = COORDS[1][0] - COORDS[3][0];
+            float y = COORDS[3][1] - COORDS[2][1];
+            float a = CG1[1][0];
+            float b = CG1[3][0];
+            float c = DG0[0][0];
+            DG1[3][0] = a;
+            DG1[1][0] = b;
+            DG1[0][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[2][0] = 4.0 * c - b - a - DG1[0][0];
+            }
+            """
 
-        self.top_kernel = """
-        if (RIGHT[0][0] == 1.0)
-        {
-        float x = COORDS[2][0] - COORDS[0][0];
-        float y = COORDS[1][1] - COORDS[0][1];
-        float a = CG1[2][0];
-        float b = CG1[0][0];
-        float c = DG0[0][0];
-        DG1[2][0] = a;
-        DG1[0][0] = b;
-        DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-        DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
-        }
-        else
-        {
-        float x = COORDS[0][0] - COORDS[2][0];
-        float y = COORDS[3][1] - COORDS[2][1];
-        float a = CG1[2][0];
-        float b = CG1[0][0];
-        float c = DG0[0][0];
-        DG1[0][0] = a;
-        DG1[2][0] = b;
-        DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-        DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
-        }
-        """
+            self.top_kernel = """
+            if (RIGHT[0][0] == 1.0)
+            {
+            float x = COORDS[2][0] - COORDS[0][0];
+            float y = COORDS[1][1] - COORDS[0][1];
+            float a = CG1[2][0];
+            float b = CG1[0][0];
+            float c = DG0[0][0];
+            DG1[2][0] = a;
+            DG1[0][0] = b;
+            DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
+            }
+            else
+            {
+            float x = COORDS[0][0] - COORDS[2][0];
+            float y = COORDS[3][1] - COORDS[2][1];
+            float a = CG1[2][0];
+            float b = CG1[0][0];
+            float c = DG0[0][0];
+            DG1[0][0] = a;
+            DG1[2][0] = b;
+            DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
+            }
+            """
+        elif self.method == 'physics':
+            self.bottom_kernel = """
+            DG1[0][0] = CG1[1][0] - 2 * (CG1[1][0] - DG0[0][0]);
+            DG1[1][0] = CG1[1][0];
+            """
+
+            self.top_kernel = """
+            DG1[1][0] = CG1[0][0] - 2 * (CG1[0][0] - DG0[0][0]);
+            DG1[0][0] = CG1[0][0];
+            """
 
     def apply(self):
 
@@ -235,7 +270,7 @@ class Recoverer(object):
     :arg VDG: optional :class:`.FunctionSpace`. If not None, v_in is interpolated
          to this space first before recovery happens.
     :arg boundary_method: a string defining which type of method needs to be
-         used at the boundaries. Valid options are 'density' or 'velocity'.
+         used at the boundaries. Valid options are 'density', 'velocity' or 'physics'.
     """
 
     def __init__(self, v_in, v_out, VDG=None, boundary_method=None):
@@ -260,18 +295,18 @@ class Recoverer(object):
 
         # check boundary method options are valid
         if boundary_method is not None:
-            if boundary_method != 'density' and boundary_method != 'velocity':
+            if boundary_method != 'density' and boundary_method != 'velocity' and boundary_method != 'physics':
                 raise ValueError("Specified boundary_method % not valid" % boundary_method)
             if VDG is None:
                 raise ValueError("If boundary_method is specified, VDG also needs specifying.")
 
             # now specify things that we'll need if we are doing boundary recovery
-            if boundary_method == 'density':
+            if boundary_method == 'density' or boundary_method == 'physics':
                 # check dimensions
                 if self.V.value_size != 1:
                     raise ValueError('This method only works for scalar functions.')
-                self.boundary_recoverer = Boundary_Recoverer(self.v_in, self.v_out, self.v)
-            if boundary_method == 'velocity':
+                self.boundary_recoverer = Boundary_Recoverer(self.v_in, self.v_out, self.v, method=self.boundary_method)
+            elif boundary_method == 'velocity':
                 # check dimensions
                 if self.V.value_size != 2:
                     raise NotImplementedError('This method only works for 2D vector functions.')
@@ -283,7 +318,7 @@ class Recoverer(object):
                 self.v_scalar = Function(self.VDG1)
                 self.v_out_scalar = Function(self.VCG1)
 
-                self.boundary_recoverer = Boundary_Recoverer(self.v_in_scalar, self.v_out_scalar, self.v_scalar)
+                self.boundary_recoverer = Boundary_Recoverer(self.v_in_scalar, self.v_out_scalar, self.v_scalar, method='density')
                 # the boundary recoverer needs to be done on a scalar fields
                 # so need to extract component and restore it after the boundary recovery is done
                 self.project_to_vector = Projector(as_vector([self.v_out_scalar, self.v_out[1]]), self.v_out)
@@ -313,7 +348,7 @@ class Recoverer(object):
                 self.boundary_recoverer.apply()
                 self.extra_averager.project()
                 self.restore_vector()
-            elif self.boundary_method == 'density':
+            elif self.boundary_method == 'density' or self.boundary_method == 'physics':
                 self.boundary_recoverer.apply()
                 self.averager.project()
         return self.v_out
