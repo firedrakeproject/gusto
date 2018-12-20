@@ -45,13 +45,13 @@ class Forcing(object):
         a = equation.label_map(lambda t: t.has_label(time_derivative),
                                replace_labelled("subject", trials),
                                drop)
-        L_explicit = equation.label_map(
+        L_explicit = (1-alpha)*dt*equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled("subject", self.x0.split(), (1-alpha)*dt),
+            replace_labelled("subject", self.x0.split()),
             drop)
-        L_implicit = equation.label_map(
+        L_implicit = alpha*dt*equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled("subject", self.x0.split(), alpha*dt),
+            replace_labelled("subject", self.x0.split()),
             drop)
 
         Vu = W.split()[0]

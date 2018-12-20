@@ -7,10 +7,29 @@ from firedrake.formmanipulation import split_form
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
-replace_test = lambda new_test: lambda t: Term(ufl.replace(t.form, {t.form.arguments()[0]: new_test}), t.labels)
-replace_labelled = lambda label, replacer, const=1., single=False: lambda t: Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer}), t.labels) if single else Term(Constant(const)*ufl.replace(t.form, {t.labels[label]: replacer[t.labels[label].function_space().index]}), t.labels)
-linearise = lambda const=1: lambda t: functools.reduce(operator.add, [Term(Constant(const)*l.form, dict(t.labels, **l.labels)) for l in t.get("linearisation")])
+linearise = lambda t: functools.reduce(
+    operator.add, [Term(l.form, dict(t.labels, **l.labels))
+                   for l in t.get("linearisation")]
+)
 extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
+
+def replace_test(new_test):
+    def rep(t):
+        test = t.form.arguments()[0]
+        new_form = ufl.replace(t.form, {test: new_test})
+        return Term(new_form, t.labels)
+    return rep
+
+def replace_labelled(label, replacer, single=False):
+    def rep(t):
+        old = t.labels[label]
+        if single:
+            new = replacer
+        else:
+            new = replacer[old.function_space().index]
+        new_form = ufl.replace(t.form, {old: new})
+        return Term(new_form, t.labels)
+    return rep
 
 
 class Term(object):
@@ -47,6 +66,13 @@ class Term(object):
 
     __radd__ = __add__
 
+    def __rmul__(self, other):
+        if type(other) is float:
+            other = Constant(other)
+        elif type(other) is not Constant:
+            return NotImplemented
+        return Term(other*self.form, self.labels)
+
 
 class LabelledForm(object):
     __slots__ = ["terms"]
@@ -66,6 +92,13 @@ class LabelledForm(object):
             return self
         else:
             return NotImplemented
+
+    def __rmul__(self, other):
+        if type(other) is float:
+            other = Constant(other)
+        elif type(other) is not Constant:
+            return NotImplemented
+        return self.label_map(all_terms, lambda t: Term(other*t.form, t.labels))
 
     def __iter__(self):
         return iter(self.terms)

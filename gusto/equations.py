@@ -120,6 +120,6 @@ class ShallowWaterEquations(PrognosticEquation):
         D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, H))
 
         if self.linear:
-            return u_form.label_map(lambda t: t.has_label(linearisation), linearise(), drop) + D_form.label_map(all_terms, linearise())
+            return u_form.label_map(lambda t: t.has_label(linearisation), linearise, drop) + D_form.label_map(all_terms, linearise)
         else:
             return u_form + D_form

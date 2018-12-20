@@ -194,8 +194,10 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def rhs(self):
-
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, self.dt, single=True)).form
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
+        r = r.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
+        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
+        return r.form
 
     def update_ubar(self, uadv):
         self.ubar.assign(uadv)
@@ -365,12 +367,18 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, -self.theta*self.dt, single=True)).form
+        l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True))
+        l = l.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
+        l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.theta*self.dt*t)
+        return l.form
 
     @cached_property
     def rhs(self):
 
-        return self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True)).label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, (1-self.theta)*self.dt, single=True)).form
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
+        r = r.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
+        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: (1-self.theta)*self.dt*t)
+        return r.form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

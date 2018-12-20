@@ -755,11 +755,13 @@ class ShallowWaterSolver(TimesteppingSolver):
         aeqn = equation.label_map(lambda t: t.has_label(time_derivative),
                                   map_if_false=drop)
 
-        aeqn += equation.label_map(lambda t: t.has_label(linearisation),
-                                   linearise(beta),
-                                   drop)
+        aeqn += beta*equation.label_map(lambda t: t.has_label(linearisation),
+                                        linearise,
+                                        drop)
 
-        aeqn = aeqn.label_map(lambda t: t.has_label(advecting_velocity), replace_labelled("uadv", trials), replace_labelled("subject", trials))
+        aeqn = aeqn.label_map(lambda t: t.has_label(advecting_velocity),
+                              replace_labelled("uadv", trials),
+                              replace_labelled("subject", trials))
 
         Leqn = equation.label_map(lambda t: t.has_label(time_derivative),
                                   replace_labelled("subject", self.xrhs.split()),
