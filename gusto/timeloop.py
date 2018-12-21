@@ -6,10 +6,10 @@ from gusto.form_manipulation_labelling import advection
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
 
-__all__ = ["CrankNicolson", "AdvectionDiffusion"]
+__all__ = ["Timestepper", "CrankNicolson"]
 
 
-class BaseTimestepper(object, metaclass=ABCMeta):
+class Timestepper(object, metaclass=ABCMeta):
     """
     Base timestepping class for Gusto
 
@@ -63,11 +63,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             state.xn(field, state.fields(field).function_space())
             state.xnp1(field, state.fields(field).function_space())
 
-    @abstractproperty
-    def passive_advection(self):
-        """list of fields that are passively advected (and possibly diffused)"""
-        pass
-
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -87,18 +82,27 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         Setup the timeloop by setting up diagnostics, dumping the fields and
         picking up from a previous run, if required
         """
+        for name, scheme in self.advected_fields:
+            scheme.setup(self.state, u_advecting="prescribed")
+
         self.state.setup_diagnostics()
         with timed_stage("Dump output"):
             self.state.setup_dump(tmax, pickup)
             t = self.state.dump(t, pickup)
         return t
 
-    @abstractmethod
-    def semi_implicit_step(self):
-        """
-        Implement the semi implicit step for the timestepping scheme.
-        """
-        pass
+    def timestep(self):
+
+        state = self.state
+
+        for name, advection in self.advected_fields:
+            old_field = getattr(state.xn, name)
+            new_field = getattr(state.xnp1, name)
+            advection.apply(old_field, new_field)
+
+        for field in state.xnp1:
+            state.xn(field.name()).assign(field)
+            state.fields(field.name()).assign(field)
 
     def run(self, t, tmax, pickup=False):
         """
@@ -127,22 +131,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for name, evaluation in self.prescribed_fields:
                 state.fields(name).project(evaluation(t))
 
-            self.semi_implicit_step()
-
-            for name, advection in self.passive_advection:
-                old_field = getattr(state.xn, name)
-                new_field = getattr(state.xnp1, name)
-                # advects a field from xn and puts result in xnp1
-                advection.update_ubar(self.advecting_velocity)
-                advection.apply(old_field, new_field)
-
-            for field in state.xn:
-                field.assign(state.xnp1(field.name()))
-
-            with timed_stage("Diffusion"):
-                for name, diffusion in self.diffused_fields:
-                    field = state.xnp1(field.name())
-                    diffusion.apply(field, field)
+            self.timestep()
 
             with timed_stage("Physics"):
                 for physics in self.physics_list:
@@ -161,7 +150,67 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
-class CrankNicolson(BaseTimestepper):
+class SemiImplicitTimestepper(Timestepper):
+
+    def __init__(self, state, *, equations, advected_fields,
+                 diffused_fields=None, physics_list=None, prescribed_fields=None):
+
+        super().__init__(state, equations=equations,
+                         advected_fields=advected_fields,
+                         diffused_fields=diffused_fields,
+                         physics_list=physics_list,
+                         prescribed_fields=prescribed_fields)
+
+        self.xstar = FieldCreator()
+        self.xstar(self.fieldlist, state.spaces("W"))
+
+    @property
+    def advecting_velocity(self):
+        un = self.state.xn("u")
+        unp1 = self.state.xnp1("u")
+        alpha = self.state.timestepping.alpha
+        return un + alpha*(unp1-un)
+
+    @property
+    def passive_advection(self):
+        """
+        Advected fields that are not part of the semi implicit step are
+        passively advected
+        """
+        return [(name, scheme)
+                for name, scheme in self.advected_fields
+                if name not in self.fieldlist]
+
+    @abstractmethod
+    def semi_implicit_step(self):
+        """
+        Implement the semi implicit step for the timestepping scheme.
+        """
+        pass
+
+    def timestep(self):
+
+        state = self.state
+
+        self.semi_implicit_step()
+
+        for name, advection in self.passive_advection:
+            old_field = getattr(state.xn, name)
+            new_field = getattr(state.xnp1, name)
+            # advects a field from xn and puts result in xnp1
+            advection.update_ubar(self.advecting_velocity)
+            advection.apply(old_field, new_field)
+
+        for field in state.xn:
+            field.assign(state.xnp1(field.name()))
+
+        with timed_stage("Diffusion"):
+            for name, diffusion in self.diffused_fields:
+                field = state.xnp1(field.name())
+                diffusion.apply(field, field)
+
+
+class CrankNicolson(SemiImplicitTimestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
     splitting and auxilliary semi-Lagrangian advection.
@@ -187,11 +236,11 @@ class CrankNicolson(BaseTimestepper):
                          diffused_fields=diffused_fields,
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
+
         self.linear_solver = linear_solver
+
         self.forcing = Forcing(state, equations)
 
-        self.xstar = FieldCreator()
-        self.xstar(self.fieldlist, state.spaces("W"))
         self.xp = FieldCreator()
         self.xp(self.fieldlist, state.spaces("W"))
 
@@ -211,23 +260,6 @@ class CrankNicolson(BaseTimestepper):
             scheme.setup(state, advecting_velocity="prescribed")
 
         self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(advected_fields).keys()))]
-
-    @property
-    def advecting_velocity(self):
-        un = self.state.xn("u")
-        unp1 = self.state.xnp1("u")
-        alpha = self.state.timestepping.alpha
-        return un + alpha*(unp1-un)
-
-    @property
-    def passive_advection(self):
-        """
-        Advected fields that are not part of the semi implicit step are
-        passively advected
-        """
-        return [(name, scheme)
-                for name, scheme in self.advected_fields
-                if name not in self.fieldlist]
 
     def semi_implicit_step(self):
         state = self.state
@@ -263,27 +295,3 @@ class CrankNicolson(BaseTimestepper):
                 state.xnp1.X += self.dy
 
             self._apply_bcs()
-
-
-class AdvectionDiffusion(BaseTimestepper):
-    """
-    This class implements a timestepper for the advection-diffusion equations.
-    No semi implicit step is required.
-    """
-
-    @property
-    def advecting_velocity(self):
-        return self.state.fields("u")
-
-    @property
-    def passive_advection(self):
-        """
-        All advected fields are passively advected
-        """
-        if self.advected_fields is not None:
-            return self.advected_fields
-        else:
-            return []
-
-    def semi_implicit_step(self):
-        pass

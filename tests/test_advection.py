@@ -90,7 +90,7 @@ def error(geometry):
 
 def run(state, advected_fields, tmax):
 
-    timestepper = AdvectionDiffusion(state, advected_fields=advected_fields)
+    timestepper = Timestepper(state, advected_fields=advected_fields)
     timestepper.run(0, tmax)
     return timestepper.state.fields
 

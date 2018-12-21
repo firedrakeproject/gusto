@@ -4,10 +4,12 @@ from firedrake import (Function, LinearVariationalProblem,
                        TestFunction, TrialFunction, FunctionSpace,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
+import ufl
 from gusto.form_manipulation_labelling import (all_terms, advection,
+                                               advecting_velocity,
                                                time_derivative, drop,
                                                replace_test, replace_labelled,
-                                               extract)
+                                               extract, Term)
 from gusto.recovery import Recoverer
 
 
@@ -92,7 +94,9 @@ class Advection(object, metaclass=ABCMeta):
                     self.fs = options.embedding_space
                 self.xdg_in = Function(self.fs)
                 self.xdg_out = Function(self.fs)
-                self.test = TestFunction(self.fs)
+                test = TestFunction(self.fs)
+                self.equation = self.equation.label_map(all_terms,
+                                                        replace_test(test))
                 self.x_projected = Function(field.function_space())
                 parameters = {'ksp_type': 'cg',
                               'pc_type': 'bjacobi',
@@ -133,14 +137,20 @@ class Advection(object, metaclass=ABCMeta):
                         ) for j in range(dim)])
                     )
                 test = TestFunction(self.fs)
-                self.test = test + dot(dot(self.ubar, tau), grad(test))
-            self.equation = self.equation.label_map(all_terms,
-                                                    replace_test(self.test))
+
+                def replace_with_supg_test(t):
+                    uadv = t.get("uadv") or Function(state.spaces("HDiv"))
+                    test = t.form.arguments()[0]
+                    new_test = test + dot(dot(uadv, tau), grad(test))
+                    return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
+
+                self.equation = self.equation.label_map(
+                    all_terms, replace_with_supg_test)
         else:
             self.discretisation_option = None
             self.fs = self.field.function_space()
 
-    def setup(self, state, advecting_velocity="fixed", labels=None):
+    def setup(self, state, u_advecting="fixed", labels=None):
 
         # select labelled terms from the equation if labels are specified
         if labels is not None:
@@ -149,22 +159,24 @@ class Advection(object, metaclass=ABCMeta):
                 map_if_true=drop)
 
         # setup advecting velocity
-        if advecting_velocity == "fixed":
+        if u_advecting == "fixed":
             # the advecting velocity is fixed over the timestep and is
             # specified by updating self.ubar
             self.ubar = Function(state.spaces("HDiv"))
             uadv = self.ubar
-        elif advecting_velocity == "prescribed":
+        elif u_advecting == "prescribed":
             # the advecting velocity is prescribed and stored in
             # state.fields.u
             uadv = state.fields("u")
-        elif advecting_velocity == "calculate":
+        elif u_advecting == "calculate":
             # the advecting velocity is calculated as part of this
             # timestepping scheme and must be replaced by q1.sub(0)
             assert len(self.field.function_space()) > 1
             uadv = self.q1.sub(0)
+        else:
+            raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
         self.equation = self.equation.label_map(
-            lambda t: t.has_label(advection),
+            lambda t: t.has_label(advecting_velocity),
             replace_labelled("uadv", uadv, single=True))
 
     def pre_apply(self, x_in, discretisation_option):
