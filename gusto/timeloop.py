@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
+from gusto.form_manipulation_labelling import advection
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
 
@@ -202,6 +203,12 @@ class CrankNicolson(BaseTimestepper):
             (name, scheme)
             for name, scheme in advected_fields
             if name in self.fieldlist]
+
+        for name, scheme in self.active_advection:
+            scheme.setup(state, labels=[advection])
+
+        for name, scheme in self.passive_advection:
+            scheme.setup(state, advecting_velocity="prescribed")
 
         self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(advected_fields).keys()))]
 

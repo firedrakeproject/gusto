@@ -55,15 +55,13 @@ class Advection(object, metaclass=ABCMeta):
                  solver_parameters=None,
                  limiter=None, options=None):
 
-        self.state = state
         self.field = field
-        self.equation = equation().label_map(lambda t: not any(t.has_label(time_derivative, advection)), map_if_true=drop)
+        self.equation = equation()
 
         if len(equation.function_space) > 1:
             idx = self.field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
-        self.ubar = Function(state.spaces("HDiv"))
         self.dt = state.timestepping.dt
 
         self.solver_parameters = (
@@ -74,74 +72,100 @@ class Advection(object, metaclass=ABCMeta):
 
         self.limiter = limiter
 
-        if options is not None:
-            self.discretisation_option = options.name
-            self._setup(state, self.field, options)
-        else:
-            self.discretisation_option = None
-            self.fs = self.field.function_space()
-
-        if self.discretisation_option is not None:
-            self.equation = self.equation.label_map(all_terms,
-                                                    replace_test(self.test))
+        self._setup_from_options(state, self.field, options)
 
         # setup required functions
         self.trial = TrialFunction(self.fs)
         self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
 
-    def _setup(self, state, field, options):
+    def _setup_from_options(self, state, field, options):
 
-        if options.name in ["embedded_dg", "recovered"]:
-            if options.embedding_space is None:
-                V_elt = BrokenElement(field.function_space().ufl_element())
-                self.fs = FunctionSpace(state.mesh, V_elt)
-            else:
-                self.fs = options.embedding_space
-            self.xdg_in = Function(self.fs)
-            self.xdg_out = Function(self.fs)
-            self.test = TestFunction(self.fs)
-            self.x_projected = Function(field.function_space())
-            parameters = {'ksp_type': 'cg',
-                          'pc_type': 'bjacobi',
-                          'sub_pc_type': 'ilu'}
-            self.Projector = Projector(self.xdg_out, self.x_projected,
-                                       solver_parameters=parameters)
+        if options is not None:
+            self.discretisation_option = options.name
 
-        if options.name == "recovered":
-            # set up the necessary functions
-            self.x_in = Function(field.function_space())
-            x_rec = Function(options.recovered_space)
-            x_brok = Function(options.broken_space)
+            if options.name in ["embedded_dg", "recovered"]:
+                if options.embedding_space is None:
+                    V_elt = BrokenElement(field.function_space().ufl_element())
+                    self.fs = FunctionSpace(state.mesh, V_elt)
+                else:
+                    self.fs = options.embedding_space
+                self.xdg_in = Function(self.fs)
+                self.xdg_out = Function(self.fs)
+                self.test = TestFunction(self.fs)
+                self.x_projected = Function(field.function_space())
+                parameters = {'ksp_type': 'cg',
+                              'pc_type': 'bjacobi',
+                              'sub_pc_type': 'ilu'}
+                self.Projector = Projector(self.xdg_out, self.x_projected,
+                                           solver_parameters=parameters)
 
-            # set up interpolators and projectors
-            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
-            self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
-            self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
-            if self.limiter is not None:
-                self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
-                self.x_out_projector = Recoverer(x_brok, self.x_projected)
-                # when the "average" method comes into firedrake master, this will be
-                # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
-        elif options.name == "supg":
-            self.fs = field.function_space()
-            self.solver_parameters['ksp_type'] = 'gmres'
+            if options.name == "recovered":
+                # set up the necessary functions
+                self.x_in = Function(field.function_space())
+                x_rec = Function(options.recovered_space)
+                x_brok = Function(options.broken_space)
 
-            dim = state.mesh.topological_dimension()
-            if options.tau is not None:
-                tau = options.tau
-                assert tau.ufl_shape == (dim, dim)
-            else:
-                vals = [options.default*self.dt]*dim
-                for component, value in options.tau_components:
-                    vals[state.components.component] = value
-                tau = Constant(tuple([
-                    tuple(
-                        [vals[j] if i == j else 0. for i, v in enumerate(vals)]
-                    ) for j in range(dim)])
-                )
-            test = TestFunction(self.fs)
-            self.test = test + dot(dot(self.ubar, tau), grad(test))
+                # set up interpolators and projectors
+                self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
+                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
+                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
+                if self.limiter is not None:
+                    self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
+                    self.x_out_projector = Recoverer(x_brok, self.x_projected)
+                    # when the "average" method comes into firedrake master, this will be
+                    # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
+            elif options.name == "supg":
+                self.fs = field.function_space()
+                self.solver_parameters['ksp_type'] = 'gmres'
+
+                dim = state.mesh.topological_dimension()
+                if options.tau is not None:
+                    tau = options.tau
+                    assert tau.ufl_shape == (dim, dim)
+                else:
+                    vals = [options.default*self.dt]*dim
+                    for component, value in options.tau_components:
+                        vals[state.components.component] = value
+                    tau = Constant(tuple([
+                        tuple(
+                            [vals[j] if i == j else 0. for i, v in enumerate(vals)]
+                        ) for j in range(dim)])
+                    )
+                test = TestFunction(self.fs)
+                self.test = test + dot(dot(self.ubar, tau), grad(test))
+            self.equation = self.equation.label_map(all_terms,
+                                                    replace_test(self.test))
+        else:
+            self.discretisation_option = None
+            self.fs = self.field.function_space()
+
+    def setup(self, state, advecting_velocity="fixed", labels=None):
+
+        # select labelled terms from the equation if labels are specified
+        if labels is not None:
+            self.equation = self.equation.label_map(
+                lambda t: not any(t.has_label(time_derivative, *labels)),
+                map_if_true=drop)
+
+        # setup advecting velocity
+        if advecting_velocity == "fixed":
+            # the advecting velocity is fixed over the timestep and is
+            # specified by updating self.ubar
+            self.ubar = Function(state.spaces("HDiv"))
+            uadv = self.ubar
+        elif advecting_velocity == "prescribed":
+            # the advecting velocity is prescribed and stored in
+            # state.fields.u
+            uadv = state.fields("u")
+        elif advecting_velocity == "calculate":
+            # the advecting velocity is calculated as part of this
+            # timestepping scheme and must be replaced by q1.sub(0)
+            assert len(self.field.function_space()) > 1
+            uadv = self.q1.sub(0)
+        self.equation = self.equation.label_map(
+            lambda t: t.has_label(advection),
+            replace_labelled("uadv", uadv, single=True))
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -195,7 +219,6 @@ class Advection(object, metaclass=ABCMeta):
     @abstractproperty
     def rhs(self):
         r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
-        r = r.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
         return r.form
 
@@ -368,7 +391,6 @@ class ThetaMethod(Advection):
     def lhs(self):
 
         l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True))
-        l = l.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
         l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.theta*self.dt*t)
         return l.form
 
@@ -376,7 +398,6 @@ class ThetaMethod(Advection):
     def rhs(self):
 
         r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
-        r = r.label_map(lambda t: t.has_label(advection), replace_labelled("uadv", self.ubar, single=True))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: (1-self.theta)*self.dt*t)
         return r.form
 
