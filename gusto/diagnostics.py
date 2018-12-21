@@ -325,7 +325,7 @@ class ExnerPi(DiagnosticField):
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Sum, self).__init__(required_fields=(field1, field2))
+        super().__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -347,7 +347,7 @@ class Sum(DiagnosticField):
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Difference, self).__init__(required_fields=(field1, field2))
+        super().__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -533,7 +533,7 @@ class HydrostaticImbalance(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("Vv")
-            super(HydrostaticImbalance, self).setup(state, space=space)
+            super().setup(state, space=space)
             rho = state.fields("rho")
             rhobar = state.fields("rhobar")
             theta = state.fields("theta")
@@ -569,7 +569,7 @@ class Precipitation(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("DG0", state.mesh, "DG", 0)
-            super(Precipitation, self).setup(state, space=space)
+            super().setup(state, space=space)
 
             rain = state.fields('rain')
             rho = state.fields('rho')
