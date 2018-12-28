@@ -14,16 +14,9 @@ class Forcing(object):
     Base class for forcing terms for Gusto.
 
     :arg state: x :class:`.State` object.
-    :arg euler_poincare: if True then the momentum equation is in Euler
-    Poincare form and we need to add 0.5*grad(u^2) to the forcing term.
-    If False then this term is not added.
-    :arg linear: if True then we are solving a linear equation so nonlinear
-    terms (namely the Euler Poincare term) should not be added.
-    :arg extra_terms: extra terms to add to the u component of the forcing
-    term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, equation):
+    def __init__(self, state, equation, dt, alpha):
 
         fieldlist = equation.fieldlist
 
@@ -33,14 +26,12 @@ class Forcing(object):
 
         eqn = equation().label_map(lambda t: t.has_label(advection), drop)
         assert len(eqn) > 1
-        self._build_forcing_solver(state, fieldlist, eqn)
+        self._build_forcing_solver(state, fieldlist, eqn, dt, alpha)
 
-    def _build_forcing_solver(self, state, fieldlist, equation):
+    def _build_forcing_solver(self, state, fieldlist, equation, dt, alpha):
 
         W = state.spaces.W
         trials = TrialFunctions(W)
-        alpha = state.timestepping.alpha
-        dt = state.timestepping.dt
 
         a = equation.label_map(lambda t: t.has_label(time_derivative),
                                replace_labelled("subject", trials),

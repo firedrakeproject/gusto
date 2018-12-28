@@ -46,12 +46,9 @@ def setup_sw(dirname):
     advected_fields = []
     advected_fields.append(("D", ForwardEuler(state, D0, eqns)))
 
-    linear_solver = ShallowWaterSolver(state, eqns)
-
     # build time stepper
     stepper = CrankNicolson(state, equations=eqns,
-                            advected_fields=advected_fields,
-                            linear_solver=linear_solver)
+                            advected_fields=advected_fields)
 
     return stepper, 2*day
 

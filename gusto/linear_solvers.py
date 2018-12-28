@@ -17,7 +17,7 @@ from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "LinearTimesteppingSolver",
            "HybridizedCompressibleSolver"]
 
 
@@ -719,33 +719,36 @@ class IncompressibleSolver(TimesteppingSolver):
         b.assign(self.b)
 
 
-class ShallowWaterSolver(TimesteppingSolver):
+class LinearTimesteppingSolver(object):
     """
-    Timestepping linear solver object for the nonlinear shallow water
-    equations with prognostic variables u and D. The linearized system
-    is solved using a hybridized-mixed method.
+    Timestepping linear solver object.
     """
+    def __init__(self, state, equation, dt, alpha, solver_parameters=None,
+                 overwrite_solver_parameters=False):
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
+        self.state = state
+
+        if solver_parameters is not None:
+            if not overwrite_solver_parameters:
+                p = flatten_parameters(self.solver_parameters)
+                p.update(flatten_parameters(solver_parameters))
+                solver_parameters = p
+            self.solver_parameters = solver_parameters
+        else:
+            self.solver_parameters = equation.solver_parameters
+
+        if state.output.log_level == DEBUG:
+            self.solver_parameters["ksp_monitor_true_residual"] = True
+
+        # setup the solver
+        self._setup_solver(equation(), dt, alpha)
+
 
     @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self):
+    def _setup_solver(self, equation, dt, alpha):
         state = self.state
-        equation = self.equation()
 
-        beta = -state.timestepping.dt*state.timestepping.alpha
+        beta = -dt*alpha
 
         # Split up the rhs vector (symbolically)
         W = state.spaces("W")
@@ -767,23 +770,20 @@ class ShallowWaterSolver(TimesteppingSolver):
                                   replace_labelled("subject", self.xrhs.split()),
                                   drop)
 
-        # Place to put result of u rho solver
-        self.uD = Function(W)
-
-        # Solver for u, D
+        # Solver for mixed system
         self.dy = Function(W)
-        uD_problem = LinearVariationalProblem(aeqn.form, Leqn.form, self.dy)
+        problem = LinearVariationalProblem(aeqn.form, Leqn.form, self.dy)
 
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result self.dy.
         """
 
         self.xrhs.assign(xrhs)
-        self.uD_solver.solve()
+        self.solver.solve()
         dy.assign(self.dy)

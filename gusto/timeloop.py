@@ -3,6 +3,7 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
 from gusto.form_manipulation_labelling import advection
+from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
 
@@ -176,8 +177,7 @@ class SemiImplicitTimestepper(Timestepper):
     def advecting_velocity(self):
         un = self.state.xn("u")
         unp1 = self.state.xnp1("u")
-        alpha = self.state.timestepping.alpha
-        return un + alpha*(unp1-un)
+        return un + self.alpha*(unp1-un)
 
     @property
     def passive_advection(self):
@@ -219,7 +219,6 @@ class CrankNicolson(SemiImplicitTimestepper):
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg diffused_fields: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
@@ -228,8 +227,16 @@ class CrankNicolson(SemiImplicitTimestepper):
          function that returns the field as a function of time.
     """
 
-    def __init__(self, state, *, equations, advected_fields, linear_solver,
-                 diffused_fields=None, physics_list=None, prescribed_fields=None):
+    def __init__(self, state, *, equations, advected_fields,
+                 diffused_fields=None, physics_list=None,
+                 prescribed_fields=None, **kwargs):
+
+        self.maxk = kwargs.pop("maxk", 4)
+        self.maxi = kwargs.pop("maxi", 1)
+        self.alpha = kwargs.pop("alpha", 0.5)
+        if kwargs:
+            raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
+        self.dt = state.timestepping.dt
 
         super().__init__(state, equations=equations,
                          advected_fields=advected_fields,
@@ -237,9 +244,9 @@ class CrankNicolson(SemiImplicitTimestepper):
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
 
-        self.linear_solver = linear_solver
+        self.linear_solver = LinearTimesteppingSolver(state, equations, self.dt, self.alpha)
 
-        self.forcing = Forcing(state, equations)
+        self.forcing = Forcing(state, equations, self.dt, self.alpha)
 
         self.xp = FieldCreator()
         self.xp(self.fieldlist, state.spaces("W"))
@@ -268,7 +275,7 @@ class CrankNicolson(SemiImplicitTimestepper):
             self.forcing.apply(state.xn.X, state.xn.X,
                                self.xstar.X, label="explicit")
 
-        for k in range(state.timestepping.maxk):
+        for k in range(self.maxk):
 
             with timed_stage("Advection"):
                 # first computes ubar from state.xn and state.xnp1
@@ -281,7 +288,7 @@ class CrankNicolson(SemiImplicitTimestepper):
 
             self.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-            for i in range(state.timestepping.maxi):
+            for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(self.xp.X, state.xnp1.X,

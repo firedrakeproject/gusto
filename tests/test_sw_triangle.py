@@ -65,12 +65,9 @@ def setup_sw(dirname, euler_poincare):
     advected_fields.append(("u", ThetaMethod(state, u0, eqns)))
     advected_fields.append(("D", SSPRK3(state, D0, eqns)))
 
-    linear_solver = ShallowWaterSolver(state, eqns)
-
     # build time stepper
     stepper = CrankNicolson(state, equations=eqns,
-                            advected_fields=advected_fields,
-                            linear_solver=linear_solver)
+                            advected_fields=advected_fields)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
