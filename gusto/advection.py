@@ -269,7 +269,7 @@ class ExplicitAdvection(Advection):
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation=None, *, subcycles=None,
+    def __init__(self, state, field, equation, *, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
         super().__init__(state, field, equation,
                          solver_parameters=solver_parameters,
