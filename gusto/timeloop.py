@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
@@ -95,10 +95,10 @@ class Timestepper(object, metaclass=ABCMeta):
 
         state = self.state
 
-        for name, advection in self.advected_fields:
+        for name, scheme in self.advected_fields:
             old_field = getattr(state.xn, name)
             new_field = getattr(state.xnp1, name)
-            advection.apply(old_field, new_field)
+            scheme.apply(old_field, new_field)
 
         for field in state.xnp1:
             state.xn(field.name()).assign(field)
@@ -202,12 +202,12 @@ class SemiImplicitTimestepper(Timestepper):
 
         self.semi_implicit_step()
 
-        for name, advection in self.passive_advection:
+        for name, scheme in self.passive_advection:
             old_field = getattr(state.xn, name)
             new_field = getattr(state.xnp1, name)
             # advects a field from xn and puts result in xnp1
-            advection.update_ubar(self.advecting_velocity)
-            advection.apply(old_field, new_field)
+            scheme.update_ubar(self.advecting_velocity)
+            scheme.apply(old_field, new_field)
 
 
 class CrankNicolson(SemiImplicitTimestepper):
@@ -272,10 +272,10 @@ class CrankNicolson(SemiImplicitTimestepper):
 
             with timed_stage("Advection"):
                 # first computes ubar from state.xn and state.xnp1
-                for name, advection in self.active_advection:
-                    advection.update_ubar(self.advecting_velocity)
+                for name, scheme in self.active_advection:
+                    scheme.update_ubar(self.advecting_velocity)
                     # advects a field from xstar and puts result in xp
-                    advection.apply(self.xstar(name), self.xp(name))
+                    scheme.apply(self.xstar(name), self.xp(name))
                 for name in self.non_advected_fields:
                     self.xp(name).assign(self.xstar(name))
 
