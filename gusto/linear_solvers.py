@@ -743,7 +743,6 @@ class LinearTimesteppingSolver(object):
         # setup the solver
         self._setup_solver(equation(), dt, alpha)
 
-
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self, equation, dt, alpha):
         state = self.state
