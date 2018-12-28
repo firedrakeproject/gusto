@@ -44,7 +44,7 @@ def setup_IPdiffusion(dirname, vector, DG):
     mu = 5.
     eqn = DiffusionEquation(state, f.name(), f.function_space(), kappa=kappa, mu=mu)
     diffused_fields = [(f.name(), Diffusion(state, f.name(), eqn))]
-    stepper = AdvectionDiffusion(state, diffused_fields=diffused_fields)
+    stepper = Timestepper(state, diffused_fields=diffused_fields)
     return stepper
 
 

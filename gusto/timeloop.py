@@ -133,6 +133,14 @@ class Timestepper(object, metaclass=ABCMeta):
 
             self.timestep()
 
+            for field in state.xn:
+                field.assign(state.xnp1(field.name()))
+
+            with timed_stage("Diffusion"):
+                for name, diffusion in self.diffused_fields:
+                    field = state.xnp1(field.name())
+                    diffusion.apply(field, field)
+
             with timed_stage("Physics"):
                 for physics in self.physics_list:
                     physics.apply()
@@ -200,14 +208,6 @@ class SemiImplicitTimestepper(Timestepper):
             # advects a field from xn and puts result in xnp1
             advection.update_ubar(self.advecting_velocity)
             advection.apply(old_field, new_field)
-
-        for field in state.xn:
-            field.assign(state.xnp1(field.name()))
-
-        with timed_stage("Diffusion"):
-            for name, diffusion in self.diffused_fields:
-                field = state.xnp1(field.name())
-                diffusion.apply(field, field)
 
 
 class CrankNicolson(SemiImplicitTimestepper):
