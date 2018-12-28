@@ -25,10 +25,10 @@ class Diffusion(object):
         self.phi = Function(field.function_space())
         self.phi1 = Function(field.function_space())
 
-        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", trial, single=True), drop)
-        a += dt*equation().label_map(lambda t: t.has_label(diffusion), replace_labelled("subject", trial, single=True), drop)
+        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", trial), drop)
+        a += dt*equation().label_map(lambda t: t.has_label(diffusion), replace_labelled("subject", trial), drop)
 
-        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", self.phi, single=True), drop)
+        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", self.phi), drop)
 
         problem = LinearVariationalProblem(a.form, L.form, self.phi1)
         self.solver = LinearVariationalSolver(problem)

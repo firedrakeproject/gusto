@@ -4,6 +4,7 @@ import operator
 from firedrake import Function, TrialFunction, Constant
 from firedrake.formmanipulation import split_form
 
+
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
@@ -13,22 +14,30 @@ linearise = lambda t: functools.reduce(
 )
 extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
 
+
 def replace_test(new_test):
+
     def rep(t):
         test = t.form.arguments()[0]
         new_form = ufl.replace(t.form, {test: new_test})
         return Term(new_form, t.labels)
+
     return rep
 
-def replace_labelled(label, replacer, single=False):
+
+def replace_labelled(label, replacer):
+
     def rep(t):
         old = t.labels[label]
-        if single:
+        # check if we need to extract part of the replacer
+        size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
+        if size(replacer) == 1:
             new = replacer
         else:
             new = replacer[old.function_space().index]
         new_form = ufl.replace(t.form, {old: new})
         return Term(new_form, t.labels)
+
     return rep
 
 

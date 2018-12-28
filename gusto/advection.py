@@ -5,7 +5,7 @@ from firedrake import (Function, LinearVariationalProblem,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
-from gusto.form_manipulation_labelling import (all_terms, advection,
+from gusto.form_manipulation_labelling import (all_terms,
                                                advecting_velocity,
                                                time_derivative, drop,
                                                replace_test, replace_labelled,
@@ -177,7 +177,7 @@ class Advection(object, metaclass=ABCMeta):
             raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
         self.equation = self.equation.label_map(
             lambda t: t.has_label(advecting_velocity),
-            replace_labelled("uadv", uadv, single=True))
+            replace_labelled("uadv", uadv))
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -225,12 +225,12 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
 
         return self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                       map_if_true=replace_labelled("subject", self.trial, single=True),
+                                       map_if_true=replace_labelled("subject", self.trial),
                                        map_if_false=drop).form
 
     @abstractproperty
     def rhs(self):
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
         return r.form
 
@@ -402,14 +402,14 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial, single=True))
+        l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial))
         l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.theta*self.dt*t)
         return l.form
 
     @cached_property
     def rhs(self):
 
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1, single=True))
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: (1-self.theta)*self.dt*t)
         return r.form
 
