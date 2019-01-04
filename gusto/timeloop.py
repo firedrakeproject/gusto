@@ -78,14 +78,16 @@ class Timestepper(object, metaclass=ABCMeta):
             for bc in bcs:
                 bc.apply(unp1)
 
+    def setup_advection_schemes(self, advected_fields):
+        for name, scheme in advected_fields:
+            scheme.setup(self.state, u_advecting="prescribed")
+
     def setup_timeloop(self, t, tmax, pickup):
         """
         Setup the timeloop by setting up diagnostics, dumping the fields and
         picking up from a previous run, if required
         """
-        for name, scheme in self.advected_fields:
-            scheme.setup(self.state, u_advecting="prescribed")
-
+        self.setup_advection_schemes(self.advected_fields)
         self.state.setup_diagnostics()
         with timed_stage("Dump output"):
             self.state.setup_dump(tmax, pickup)
@@ -252,6 +254,7 @@ class CrankNicolson(SemiImplicitTimestepper):
         self.xrhs = Function(state.spaces("W"))
         self.dy = Function(state.spaces("W"))
 
+    def setup_advection_schemes(self, advected_fields):
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [
             (name, scheme)
@@ -259,10 +262,10 @@ class CrankNicolson(SemiImplicitTimestepper):
             if name in self.fieldlist]
 
         for name, scheme in self.active_advection:
-            scheme.setup(state, labels=[advection])
+            scheme.setup(self.state, labels=[advection])
 
         for name, scheme in self.passive_advection:
-            scheme.setup(state, advecting_velocity="prescribed")
+            scheme.setup(self.state, u_advecting="prescribed")
 
         self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(advected_fields).keys()))]
 

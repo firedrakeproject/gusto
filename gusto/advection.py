@@ -57,6 +57,7 @@ class Advection(object, metaclass=ABCMeta):
                  solver_parameters=None,
                  limiter=None, options=None):
 
+        self._initialised = False
         self.field = field
         self.equation = equation()
 
@@ -151,6 +152,9 @@ class Advection(object, metaclass=ABCMeta):
 
     def setup(self, state, u_advecting="fixed", labels=None):
 
+        if self._initialised:
+            raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
+
         # select labelled terms from the equation if labels are specified
         if labels is not None:
             self.equation = self.equation.label_map(
@@ -177,6 +181,7 @@ class Advection(object, metaclass=ABCMeta):
         self.equation = self.equation.label_map(
             lambda t: t.has_label(advecting_velocity),
             replace_labelled("uadv", uadv))
+        self._initialised = True
 
     def pre_apply(self, x_in, discretisation_option):
         """
