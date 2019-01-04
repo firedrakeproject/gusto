@@ -35,9 +35,7 @@ def state(tmpdir, geometry):
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([1.0, 0.0])
 
-    timestepping = TimesteppingParameters(dt=dt)
-    state = State(mesh,
-                  timestepping=timestepping,
+    state = State(mesh, dt,
                   output=output)
 
     build_spaces(state, family, 1, vertical_degree)

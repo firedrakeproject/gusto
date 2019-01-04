@@ -20,7 +20,7 @@ def setup_sw(dirname, euler_poincare):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    timestepping = TimesteppingParameters(dt=1500.)
+    dt=1500.
     output = OutputParameters(dirname=dirname+"/sw", steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
     diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
@@ -39,8 +39,7 @@ def setup_sw(dirname, euler_poincare):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_AbsoluteVorticity')]
 
-    state = State(mesh,
-                  timestepping=timestepping,
+    state = State(mesh, dt,
                   output=output,
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)

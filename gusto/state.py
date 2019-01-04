@@ -2,6 +2,7 @@ from os import path
 import itertools
 from netCDF4 import Dataset
 import time
+from gusto.configuration import logger, set_log_handler, XYComponents, XZComponents, XYZComponents
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        FunctionSpace, VectorFunctionSpace,
@@ -10,7 +11,7 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        dx, op2, par_loop, READ, WRITE, DumbCheckpoint,
                        FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector)
 import numpy as np
-from gusto.configuration import logger, set_log_handler, XYComponents, XZComponents, XYZComponents
+
 
 __all__ = ["State", "build_spaces"]
 
@@ -164,23 +165,23 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
-    :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh,
+    def __init__(self, mesh, dt,
                  hydrostatic=None,
-                 timestepping=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
 
         self.hydrostatic = hydrostatic
-        self.timestepping = timestepping
+
+        self.dt = dt
+
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
@@ -245,8 +246,6 @@ class State(object):
         # setup logger
         logger.setLevel(output.log_level)
         set_log_handler(mesh.comm)
-        logger.info("Timestepping parameters that take non-default values:")
-        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
@@ -326,7 +325,7 @@ class State(object):
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
 
-            ndt = int(tmax/self.timestepping.dt)
+            ndt = int(tmax/self.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,

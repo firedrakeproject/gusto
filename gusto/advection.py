@@ -64,8 +64,7 @@ class Advection(object, metaclass=ABCMeta):
             idx = self.field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
-        self.dt = state.timestepping.dt
-
+        self.dt = state.dt
         self.solver_parameters = (
             solver_parameters or {'ksp_type': 'cg',
                                   'pc_type': 'bjacobi',

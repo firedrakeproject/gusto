@@ -19,7 +19,7 @@ class Diffusion(object):
 
     def __init__(self, state, fieldname, equation):
 
-        dt = state.timestepping.dt
+        dt = state.dt
         field = state.fields(fieldname)
         trial = TrialFunction(field.function_space())
         self.phi = Function(field.function_space())

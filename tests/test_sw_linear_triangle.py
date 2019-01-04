@@ -12,18 +12,17 @@ def setup_sw(dirname):
     R = 6371220.
     H = 2000.
     day = 24.*60.*60.
+    dt=3600.
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    timestepping = TimesteppingParameters(dt=3600.)
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
 
-    state = State(mesh,
-                  timestepping=timestepping,
+    state = State(mesh, dt,
                   output=output,
                   parameters=parameters)
 

@@ -1,6 +1,6 @@
 from firedrake import (TrialFunctions, Function,
                        DirichletBC, LinearVariationalProblem,
-                       LinearVariationalSolver)
+                       LinearVariationalSolver, Constant)
 from gusto.configuration import DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
                                                advection,
@@ -16,7 +16,7 @@ class Forcing(object):
     :arg state: x :class:`.State` object.
     """
 
-    def __init__(self, state, equation, dt, alpha):
+    def __init__(self, state, equation, alpha):
 
         fieldlist = equation.fieldlist
 
@@ -26,21 +26,22 @@ class Forcing(object):
 
         eqn = equation().label_map(lambda t: t.has_label(advection), drop)
         assert len(eqn) > 1
-        self._build_forcing_solver(state, fieldlist, eqn, dt, alpha)
+        self._build_forcing_solver(state, fieldlist, eqn, alpha)
 
-    def _build_forcing_solver(self, state, fieldlist, equation, dt, alpha):
+    def _build_forcing_solver(self, state, fieldlist, equation, alpha):
 
+        dt = state.dt
         W = state.spaces.W
         trials = TrialFunctions(W)
 
         a = equation.label_map(lambda t: t.has_label(time_derivative),
                                replace_labelled("subject", trials),
                                drop)
-        L_explicit = (1-alpha)*dt*equation.label_map(
+        L_explicit = Constant((1-alpha)*dt)*equation.label_map(
             lambda t: not t.has_label(time_derivative),
             replace_labelled("subject", self.x0.split()),
             drop)
-        L_implicit = alpha*dt*equation.label_map(
+        L_implicit = Constant(alpha*dt)*equation.label_map(
             lambda t: not t.has_label(time_derivative),
             replace_labelled("subject", self.x0.split()),
             drop)

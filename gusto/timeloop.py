@@ -111,9 +111,8 @@ class Timestepper(object, metaclass=ABCMeta):
         any passively advected fields are updated, implicit diffusion and
         physics updates are applied (if required).
         """
-
         state = self.state
-        dt = state.timestepping.dt
+        dt = state.dt
 
         t = self.setup_timeloop(t, tmax, pickup)
 
@@ -236,7 +235,6 @@ class CrankNicolson(SemiImplicitTimestepper):
         self.alpha = kwargs.pop("alpha", 0.5)
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
-        self.dt = state.timestepping.dt
 
         super().__init__(state, equations=equations,
                          advected_fields=advected_fields,
@@ -244,9 +242,9 @@ class CrankNicolson(SemiImplicitTimestepper):
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
 
-        self.linear_solver = LinearTimesteppingSolver(state, equations, self.dt, self.alpha)
+        self.linear_solver = LinearTimesteppingSolver(state, equations, self.alpha)
 
-        self.forcing = Forcing(state, equations, self.dt, self.alpha)
+        self.forcing = Forcing(state, equations, self.alpha)
 
         self.xp = FieldCreator()
         self.xp(self.fieldlist, state.spaces("W"))

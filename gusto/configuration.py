@@ -8,7 +8,7 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "XYComponents", "XZComponents", "XYZComponents"]
+__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "XYComponents", "XZComponents", "XYZComponents"]
 
 logger = logging.getLogger("gusto")
 
@@ -36,14 +36,6 @@ class Configuration(object):
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
         object.__setattr__(self, name, value)
-
-
-class TimesteppingParameters(Configuration):
-
-    """
-    Timestepping parameters for Gusto
-    """
-    dt = None
 
 
 class OutputParameters(Configuration):

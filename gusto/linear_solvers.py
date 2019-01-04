@@ -3,7 +3,7 @@ from firedrake import (split, LinearVariationalProblem,
                        TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad,
                        Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace,
-                       assemble, LinearSolver, Tensor, AssembledVector)
+                       assemble, LinearSolver, Tensor, AssembledVector, Constant)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
@@ -723,7 +723,7 @@ class LinearTimesteppingSolver(object):
     """
     Timestepping linear solver object.
     """
-    def __init__(self, state, equation, dt, alpha, solver_parameters=None,
+    def __init__(self, state, equation, alpha, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
@@ -741,13 +741,13 @@ class LinearTimesteppingSolver(object):
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
-        self._setup_solver(equation(), dt, alpha)
+        self._setup_solver(equation(), state.dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self, equation, dt, alpha):
         state = self.state
 
-        beta = -dt*alpha
+        beta = Constant(-dt*alpha)
 
         # Split up the rhs vector (symbolically)
         W = state.spaces("W")
