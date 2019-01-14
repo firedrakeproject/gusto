@@ -11,11 +11,9 @@ def setup_IPdiffusion(dirname, vector, DG):
     m = PeriodicIntervalMesh(50, L)
     mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
 
-    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname)
 
-    state = State(mesh,
-                  timestepping=timestepping,
+    state = State(mesh, dt,
                   output=output)
 
     x = SpatialCoordinate(mesh)
@@ -43,8 +41,8 @@ def setup_IPdiffusion(dirname, vector, DG):
 
     mu = 5.
     eqn = DiffusionEquation(state, f.name(), f.function_space(), kappa=kappa, mu=mu)
-    diffused_fields = [(f.name(), Diffusion(state, f.name(), eqn))]
-    stepper = Timestepper(state, diffused_fields=diffused_fields)
+    schemes = [(f.name(), BackwardEuler(state, f, eqn))]
+    stepper = Timestepper(state, schemes=schemes)
     return stepper
 
 

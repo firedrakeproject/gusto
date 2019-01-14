@@ -13,7 +13,7 @@ from gusto.form_manipulation_labelling import (all_terms,
 from gusto.recovery import Recoverer
 
 
-__all__ = ["ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["BackwardEuler", "ForwardEuler", "SSPRK3", "ThetaMethod"]
 
 
 def embedded_dg(original_apply):
@@ -61,7 +61,7 @@ class Advection(object, metaclass=ABCMeta):
         self.field = field
         self.equation = equation()
 
-        if len(equation.function_space) > 1:
+        if len(equation.function_space) > 1 and len(field.function_space()) == 1:
             idx = self.field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
@@ -150,7 +150,7 @@ class Advection(object, metaclass=ABCMeta):
             self.discretisation_option = None
             self.fs = self.field.function_space()
 
-    def setup(self, state, u_advecting="fixed", labels=None):
+    def setup(self, state, u_advecting=None, labels=None):
 
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
@@ -161,26 +161,28 @@ class Advection(object, metaclass=ABCMeta):
                 lambda t: not any(t.has_label(time_derivative, *labels)),
                 map_if_true=drop)
 
-        # setup advecting velocity
-        if u_advecting == "fixed":
-            # the advecting velocity is fixed over the timestep and is
-            # specified by updating self.ubar
-            self.ubar = Function(state.spaces("HDiv"))
-            uadv = self.ubar
-        elif u_advecting == "prescribed":
-            # the advecting velocity is prescribed and stored in
-            # state.fields.u
-            uadv = state.fields("u")
-        elif u_advecting == "calculate":
-            # the advecting velocity is calculated as part of this
-            # timestepping scheme and must be replaced by q1.sub(0)
-            assert len(self.field.function_space()) > 1
-            uadv = self.q1.sub(0)
-        else:
-            raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
-        self.equation = self.equation.label_map(
-            lambda t: t.has_label(advecting_velocity),
-            replace_labelled("uadv", uadv))
+        if any([t.has_label(advecting_velocity) for t in self.equation]):
+            # setup advecting velocity
+            if u_advecting == "fixed":
+                # the advecting velocity is fixed over the timestep and is
+                # specified by updating self.ubar
+                self.ubar = Function(state.spaces("HDiv"))
+                uadv = self.ubar
+            elif u_advecting == "prescribed":
+                # the advecting velocity is prescribed and stored in
+                # state.fields.u
+                assert "u" in [f.name() for f in state.fields]
+                uadv = state.fields("u")
+            elif u_advecting == "calculate":
+                # the advecting velocity is calculated as part of this
+                # timestepping scheme and must be replaced by q1.sub(0)
+                assert len(self.field.function_space()) > 1
+                uadv = self.q1.sub(0)
+            else:
+                raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
+            self.equation = self.equation.label_map(
+                lambda t: t.has_label(advecting_velocity),
+                replace_labelled("uadv", uadv))
         self._initialised = True
 
     def pre_apply(self, x_in, discretisation_option):
@@ -227,16 +229,11 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def lhs(self):
-
-        return self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                       map_if_true=replace_labelled("subject", self.trial),
-                                       map_if_false=drop).form
+        pass
 
     @abstractproperty
     def rhs(self):
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
-        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
-        return r.form
+        pass
 
     def update_ubar(self, uadv):
         self.ubar.assign(uadv)
@@ -258,6 +255,32 @@ class Advection(object, metaclass=ABCMeta):
         :arg x_out: :class:`.Function` object, the output Function.
         """
         pass
+
+
+class BackwardEuler(Advection):
+
+    @property
+    def lhs(self):
+        l = self.equation.label_map(
+            lambda t: t.has_label(time_derivative),
+            replace_labelled("subject", self.trial), drop)
+
+        l += self.dt*self.equation.label_map(
+            lambda t: not t.has_label(time_derivative),
+            replace_labelled("subject", self.trial), drop)
+
+        return l.form
+
+    @property
+    def rhs(self):
+        return self.equation.label_map(
+            lambda t: t.has_label(time_derivative),
+            replace_labelled("subject", self.q1), drop).form
+
+    def apply(self, x_in, x_out):
+        self.q1.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.dq)
 
 
 class ExplicitAdvection(Advection):
@@ -288,6 +311,19 @@ class ExplicitAdvection(Advection):
             self.dt = self.dt
             self.ncycles = 1
         self.x = [Function(self.fs)]*(self.ncycles+1)
+
+    @abstractproperty
+    def lhs(self):
+
+        return self.equation.label_map(lambda t: t.has_label(time_derivative),
+                                       map_if_true=replace_labelled("subject", self.trial),
+                                       map_if_false=drop).form
+
+    @abstractproperty
+    def rhs(self):
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
+        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
+        return r.form
 
     @abstractmethod
     def apply_cycle(self, x_in, x_out):

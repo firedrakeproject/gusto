@@ -1,49 +1,10 @@
-from firedrake import (TestFunction, TrialFunction, Function,
+from firedrake import (TestFunction, Function,
                        inner, outer, grad, avg, dx, dS_h, dS_v,
-                       FacetNormal, LinearVariationalProblem,
-                       LinearVariationalSolver)
-from gusto.form_manipulation_labelling import (drop,
-                                               subject, time_derivative,
-                                               diffusion, replace_labelled)
+                       FacetNormal)
+from gusto.form_manipulation_labelling import subject, diffusion
 
 
-__all__ = ["Diffusion", "interior_penalty_diffusion_form"]
-
-
-class Diffusion(object):
-    """
-    Base class for diffusion schemes for gusto.
-
-    :arg state: :class:`.State` object.
-    """
-
-    def __init__(self, state, fieldname, equation):
-
-        dt = state.dt
-        field = state.fields(fieldname)
-        trial = TrialFunction(field.function_space())
-        self.phi = Function(field.function_space())
-        self.phi1 = Function(field.function_space())
-
-        a = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", trial), drop)
-        a += dt*equation().label_map(lambda t: t.has_label(diffusion), replace_labelled("subject", trial), drop)
-
-        L = equation().label_map(lambda t: t.has_label(time_derivative), replace_labelled("subject", self.phi), drop)
-
-        problem = LinearVariationalProblem(a.form, L.form, self.phi1)
-        self.solver = LinearVariationalSolver(problem)
-
-    def apply(self, x, x_out):
-        """
-        Function takes x as input, computes F(x) and returns x_out
-        as output.
-
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
-        """
-        self.phi.assign(x)
-        self.solver.solve()
-        x_out.assign(self.phi1)
+__all__ = ["interior_penalty_diffusion_form"]
 
 
 def interior_penalty_diffusion_form(state, V, *, kappa, mu):
