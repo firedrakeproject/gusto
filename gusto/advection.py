@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, LinearVariationalProblem,
                        LinearVariationalSolver, Projector, Interpolator,
                        TestFunction, TrialFunction, FunctionSpace,
+                       TrialFunctions,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
@@ -66,20 +67,25 @@ class Advection(object, metaclass=ABCMeta):
             self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
 
         self.dt = state.dt
-        self.solver_parameters = (
-            solver_parameters or {'ksp_type': 'cg',
-                                  'pc_type': 'bjacobi',
-                                  'sub_pc_type': 'ilu'}
-        )
 
         self.limiter = limiter
 
         self._setup_from_options(state, self.field, options)
 
         # setup required functions
-        self.trial = TrialFunction(self.fs)
-        self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
+        if len(equation.function_space) > 1 and len(field.function_space()) > 1:
+            self.trial = TrialFunctions(self.fs)
+            self.qs = self.q1.split()
+            default_solver_params = equation.solver_parameters
+        else:
+            self.trial = TrialFunction(self.fs)
+            self.qs = self.q1
+            default_solver_params = {'ksp_type': 'cg',
+                                     'pc_type': 'bjacobi',
+                                     'sub_pc_type': 'ilu'}
+        self.dq = Function(self.fs)
+        self.solver_parameters = solver_parameters or default_solver_params
 
     def _setup_from_options(self, state, field, options):
 
@@ -177,7 +183,7 @@ class Advection(object, metaclass=ABCMeta):
                 # the advecting velocity is calculated as part of this
                 # timestepping scheme and must be replaced by q1.sub(0)
                 assert len(self.field.function_space()) > 1
-                uadv = self.q1.sub(0)
+                uadv = self.qs[0]
             else:
                 raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
             self.equation = self.equation.label_map(
@@ -275,7 +281,7 @@ class BackwardEuler(Advection):
     def rhs(self):
         return self.equation.label_map(
             lambda t: t.has_label(time_derivative),
-            replace_labelled("subject", self.q1), drop).form
+            replace_labelled("subject", self.qs), drop).form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -314,14 +320,14 @@ class ExplicitAdvection(Advection):
 
     @abstractproperty
     def lhs(self):
-
-        return self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                       map_if_true=replace_labelled("subject", self.trial),
-                                       map_if_false=drop).form
+        l = self.equation.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_true=replace_labelled("subject", self.trial),
+                                    map_if_false=drop)
+        return l.form
 
     @abstractproperty
     def rhs(self):
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
         return r.form
 
@@ -427,7 +433,9 @@ class ThetaMethod(Advection):
     """
     def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
 
-        if not solver_parameters:
+        if len(equation.function_space) > 1 and len(field.function_space()) > 1:
+            solver_parameters = equation.solver_parameters
+        else:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
@@ -449,7 +457,7 @@ class ThetaMethod(Advection):
     @cached_property
     def rhs(self):
 
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.q1))
+        r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: (1-self.theta)*self.dt*t)
         return r.form
 
