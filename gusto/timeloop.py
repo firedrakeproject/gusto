@@ -96,7 +96,7 @@ class Timestepper(object, metaclass=ABCMeta):
 
     def evaluate_prescribed_fields(self, state):
         for name, evaluation in self.prescribed_fields:
-            state.fields(name).project(evaluation(t))
+            state.fields(name).project(evaluation(state.t))
 
     def update_fields(self, old, new):
         for field in new:
