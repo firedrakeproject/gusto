@@ -11,9 +11,10 @@ import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
            "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
-           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "ExnerPi", "Sum",
-           "Difference", "SteadyStateError", "Perturbation", "Theta_e", "InternalEnergy",
-           "PotentialEnergy", "CompressibleKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
+           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
+           "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError",
+           "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
+           "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
 
@@ -291,6 +292,16 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
         return self.field.interpolate(enstrophy)
 
 
+class CompressibleKineticEnergy(Energy):
+    name = "CompressibleKineticEnergy"
+
+    def compute(self, state):
+        u = state.fields("u")
+        rho = state.fields("rho")
+        energy = self.kinetic(u, rho)
+        return self.field.interpolate(energy)
+
+
 class ExnerPi(DiagnosticField):
 
     def __init__(self, reference=False):
@@ -464,8 +475,8 @@ class PotentialEnergy(ThermodynamicDiagnostic):
         return self.field.interpolate(self.rho_averaged * (1 + self.r_t) * state.parameters.g * dot(self.x, state.k))
 
 
-class CompressibleKineticEnergy(ThermodynamicDiagnostic):
-    name = "CompressibleKineticEnergy"
+class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
+    name = "ThermodynamicKineticEnergy"
 
     def compute(self, state):
         super().compute(state)
@@ -497,7 +508,7 @@ class Theta_d(ThermodynamicDiagnostic):
     def compute(self, state):
         super().compute(state)
 
-        return self.field.assign(self.theta / (1 + self.r_v * self.parameters.R_v / self.parameters.R_d))
+        return self.field.assign(self.theta / (1 + self.r_v * state.parameters.R_v / state.parameters.R_d))
 
 
 class RelativeHumidity(ThermodynamicDiagnostic):
