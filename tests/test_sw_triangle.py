@@ -7,7 +7,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def setup_sw(dirname, euler_poincare):
+def setup_sw(dirname, scheme):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -60,13 +60,19 @@ def setup_sw(dirname, euler_poincare):
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, eqns)))
-    advected_fields.append(("D", SSPRK3(state, D0, eqns)))
-
     # build time stepper
-    stepper = CrankNicolson(state, equations=eqns,
-                            advected_fields=advected_fields)
+    if scheme == "CrankNicolson":
+        advected_fields = []
+        advected_fields.append(("u", ThetaMethod(state, u0, eqns)))
+        advected_fields.append(("D", SSPRK3(state, D0, eqns)))
+        stepper = CrankNicolson(state, equations=eqns,
+                                advected_fields=advected_fields)
+    elif scheme == "ImplicitMidpoint":
+        scheme = ThetaMethod(state, state.fields.X, eqns)
+        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
+    elif scheme == "SSPRK3":
+        scheme = SSPRK3(state, state.fields.X, eqns)
+        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
@@ -81,17 +87,17 @@ def setup_sw(dirname, euler_poincare):
     return stepper, 0.25*day
 
 
-def run_sw(dirname, euler_poincare):
+def run_sw(dirname, scheme):
 
-    stepper, tmax = setup_sw(dirname, euler_poincare)
+    stepper, tmax = setup_sw(dirname, scheme)
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("euler_poincare", [False])
-def test_sw_setup(tmpdir, euler_poincare):
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "ImplicitMidpoint", "SSPRK3"])
+def test_sw_setup(tmpdir, scheme):
 
     dirname = str(tmpdir)
-    run_sw(dirname, euler_poincare=euler_poincare)
+    run_sw(dirname, scheme)
     filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
 
