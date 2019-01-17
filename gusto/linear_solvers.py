@@ -1,4 +1,4 @@
-from firedrake import (split, LinearVariationalProblem,
+from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad,
@@ -117,13 +117,18 @@ class CompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
+        Dt = state.timestepping.dt
+        beta_ = Dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
+
+        # Store time-stepping coefficients as UFL Constants
+        dt = Constant(Dt)
+        beta = Constant(beta_)
+        beta_cp = Constant(beta_ * cp)
 
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
@@ -175,12 +180,12 @@ class CompressibleSolver(TimesteppingSolver):
 
         eqn = (
             inner(w, (state.h_project(u) - u_in))*dx
-            - beta*cp*div(theta_w*V(w))*pibar*dxp
+            - beta_cp*div(theta_w*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta*cp*jump(theta*V(w), n)*avg(pibar)*dS_v
-            - beta*cp*div(thetabar_w*w)*pi*dxp
-            + beta*cp*jump(thetabar_w*w, n)*avg(pi)*dS_vp
+            # + beta_cp*jump(theta*V(w), n)*avg(pibar)*dS_v
+            - beta_cp*div(thetabar_w*w)*pi*dxp
+            + beta_cp*jump(thetabar_w*w, n)*avg(pi)*dS_vp
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
         )
@@ -314,14 +319,19 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         import numpy as np
 
         state = self.state
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
+        Dt = state.timestepping.dt
+        beta_ = Dt*state.timestepping.alpha
         cp = state.parameters.cp
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
+
+        # Store time-stepping coefficients as UFL Constants
+        dt = Constant(Dt)
+        beta = Constant(beta_)
+        beta_cp = Constant(beta_ * cp)
 
         h_deg = state.horizontal_degree
         v_deg = state.vertical_degree
@@ -410,13 +420,13 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                - beta*cp*div(theta_w*V(w))*pibar*dxp
+                - beta_cp*div(theta_w*V(w))*pibar*dxp
                 # following does nothing but is preserved in the comments
                 # to remind us why (because V(w) is purely vertical).
-                # + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
-                + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
-                + beta*cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
-                - beta*cp*div(thetabar_w*w)*pi*dxp
+                # + beta_cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
+                + beta_cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
+                + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
+                - beta_cp*div(thetabar_w*w)*pi*dxp
                 + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
                 + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
 
@@ -432,9 +442,9 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Off-diagonal block matrices containing the contributions
         # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta*cp*dot(thetabar_w*w, n)*l0('+')*(dS_vp + dS_hp)
-                   + beta*cp*dot(thetabar_w*w, n)*l0*ds_vp
-                   + beta*cp*dot(thetabar_w*w, n)*l0*ds_tbp)
+        K = Tensor(beta_cp*dot(thetabar_w*w, n)*l0('+')*(dS_vp + dS_hp)
+                   + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
+                   + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp)
 
         # X = A.inv * (X_r - K * l),
         # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
@@ -622,12 +632,16 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        dt = state.timestepping.dt
-        beta = dt*state.timestepping.alpha
+        Dt = state.timestepping.dt
+        beta_ = Dt*state.timestepping.alpha
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vb = state.spaces("HDiv_v")
         Vp = state.spaces("DG")
+
+        # Store time-stepping coefficients as UFL Constants
+        dt = Constant(Dt)
+        beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
         u_in, p_in, b_in = split(state.xrhs)
@@ -738,9 +752,14 @@ class ShallowWaterSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state
-        H = state.parameters.H
-        g = state.parameters.g
-        beta = state.timestepping.dt*state.timestepping.alpha
+        H_ = state.parameters.H
+        g_ = state.parameters.g
+        beta_ = state.timestepping.dt*state.timestepping.alpha
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+        H = Constant(H_)
+        g = Constant(g_)
 
         # Split up the rhs vector (symbolically)
         u_in, D_in = split(state.xrhs)
