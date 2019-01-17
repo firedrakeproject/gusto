@@ -20,11 +20,14 @@ def setup_sw(dirname, scheme):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    dt=1500.
+    if scheme == "CrankNicolson":
+        dt = 1500.
+    else:
+        dt = 500.
     output = OutputParameters(dirname=dirname+"/sw", steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
     diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
-                         PotentialVorticity(),
+                         PotentialVorticity(), CourantNumber(),
                          ShallowWaterPotentialEnstrophy('RelativeVorticity'),
                          ShallowWaterPotentialEnstrophy('AbsoluteVorticity'),
                          ShallowWaterPotentialEnstrophy('PotentialVorticity'),
@@ -93,7 +96,7 @@ def run_sw(dirname, scheme):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("scheme", ["CrankNicolson", "ImplicitMidpoint", "SSPRK3"])
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "SSPRK3"])
 def test_sw_setup(tmpdir, scheme):
 
     dirname = str(tmpdir)
