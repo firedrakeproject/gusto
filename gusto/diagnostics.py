@@ -105,7 +105,7 @@ class CourantNumber(DiagnosticField):
 
     def compute(self, state):
         u = state.fields("u")
-        dt = Constant(state.timestepping.dt)
+        dt = Constant(state.dt)
         return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
 
 
