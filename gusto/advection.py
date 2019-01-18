@@ -84,6 +84,9 @@ class Advection(object, metaclass=ABCMeta):
             default_solver_params = {'ksp_type': 'cg',
                                      'pc_type': 'bjacobi',
                                      'sub_pc_type': 'ilu'}
+            if options is not None and options.name == "supg":
+                default_solver_params['ksp_type'] = 'gmres'
+
         self.dq = Function(self.fs)
         self.solver_parameters = solver_parameters or default_solver_params
 
@@ -127,7 +130,6 @@ class Advection(object, metaclass=ABCMeta):
                     # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
             elif options.name == "supg":
                 self.fs = field.function_space()
-                self.solver_parameters['ksp_type'] = 'gmres'
 
                 dim = state.mesh.topological_dimension()
                 if options.tau is not None:
