@@ -424,11 +424,11 @@ class State(object):
         output = self.output
 
         # Diagnostics:
-        if output.dump_diagnostics:
-            # Compute diagnostic fields
-            for field in self.diagnostic_fields:
-                field(self)
+        # Compute diagnostic fields
+        for field in self.diagnostic_fields:
+            field(self)
 
+        if output.dump_diagnostics:
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
 
