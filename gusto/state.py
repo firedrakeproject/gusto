@@ -319,7 +319,8 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
 
-        if self.output.dump_data:
+        if any([self.output.dump_data, self.output.dumplist_latlon,
+                self.output.dump_diagnostics, self.output.point_data]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             if self.mesh.comm.rank == 0 \
@@ -327,6 +328,8 @@ class State(object):
                and path.exists(self.dumpdir) and not pickup:
                 raise IOError("results directory '%s' already exists"
                               % self.dumpdir)
+
+        if self.output.dump_data:
 
             # setup pvd output file
             outfile = path.join(self.dumpdir, "field_output.pvd")
