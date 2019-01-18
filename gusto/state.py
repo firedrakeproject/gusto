@@ -330,7 +330,8 @@ class State(object):
                 raise IOError("results directory '%s' already exists"
                               % self.dumpdir)
             else:
-                mkdir(self.dumpdir)
+                if "pytest" not in self.output.dirname:
+                    mkdir(self.dumpdir)
 
         if self.output.dump_vtus:
 
