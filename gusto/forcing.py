@@ -37,11 +37,11 @@ class Forcing(object):
         a = equation.label_map(lambda t: t.has_label(time_derivative),
                                replace_labelled("subject", trials),
                                drop)
-        L_explicit = Constant((1-alpha)*dt)*equation.label_map(
+        L_explicit = Constant(-(1-alpha)*dt)*equation.label_map(
             lambda t: not t.has_label(time_derivative),
             replace_labelled("subject", self.x0.split()),
             drop)
-        L_implicit = Constant(alpha*dt)*equation.label_map(
+        L_implicit = Constant(-alpha*dt)*equation.label_map(
             lambda t: not t.has_label(time_derivative),
             replace_labelled("subject", self.x0.split()),
             drop)

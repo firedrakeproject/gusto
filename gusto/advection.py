@@ -285,7 +285,7 @@ class BackwardEuler(Advection):
             lambda t: t.has_label(time_derivative),
             replace_labelled("subject", self.trial), drop)
 
-        l += self.dt*self.equation.label_map(
+        l -= self.dt*self.equation.label_map(
             lambda t: not t.has_label(time_derivative),
             replace_labelled("subject", self.trial), drop)
 
@@ -343,7 +343,7 @@ class ExplicitAdvection(Advection):
     @abstractproperty
     def rhs(self):
         r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
-        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.dt*t)
+        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.dt*t)
         return r.form
 
     @abstractmethod
@@ -466,14 +466,14 @@ class ThetaMethod(Advection):
     def lhs(self):
 
         l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial))
-        l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.theta*self.dt*t)
+        l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.theta*self.dt*t)
         return l.form
 
     @cached_property
     def rhs(self):
 
         r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
-        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: (1-self.theta)*self.dt*t)
+        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -(1-self.theta)*self.dt*t)
         return r.form
 
     def apply(self, x_in, x_out):

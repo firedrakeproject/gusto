@@ -59,22 +59,22 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     dS, ds = surface_measures(V)
 
     if ibp == IntegrateByParts.ONCE:
-        L = inner(div(outer(test, ubar)), q)*dx
+        L = -inner(div(outer(test, ubar)), q)*dx
     else:
-        L = -inner(outer(test, ubar), grad(q))*dx
+        L = inner(outer(test, ubar), grad(q))*dx
 
     if dS is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L -= dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
         if ibp == IntegrateByParts.TWICE:
-            L += (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
+            L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
     if outflow is not None:
-        L -= test*un*q*ds
+        L += test*un*q*ds
 
     form = subject(advection(advecting_velocity(L, ubar)), q)
     return form
@@ -90,7 +90,7 @@ def linear_advection_form(state, V, idx, qbar):
         test = TestFunction(V)
         ubar = Function(state.spaces("HDiv"))
 
-    form = subject(advection(advecting_velocity(-Constant(qbar)*test*div(ubar)*dx, ubar)), X)
+    form = subject(advection(advecting_velocity(Constant(qbar)*test*div(ubar)*dx, ubar)), X)
     return form
 
 
@@ -109,18 +109,18 @@ def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
-        L = inner(grad(test), outer(q, ubar))*dx
+        L = -inner(grad(test), outer(q, ubar))*dx
     else:
-        L = -inner(test, div(outer(q, ubar)))*dx
+        L = inner(test, div(outer(q, ubar)))*dx
 
     if dS is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L -= dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
         if ibp == IntegrateByParts.TWICE:
-            L += (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
+            L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
     form = subject(advection(advecting_velocity(L, ubar)), X)
@@ -135,8 +135,8 @@ def advection_vector_manifold_form(state, V):
     dS, ds = surface_measures(V)
     w = TestFunction(V)
     u = Function(V)
-    L = -un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))*dS
-    L -= un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))*dS
+    L = un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))*dS
+    L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))*dS
     return L
 
 
@@ -176,8 +176,8 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
         both = lambda u: 2*avg(u)
 
         L = (
-            -inner(q, curl(cross(ubar, test)))*dx
-            + inner(both(Upwind*q),
+            inner(q, curl(cross(ubar, test)))*dx
+            - inner(both(Upwind*q),
                     both(cross(n, cross(ubar, test))))*dS
         )
 
@@ -193,19 +193,19 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
 
         if ibp == IntegrateByParts.ONCE:
             L = (
-                inner(gradperp(inner(test, perp(ubar))), q)*dx
-                + inner(jump(inner(test, perp(ubar)), n),
+                -inner(gradperp(inner(test, perp(ubar))), q)*dx
+                - inner(jump(inner(test, perp(ubar)), n),
                         perp_u_upwind(q))*dS
             )
         else:
             L = (
-                (inner(test, div(perp(q))*perp(ubar)))*dx
-                + inner(jump(inner(test, perp(ubar)), n),
+                (-inner(test, div(perp(q))*perp(ubar)))*dx
+                - inner(jump(inner(test, perp(ubar)), n),
                         perp_u_upwind(q))*dS
-                - jump(inner(test, perp(ubar))*perp(q), n)*dS
+                + jump(inner(test, perp(ubar))*perp(q), n)*dS
             )
 
-    L += 0.5*div(test)*inner(q, ubar)*dx
+    L -= 0.5*div(test)*inner(q, ubar)*dx
     form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
 
@@ -223,5 +223,5 @@ def advection_equation_circulation_form(state, V, *, ibp=IntegrateByParts.ONCE):
     ubar = Function(state.spaces("HDiv"))
     q = Function(V)
     form = vector_invariant_form(state, V, ibp)
-    form += subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), q)
+    form -= subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), q)
     return form

@@ -126,9 +126,9 @@ class ShallowWaterEquations(PrognosticEquation):
 
         u_adv = vector_invariant_form(state, W, 0)
 
-        coriolis_term = linearisation(subject(-f*inner(w, state.perp(u))*dx, X))
+        coriolis_term = linearisation(subject(f*inner(w, state.perp(u))*dx, X))
 
-        pressure_gradient_term = linearisation(subject(g*div(w)*D*dx, X))
+        pressure_gradient_term = linearisation(subject(-g*div(w)*D*dx, X))
 
         u_form = u_adv + coriolis_term + pressure_gradient_term
 

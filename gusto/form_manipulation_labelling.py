@@ -124,6 +124,16 @@ class LabelledForm(object):
         else:
             return NotImplemented
 
+    def __sub__(self, other):
+        if type(other) is Term:
+            return LabelledForm(*self, Constant(-1.)*other)
+        elif type(other) is LabelledForm:
+            return LabelledForm(*self, *[Constant(-1.)*t for t in other])
+        elif other is None:
+            return self
+        else:
+            return NotImplemented
+
     def __rmul__(self, other):
         if type(other) is float:
             other = Constant(other)

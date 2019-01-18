@@ -758,7 +758,7 @@ class LinearTimesteppingSolver(object):
         aeqn = equation.label_map(lambda t: t.has_label(time_derivative),
                                   map_if_false=drop)
 
-        aeqn += beta*equation.label_map(lambda t: t.has_label(linearisation),
+        aeqn -= beta*equation.label_map(lambda t: t.has_label(linearisation),
                                         linearise,
                                         drop)
 

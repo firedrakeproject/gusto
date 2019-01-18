@@ -25,13 +25,13 @@ def interior_penalty_diffusion_form(state, V, *, kappa, mu):
     phi = Function(V)
     n = FacetNormal(state.mesh)
 
-    form = subject(inner(grad(gamma), grad(phi)*kappa)*dx, phi)
+    form = subject(-inner(grad(gamma), grad(phi)*kappa)*dx, phi)
 
     def get_flux_form(dS, M):
 
-        fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
-                  - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
-                  + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
+        fluxes = (inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
+                  + inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
+                  - mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
         return fluxes
 
     form += subject(get_flux_form(dS_v, kappa), phi)
