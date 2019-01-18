@@ -1,6 +1,7 @@
 from os import path, mkdir
 import itertools
 from netCDF4 import Dataset
+import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
@@ -324,13 +325,14 @@ class State(object):
                 self.output.checkpoint and not pickup]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
+            running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
             if self.mesh.comm.rank == 0 \
-               and "pytest" not in self.output.dirname \
+               and not running_tests \
                and path.exists(self.dumpdir) and not pickup:
                 raise IOError("results directory '%s' already exists"
                               % self.dumpdir)
             else:
-                if "pytest" not in self.output.dirname:
+                if not running_tests:
                     mkdir(self.dumpdir)
 
         if self.output.dump_vtus:
