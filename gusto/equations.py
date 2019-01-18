@@ -4,13 +4,18 @@ import operator
 from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions)
-from gusto.form_manipulation_labelling import (subject, time_derivative,
+from gusto.form_manipulation_labelling import (all_terms,
+                                               subject, time_derivative,
                                                linearisation, linearise,
-                                               drop, index)
+                                               drop, index, advection,
+                                               relabel_uadv)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
-                                      linear_advection_form)
+                                      linear_advection_form,
+                                      advection_equation_circulation_form,
+                                      advection_vector_manifold_form,
+                                      kinetic_energy_form)
 from gusto.state import build_spaces
 
 
@@ -97,7 +102,11 @@ class ShallowWaterEquations(PrognosticEquation):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, family, degree):
+    def __init__(self, state, family, degree, **kwargs):
+
+        self.u_advection_option = kwargs.pop("u_advection_option", "vector_invariant_form")
+        if kwargs:
+            raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
         Vu, VD = build_spaces(state, family, degree)
         state.spaces.W = MixedFunctionSpace((Vu, VD))
@@ -124,7 +133,17 @@ class ShallowWaterEquations(PrognosticEquation):
         X = Function(W)
         u, D = X.split()
 
-        u_adv = vector_invariant_form(state, W, 0)
+        if self.u_advection_option == "circulation_form":
+            ke_form = kinetic_energy_form(state, W, 0)
+            ke_form = advection.remove(ke_form)
+            ke_form = ke_form.label_map(all_terms, relabel_uadv)
+            u_adv = advection_equation_circulation_form(state, W, 0) + ke_form
+        elif self.u_advection_option == "vector_advection":
+            u_adv = advection_vector_manifold_form(state, W, 0)
+        elif self.u_advection_option == "vector_invariant_form":
+            u_adv = vector_invariant_form(state, W, 0)
+        else:
+            raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
 
         coriolis_term = linearisation(subject(f*inner(w, state.perp(u))*dx, X))
 

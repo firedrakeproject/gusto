@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, Min, FunctionSpace)
+                       as_vector, pi, sqrt, Min)
 import sys
 
 day = 24.*60.*60.

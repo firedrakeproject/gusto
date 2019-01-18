@@ -7,7 +7,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def setup_sw(dirname, scheme):
+def setup_sw(dirname, scheme, uopt):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -47,7 +47,7 @@ def setup_sw(dirname, scheme):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
-    eqns = ShallowWaterEquations(state, family="BDM", degree=1)
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1, u_advection_option=uopt)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -90,18 +90,14 @@ def setup_sw(dirname, scheme):
     return stepper, 0.25*day
 
 
-def run_sw(dirname, scheme):
+def run_sw(dirname, scheme, uopt="vector_invariant_form"):
 
-    stepper, tmax = setup_sw(dirname, scheme)
+    stepper, tmax = setup_sw(dirname, scheme, uopt)
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("scheme", ["CrankNicolson", "ImplicitMidpoint", "SSPRK3"])
-def test_sw_setup(tmpdir, scheme):
+def check_errors(filename):
 
-    dirname = str(tmpdir)
-    run_sw(dirname, scheme)
-    filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
 
     Derr = data.groups["D_error"]
@@ -133,3 +129,23 @@ def test_sw_setup(tmpdir, scheme):
 
     enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_AbsoluteVorticity"]
     assert enstrophy_diff["max"][-1] < 1.e-15
+
+
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "ImplicitMidpoint", "SSPRK3"])
+def test_sw(tmpdir, scheme):
+
+    dirname = str(tmpdir)
+    run_sw(dirname, scheme)
+    filename = path.join(dirname, "sw/diagnostics.nc")
+
+    check_errors(filename)
+
+
+@pytest.mark.parametrize("uopt", ["circulation_form", "vector_advection"])
+def test_sw_uopts(tmpdir, uopt):
+
+    dirname = str(tmpdir)
+    run_sw(dirname, scheme="CrankNicolson", uopt=uopt)
+    filename = path.join(dirname, "sw/diagnostics.nc")
+
+    check_errors(filename)

@@ -38,7 +38,7 @@ def surface_measures(V, direction=None):
             return dS, ds
 
 
-def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
+def advection_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, outflow=None):
     """
     The equation is assumed to be in the form:
 
@@ -51,12 +51,17 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
     """
-    # set up functions required for forms
-    ubar = Function(state.spaces("HDiv"))
-    test = TestFunction(V)
-    q = Function(V)
+    X = Function(V)
+    if len(V) > 1:
+        test = TestFunctions(V)[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
+    else:
+        test = TestFunction(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
 
-    dS, ds = surface_measures(V)
+    dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
@@ -76,7 +81,7 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
     if outflow is not None:
         L += test*un*q*ds
 
-    form = subject(advection(advecting_velocity(L, ubar)), q)
+    form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
 
 
@@ -127,17 +132,27 @@ def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def advection_vector_manifold_form(state, V):
-    ubar = Function(state.spaces("HDiv"))
+def advection_vector_manifold_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, outflow=None):
+    X = Function(V)
+    if len(V) > 1:
+        test = TestFunctions(V)[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
+    else:
+        test = TestFunction(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
+
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-    dS, ds = surface_measures(V)
-    w = TestFunction(V)
-    u = Function(V)
-    L = un('+')*inner(w('-'), n('+')+n('-'))*inner(u('+'), n('+'))*dS
-    L += un('-')*inner(w('+'), n('+')+n('-'))*inner(u('-'), n('-'))*dS
-    return L
+    dS, ds = surface_measures(q.function_space())
+
+    L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
+    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
+
+    form = advection_form(state, V, idx, ibp=ibp) + subject(advection(advecting_velocity(L, ubar)), X)
+    return form
 
 
 def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
@@ -210,7 +225,22 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def advection_equation_circulation_form(state, V, *, ibp=IntegrateByParts.ONCE):
+def kinetic_energy_form(state, V, idx):
+    X = Function(V)
+    if len(V) > 1:
+        test = TestFunctions(V)[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
+    else:
+        test = TestFunction(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
+
+    form = subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), X)
+    return form
+
+
+def advection_equation_circulation_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     """
     Defining the circulation form of the vector advection term.
 
@@ -219,9 +249,5 @@ def advection_equation_circulation_form(state, V, *, ibp=IntegrateByParts.ONCE):
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
     """
-    test = TestFunction(V)
-    ubar = Function(state.spaces("HDiv"))
-    q = Function(V)
-    form = vector_invariant_form(state, V, ibp)
-    form -= subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), q)
+    form = vector_invariant_form(state, V, idx, ibp=ibp) - kinetic_energy_form(state, V, idx)
     return form

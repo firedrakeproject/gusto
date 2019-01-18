@@ -63,6 +63,13 @@ def replace_labelled(label, replacer):
     return rep
 
 
+def relabel_uadv(t):
+    old = t.labels["uadv"]
+    new = t.get("subject").split()[0]
+    new_form = ufl.replace(t.form, {old: new})
+    return advecting_velocity.remove(Term(new_form, t.labels))
+
+
 class Term(object):
     """
     Term class, containing a form and its labels.

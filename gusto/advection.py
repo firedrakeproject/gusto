@@ -10,7 +10,7 @@ from gusto.form_manipulation_labelling import (all_terms,
                                                advecting_velocity,
                                                time_derivative, drop,
                                                replace_test, replace_labelled,
-                                               extract, Term)
+                                               extract, Term, relabel_uadv)
 from gusto.recovery import Recoverer
 
 
@@ -176,13 +176,6 @@ class Advection(object, metaclass=ABCMeta):
                 # timestepping scheme and must be replaced with the
                 # correct part of the term's subject
                 assert len(self.field.function_space()) > 1
-
-                def relabel_uadv(t):
-                    old = t.labels["uadv"]
-                    new = t.get("subject").split()[0]
-                    new_form = ufl.replace(t.form, {old: new})
-                    return advecting_velocity.remove(Term(new_form, t.labels))
-
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
                     relabel_uadv)
