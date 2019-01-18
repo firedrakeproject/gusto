@@ -319,7 +319,7 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
 
-        if any([self.output.dump_data, self.output.dumplist_latlon,
+        if any([self.output.dump_vtus, self.output.dumplist_latlon,
                 self.output.dump_diagnostics, self.output.point_data,
                 self.output.checkpoint and not pickup]):
             # setup output directory and check that it does not already exist
@@ -332,7 +332,7 @@ class State(object):
             else:
                 mkdir(self.dumpdir)
 
-        if self.output.dump_data:
+        if self.output.dump_vtus:
 
             # setup pvd output file
             outfile = path.join(self.dumpdir, "field_output.pvd")
@@ -442,7 +442,7 @@ class State(object):
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
 
-        if output.dump_data and (next(self.dumpcount) % output.dumpfreq) == 0:
+        if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
             self.dumpfile.write(*self.to_dump)
 
