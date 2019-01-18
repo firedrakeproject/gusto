@@ -1,4 +1,4 @@
-from os import path
+from os import path, mkdir
 import itertools
 from netCDF4 import Dataset
 import time
@@ -320,7 +320,8 @@ class State(object):
         """
 
         if any([self.output.dump_data, self.output.dumplist_latlon,
-                self.output.dump_diagnostics, self.output.point_data]):
+                self.output.dump_diagnostics, self.output.point_data,
+                self.output.checkpoint and not pickup]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             if self.mesh.comm.rank == 0 \
@@ -328,6 +329,8 @@ class State(object):
                and path.exists(self.dumpdir) and not pickup:
                 raise IOError("results directory '%s' already exists"
                               % self.dumpdir)
+            else:
+                mkdir(self.dumpdir)
 
         if self.output.dump_data:
 
