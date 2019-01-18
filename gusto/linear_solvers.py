@@ -10,6 +10,7 @@ from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
+                                               all_terms,
                                                linearisation, linearise,
                                                replace_labelled,
                                                advecting_velocity)
@@ -762,7 +763,9 @@ class LinearTimesteppingSolver(object):
                                         drop)
 
         aeqn = aeqn.label_map(lambda t: t.has_label(advecting_velocity),
-                              replace_labelled("uadv", trials),
+                              replace_labelled("uadv", trials))
+
+        aeqn = aeqn.label_map(all_terms,
                               replace_labelled("subject", trials))
 
         Leqn = equation.label_map(lambda t: t.has_label(time_derivative),

@@ -1,18 +1,27 @@
 import ufl
 import functools
 import operator
-from firedrake import Function, TrialFunction, Constant
+from firedrake import Function, TrialFunction, Constant, split
 from firedrake.formmanipulation import split_form
 
 
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
-linearise = lambda t: functools.reduce(
-    operator.add, [Term(l.form, dict(t.labels, **l.labels))
-                   for l in t.get("linearisation")]
-)
 extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
+
+
+def linearise(t):
+    t_linear = t.get("linearisation")
+    if type(t_linear) == LabelledForm:
+        new_labels = t.labels.copy()
+        new_labels["linearisation"] = True
+        return LabelledForm(functools.reduce(
+            operator.add,
+            [Term(l.form, dict(new_labels, **l.labels))
+             for l in t_linear]))
+    elif t_linear is True:
+        return Term(t.form, t.labels)
 
 
 def replace_test(new_test):
@@ -31,11 +40,24 @@ def replace_labelled(label, replacer):
         old = t.labels[label]
         # check if we need to extract part of the replacer
         size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
-        if size(replacer) == 1:
-            new = replacer
+        extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
+        if size(old) == 1:
+            if size(replacer) == 1:
+                new = replacer
+            else:
+                new = extract(replacer, old.function_space().index)
+            replace_dict = {old: new}
         else:
-            new = replacer[old.function_space().index]
-        new_form = ufl.replace(t.form, {old: new})
+            if size(replacer) == 1:
+                new = replacer
+                replace_dict = {extract(old, new.function_space().index): new}
+            else:
+                if type(replacer) is Function:
+                    new = split(replacer)
+                else:
+                    new = replacer
+                replace_dict = {k: v for k, v in zip(old.split(), new)}
+        new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)
 
     return rep
@@ -122,8 +144,11 @@ class LabelledForm(object):
         `map_if_true`; terms for which `term_filter` is false are
         transformed by map_is_false."""
 
-        return LabelledForm(functools.reduce(
-            operator.add, filter(lambda t: t is not None, (map_if_true(t) if term_filter(t) else map_if_false(t) for t in self.terms))))
+        return LabelledForm(
+            functools.reduce(operator.add,
+                             filter(lambda t: t is not None,
+                                    (map_if_true(t) if term_filter(t) else
+                                     map_if_false(t) for t in self.terms))))
 
     @property
     def form(self):
@@ -139,11 +164,11 @@ class Label(object):
     :arg validator: (optional) function to check the validity of any
     value later passed to __call__
     """
-    __slots__ = ["label", "value", "validator"]
+    __slots__ = ["label", "default_value", "value", "validator"]
 
     def __init__(self, label, *, value=True, validator=None):
         self.label = label
-        self.value = value
+        self.default_value = value
         self.validator = validator
 
     def __call__(self, target, value=None):
@@ -151,8 +176,10 @@ class Label(object):
             assert(self.validator)
             assert(self.validator(value))
             self.value = value
+        else:
+            self.value = self.default_value
         if isinstance(target, LabelledForm):
-            return LabelledForm(*(self(t) for t in target.terms))
+            return LabelledForm(*(self(t, value) for t in target.terms))
         elif isinstance(target, ufl.Form):
             return LabelledForm(Term(target, {self.label: self.value}))
         elif isinstance(target, Term):
@@ -183,5 +210,5 @@ advection = Label("advection")
 diffusion = Label("diffusion")
 advecting_velocity = Label("uadv", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) in [TrialFunction, Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])
-linearisation = Label("linearisation", validator=lambda value: isinstance(value, LabelledForm))
-implicit = Label("implicit", validator=lambda value: value in [True, "end_of_step"])
+linearisation = Label("linearisation", validator=lambda value: type(value) is LabelledForm)
+index = Label("index", validator=lambda value: type(value) is int)

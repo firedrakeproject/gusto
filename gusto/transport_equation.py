@@ -82,28 +82,29 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=None):
 
 def linear_advection_form(state, V, idx, qbar):
 
+    X = Function(V)
     if len(V) > 1:
         test = TestFunctions(V)[idx]
-        q = Function(V).split()[idx]
         ubar = Function(V.sub(0))
     else:
         test = TestFunction(V)
-        q = Function(V)
         ubar = Function(state.spaces("HDiv"))
 
-    form = subject(advecting_velocity(-Constant(qbar)*test*div(ubar)*dx, ubar), q)
+    form = subject(advection(advecting_velocity(-Constant(qbar)*test*div(ubar)*dx, ubar)), X)
     return form
 
 
 def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
-    ubar = Function(state.spaces("HDiv"))
 
+    X = Function(V)
     if len(V) > 1:
         test = TestFunctions(V)[idx]
-        q = Function(V).split()[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
     else:
         test = TestFunction(V)
-        q = Function(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
 
     dS, ds = surface_measures(q.function_space())
 
@@ -122,7 +123,7 @@ def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
             L += (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
-    form = subject(advection(advecting_velocity(L, ubar)), q)
+    form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
 
 
@@ -148,13 +149,15 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
               take the value None, "once" or "twice". Defaults to "once".
     """
-    ubar = Function(state.spaces("HDiv"))
+    X = Function(V)
     if len(V) > 1:
         test = TestFunctions(V)[idx]
-        q = Function(V).split()[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
     else:
         test = TestFunction(V)
-        q = Function(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
 
     dS, ds = surface_measures(q.function_space())
 
@@ -203,7 +206,7 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
             )
 
     L += 0.5*div(test)*inner(q, ubar)*dx
-    form = subject(advection(advecting_velocity(L, ubar)), q)
+    form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
 
 

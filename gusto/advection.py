@@ -1,8 +1,8 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, LinearVariationalProblem,
-                       LinearVariationalSolver, Projector, Interpolator,
+from firedrake import (Function, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, Projector, Interpolator,
                        TestFunction, TrialFunction, FunctionSpace,
-                       TrialFunctions,
+                       TrialFunctions, action,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
@@ -64,7 +64,7 @@ class Advection(object, metaclass=ABCMeta):
 
         if len(equation.function_space) > 1 and len(field.function_space()) == 1:
             idx = self.field.function_space().index
-            self.equation = self.equation.label_map(lambda t: t.labels["subject"].function_space().index == idx, extract(idx), drop)
+            self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
 
         self.dt = state.dt
 
@@ -169,26 +169,38 @@ class Advection(object, metaclass=ABCMeta):
 
         if any([t.has_label(advecting_velocity) for t in self.equation]):
             # setup advecting velocity
-            if u_advecting == "fixed":
-                # the advecting velocity is fixed over the timestep and is
-                # specified by updating self.ubar
-                self.ubar = Function(state.spaces("HDiv"))
-                uadv = self.ubar
-            elif u_advecting == "prescribed":
-                # the advecting velocity is prescribed and stored in
-                # state.fields.u
-                assert "u" in [f.name() for f in state.fields]
-                uadv = state.fields("u")
-            elif u_advecting == "calculate":
+            if u_advecting is None:
                 # the advecting velocity is calculated as part of this
-                # timestepping scheme and must be replaced by q1.sub(0)
+                # timestepping scheme and must be replaced with the
+                # correct part of the term's subject
                 assert len(self.field.function_space()) > 1
-                uadv = self.qs[0]
+
+                def relabel_uadv(t):
+                    old = t.labels["uadv"]
+                    new = t.get("subject").split()[0]
+                    new_form = ufl.replace(t.form, {old: new})
+                    return advecting_velocity.remove(Term(new_form, t.labels))
+
+                self.equation = self.equation.label_map(
+                    lambda t: t.has_label(advecting_velocity),
+                    relabel_uadv)
             else:
-                raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
-            self.equation = self.equation.label_map(
-                lambda t: t.has_label(advecting_velocity),
-                replace_labelled("uadv", uadv))
+                if u_advecting == "fixed":
+                    # the advecting velocity is fixed over the timestep and is
+                    # specified by updating self.ubar
+                    self.ubar = Function(state.spaces("HDiv"))
+                    uadv = self.ubar
+                elif u_advecting == "prescribed":
+                    # the advecting velocity is prescribed and stored in
+                    # state.fields.u
+                    assert "u" in [f.name() for f in state.fields]
+                    uadv = state.fields("u")
+                else:
+                    raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
+                self.equation = self.equation.label_map(
+                    lambda t: t.has_label(advecting_velocity),
+                    replace_labelled("uadv", uadv))
+
         self._initialised = True
 
     def pre_apply(self, x_in, discretisation_option):
@@ -247,9 +259,9 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
+        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
-        return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply(self, x_in, x_out):
@@ -304,6 +316,7 @@ class ExplicitAdvection(Advection):
 
     def __init__(self, state, field, equation, *, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
+
         super().__init__(state, field, equation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)

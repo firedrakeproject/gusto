@@ -96,7 +96,7 @@ def run_sw(dirname, scheme):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("scheme", ["CrankNicolson", "SSPRK3"])
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "ImplicitMidpoint", "SSPRK3"])
 def test_sw_setup(tmpdir, scheme):
 
     dirname = str(tmpdir)

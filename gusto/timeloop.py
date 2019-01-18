@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
-from gusto.form_manipulation_labelling import advection, diffusion, implicit
+from gusto.form_manipulation_labelling import advection, diffusion
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
@@ -73,10 +73,9 @@ class Timestepper(object, metaclass=ABCMeta):
     def setup_schemes(self):
         for name, scheme in self.schemes:
             if name in ["X", "u"]:
-                u_advecting = "calculate"
+                scheme.setup(self.state)
             else:
-                u_advecting = "prescribed"
-            scheme.setup(self.state, u_advecting)
+                scheme.setup(self.state, u_advecting="prescribed")
 
     def setup_timeloop(self, t, tmax, pickup):
         """

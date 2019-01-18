@@ -6,7 +6,7 @@ from firedrake import (Function, TestFunction, inner, dx, div,
                        MixedFunctionSpace, TestFunctions)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                linearisation, linearise,
-                                               all_terms, drop)
+                                               drop, index)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
@@ -38,8 +38,10 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             tests = TestFunctions(self.function_space)
             qs = Function(self.function_space)
             return functools.reduce(
-                operator.add, (subject(time_derivative(inner(q, test)*dx), q)
-                               for q, test in zip(qs.split(), tests)))
+                operator.add,
+                (index(subject(
+                    time_derivative(inner(q, test)*dx), qs), tests.index(test))
+                 for q, test in zip(qs.split(), tests)))
 
     @abstractproperty
     def form(self):
@@ -95,9 +97,8 @@ class ShallowWaterEquations(PrognosticEquation):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, family, degree, linear=False):
+    def __init__(self, state, family, degree):
 
-        self.linear = linear
         Vu, VD = build_spaces(state, family, degree)
         state.spaces.W = MixedFunctionSpace((Vu, VD))
         self.function_space = state.spaces.W
@@ -118,22 +119,26 @@ class ShallowWaterEquations(PrognosticEquation):
         H = state.parameters.H
         f = state.fields("coriolis")
 
-        u = self.state.fields("u")
-        D = self.state.fields("D")
         W = state.spaces.W
         w, phi = TestFunctions(W)
+        X = Function(W)
+        u, D = X.split()
 
         u_adv = vector_invariant_form(state, W, 0)
 
-        coriolis_term = linearisation(subject(-f*inner(w, state.perp(u))*dx, u), subject(-f*inner(w, state.perp(u))*dx, u))
+        coriolis_term = linearisation(subject(-f*inner(w, state.perp(u))*dx, X))
 
-        pressure_gradient_term = linearisation(subject(g*div(w)*D*dx, D), subject(g*div(w)*D*dx, D))
+        pressure_gradient_term = linearisation(subject(g*div(w)*D*dx, X))
 
         u_form = u_adv + coriolis_term + pressure_gradient_term
 
         D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, H))
 
-        if self.linear:
-            return u_form.label_map(lambda t: t.has_label(linearisation), linearise, drop) + D_form.label_map(all_terms, linearise)
-        else:
-            return u_form + D_form
+        return index(u_form, 0) + index(D_form, 1)
+
+
+class LinearShallowWaterEquations(ShallowWaterEquations):
+
+    def form(self):
+
+        return super().form().label_map(lambda t: t.has_label(linearisation), linearise, drop)

@@ -4,15 +4,19 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector)
 from math import pi
 from netCDF4 import Dataset
+import pytest
 
 
-def setup_sw(dirname):
+def setup_sw(dirname, scheme):
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
     R = 6371220.
     H = 2000.
     day = 24.*60.*60.
-    dt=3600.
+    if scheme == "CrankNicolson":
+        dt = 3600.
+    elif scheme == "SSPRK3":
+        dt = 500.
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
@@ -26,7 +30,7 @@ def setup_sw(dirname):
                   output=output,
                   parameters=parameters)
 
-    eqns = ShallowWaterEquations(state, family="BDM", degree=1, linear=True)
+    eqns = LinearShallowWaterEquations(state, family="BDM", degree=1)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -42,25 +46,29 @@ def setup_sw(dirname):
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    advected_fields = []
-    advected_fields.append(("D", ForwardEuler(state, D0, eqns)))
-
     # build time stepper
-    stepper = CrankNicolson(state, equations=eqns,
-                            advected_fields=advected_fields)
+    if scheme == "CrankNicolson":
+        advected_fields = []
+        advected_fields.append(("D", ForwardEuler(state, D0, eqns)))
+        stepper = CrankNicolson(state, equations=eqns,
+                                advected_fields=advected_fields)
+    elif scheme == "SSPRK3":
+        scheme = SSPRK3(state, state.fields.X, eqns)
+        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
 
     return stepper, 2*day
 
 
-def run_sw(dirname):
+def run_sw(dirname, scheme):
 
-    stepper, tmax = setup_sw(dirname)
+    stepper, tmax = setup_sw(dirname, scheme)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_sw_linear(tmpdir):
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "SSPRK3"])
+def test_sw_linear(tmpdir, scheme):
     dirname = str(tmpdir)
-    run_sw(dirname)
+    run_sw(dirname, scheme)
     filename = path.join(dirname, "sw_linear_w2/diagnostics.nc")
     data = Dataset(filename, "r")
 
