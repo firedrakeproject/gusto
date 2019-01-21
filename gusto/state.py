@@ -1,4 +1,4 @@
-from os import path, mkdir
+from os import path, makedirs
 import itertools
 from netCDF4 import Dataset
 import sys
@@ -333,7 +333,7 @@ class State(object):
                               % self.dumpdir)
             else:
                 if not running_tests:
-                    mkdir(self.dumpdir)
+                    makedirs(self.dumpdir)
 
         if self.output.dump_vtus:
 
