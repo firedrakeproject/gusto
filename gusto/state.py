@@ -1,6 +1,7 @@
-from os import path
+from os import path, mkdir
 import itertools
 from netCDF4 import Dataset
+import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
@@ -319,14 +320,22 @@ class State(object):
         otherwise dump and checkpoint to disk. (default is False).
         """
 
-        if self.output.dump_data:
+        if any([self.output.dump_vtus, self.output.dumplist_latlon,
+                self.output.dump_diagnostics, self.output.point_data,
+                self.output.checkpoint and not pickup]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
+            running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
             if self.mesh.comm.rank == 0 \
-               and "pytest" not in self.output.dirname \
+               and not running_tests \
                and path.exists(self.dumpdir) and not pickup:
                 raise IOError("results directory '%s' already exists"
                               % self.dumpdir)
+            else:
+                if not running_tests:
+                    mkdir(self.dumpdir)
+
+        if self.output.dump_vtus:
 
             # setup pvd output file
             outfile = path.join(self.dumpdir, "field_output.pvd")
@@ -418,11 +427,11 @@ class State(object):
         output = self.output
 
         # Diagnostics:
-        if output.dump_diagnostics:
-            # Compute diagnostic fields
-            for field in self.diagnostic_fields:
-                field(self)
+        # Compute diagnostic fields
+        for field in self.diagnostic_fields:
+            field(self)
 
+        if output.dump_diagnostics:
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
 
@@ -436,7 +445,7 @@ class State(object):
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
 
-        if output.dump_data and (next(self.dumpcount) % output.dumpfreq) == 0:
+        if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
             self.dumpfile.write(*self.to_dump)
 
