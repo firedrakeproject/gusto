@@ -188,7 +188,6 @@ class SemiImplicitTimestepper(Timestepper):
         for name, scheme in self.passive_advection:
             old_field = getattr(self.xn, name)
             new_field = getattr(self.xnp1, name)
-            scheme.update_ubar(self.advecting_velocity)
             # advects a field from xn and puts result in xnp1
             scheme.apply(old_field, new_field)
 
@@ -279,7 +278,6 @@ class CrankNicolson(SemiImplicitTimestepper):
             with timed_stage("Advection"):
                 # first computes ubar from state.xn and state.xnp1
                 for name, scheme in self.active_advection:
-                    scheme.update_ubar(self.advecting_velocity)
                     # advects a field from xstar and puts result in xp
                     scheme.apply(self.xstar(name), self.xp(name))
                 for name in self.non_advected_fields:

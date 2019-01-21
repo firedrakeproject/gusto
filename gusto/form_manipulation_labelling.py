@@ -39,16 +39,22 @@ def replace_labelled(label, replacer):
     def rep(t):
         old = t.labels[label]
         # check if we need to extract part of the replacer
+        repl_expr = isinstance(replacer, ufl.core.expr.Expr)
         size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
         extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
         if size(old) == 1:
-            if size(replacer) == 1:
+            if repl_expr:
+                new = replacer
+            elif size(replacer) == 1:
                 new = replacer
             else:
                 new = extract(replacer, old.function_space().index)
             replace_dict = {old: new}
         else:
-            if size(replacer) == 1:
+            if repl_expr:
+                new = replacer
+                replace_dict = {extract(old, new.function_space().index): new}
+            elif size(replacer) == 1:
                 new = replacer
                 replace_dict = {extract(old, new.function_space().index): new}
             else:

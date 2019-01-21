@@ -144,7 +144,7 @@ class Advection(object, metaclass=ABCMeta):
             test = TestFunction(self.fs)
             default_uadv = (
                 self.prescribed_uadv or Function(state.spaces("HDiv"))
-                )
+            )
 
             def replace_with_supg_test(t):
                 uadv = t.get("uadv") or default_uadv
@@ -197,11 +197,9 @@ class Advection(object, metaclass=ABCMeta):
                 if self.prescribed_uadv:
                     logger.warning(
                         "prescribed advection overwritten by timeloop")
-                self.ubar = Function(state.spaces("HDiv")).assign(u_advecting)
-
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
-                    replace_labelled("uadv", self.ubar))
+                    replace_labelled("uadv", u_advecting))
 
         # setup required functions
         self.q1 = Function(self.fs)
@@ -267,9 +265,6 @@ class Advection(object, metaclass=ABCMeta):
     @abstractproperty
     def rhs(self):
         pass
-
-    def update_ubar(self, uadv):
-        self.ubar.assign(uadv)
 
     @cached_property
     def solver(self):
