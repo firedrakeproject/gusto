@@ -271,7 +271,6 @@ class CrankNicolson(SemiImplicitTimestepper):
             scheme.setup(self.state, labels=[diffusion])
 
     def semi_implicit_step(self):
-        state = self.state
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(self.xn.X, self.xn.X,
