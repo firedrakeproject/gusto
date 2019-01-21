@@ -41,26 +41,26 @@ class Timestepper(object, metaclass=ABCMeta):
         else:
             self.prescribed_fields = []
 
-        state.xn = FieldCreator()
-        state.xnp1 = FieldCreator()
+        self.xn = FieldCreator()
+        self.xnp1 = FieldCreator()
 
         if equations is not None:
             self.fieldlist = equations.fieldlist
-            state.xn(self.fieldlist, state.spaces.W, dump=False, pickup=False)
-            state.xnp1(self.fieldlist, state.spaces.W, dump=False, pickup=False)
+            self.xn(self.fieldlist, state.spaces.W, dump=False, pickup=False)
+            self.xnp1(self.fieldlist, state.spaces.W, dump=False, pickup=False)
         else:
             self.fieldlist = []
 
         additional_fields = set([f for f, _ in schemes]).difference(set(self.fieldlist))
         for field in additional_fields:
-            state.xn(field, state.fields(field).function_space())
-            state.xnp1(field, state.fields(field).function_space())
+            self.xn(field, state.fields(field).function_space())
+            self.xnp1(field, state.fields(field).function_space())
 
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
         """
-        unp1 = self.state.xnp1("u")
+        unp1 = self.xnp1("u")
 
         if unp1.function_space().extruded:
             M = unp1.function_space()
@@ -90,7 +90,7 @@ class Timestepper(object, metaclass=ABCMeta):
         return t
 
     def initialise(self, state):
-        for field in state.xn:
+        for field in self.xn:
             field.assign(state.fields(field.name()))
 
     def evaluate_prescribed_fields(self, state):
@@ -103,8 +103,8 @@ class Timestepper(object, metaclass=ABCMeta):
 
     def timestep(self, state):
         for name, scheme in self.schemes:
-            old_field = getattr(state.xn, name)
-            new_field = getattr(state.xnp1, name)
+            old_field = getattr(self.xn, name)
+            new_field = getattr(self.xnp1, name)
             scheme.apply(old_field, new_field)
 
     def run(self, t, tmax, pickup=False):
@@ -130,14 +130,14 @@ class Timestepper(object, metaclass=ABCMeta):
             self.timestep(state)
 
             # update xn
-            self.update_fields(state.xn, state.xnp1)
+            self.update_fields(self.xn, self.xnp1)
 
             with timed_stage("Physics"):
                 for physics in self.physics_list:
                     physics.apply()
 
-            self.update_fields(state.xn, state.xnp1)
-            self.update_fields(state.fields, state.xnp1)
+            self.update_fields(self.xn, self.xnp1)
+            self.update_fields(state.fields, self.xnp1)
 
             with timed_stage("Dump output"):
                 state.dump(t, pickup=False)
@@ -163,8 +163,8 @@ class SemiImplicitTimestepper(Timestepper):
 
     @property
     def advecting_velocity(self):
-        un = self.state.xn("u")
-        unp1 = self.state.xnp1("u")
+        un = self.xn("u")
+        unp1 = self.xnp1("u")
         return un + self.alpha*(unp1-un)
 
     @property
@@ -189,16 +189,16 @@ class SemiImplicitTimestepper(Timestepper):
         self.semi_implicit_step()
 
         for name, scheme in self.passive_advection:
-            old_field = getattr(state.xn, name)
-            new_field = getattr(state.xnp1, name)
+            old_field = getattr(self.xn, name)
+            new_field = getattr(self.xnp1, name)
             scheme.update_ubar(self.advecting_velocity)
             # advects a field from xn and puts result in xnp1
             scheme.apply(old_field, new_field)
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffused_fields:
-                old_field = getattr(state.xnp1, name)
-                new_field = getattr(state.xnp1, name)
+                old_field = getattr(self.xnp1, name)
+                new_field = getattr(self.xnp1, name)
                 scheme.apply(old_field, new_field)
 
 
@@ -274,7 +274,7 @@ class CrankNicolson(SemiImplicitTimestepper):
         state = self.state
 
         with timed_stage("Apply forcing terms"):
-            self.forcing.apply(state.xn.X, state.xn.X,
+            self.forcing.apply(self.xn.X, self.xn.X,
                                self.xstar.X, label="explicit")
 
         for k in range(self.maxk):
@@ -293,14 +293,14 @@ class CrankNicolson(SemiImplicitTimestepper):
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
-                    self.forcing.apply(self.xp.X, state.xnp1.X,
+                    self.forcing.apply(self.xp.X, self.xnp1.X,
                                        self.xrhs, label="implicit")
 
-                self.xrhs -= state.xnp1.X
+                self.xrhs -= self.xnp1.X
 
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(self.xrhs, self.dy)  # solves linear system and places result in self.dy
 
-                state.xnp1.X += self.dy
+                self.xnp1.X += self.dy
 
             self._apply_bcs()
