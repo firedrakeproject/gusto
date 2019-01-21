@@ -28,7 +28,7 @@ def is_cg(V):
         return sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
 
 
-def surface_measures(V, direction=None):
+def surface_measures(V):
     if is_cg(V):
         return None, None
     else:
@@ -36,6 +36,22 @@ def surface_measures(V, direction=None):
             return (dS_h + dS_v), (ds_b + ds_t + ds_v)
         else:
             return dS, ds
+
+
+def setup_functions(state, V, idx):
+
+    X = Function(V)
+    if len(V) > 1:
+        if idx is None:
+            raise ValueError("If V is a mixed function space you must specify the index of the space this form is defined on")
+        test = TestFunctions(V)[idx]
+        q = X.split()[idx]
+        ubar = Function(V.sub(0))
+    else:
+        test = TestFunction(V)
+        q = X
+        ubar = Function(state.spaces("HDiv"))
+    return X, test, q, ubar
 
 
 def advection_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=None):
@@ -51,16 +67,8 @@ def advection_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=Non
     :arg ibp: string, stands for 'integrate by parts' and can take the value
               None, "once" or "twice". Defaults to "once".
     """
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        q = X.split()[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        q = X
-        ubar = Function(state.spaces("HDiv"))
 
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
@@ -87,13 +95,7 @@ def advection_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=Non
 
 def linear_advection_form(state, V, idx=None, qbar=None):
 
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        ubar = Function(state.spaces("HDiv"))
+    X, test, _, ubar = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(Constant(qbar)*test*div(ubar)*dx, ubar)), X)
     return form
@@ -101,16 +103,7 @@ def linear_advection_form(state, V, idx=None, qbar=None):
 
 def continuity_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
 
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        q = X.split()[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        q = X
-        ubar = Function(state.spaces("HDiv"))
-
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
@@ -133,20 +126,12 @@ def continuity_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
 
 
 def advection_vector_manifold_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=None):
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        q = X.split()[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        q = X
-        ubar = Function(state.spaces("HDiv"))
+
+    X, test, q, ubar = setup_functions(state, V, idx)
+    dS, ds = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
-
-    dS, ds = surface_measures(q.function_space())
 
     L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
     L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
@@ -164,16 +149,8 @@ def vector_invariant_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
     :arg ibp: (optional) string, stands for 'integrate by parts' and can
               take the value None, "once" or "twice". Defaults to "once".
     """
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        q = X.split()[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        q = X
-        ubar = Function(state.spaces("HDiv"))
 
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
@@ -225,16 +202,9 @@ def vector_invariant_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def kinetic_energy_form(state, V, idx=None):
-    X = Function(V)
-    if len(V) > 1:
-        test = TestFunctions(V)[idx]
-        q = X.split()[idx]
-        ubar = Function(V.sub(0))
-    else:
-        test = TestFunction(V)
-        q = X
-        ubar = Function(state.spaces("HDiv"))
+def kinetic_energy_form(state, V, idx=None): 
+
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), X)
     return form
