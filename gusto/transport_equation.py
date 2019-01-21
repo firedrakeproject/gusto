@@ -38,7 +38,7 @@ def surface_measures(V, direction=None):
             return dS, ds
 
 
-def advection_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, outflow=None):
+def advection_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=None):
     """
     The equation is assumed to be in the form:
 
@@ -85,7 +85,7 @@ def advection_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, outflow=None):
     return form
 
 
-def linear_advection_form(state, V, idx, qbar):
+def linear_advection_form(state, V, idx=None, qbar=None):
 
     X = Function(V)
     if len(V) > 1:
@@ -99,7 +99,7 @@ def linear_advection_form(state, V, idx, qbar):
     return form
 
 
-def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
+def continuity_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
 
     X = Function(V)
     if len(V) > 1:
@@ -132,7 +132,7 @@ def continuity_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def advection_vector_manifold_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, outflow=None):
+def advection_vector_manifold_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE, outflow=None):
     X = Function(V)
     if len(V) > 1:
         test = TestFunctions(V)[idx]
@@ -155,7 +155,7 @@ def advection_vector_manifold_form(state, V, idx, *, ibp=IntegrateByParts.ONCE, 
     return form
 
 
-def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
     """
     Defines the vector invariant form of the vector advection term.
 
@@ -225,7 +225,7 @@ def vector_invariant_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def kinetic_energy_form(state, V, idx):
+def kinetic_energy_form(state, V, idx=None):
     X = Function(V)
     if len(V) > 1:
         test = TestFunctions(V)[idx]
@@ -240,7 +240,7 @@ def kinetic_energy_form(state, V, idx):
     return form
 
 
-def advection_equation_circulation_form(state, V, idx, *, ibp=IntegrateByParts.ONCE):
+def advection_equation_circulation_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
     """
     Defining the circulation form of the vector advection term.
 
