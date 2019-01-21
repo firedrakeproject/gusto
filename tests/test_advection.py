@@ -124,6 +124,7 @@ def test_advection_dg(geometry, error, state,
     vec_end = Function(vspace).interpolate(vec_end_expr)
 
     s = "_"
+    uadv = state.fields('u')
     advected_fields = []
 
     # setup scalar fields
@@ -132,7 +133,7 @@ def test_advection_dg(geometry, error, state,
         for time_discretisation in ["ssprk", "im"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, time_discretisation))
-            eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, fspace, uadv, ibp=ibp)
             f = state.fields(fname, fspace)
             f.interpolate(f_init)
             scalar_fields.append(fname)
@@ -147,7 +148,7 @@ def test_advection_dg(geometry, error, state,
         for time_discretisation in ["im"]:
             # create functions and initialise them
             fname = s.join(("vecf", ibp.name, time_discretisation))
-            eqn = AdvectionEquation(state, fname, vspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, vspace, uadv, ibp=ibp)
             f = state.fields(fname, vspace)
             f.interpolate(vec_expr)
             vector_fields.append(fname)
@@ -172,6 +173,7 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
     f_end = Function(fspace).interpolate(f_end)
 
     s = "_"
+    uadv = state.fields('u')
     advected_fields = []
     opts = {"broken": EmbeddedDGOptions(),
             "dg": EmbeddedDGOptions(embedding_space=state.spaces("DG"))}
@@ -183,7 +185,7 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
             for space in ["broken", "dg"]:
                 # create functions and initialise them
                 fname = s.join(("f", ibp.name, equation_form, space))
-                eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
+                eqn = AdvectionEquation(state, fname, fspace, uadv, ibp=ibp)
                 f = state.fields(fname, fspace)
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
@@ -200,6 +202,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
     in slice geometry.
     """
     s = "_"
+    uadv = state.fields('u')
     advected_fields = []
 
     cgspace = FunctionSpace(state.mesh, "CG", 1)
@@ -228,7 +231,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("f", equation_form, time_discretisation))
-            eqn = AdvectionEquation(state, fname, cgspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, cgspace, uadv, ibp=ibp)
             f = state.fields(fname, cgspace)
             f.interpolate(f_init)
             cg_scalar_fields.append(fname)
@@ -244,7 +247,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("fvec", equation_form, time_discretisation))
-            eqn = AdvectionEquation(state, fname, vcgspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, vcgspace, uadv, ibp=ibp)
             f = state.fields(fname, vcgspace)
             f.interpolate(vec_expr)
             cg_vector_fields.append(fname)
@@ -260,7 +263,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("f", ibp.name, equation_form, time_discretisation))
-            eqn = AdvectionEquation(state, fname, fspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, fspace, uadv, ibp=ibp)
             f = state.fields(fname, fspace)
             f.interpolate(f_init)
             hdiv_v_fields.append(fname)
@@ -276,7 +279,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
         for time_discretisation in ["ssprk"]:
             # create functions and initialise them
             fname = s.join(("fvec", ibp.name, equation_form, time_discretisation))
-            eqn = AdvectionEquation(state, fname, vspace, ibp=ibp)
+            eqn = AdvectionEquation(state, fname, vspace, uadv, ibp=ibp)
             f = state.fields(fname, vspace)
             f.project(vec_expr)
             hdiv_fields.append(fname)

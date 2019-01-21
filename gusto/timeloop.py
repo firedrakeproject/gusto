@@ -72,10 +72,7 @@ class Timestepper(object, metaclass=ABCMeta):
 
     def setup_schemes(self):
         for name, scheme in self.schemes:
-            if name in ["X", "u"]:
-                scheme.setup(self.state)
-            else:
-                scheme.setup(self.state, u_advecting="prescribed")
+            scheme.setup(self.state)
 
     def setup_timeloop(self, t, tmax, pickup):
         """
@@ -260,10 +257,11 @@ class CrankNicolson(SemiImplicitTimestepper):
             if name in self.fieldlist]
 
         for name, scheme in self.active_advection:
-            scheme.setup(self.state, u_advecting="fixed", labels=[advection])
+            scheme.setup(self.state, u_advecting=self.advecting_velocity,
+                         labels=[advection])
 
         for name, scheme in self.passive_advection:
-            scheme.setup(self.state, u_advecting="fixed")
+            scheme.setup(self.state, u_advecting=self.advecting_velocity)
 
         self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(self.advected_fields).keys()))]
 

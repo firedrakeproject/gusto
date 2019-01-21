@@ -58,22 +58,30 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
 class AdvectionEquation(PrognosticEquation):
 
-    def __init__(self, state, field_name, function_space, **kwargs):
+    def __init__(self, state, field_name, function_space,
+                 advecting_velocity=None,
+                 **kwargs):
         super().__init__(state, function_space, field_name)
+        self.uadv = advecting_velocity
         self.kwargs = kwargs
 
     def form(self):
-        return advection_form(self.state, self.function_space, **self.kwargs)
+        return advection_form(self.state, self.function_space, uadv=self.uadv,
+                              **self.kwargs)
 
 
 class ContinuityEquation(PrognosticEquation):
 
-    def __init__(self, state, field_name, function_space, **kwargs):
+    def __init__(self, state, field_name, function_space,
+                 advecting_velocity=None,
+                 **kwargs):
         super().__init__(state, field_name, function_space)
+        self.uadv = advecting_velocity
         self.kwargs = kwargs
 
     def form(self):
-        return continuity_form(self.state, self.function_space, **self.kwargs)
+        return continuity_form(self.state, self.function_space, uadv=self.uadv,
+                               **self.kwargs)
 
 
 class DiffusionEquation(PrognosticEquation):
@@ -151,7 +159,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
         u_form = u_adv + coriolis_term + pressure_gradient_term
 
-        D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, H))
+        D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, qbar=H))
 
         return index(u_form, 0) + index(D_form, 1)
 

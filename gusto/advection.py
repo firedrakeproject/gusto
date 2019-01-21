@@ -6,6 +6,7 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
+from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms,
                                                advecting_velocity,
                                                time_derivative, drop,
@@ -64,6 +65,10 @@ class Advection(object, metaclass=ABCMeta):
 
         self.mixed_equation = len(equation.function_space) > 1
         self.mixed_function = len(field.function_space()) > 1
+        if hasattr(equation, "uadv"):
+            self.prescribed_uadv = equation.uadv
+        else:
+            self.prescribed_uadv = None
 
         if self.mixed_equation and not self.mixed_function:
             idx = self.field.function_space().index
@@ -137,9 +142,12 @@ class Advection(object, metaclass=ABCMeta):
                     ) for j in range(dim)])
                 )
             test = TestFunction(self.fs)
+            default_uadv = (
+                self.prescribed_uadv or Function(state.spaces("HDiv"))
+                )
 
             def replace_with_supg_test(t):
-                uadv = t.get("uadv") or Function(state.spaces("HDiv"))
+                uadv = t.get("uadv") or default_uadv
                 test = t.form.arguments()[0]
                 new_test = test + dot(dot(uadv, tau), grad(test))
                 return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
@@ -175,29 +183,25 @@ class Advection(object, metaclass=ABCMeta):
         if any([t.has_label(advecting_velocity) for t in self.equation]):
             # setup advecting velocity
             if u_advecting is None:
-                # the advecting velocity is calculated as part of this
-                # timestepping scheme and must be replaced with the
-                # correct part of the term's subject
-                assert self.mixed_function
-                self.equation = self.equation.label_map(
-                    lambda t: t.has_label(advecting_velocity),
-                    relabel_uadv)
+                if self.prescribed_uadv is None:
+                    # the advecting velocity is calculated as part of this
+                    # timestepping scheme and must be replaced with the
+                    # correct part of the term's subject
+                    assert self.mixed_function
+                    self.equation = self.equation.label_map(
+                        lambda t: t.has_label(advecting_velocity),
+                        relabel_uadv)
             else:
-                if u_advecting == "fixed":
-                    # the advecting velocity is fixed over the timestep and is
-                    # specified by updating self.ubar
-                    self.ubar = Function(state.spaces("HDiv"))
-                    uadv = self.ubar
-                elif u_advecting == "prescribed":
-                    # the advecting velocity is prescribed and stored in
-                    # state.fields.u
-                    assert "u" in [f.name() for f in state.fields]
-                    uadv = state.fields("u")
-                else:
-                    raise ValueError("Option %s not valid for advecting velocity" % advecting_velocity)
+                # the advecting velocity is fixed over the timestep and is
+                # specified by updating self.ubar
+                if self.prescribed_uadv:
+                    logger.warning(
+                        "prescribed advection overwritten by timeloop")
+                self.ubar = Function(state.spaces("HDiv")).assign(u_advecting)
+
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
-                    replace_labelled("uadv", uadv))
+                    replace_labelled("uadv", self.ubar))
 
         # setup required functions
         self.q1 = Function(self.fs)
