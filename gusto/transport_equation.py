@@ -230,5 +230,5 @@ def advection_equation_circulation_form(state, V, idx=None, *, uadv=None,
     form = (
         vector_invariant_form(state, V, idx, uadv=uadv, ibp=ibp)
         - kinetic_energy_form(state, V, idx, uadv=uadv)
-        )
+    )
     return form
