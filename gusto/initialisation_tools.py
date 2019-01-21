@@ -64,7 +64,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], 0.0, bstring)]
+    bcs = [DirichletBC(WV[0], Constant(0.0), bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
@@ -122,7 +122,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     n = FacetNormal(state.mesh)
 
-    cp = state.parameters.cp
+    cp = Constant(state.parameters.cp)
 
     # add effect of density of water upon theta
     theta = theta0
@@ -143,10 +143,13 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bstring = "top"
 
     arhs = -cp*inner(dv, n)*theta*pi_boundary*bmeasure
-    g = state.parameters.g
+
+    # Possibly make g vary with spatial coordinates?
+    g = Constant(state.parameters.g)
+
     arhs -= g*inner(dv, state.k)*dx
 
-    bcs = [DirichletBC(W.sub(0), 0.0, bstring)]
+    bcs = [DirichletBC(W.sub(0), Constant(0.0), bstring)]
 
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
