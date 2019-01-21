@@ -202,7 +202,7 @@ def vector_invariant_form(state, V, idx=None, *, ibp=IntegrateByParts.ONCE):
     return form
 
 
-def kinetic_energy_form(state, V, idx=None): 
+def kinetic_energy_form(state, V, idx=None):
 
     X, test, q, ubar = setup_functions(state, V, idx)
 
