@@ -62,101 +62,92 @@ class Advection(object, metaclass=ABCMeta):
         self.field = field
         self.equation = equation()
 
-        if len(equation.function_space) > 1 and len(field.function_space()) == 1:
+        self.mixed_equation = len(equation.function_space) > 1
+        self.mixed_function = len(field.function_space()) > 1
+
+        if self.mixed_equation and not self.mixed_function:
             idx = self.field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
 
+        if self.mixed_equation and self.mixed_function:
+            self.default_solver_params = equation.solver_parameters
+        else:
+            self.default_solver_params = {'ksp_type': 'cg',
+                                          'pc_type': 'bjacobi',
+                                          'sub_pc_type': 'ilu'}
         self.dt = state.dt
+
+        self.solver_parameters = solver_parameters
 
         self.limiter = limiter
 
-        self._setup_from_options(state, self.field, options)
-
-        # setup required functions
-        self.q1 = Function(self.fs)
-        if len(equation.function_space) > 1 and len(field.function_space()) > 1:
-            self.trial = TrialFunctions(self.fs)
-            self.qs = self.q1.split()
-            default_solver_params = equation.solver_parameters
-        else:
-            self.trial = TrialFunction(self.fs)
-            self.qs = self.q1
-            default_solver_params = {'ksp_type': 'cg',
-                                     'pc_type': 'bjacobi',
-                                     'sub_pc_type': 'ilu'}
-            if options is not None and options.name == "supg":
-                default_solver_params['ksp_type'] = 'gmres'
-
-        self.dq = Function(self.fs)
-        self.solver_parameters = solver_parameters or default_solver_params
+        self.options = options
 
     def _setup_from_options(self, state, field, options):
 
-        if options is not None:
-            self.discretisation_option = options.name
+        self.discretisation_option = options.name
 
-            if options.name in ["embedded_dg", "recovered"]:
-                if options.embedding_space is None:
-                    V_elt = BrokenElement(field.function_space().ufl_element())
-                    self.fs = FunctionSpace(state.mesh, V_elt)
-                else:
-                    self.fs = options.embedding_space
-                self.xdg_in = Function(self.fs)
-                self.xdg_out = Function(self.fs)
-                test = TestFunction(self.fs)
-                self.equation = self.equation.label_map(all_terms,
-                                                        replace_test(test))
-                self.x_projected = Function(field.function_space())
-                parameters = {'ksp_type': 'cg',
-                              'pc_type': 'bjacobi',
-                              'sub_pc_type': 'ilu'}
-                self.Projector = Projector(self.xdg_out, self.x_projected,
-                                           solver_parameters=parameters)
+        if options.name in ["embedded_dg", "recovered"]:
+            if options.embedding_space is None:
+                V_elt = BrokenElement(field.function_space().ufl_element())
+                self.fs = FunctionSpace(state.mesh, V_elt)
+            else:
+                self.fs = options.embedding_space
+            self.xdg_in = Function(self.fs)
+            self.xdg_out = Function(self.fs)
+            test = TestFunction(self.fs)
+            self.equation = self.equation.label_map(all_terms,
+                                                    replace_test(test))
+            self.x_projected = Function(field.function_space())
+            parameters = {'ksp_type': 'cg',
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
+            self.Projector = Projector(self.xdg_out, self.x_projected,
+                                       solver_parameters=parameters)
 
-            if options.name == "recovered":
-                # set up the necessary functions
-                self.x_in = Function(field.function_space())
-                x_rec = Function(options.recovered_space)
-                x_brok = Function(options.broken_space)
+        if options.name == "recovered":
+            # set up the necessary functions
+            self.x_in = Function(field.function_space())
+            x_rec = Function(options.recovered_space)
+            x_brok = Function(options.broken_space)
 
-                # set up interpolators and projectors
-                self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
-                self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
-                self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
-                if self.limiter is not None:
-                    self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
-                    self.x_out_projector = Recoverer(x_brok, self.x_projected)
-                    # when the "average" method comes into firedrake master, this will be
-                    # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
-            elif options.name == "supg":
-                self.fs = field.function_space()
+            # set up interpolators and projectors
+            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
+            self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
+            self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
+            if self.limiter is not None:
+                self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
+                self.x_out_projector = Recoverer(x_brok, self.x_projected)
+                # when the "average" method comes into firedrake master, this will be
+                # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
+        elif options.name == "supg":
+            self.fs = field.function_space()
 
-                dim = state.mesh.topological_dimension()
-                if options.tau is not None:
-                    tau = options.tau
-                    assert tau.ufl_shape == (dim, dim)
-                else:
-                    vals = [options.default*self.dt]*dim
-                    for component, value in options.tau_components:
-                        vals[state.components.component] = value
-                    tau = Constant(tuple([
-                        tuple(
-                            [vals[j] if i == j else 0. for i, v in enumerate(vals)]
-                        ) for j in range(dim)])
-                    )
-                test = TestFunction(self.fs)
+            dim = state.mesh.topological_dimension()
+            if options.tau is not None:
+                tau = options.tau
+                assert tau.ufl_shape == (dim, dim)
+            else:
+                vals = [options.default*self.dt]*dim
+                for component, value in options.tau_components:
+                    vals[state.components.component] = value
+                tau = Constant(tuple([
+                    tuple(
+                        [vals[j] if i == j else 0. for i, v in enumerate(vals)]
+                    ) for j in range(dim)])
+                )
+            test = TestFunction(self.fs)
 
-                def replace_with_supg_test(t):
-                    uadv = t.get("uadv") or Function(state.spaces("HDiv"))
-                    test = t.form.arguments()[0]
-                    new_test = test + dot(dot(uadv, tau), grad(test))
-                    return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
+            def replace_with_supg_test(t):
+                uadv = t.get("uadv") or Function(state.spaces("HDiv"))
+                test = t.form.arguments()[0]
+                new_test = test + dot(dot(uadv, tau), grad(test))
+                return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
 
-                self.equation = self.equation.label_map(
-                    all_terms, replace_with_supg_test)
-        else:
-            self.discretisation_option = None
-            self.fs = self.field.function_space()
+            self.equation = self.equation.label_map(
+                all_terms, replace_with_supg_test)
+
+            self.default_solver_params['ksp_type'] = 'gmres'
 
     def setup(self, state, u_advecting=None, labels=None):
 
@@ -169,13 +160,25 @@ class Advection(object, metaclass=ABCMeta):
                 lambda t: not any(t.has_label(time_derivative, *labels)),
                 map_if_true=drop)
 
+        # if options have been specified via an AdvectionOptions
+        # class, now is the time to apply them
+        if self.options is not None:
+            if self.mixed_equation and self.mixed_function:
+                raise NotImplementedError("%s options not implemented for mixed problems" % self.options.name)
+            else:
+                self._setup_from_options(state, self.field, self.options)
+        else:
+            self.discretisation_option = None
+            self.fs = self.field.function_space()
+
+        # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.equation]):
             # setup advecting velocity
             if u_advecting is None:
                 # the advecting velocity is calculated as part of this
                 # timestepping scheme and must be replaced with the
                 # correct part of the term's subject
-                assert len(self.field.function_space()) > 1
+                assert self.mixed_function
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
                     relabel_uadv)
@@ -195,6 +198,19 @@ class Advection(object, metaclass=ABCMeta):
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
                     replace_labelled("uadv", uadv))
+
+        # setup required functions
+        self.q1 = Function(self.fs)
+        if self.mixed_equation and self.mixed_function:
+            self.trial = TrialFunctions(self.fs)
+            self.qs = self.q1.split()
+        else:
+            self.trial = TrialFunction(self.fs)
+            self.qs = self.q1
+
+        self.dq = Function(self.fs)
+        if self.solver_parameters is None:
+            self.solver_parameters = self.default_solver_params
 
         self._initialised = True
 
@@ -316,11 +332,17 @@ class ExplicitAdvection(Advection):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
+        self.subcycles = subcycles
+
+    def setup(self, state, u_advecting=None, labels=None):
+
+        super().setup(state, u_advecting=u_advecting, labels=labels)
+
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if subcycles is not None:
-            self.dt = self.dt/subcycles
-            self.ncycles = subcycles
+        if self.subcycles is not None:
+            self.dt = self.dt/self.subcycles
+            self.ncycles = self.subcycles
         else:
             self.dt = self.dt
             self.ncycles = 1
@@ -441,17 +463,18 @@ class ThetaMethod(Advection):
     """
     def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
 
-        if len(equation.function_space) > 1 and len(field.function_space()) > 1:
-            solver_parameters = equation.solver_parameters
-        else:
-            # theta method leads to asymmetric matrix, per lhs function below,
-            # so don't use CG
-            solver_parameters = {'ksp_type': 'gmres',
-                                 'pc_type': 'bjacobi',
-                                 'sub_pc_type': 'ilu'}
+        if solver_parameters is None:
+            if len(equation.function_space) > 1 and len(field.function_space()) > 1:
+                solver_parameters = equation.solver_parameters
+            else:
+                # theta method leads to asymmetric matrix, per lhs
+                # function below, so don't use CG
+                solver_parameters = {'ksp_type': 'gmres',
+                                     'pc_type': 'bjacobi',
+                                     'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation,
-                                          solver_parameters=solver_parameters)
+        super().__init__(state, field, equation,
+                         solver_parameters=solver_parameters)
 
         self.theta = theta
 
