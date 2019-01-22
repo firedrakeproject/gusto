@@ -46,8 +46,9 @@ class Timestepper(object, metaclass=ABCMeta):
 
         if equations is not None:
             self.fieldlist = equations.fieldlist
-            self.xn(self.fieldlist, state.spaces.W, dump=False, pickup=False)
-            self.xnp1(self.fieldlist, state.spaces.W, dump=False, pickup=False)
+            W = equations.function_space
+            self.xn(self.fieldlist, W, dump=False, pickup=False)
+            self.xnp1(self.fieldlist, W, dump=False, pickup=False)
         else:
             self.fieldlist = []
 
@@ -156,7 +157,7 @@ class SemiImplicitTimestepper(Timestepper):
                          prescribed_fields=prescribed_fields)
 
         self.xstar = FieldCreator()
-        self.xstar(self.fieldlist, state.spaces("W"))
+        self.xstar(self.fieldlist, equations.function_space)
 
     @property
     def advecting_velocity(self):
@@ -242,11 +243,12 @@ class CrankNicolson(SemiImplicitTimestepper):
 
         self.forcing = Forcing(state, equations, self.alpha)
 
+        W = equations.function_space
         self.xp = FieldCreator()
-        self.xp(self.fieldlist, state.spaces("W"))
+        self.xp(self.fieldlist, W)
 
-        self.xrhs = Function(state.spaces("W"))
-        self.dy = Function(state.spaces("W"))
+        self.xrhs = Function(W)
+        self.dy = Function(W)
 
     def setup_schemes(self):
         # list of fields that are advected as part of the nonlinear iteration

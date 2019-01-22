@@ -120,8 +120,7 @@ class ShallowWaterEquations(PrognosticEquation):
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
         Vu, VD = build_spaces(state, family, degree)
-        state.spaces.W = MixedFunctionSpace((Vu, VD))
-        self.function_space = state.spaces.W
+        self.function_space = MixedFunctionSpace((Vu, VD))
 
         self.fieldlist = ['u', 'D']
 
@@ -131,7 +130,7 @@ class ShallowWaterEquations(PrognosticEquation):
         if bexpr:
             self.setup_topography(state, bexpr)
 
-        super().__init__(state, state.spaces.W, *self.fieldlist)
+        super().__init__(state, self.function_space, *self.fieldlist)
 
     def setup_coriolis(self, state, fexpr):
 
@@ -155,7 +154,7 @@ class ShallowWaterEquations(PrognosticEquation):
         g = state.parameters.g
         H = state.parameters.H
 
-        W = state.spaces.W
+        W = self.function_space
         w, phi = TestFunctions(W)
         X = Function(W)
         u, D = X.split()

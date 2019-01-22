@@ -727,8 +727,6 @@ class LinearTimesteppingSolver(object):
     def __init__(self, state, equation, alpha, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
-        self.state = state
-
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
                 p = flatten_parameters(self.solver_parameters)
@@ -742,16 +740,15 @@ class LinearTimesteppingSolver(object):
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
-        self._setup_solver(equation(), state.dt, alpha)
+        W = equation.function_space
+        self._setup_solver(equation(), W, state.dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self, equation, dt, alpha):
-        state = self.state
+    def _setup_solver(self, equation, W, dt, alpha):
 
         beta = Constant(-dt*alpha)
 
         # Split up the rhs vector (symbolically)
-        W = state.spaces("W")
         trials = TrialFunctions(W)
         self.xrhs = Function(W)
 

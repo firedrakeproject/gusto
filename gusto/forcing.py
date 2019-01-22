@@ -18,20 +18,18 @@ class Forcing(object):
 
     def __init__(self, state, equation, alpha):
 
-        fieldlist = equation.fieldlist
-
         # this is the function that the forcing term is applied to
-        self.x0 = Function(state.spaces("W"))
-        self.xF = Function(state.spaces("W"))
+        W = equation.function_space
+        self.x0 = Function(W)
+        self.xF = Function(W)
 
         eqn = equation().label_map(lambda t: t.has_label(advection), drop)
         assert len(eqn) > 1
-        self._build_forcing_solver(state, fieldlist, eqn, alpha)
+        self._build_forcing_solver(state, W, eqn, alpha)
 
-    def _build_forcing_solver(self, state, fieldlist, equation, alpha):
+    def _build_forcing_solver(self, state, W, equation, alpha):
 
         dt = state.dt
-        W = state.spaces.W
         trials = TrialFunctions(W)
 
         a = equation.label_map(lambda t: t.has_label(time_derivative),
