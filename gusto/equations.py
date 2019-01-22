@@ -189,7 +189,7 @@ class ShallowWaterEquations(PrognosticEquation):
                     u_form += linearisation(
                         subject(field*inner(w, state.perp(u))*dx, X))
                 elif field_name == "topography":
-                    u_form += linearisation(subject(-g*div(w)*field*dx, X))
+                    u_form += -g*div(w)*field*dx
 
         D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, qbar=H))
 

@@ -37,7 +37,9 @@ def replace_test(new_test):
 def replace_labelled(label, replacer):
 
     def rep(t):
-        old = t.labels[label]
+        old = t.get(label)
+        if old is None:
+            return Term(t.form, t.labels)
         # check if we need to extract part of the replacer
         repl_expr = isinstance(replacer, ufl.core.expr.Expr)
         size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
@@ -128,7 +130,11 @@ class LabelledForm(object):
             self.terms = list(terms)
 
     def __add__(self, other):
-        if type(other) is Term:
+        if other is None:
+            return self
+        elif isinstance(other, ufl.Form):
+            return LabelledForm(*self, Term(other))
+        elif type(other) is Term:
             return LabelledForm(*self, other)
         elif type(other) is LabelledForm:
             return LabelledForm(*self, *other)
