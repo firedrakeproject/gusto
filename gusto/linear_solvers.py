@@ -291,10 +291,18 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
     # Solver parameters for the Lagrange multiplier system
     # NOTE: The reduced operator is not symmetric
-    solver_parameters = {'ksp_type': 'gmres',
-                         'pc_type': 'bjacobi',
-                         'sub_pc_type': 'ilu',
-                         'ksp_rtol': 1.0e-8}
+    solver_parameters = {'mat_type': 'matfree',
+                         'pmat_type': 'matfree',
+                         'ksp_type': 'preonly',
+                         'pc_type': 'python',
+                         'pc_python_type': 'firedrake.SCPC',
+                         'pc_sc_eliminate_fields': '0, 1',
+                         'condensed_field': {'ksp_type': 'gmres',
+                                             'ksp_monitor_true_residual': True,
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu',
+                                             'ksp_rtol': 1.0e-8,
+                                             'ksp_atol': 1.0e-8}}
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
@@ -315,7 +323,6 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
-        from firedrake.assemble import create_assembly_callable
         import numpy as np
 
         state = self.state
@@ -340,13 +347,10 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         # Split up the rhs vector (symbolically)
         u_in, rho_in, theta_in = split(state.xrhs)
 
-        # Build the function space for "broken" u and rho
-        # and add the trace variable
-        M = MixedFunctionSpace((Vu_broken, Vrho))
-        w, phi = TestFunctions(M)
-        u, rho = TrialFunctions(M)
-        l0 = TrialFunction(Vtrace)
-        dl = TestFunction(Vtrace)
+        # Build the function space for "broken" u, rho, and pressure trace
+        M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
+        w, phi, dl = TestFunctions(M)
+        u, rho, l0 = TrialFunctions(M)
 
         n = FacetNormal(state.mesh)
 
@@ -380,8 +384,10 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
 
         # Mass matrix for the trace space
-        tM = assemble(dl('+')*l0('+')*(dS_v + dS_h)
-                      + dl*l0*ds_v + dl*l0*(ds_t + ds_b))
+        _l0 = TrialFunction(Vtrace)
+        _dl = TestFunction(Vtrace)
+        tM = assemble(_dl('+')*_l0('+')*(dS_v + dS_h)
+                      + _dl*_l0*ds_v + _dl*_l0*(ds_t + ds_b))
 
         Lrhobar = Function(Vtrace)
         Lpibar = Function(Vtrace)
@@ -390,12 +396,13 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                                                            'sub_pc_type': 'ilu'},
                                     options_prefix='rhobarpibar_solver')
 
+        # Project field averages into functions on the trace space
         rhobar_avg = Function(Vtrace)
         pibar_avg = Function(Vtrace)
 
         def _traceRHS(f):
-            return (dl('+')*avg(f)*(dS_v + dS_h)
-                    + dl*f*ds_v + dl*f*(ds_t + ds_b))
+            return (_dl('+')*avg(f)*(dS_v + dS_h)
+                    + _dl*f*ds_v + _dl*f*(ds_t + ds_b))
 
         assemble(_traceRHS(rhobar), tensor=Lrhobar)
         assemble(_traceRHS(pibar), tensor=Lpibar)
@@ -418,89 +425,43 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             theta_w = theta
             thetabar_w = thetabar
 
-        # "broken" u and rho system
-        Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
-                - beta_cp*div(theta_w*V(w))*pibar*dxp
-                # following does nothing but is preserved in the comments
-                # to remind us why (because V(w) is purely vertical).
-                # + beta_cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
-                + beta_cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
-                + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
-                - beta_cp*div(thetabar_w*w)*pi*dxp
-                + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-                + beta*dot(phi*u, n)*rhobar_avg('+')*(dS_v + dS_h))
+        # "broken" u, rho, and trace system
+        eqn = (inner(w, (state.h_project(u) - u_in))*dx
+               - beta_cp*div(theta_w*V(w))*pibar*dxp
+               # following does nothing but is preserved in the comments
+               # to remind us why (because V(w) is purely vertical).
+               # + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_vp
+               + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_hp
+               + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
+               - beta_cp*div(thetabar_w*w)*pi*dxp
+               + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+               + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+               # trace terms appearing after integrating momentum equation
+               + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
+               + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
+               + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
+               # constraint equation to enforce continuity of the velocity
+               # (coefficients added to make the trace coupling symmetric
+               # with the terms picked up in the momentum equation)
+               + beta_cp*dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
+               + beta_cp*dl*dot(thetabar_w*u, n)*ds_vp
+               + beta_cp*dl*dot(thetabar_w*u, n)*ds_tbp)
 
         if mu is not None:
-            Aeqn += dt*mu*inner(w, k)*inner(u, k)*dx
+            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
-        # Form the mixed operators using Slate
-        # (A   K)(X) = (X_r)
-        # (K.T 0)(l)   (0  )
-        # where X = ("broken" u, rho)
-        A = Tensor(lhs(Aeqn))
-        X_r = Tensor(rhs(Aeqn))
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
 
-        # Off-diagonal block matrices containing the contributions
-        # of the Lagrange multipliers (surface terms in the momentum equation)
-        K = Tensor(beta_cp*dot(thetabar_w*w, n)*l0('+')*(dS_vp + dS_hp)
-                   + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
-                   + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp)
+        # Function for the hybridized solutions
+        self.urhol0 = Function(M)
 
-        # X = A.inv * (X_r - K * l),
-        # 0 = K.T * X = -(K.T * A.inv * K) * l + K.T * A.inv * X_r,
-        # so (K.T * A.inv * K) * l = K.T * A.inv * X_r
-        # is the reduced equation for the Lagrange multipliers.
-        # Right-hand side expression: (Forward substitution)
-        Rexp = K.T * A.inv * X_r
-        self.R = Function(Vtrace)
-
-        # We need to rebuild R everytime data changes
-        self._assemble_Rexp = create_assembly_callable(Rexp, tensor=self.R)
-
-        # Schur complement operator:
-        Smatexp = K.T * A.inv * K
-        with timed_region("Gusto:HybridAssembleTraceOp"):
-            S = assemble(Smatexp)
-            S.force_evaluation()
-
-        # Set up the Linear solver for the system of Lagrange multipliers
-        self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
-                                    options_prefix='lambda_solve')
-
-        # Result function for the multiplier solution
-        self.lambdar = Function(Vtrace)
-
-        # Place to put result of u rho reconstruction
-        self.urho = Function(M)
-
-        # Reconstruction of broken u and rho
-        u_, rho_ = self.urho.split()
-
-        # Split operators for two-stage reconstruction
-        _A = A.blocks
-        _K = K.blocks
-        _Xr = X_r.blocks
-
-        A00 = _A[0, 0]
-        A01 = _A[0, 1]
-        A10 = _A[1, 0]
-        A11 = _A[1, 1]
-        K0 = _K[0, 0]
-        Ru = _Xr[0]
-        Rrho = _Xr[1]
-        lambda_vec = AssembledVector(self.lambdar)
-
-        # rho reconstruction
-        Srho = A11 - A10 * A00.inv * A01
-        rho_expr = Srho.solve(Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec),
-                              decomposition="PartialPivLU")
-        self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
-
-        # "broken" u reconstruction
-        rho_vec = AssembledVector(rho_)
-        u_expr = A00.solve(Ru - A01 * rho_vec - K0 * lambda_vec,
-                           decomposition="PartialPivLU")
-        self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
+        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0)
+        hybridized_solver = LinearVariationalSolver(hybridized_prb,
+                                                    solver_parameters=self.solver_parameters,
+                                                    options_prefix='ImplicitSolver')
+        # import ipdb; ipdb.set_trace()
+        self.hybridized_solver = hybridized_solver
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
@@ -540,6 +501,8 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                                                                        'pc_sub_type': 'ilu'},
                                                     options_prefix='thetabacksubstitution')
 
+        # Store boundary conditions for the div-conforming velocity to apply
+        # post-solve
         self.bcs = [DirichletBC(Vu, 0.0, "bottom"),
                     DirichletBC(Vu, 0.0, "top")]
 
@@ -549,37 +512,24 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
-        # Solve the velocity-density system
-        with timed_region("Gusto:VelocityDensitySolve"):
+        # Solve the hybridized system
+        self.hybridized_solver.solve()
 
-            # Assemble the RHS for lambda into self.R
-            with timed_region("Gusto:HybridRHS"):
-                self._assemble_Rexp()
+        broken_u, rho1, _ = self.urhol0.split()
+        u1 = self.u_hdiv
 
-            # Solve for lambda
-            with timed_region("Gusto:HybridTraceSolve"):
-                self.lSolver.solve(self.lambdar, self.R)
+        # Project broken_u into the HDiv space
+        u1.assign(0.0)
 
-            # Reconstruct broken u and rho
-            with timed_region("Gusto:HybridRecon"):
-                self._assemble_rho()
-                self._assemble_u()
+        with timed_region("Gusto:HybridProjectHDiv"):
+            par_loop(self._average_kernel, dx,
+                     {"w": (self._weight, READ),
+                      "vec_in": (broken_u, READ),
+                      "vec_out": (u1, INC)})
 
-            broken_u, rho1 = self.urho.split()
-            u1 = self.u_hdiv
-
-            # Project broken_u into the HDiv space
-            u1.assign(0.0)
-
-            with timed_region("Gusto:HybridProjectHDiv"):
-                par_loop(self._average_kernel, dx,
-                         {"w": (self._weight, READ),
-                          "vec_in": (broken_u, READ),
-                          "vec_out": (u1, INC)})
-
-            # Reapply bcs to ensure they are satisfied
-            for bc in self.bcs:
-                bc.apply(u1)
+        # Reapply bcs to ensure they are satisfied
+        for bc in self.bcs:
+            bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
         u, rho, theta = self.state.dy.split()
