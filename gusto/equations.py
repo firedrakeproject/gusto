@@ -4,6 +4,7 @@ import operator
 from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions)
+from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms,
                                                subject, time_derivative,
                                                linearisation, linearise,
@@ -112,6 +113,8 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, **kwargs):
 
+        fexpr = kwargs.pop("fexpr", "default")
+        bexpr = kwargs.pop("bexpr", None)
         self.u_advection_option = kwargs.pop("u_advection_option", "vector_invariant_form")
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
@@ -121,20 +124,36 @@ class ShallowWaterEquations(PrognosticEquation):
         self.function_space = state.spaces.W
 
         self.fieldlist = ['u', 'D']
+
+        if fexpr:
+            self.setup_coriolis(state, fexpr)
+
+        if bexpr:
+            self.setup_topography(state, bexpr)
+
         super().__init__(state, state.spaces.W, *self.fieldlist)
-        Omega = state.parameters.Omega
-        x = SpatialCoordinate(state.mesh)
-        R = sqrt(inner(x, x))
-        fexpr = 2*Omega*x[2]/R
+
+    def setup_coriolis(self, state, fexpr):
+
+        if fexpr == "default":
+            Omega = state.parameters.Omega
+            x = SpatialCoordinate(state.mesh)
+            R = sqrt(inner(x, x))
+            fexpr = 2*Omega*x[2]/R
+
         V = FunctionSpace(state.mesh, "CG", 1)
-        f = Function(V).interpolate(fexpr)
-        state.fields("coriolis", f)
+        f = state.fields("coriolis", V)
+        f.interpolate(fexpr)
+
+    def setup_topography(self, state, bexpr):
+
+        b = state.fields("topography", state.fields("D").function_space())
+        b.interpolate(bexpr)
 
     def form(self):
         state = self.state
         g = state.parameters.g
         H = state.parameters.H
-        f = state.fields("coriolis")
 
         W = state.spaces.W
         w, phi = TestFunctions(W)
@@ -153,11 +172,24 @@ class ShallowWaterEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
 
-        coriolis_term = linearisation(subject(f*inner(w, state.perp(u))*dx, X))
-
         pressure_gradient_term = linearisation(subject(-g*div(w)*D*dx, X))
 
-        u_form = u_adv + coriolis_term + pressure_gradient_term
+        u_form = u_adv + pressure_gradient_term
+
+        for field_name in ["coriolis", "topography"]:
+            try:
+                field = state.fields(field_name)
+                add_term = True
+            except AttributeError:
+                logger.info("field %s not present" % field_name)
+                add_term = False
+
+            if add_term:
+                if field_name == "coriolis":
+                    u_form += linearisation(
+                        subject(field*inner(w, state.perp(u))*dx, X))
+                elif field_name == "topography":
+                    u_form += linearisation(subject(-g*div(w)*field*dx, X))
 
         D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, qbar=H))
 
