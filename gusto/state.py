@@ -44,9 +44,12 @@ class FieldCreator(object):
             try:
                 return getattr(self, name)
             except AttributeError:
-                value = Function(space)
-                self.add_field(name, value, dump, pickup)
-                return value
+                if space is not None:
+                    value = Function(space)
+                    self.add_field(name, value, dump, pickup)
+                    return value
+                else:
+                    raise AttributeError("No field named %s" % name)
         else:
             if len(space) > 1:
                 self.X = Function(space)
