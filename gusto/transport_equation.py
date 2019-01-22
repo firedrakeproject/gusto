@@ -97,7 +97,7 @@ def advection_form(state, V, idx=None, *, uadv=None,
     return form
 
 
-def linear_advection_form(state, V, idx=None, *, qbar=None, uadv=None):
+def linear_continuity_form(state, V, idx=None, *, qbar=None, uadv=None):
 
     X, test, _, ubar = setup_functions(state, V, idx, uadv)
 

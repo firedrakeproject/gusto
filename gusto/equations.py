@@ -13,7 +13,7 @@ from gusto.form_manipulation_labelling import (all_terms,
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
-                                      linear_advection_form,
+                                      linear_continuity_form,
                                       advection_equation_circulation_form,
                                       advection_vector_manifold_form,
                                       kinetic_energy_form)
@@ -190,7 +190,7 @@ class ShallowWaterEquations(PrognosticEquation):
                 elif field_name == "topography":
                     u_form += -g*div(w)*field*dx
 
-        D_form = linearisation(continuity_form(state, W, 1), linear_advection_form(state, W, 1, qbar=H))
+        D_form = linearisation(continuity_form(state, W, 1), linear_continuity_form(state, W, 1, qbar=H))
 
         return index(u_form, 0) + index(D_form, 1)
 
