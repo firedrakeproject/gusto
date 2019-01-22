@@ -297,12 +297,17 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                          'pc_type': 'python',
                          'pc_python_type': 'firedrake.SCPC',
                          'pc_sc_eliminate_fields': '0, 1',
-                         'condensed_field': {'ksp_type': 'gmres',
+                         'condensed_field': {'ksp_type': 'fgmres',
                                              'ksp_monitor_true_residual': True,
-                                             'pc_type': 'bjacobi',
-                                             'sub_pc_type': 'ilu',
                                              'ksp_rtol': 1.0e-8,
-                                             'ksp_atol': 1.0e-8}}
+                                             'ksp_atol': 1.0e-8,
+                                             'ksp_max_it': 100,
+                                             'pc_type': 'gamg',
+                                             'pc_gamg_sym_graph': True,
+                                             'mg_levels': {'ksp_type': 'gmres',
+                                                           'ksp_max_its': 5,
+                                                           'pc_type': 'bjacobi',
+                                                           'sub_pc_type': 'ilu'}}}
 
     def __init__(self, state, quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
@@ -460,7 +465,6 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.solver_parameters,
                                                     options_prefix='ImplicitSolver')
-        # import ipdb; ipdb.set_trace()
         self.hybridized_solver = hybridized_solver
 
         # Project broken u into the HDiv space using facet averaging.
