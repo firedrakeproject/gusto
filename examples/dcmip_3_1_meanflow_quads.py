@@ -142,50 +142,7 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
-# if not gamg then use basic ilu
-gamg = False
-if gamg:
-    inner_solver_parameters = {
-        'ksp_type': 'fgmres',
-        'ksp_monitor': True,
-        'ksp_rtol': 1.0e-6,
-        'ksp_atol': 1.0e-8,
-        'ksp_max_it': 100,
-        'pc_type': 'gamg',
-        'pc_gamg_sym_graph': True,
-        'mg_levels': {'ksp_type': 'gmres',
-                      'ksp_max_its': 8,
-                      'pc_type': 'bjacobi',
-                      'sub_pc_type': 'ilu'}
-    }
-    solver_parameters = {'mat_type': 'matfree',
-                         'pmat_type': 'matfree',
-                         'ksp_type': 'preonly',
-                         'pc_type': 'python',
-                         'pc_python_type': 'firedrake.SCPC',
-                         'pc_sc_eliminate_fields': '0, 1',
-                         'condensed_field': inner_solver_parameters}
-    overwrite = True
-else:
-    solver_parameters = {
-        'ksp_monitor': True,
-        'mat_type': 'matfree',
-        'pmat_type': 'matfree',
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.SCPC',
-        'pc_sc_eliminate_fields': '0, 1',
-        'condensed_field': {'ksp_type': 'gmres',
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu',
-                            'ksp_rtol': 1.0e-6,
-                            'ksp_atol': 1.0e-8}
-    }
-    overwrite = False
-
-linear_solver = HybridizedCompressibleSolver(state,
-                                             solver_parameters=solver_parameters,
-                                             overwrite_solver_parameters=overwrite)
+linear_solver = HybridizedCompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
