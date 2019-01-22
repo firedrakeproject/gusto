@@ -124,13 +124,13 @@ class ShallowWaterEquations(PrognosticEquation):
 
         self.fieldlist = ['u', 'D']
 
+        super().__init__(state, self.function_space, *self.fieldlist)
+
         if fexpr:
             self.setup_coriolis(state, fexpr)
 
         if bexpr:
             self.setup_topography(state, bexpr)
-
-        super().__init__(state, self.function_space, *self.fieldlist)
 
     def setup_coriolis(self, state, fexpr):
 
