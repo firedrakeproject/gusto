@@ -1,7 +1,7 @@
 from firedrake import (TrialFunctions, Function,
                        DirichletBC, LinearVariationalProblem,
                        LinearVariationalSolver, Constant)
-from gusto.configuration import DEBUG
+from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
                                                advection,
                                                replace_labelled)
@@ -13,10 +13,9 @@ class Forcing(object):
     """
     Base class for forcing terms for Gusto.
 
-    :arg state: x :class:`.State` object.
     """
 
-    def __init__(self, state, equation, alpha):
+    def __init__(self, equation, dt, alpha):
 
         # this is the function that the forcing term is applied to
         W = equation.function_space
@@ -25,11 +24,10 @@ class Forcing(object):
 
         eqn = equation().label_map(lambda t: t.has_label(advection), drop)
         assert len(eqn) > 1
-        self._build_forcing_solver(state, W, eqn, alpha)
+        self._build_forcing_solver(W, eqn, dt, alpha)
 
-    def _build_forcing_solver(self, state, W, equation, alpha):
+    def _build_forcing_solver(self, W, equation, dt, alpha):
 
-        dt = state.dt
         trials = TrialFunctions(W)
 
         a = equation.label_map(lambda t: t.has_label(time_derivative),
@@ -60,7 +58,7 @@ class Forcing(object):
         )
 
         solver_parameters = {}
-        if state.output.log_level == DEBUG:
+        if logger.isEnabledFor(DEBUG):
             solver_parameters["ksp_monitor_true_residual"] = True
 
         self.solvers = {}

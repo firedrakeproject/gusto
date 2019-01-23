@@ -13,7 +13,7 @@ def setup_IPdiffusion(dirname, vector, DG):
 
     output = OutputParameters(dirname=dirname)
 
-    state = State(mesh, dt,
+    state = State(mesh,
                   output=output)
 
     x = SpatialCoordinate(mesh)
@@ -42,15 +42,15 @@ def setup_IPdiffusion(dirname, vector, DG):
     mu = 5.
     eqns = [("f", DiffusionEquation(state, "f", f.function_space(),
                                     kappa=kappa, mu=mu))]
-    schemes = [("f", BackwardEuler(state))]
+    schemes = [("f", BackwardEuler())]
     stepper = Timestepper(state, equations=eqns, schemes=schemes)
-    return stepper
+    return stepper, dt
 
 
 def run(dirname, vector, DG):
 
-    stepper = setup_IPdiffusion(dirname, vector, DG)
-    stepper.run(t=0., tmax=2.5)
+    stepper, dt = setup_IPdiffusion(dirname, vector, DG)
+    stepper.run(t=0., dt=dt, tmax=2.5)
     return stepper.state.fields("f")
 
 

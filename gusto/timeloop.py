@@ -99,17 +99,18 @@ class Timestepper(object, metaclass=ABCMeta):
             else:
                 eqn = dict(equations)['X']
                 assert name in eqn.fieldlist
-            scheme.setup(state, field, eqn, u_advecting=uadv, labels=labels)
+            scheme.setup(state, field, eqn, dt=self.dt,
+                         u_advecting=uadv, labels=labels)
 
-    def setup_timeloop(self, t, tmax, pickup):
+    def setup_timeloop(self, t, dt, tmax, pickup):
         """
         Setup the timeloop by setting up diagnostics, dumping the fields and
         picking up from a previous run, if required
         """
         self.setup_schemes()
-        self.state.setup_diagnostics()
+        self.state.setup_diagnostics(dt)
         with timed_stage("Dump output"):
-            self.state.setup_dump(tmax, pickup)
+            self.state.setup_dump(dt, tmax, pickup)
             t = self.state.dump(t, pickup)
         return t
 
@@ -131,14 +132,14 @@ class Timestepper(object, metaclass=ABCMeta):
             new_field = getattr(self.xnp1, name)
             scheme.apply(old_field, new_field)
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, dt, tmax, pickup=False):
         """
         This is the timeloop.
         """
         state = self.state
-        dt = state.dt
+        self.dt = dt
 
-        t = self.setup_timeloop(t, tmax, pickup)
+        t = self.setup_timeloop(t, dt, tmax, pickup)
 
         self.initialise(state)
 
@@ -276,16 +277,20 @@ class CrankNicolson(SemiImplicitTimestepper):
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
 
-        self.linear_solver = LinearTimesteppingSolver(state, equation_set, self.alpha)
-
-        self.forcing = Forcing(state, equation_set, self.alpha)
-
+        self.equation_set = equation_set
         W = equation_set.function_space
         self.xp = FieldCreator()
         self.xp(*equation_set.fieldlist, space=W)
 
         self.xrhs = Function(W)
         self.dy = Function(W)
+
+    def setup_timeloop(self, t, dt, tmax, pickup):
+        t = super().setup_timeloop(t, dt, tmax, pickup)
+        self.linear_solver = LinearTimesteppingSolver(self.equation_set,
+                                                      dt, self.alpha)
+        self.forcing = Forcing(self.equation_set, dt, self.alpha)
+        return t
 
     def semi_implicit_step(self):
 

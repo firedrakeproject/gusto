@@ -178,7 +178,7 @@ class State(object):
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh, dt,
+    def __init__(self, mesh,
                  hydrostatic=None,
                  output=None,
                  parameters=None,
@@ -186,8 +186,6 @@ class State(object):
                  diagnostic_fields=None):
 
         self.hydrostatic = hydrostatic
-
-        self.dt = dt
 
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -257,7 +255,7 @@ class State(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
 
-    def setup_diagnostics(self):
+    def setup_diagnostics(self, dt):
         """
         Add special case diagnostic fields
         """
@@ -274,10 +272,13 @@ class State(object):
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
         for diagnostic in self.diagnostic_fields:
-            diagnostic.setup(self)
+            if diagnostic.name == "CourantNumber":
+                diagnostic.setup(self, dt)
+            else:
+                diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, tmax, pickup=False):
+    def setup_dump(self, dt, tmax, pickup=False):
         """
         Setup dump files
         Check for existence of directory so as not to overwrite
@@ -332,7 +333,7 @@ class State(object):
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
 
-            ndt = int(tmax/self.dt)
+            ndt = int(tmax/dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,

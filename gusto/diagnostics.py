@@ -94,7 +94,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
 class CourantNumber(DiagnosticField):
     name = "CourantNumber"
 
-    def setup(self, state):
+    def setup(self, state, dt):
         if not self._initialised:
             super(CourantNumber, self).setup(state)
             # set up area computation
@@ -102,10 +102,11 @@ class CourantNumber(DiagnosticField):
             test = TestFunction(V)
             self.area = Function(V)
             assemble(test*dx, tensor=self.area)
+            self.dt = dt
 
     def compute(self, state):
         u = state.fields("u")
-        dt = Constant(state.dt)
+        dt = Constant(self.dt)
         return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
 
 

@@ -8,7 +8,7 @@ from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
-from gusto.configuration import DEBUG
+from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
                                                all_terms,
                                                linearisation, linearise,
@@ -724,7 +724,7 @@ class LinearTimesteppingSolver(object):
     """
     Timestepping linear solver object.
     """
-    def __init__(self, state, equation, alpha, solver_parameters=None,
+    def __init__(self, equation, dt, alpha, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         if solver_parameters is not None:
@@ -736,12 +736,12 @@ class LinearTimesteppingSolver(object):
         else:
             self.solver_parameters = equation.solver_parameters
 
-        if state.output.log_level == DEBUG:
+        if logger.isEnabledFor(DEBUG):
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
         W = equation.function_space
-        self._setup_solver(equation(), W, state.dt, alpha)
+        self._setup_solver(equation(), W, dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self, equation, W, dt, alpha):

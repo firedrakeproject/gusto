@@ -42,7 +42,7 @@ def setup_sw(dirname, scheme, uopt):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_AbsoluteVorticity')]
 
-    state = State(mesh, dt,
+    state = State(mesh,
                   output=output,
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
@@ -66,15 +66,15 @@ def setup_sw(dirname, scheme, uopt):
     # build time stepper
     if scheme == "CrankNicolson":
         advected_fields = []
-        advected_fields.append(("u", ThetaMethod(state)))
-        advected_fields.append(("D", SSPRK3(state)))
+        advected_fields.append(("u", ThetaMethod()))
+        advected_fields.append(("D", SSPRK3()))
         stepper = CrankNicolson(state, equation_set=eqns,
                                 advected_fields=advected_fields)
     elif scheme == "ImplicitMidpoint":
-        scheme = ThetaMethod(state)
+        scheme = ThetaMethod()
         stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
     elif scheme == "SSPRK3":
-        scheme = SSPRK3(state)
+        scheme = SSPRK3()
         stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
@@ -87,13 +87,13 @@ def setup_sw(dirname, scheme, uopt):
     pv_analytical = state.fields("AnalyticalPotentialVorticity", space=vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
-    return stepper, 0.25*day
+    return stepper, dt, 0.25*day
 
 
 def run_sw(dirname, scheme, uopt="vector_invariant_form"):
 
-    stepper, tmax = setup_sw(dirname, scheme, uopt)
-    stepper.run(t=0, tmax=tmax)
+    stepper, dt, tmax = setup_sw(dirname, scheme, uopt)
+    stepper.run(t=0, dt=dt, tmax=tmax)
 
 
 def check_errors(filename):

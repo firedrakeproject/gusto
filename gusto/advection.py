@@ -46,19 +46,16 @@ class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
-    :arg state: :class:`.State` object.
     :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, *,
+    def __init__(self, *,
                  solver_parameters=None,
                  limiter=None, options=None):
 
         self._initialised = False
-
-        self.dt = state.dt
 
         self.solver_parameters = solver_parameters
 
@@ -135,11 +132,12 @@ class Advection(object, metaclass=ABCMeta):
 
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, field, equation, u_advecting=None, labels=None):
+    def setup(self, state, field, equation, dt, u_advecting=None, labels=None):
 
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
+        self.dt = dt
         if labels is None:
             labels = []
         self.field = field
@@ -317,34 +315,31 @@ class ExplicitAdvection(Advection):
     """
     Base class for explicit advection schemes.
 
-    :arg state: :class:`.State` object.
-    :arg field: field to be advected
-    :arg equation: :class:`.Equation` object, specifying the equation
-    that field satisfies
     :arg subcycles: (optional) integer specifying number of subcycles to perform
     :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, *, subcycles=None,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(self, subcycles=None, solver_parameters=None,
+                 limiter=None, options=None):
 
-        super().__init__(state,
-                         solver_parameters=solver_parameters,
+        self.subcycles = subcycles
+        super().__init__(solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
+
+    def setup(self, state, field, equation, dt,
+              u_advecting=None, labels=None):
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if subcycles is not None:
-            self.dt = self.dt/self.subcycles
+        if self.subcycles is not None:
+            dt = dt/self.subcycles
             self.ncycles = self.subcycles
         else:
-            self.dt = self.dt
+            dt = dt
             self.ncycles = 1
 
-    def setup(self, state, field, equation, u_advecting=None, labels=None):
-
-        super().setup(state, field, equation,
+        super().setup(state, field, equation, dt,
                       u_advecting=u_advecting, labels=labels)
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
@@ -461,9 +456,9 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, theta=0.5, solver_parameters=None):
+    def __init__(self, theta=0.5, solver_parameters=None):
 
-        super().__init__(state, solver_parameters=solver_parameters)
+        super().__init__(solver_parameters=solver_parameters)
 
         self.theta = theta
 
