@@ -8,7 +8,7 @@ from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
-from gusto.configuration import DEBUG
+from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -42,7 +42,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        if state.output.log_level == DEBUG:
+        if logger.isEnabledFor(DEBUG):
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # setup the solver
@@ -109,7 +109,7 @@ class CompressibleSolver(TimesteppingSolver):
         else:
             dgspace = state.spaces("DG")
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
+                logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
@@ -303,7 +303,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         else:
             dgspace = state.spaces("DG")
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
+                logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
