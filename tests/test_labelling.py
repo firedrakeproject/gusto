@@ -1,11 +1,28 @@
 import pytest
-from firedrake import TestFunction, Function, FunctionSpace, UnitSquareMesh, dx
+from firedrake import (TestFunction, Function, FunctionSpace, UnitSquareMesh,
+                       dx, Constant, LinearVariationalProblem,
+                       LinearVariationalSolver)
 from gusto import *
 
 
 @pytest.fixture
+def mesh():
+    return UnitSquareMesh(2, 2)
+
+
+@pytest.fixture
+def V(mesh):
+    return FunctionSpace(mesh, "CG", 1)
+
+
+@pytest.fixture
+def function(V):
+    return Function(V)
+
+
+@pytest.fixture
 def label_a():
-    return Label("a")
+    return Label("a", validator=lambda arg: isinstance(arg, Function))
 
 
 @pytest.fixture
@@ -14,17 +31,14 @@ def label_x():
 
 
 @pytest.fixture
-def form():
-    mesh = UnitSquareMesh(2, 2)
-    V = FunctionSpace(mesh, "CG", 1)
+def form(mesh, function, V):
     phi = TestFunction(V)
-    f = Function(V)
-    return phi*f*dx
+    return phi*function*dx
 
 
 @pytest.fixture
-def labelled_form(label_a, form):
-    return label_a(form)
+def labelled_form(label_a, function, form):
+    return label_a(form, function)
 
 
 @pytest.fixture
@@ -61,9 +75,9 @@ def test_label_labelled_form(labelled_form, label_a, label_x):
     new = label_x(labelled_form)
     assert(isinstance(new, LabelledForm))
     assert([t.has_label(label_a, label_x) for t in new])
-    assert([t.labels["x"] == "y" for t in new])
+    assert([t.get("x") == "y" for t in new])
     new = label_x(new, "z")
-    assert([t.labels["x"] == "z" for t in new])
+    assert([t.get("x") == "z" for t in new])
 
 
 def test_add_term(term, labelled_form):
@@ -102,11 +116,102 @@ def test_add_labelled_form(term, labelled_form):
     assert(c == c)
 
 
-def test_label_map(labelled_form, label_x):
+def test_label_map(labelled_form, label_a, label_x, form):
     """
     test that label_map returns a labelled_form with the label_map correctly
     applied
     """
-    new = labelled_form.label_map(lambda t: t.has_label(label_x), lambda t: label_x(t, "z"))
-    assert(isinstance(new, LabelledForm))
-    assert(t.labels["x"] is "z" for t in new if "x" in t.labels.keys())
+    a = labelled_form + label_x(form)
+    new = a.label_map(lambda t: t.has_label(label_a), lambda t: label_x(t, "z"), lambda t: label_x(t, "q"))
+    assert isinstance(new, LabelledForm)
+    assert all([t.get("x") == "z" for t in new if "a" in t.labels.keys()])
+    assert all([t.get("x") == "q" for t in new if "a" not in t.labels.keys()])
+
+
+def test_identity(labelled_form, label_a):
+    """
+    test that the identity function leaves the term unchanged
+    """
+    new = labelled_form.label_map(lambda t: t.has_label(label_a), identity)
+    t_old = labelled_form.terms[0]
+    t_new = new.terms[0]
+    assert t_new == t_old
+
+
+def test_drop(labelled_form, label_x, form):
+    """
+    test that the drop function drops the terms satisfying the term_filter
+    """
+    a = labelled_form + label_x(form)
+    new = a.label_map(lambda t: t.has_label(label_x), drop)
+    assert len(new) == 1
+    assert not any([t.has_label(label_x) for t in new])
+
+
+def test_all_terms(labelled_form, label_x):
+    """
+    test that the all_terms function cycles through all the terms
+    """
+    new = labelled_form.label_map(all_terms, map_if_false=drop)
+    assert len(new) == len(labelled_form)
+    new = labelled_form.label_map(all_terms, lambda t: label_x(t))
+    assert all([t.has_label(label_x) for t in new])
+
+
+def test_replace_test(V, labelled_form):
+    """
+    test that the replace_test function replaces the TestFunction in the form
+    """
+    replacer = Function(V)
+    new = labelled_form.label_map(all_terms, replace_test(replacer))
+    assert len(new.terms[0].form.arguments()) == 0
+
+
+def test_replace_labelled(V, labelled_form, label_a, label_x, form):
+    """
+    test the replace_labelled(label, replacer) function:
+    * if the term does not have this label then return a new instance
+      of the term with identical form and labels
+    * if replacer is a TrialFunction then replace the labelled item
+      with replacer
+    * if replacer is a Function then replace the labelled item
+      with replacer
+    * if replacer is a ufl expression then replace the labelled item
+      with replacer
+    """
+    replacer_tri = TrialFunction(V)
+    replacer_fn = Function(V).interpolate(Constant(2.))
+    t_old = labelled_form.terms[0]
+
+    new = labelled_form.label_map(all_terms, replace_labelled("x", replacer_fn))
+    t_new = new.terms[0]
+    # check that we have a new instance of term
+    assert not t_new == t_old
+    # check that form and labels are the same
+    assert t_new.form == t_old.form
+    assert t_new.labels == t_old.labels
+
+    a = labelled_form.label_map(all_terms, replace_labelled("a", replacer_tri))
+    # check that the form now has 2 arguments because it has both test
+    # and trial functions
+    assert len(a.form.arguments()) == 2
+
+    # check that L contains replacer_fn by solving
+    # <test, trial> = <test, replacer_fn>
+    L = labelled_form.label_map(all_terms, replace_labelled("a", replacer_fn))
+    b = Function(V)
+    prob = LinearVariationalProblem(a.form, L.form, b)
+    solver = LinearVariationalSolver(prob)
+    solver.solve()
+    err = Function(V).assign(replacer_fn-b)
+    assert err.dat.data.max() < 1.e-15
+
+    replacer_expr = 2*replacer_fn
+    # check that L contains replacer_expr by solving
+    # <test, trial> = <test, replacer_fn>
+    L = labelled_form.label_map(all_terms, replace_labelled("a", replacer_expr))
+    prob = LinearVariationalProblem(a.form, L.form, b)
+    solver = LinearVariationalSolver(prob)
+    solver.solve()
+    err = Function(V).assign(replacer_expr-b)
+    assert err.dat.data.max() < 1.e-14
