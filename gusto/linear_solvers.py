@@ -298,7 +298,6 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                          'pc_python_type': 'firedrake.SCPC',
                          'pc_sc_eliminate_fields': '0, 1',
                          'condensed_field': {'ksp_type': 'fgmres',
-                                             'ksp_monitor_true_residual': True,
                                              'ksp_rtol': 1.0e-8,
                                              'ksp_atol': 1.0e-8,
                                              'ksp_max_it': 100,
@@ -323,6 +322,10 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
                 state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
+
+        # Turn monitor on for the trace system when running in debug mode
+        if state.output.log_level == DEBUG:
+            self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = True
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
