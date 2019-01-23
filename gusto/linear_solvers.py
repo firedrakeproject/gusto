@@ -324,7 +324,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             self.quadrature_degree = (5, 5)
 
         # Turn monitor on for the trace system when running in debug mode
-        if state.output.log_level == DEBUG:
+        if logger.isEnabledFor(DEBUG):
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = True
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
