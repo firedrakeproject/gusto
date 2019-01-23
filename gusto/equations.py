@@ -26,11 +26,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.state = state
         self.function_space = function_space
 
-        if len(field_names) == 1:
-            state.fields(field_names[0], function_space)
-        else:
-            assert len(field_names) == len(function_space)
-            state.fields(field_names, function_space)
+        state.fields(*field_names, space=function_space)
 
         state.diagnostics.register(*field_names)
 
@@ -141,12 +137,12 @@ class ShallowWaterEquations(PrognosticEquation):
             fexpr = 2*Omega*x[2]/R
 
         V = FunctionSpace(state.mesh, "CG", 1)
-        f = state.fields("coriolis", V)
+        f = state.fields("coriolis", space=V)
         f.interpolate(fexpr)
 
     def setup_topography(self, state, bexpr):
 
-        b = state.fields("topography", state.fields("D").function_space())
+        b = state.fields("topography", space=state.fields("D").function_space())
         b.interpolate(bexpr)
 
     def form(self):

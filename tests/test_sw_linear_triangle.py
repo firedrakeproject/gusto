@@ -49,12 +49,12 @@ def setup_sw(dirname, scheme):
     # build time stepper
     if scheme == "CrankNicolson":
         advected_fields = []
-        advected_fields.append(("D", ForwardEuler(state, D0, eqns)))
-        stepper = CrankNicolson(state, equations=eqns,
+        advected_fields.append(("D", ForwardEuler(state)))
+        stepper = CrankNicolson(state, equation_set=eqns,
                                 advected_fields=advected_fields)
     elif scheme == "SSPRK3":
-        scheme = SSPRK3(state, state.fields.X, eqns)
-        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
+        scheme = SSPRK3(state)
+        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
 
     return stepper, 2*day
 

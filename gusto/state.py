@@ -39,23 +39,27 @@ class FieldCreator(object):
         value.rename(name)
         self.fields.append(value)
 
-    def __call__(self, name, space=None, dump=True, pickup=True):
-        if type(name) is str:
-            try:
-                return getattr(self, name)
-            except AttributeError:
-                if space is not None:
+    def __call__(self, *names, space=None, dump=True, pickup=True):
+        try:
+            if len(names) == 1:
+                return getattr(self, names[0])
+            else:
+                raise AttributeError("I don't want to")
+        except AttributeError:
+            if space is not None:
+                assert len(names) == len(space), "must specify one name per function space in %s" % space
+                if len(space) == 1:
                     value = Function(space)
-                    self.add_field(name, value, dump, pickup)
+                    self.add_field(names[0], value, dump, pickup)
                     return value
                 else:
-                    raise AttributeError("No field named %s" % name)
-        else:
-            if len(space) > 1:
-                self.X = Function(space)
-                for fname, value in zip(name, self.X.split()):
-                    self.add_field(fname, value, dump, pickup)
-            return self.X
+                    assert not hasattr(self, 'X'), "cannot have more than one mixed variable"
+                    self.X = Function(space)
+                    for fname, value in zip(names, self.X.split()):
+                        self.add_field(fname, value, dump, pickup)
+                    return self.X
+            else:
+                raise AttributeError("No field named %s and no space provided to create a new field." % names)
 
     def __iter__(self):
         return iter(self.fields)

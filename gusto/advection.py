@@ -47,39 +47,17 @@ class Advection(object, metaclass=ABCMeta):
     Base class for advection schemes.
 
     :arg state: :class:`.State` object.
-    :arg field: field to be advected
-    :arg equation: :class:`.Equation` object, specifying the equation
-    that field satisfies
     :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, field, equation, *,
+    def __init__(self, state, *,
                  solver_parameters=None,
                  limiter=None, options=None):
 
         self._initialised = False
-        self.field = field
-        self.equation = equation()
 
-        self.mixed_equation = len(equation.function_space) > 1
-        self.mixed_function = len(field.function_space()) > 1
-        if hasattr(equation, "uadv"):
-            self.prescribed_uadv = equation.uadv
-        else:
-            self.prescribed_uadv = None
-
-        if self.mixed_equation and not self.mixed_function:
-            idx = self.field.function_space().index
-            self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
-
-        if self.mixed_equation and self.mixed_function:
-            self.default_solver_params = equation.solver_parameters
-        else:
-            self.default_solver_params = {'ksp_type': 'cg',
-                                          'pc_type': 'bjacobi',
-                                          'sub_pc_type': 'ilu'}
         self.dt = state.dt
 
         self.solver_parameters = solver_parameters
@@ -155,15 +133,31 @@ class Advection(object, metaclass=ABCMeta):
             self.equation = self.equation.label_map(
                 all_terms, replace_with_supg_test)
 
-            self.default_solver_params['ksp_type'] = 'gmres'
+            self.default_ksp_type = 'gmres'
 
-    def setup(self, state, u_advecting=None, labels=None):
+    def setup(self, state, field, equation, u_advecting=None, labels=None):
 
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
+        if labels is None:
+            labels = []
+        self.field = field
+        self.equation = equation()
+
+        try:
+            self.prescribed_uadv = equation.uadv
+        except AttributeError:
+            self.prescribed_uadv = False
+
+        mixed_equation = len(equation.function_space) > 1
+        mixed_function = len(field.function_space()) > 1
+        if mixed_equation and not mixed_function:
+            idx = field.function_space().index
+            self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
+
         # select labelled terms from the equation if labels are specified
-        if labels is not None:
+        if len(labels) > 0:
             self.equation = self.equation.label_map(
                 lambda t: not any(t.has_label(time_derivative, *labels)),
                 map_if_true=drop)
@@ -171,23 +165,23 @@ class Advection(object, metaclass=ABCMeta):
         # if options have been specified via an AdvectionOptions
         # class, now is the time to apply them
         if self.options is not None:
-            if self.mixed_equation and self.mixed_function:
+            if mixed_equation and mixed_function:
                 raise NotImplementedError("%s options not implemented for mixed problems" % self.options.name)
             else:
-                self._setup_from_options(state, self.field, self.options)
+                self._setup_from_options(state, field, self.options)
         else:
             self.discretisation_option = None
-            self.fs = self.field.function_space()
+            self.fs = field.function_space()
 
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.equation]):
             # setup advecting velocity
             if u_advecting is None:
-                if self.prescribed_uadv is None:
+                if not self.prescribed_uadv:
                     # the advecting velocity is calculated as part of this
                     # timestepping scheme and must be replaced with the
                     # correct part of the term's subject
-                    assert self.mixed_function
+                    assert mixed_function
                     self.equation = self.equation.label_map(
                         lambda t: t.has_label(advecting_velocity),
                         relabel_uadv)
@@ -203,16 +197,24 @@ class Advection(object, metaclass=ABCMeta):
 
         # setup required functions
         self.q1 = Function(self.fs)
-        if self.mixed_equation and self.mixed_function:
+        self.dq = Function(self.fs)
+        if mixed_equation and mixed_function:
             self.trial = TrialFunctions(self.fs)
             self.qs = self.q1.split()
+            default_solver_params = equation.solver_parameters
         else:
             self.trial = TrialFunction(self.fs)
             self.qs = self.q1
+            try:
+                ksp_type = self.default_ksp_type
+            except AttributeError:
+                ksp_type = 'cg'
+            default_solver_params = {'ksp_type': ksp_type,
+                                     'pc_type': 'bjacobi',
+                                     'sub_pc_type': 'ilu'}
 
-        self.dq = Function(self.fs)
         if self.solver_parameters is None:
-            self.solver_parameters = self.default_solver_params
+            self.solver_parameters = default_solver_params
 
         self._initialised = True
 
@@ -324,27 +326,26 @@ class ExplicitAdvection(Advection):
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation, *, subcycles=None,
+    def __init__(self, state, *, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
 
-        super().__init__(state, field, equation,
+        super().__init__(state,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-        self.subcycles = subcycles
-
-    def setup(self, state, u_advecting=None, labels=None):
-
-        super().setup(state, u_advecting=u_advecting, labels=labels)
-
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if self.subcycles is not None:
+        if subcycles is not None:
             self.dt = self.dt/self.subcycles
             self.ncycles = self.subcycles
         else:
             self.dt = self.dt
             self.ncycles = 1
+
+    def setup(self, state, field, equation, u_advecting=None, labels=None):
+
+        super().setup(state, field, equation,
+                      u_advecting=u_advecting, labels=labels)
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
     @abstractproperty
@@ -460,22 +461,15 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
+    def __init__(self, state, theta=0.5, solver_parameters=None):
 
-        if solver_parameters is None:
-            if len(equation.function_space) > 1 and len(field.function_space()) > 1:
-                solver_parameters = equation.solver_parameters
-            else:
-                # theta method leads to asymmetric matrix, per lhs
-                # function below, so don't use CG
-                solver_parameters = {'ksp_type': 'gmres',
-                                     'pc_type': 'bjacobi',
-                                     'sub_pc_type': 'ilu'}
-
-        super().__init__(state, field, equation,
-                         solver_parameters=solver_parameters)
+        super().__init__(state, solver_parameters=solver_parameters)
 
         self.theta = theta
+
+        # theta method leads to asymmetric matrix, per lhs
+        # function below, so don't use CG
+        self.default_ksp_type = 'gmres'
 
     @cached_property
     def lhs(self):

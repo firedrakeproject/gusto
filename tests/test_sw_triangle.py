@@ -66,25 +66,25 @@ def setup_sw(dirname, scheme, uopt):
     # build time stepper
     if scheme == "CrankNicolson":
         advected_fields = []
-        advected_fields.append(("u", ThetaMethod(state, u0, eqns)))
-        advected_fields.append(("D", SSPRK3(state, D0, eqns)))
-        stepper = CrankNicolson(state, equations=eqns,
+        advected_fields.append(("u", ThetaMethod(state)))
+        advected_fields.append(("D", SSPRK3(state)))
+        stepper = CrankNicolson(state, equation_set=eqns,
                                 advected_fields=advected_fields)
     elif scheme == "ImplicitMidpoint":
-        scheme = ThetaMethod(state, state.fields.X, eqns)
-        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
+        scheme = ThetaMethod(state)
+        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
     elif scheme == "SSPRK3":
-        scheme = SSPRK3(state, state.fields.X, eqns)
-        stepper = Timestepper(state, equations=eqns, schemes=[("X", scheme)])
+        scheme = SSPRK3(state)
+        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
     f = state.fields("coriolis")
-    vrel_analytical = state.fields("AnalyticalRelativeVorticity", vspace)
+    vrel_analytical = state.fields("AnalyticalRelativeVorticity", space=vspace)
     vrel_analytical.interpolate(vexpr)
-    vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", vspace)
+    vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", space=vspace)
     vabs_analytical.interpolate(vexpr + f)
-    pv_analytical = state.fields("AnalyticalPotentialVorticity", vspace)
+    pv_analytical = state.fields("AnalyticalPotentialVorticity", space=vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
     return stepper, 0.25*day

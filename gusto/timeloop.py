@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from pyop2.profiling import timed_stage
+from gusto.advection import Advection
 from gusto.configuration import logger
+from gusto.equations import PrognosticEquation
 from gusto.forcing import Forcing
 from gusto.form_manipulation_labelling import advection, diffusion
 from gusto.linear_solvers import LinearTimesteppingSolver
@@ -12,26 +14,38 @@ __all__ = ["Timestepper", "CrankNicolson"]
 
 class Timestepper(object, metaclass=ABCMeta):
     """
-    Base timestepping class for Gusto
+    Basic timestepping class for Gusto
 
     :arg state: a :class:`.State` object
-    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
-    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
+    :arg equation_set: (optional) a :class:`.PrognosticEquation` object,
+         defined on a mixed function space
+    :arg equations: a list of tuples (field, equation)
+         pairing a field name with the :class:`.PrognosticEquation` object
+         that defines the prognostic equation that the field satisfies.
+    :arg schemes: a list of tuples (field, scheme, *labels) that specify
+         which scheme to use to timestep the field's prognostic equation and
+         which labels, if any, to use to select part of the equation.
     :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a
-         function that returns the field as a function of time.
+    :arg prescribed_fields: an ordered list of tuples, pairing a field name
+         with a function that returns the field as a function of time.
     """
 
-    def __init__(self, state, *, equations=None, schemes=None,
+    def __init__(self, state, equation_set=None, *,
+                 equations=None, schemes=None,
                  physics_list=None, prescribed_fields=None):
 
         self.state = state
-        self.schemes = schemes
 
+        if equations is not None:
+            self.equations = tuple(equations)
+        else:
+            self.equations = []
+        if schemes is None:
+            raise ValueError("You need to specify which timestepping schemes you are using")
+        elif isinstance(schemes, Advection):
+            self.schemes = (('X', schemes),)
+        else:
+            self.schemes = tuple(schemes)
         if physics_list is not None:
             self.physics_list = physics_list
         else:
@@ -44,18 +58,18 @@ class Timestepper(object, metaclass=ABCMeta):
         self.xn = FieldCreator()
         self.xnp1 = FieldCreator()
 
-        if equations is not None:
-            self.fieldlist = equations.fieldlist
-            W = equations.function_space
-            self.xn(self.fieldlist, W, dump=False, pickup=False)
-            self.xnp1(self.fieldlist, W, dump=False, pickup=False)
-        else:
-            self.fieldlist = []
+        if equation_set is not None:
+            assert isinstance(equation_set, PrognosticEquation)
+            assert len(equation_set.function_space) > 1
+            W = equation_set.function_space
+            fieldlist = equation_set.fieldlist
+            self.xn(*fieldlist, space=W, dump=False, pickup=False)
+            self.xnp1(*fieldlist, space=W, dump=False, pickup=False)
+            self.equations.insert(0, ('X', equation_set))
 
-        additional_fields = set([f for f, _ in schemes]).difference(set(self.fieldlist))
-        for field in additional_fields:
-            self.xn(field, state.fields(field).function_space())
-            self.xnp1(field, state.fields(field).function_space())
+        for field, eqn in self.equations:
+            self.xn(field, space=state.fields(field).function_space())
+            self.xnp1(field, space=state.fields(field).function_space())
 
     def _apply_bcs(self):
         """
@@ -72,8 +86,20 @@ class Timestepper(object, metaclass=ABCMeta):
                 bc.apply(unp1)
 
     def setup_schemes(self):
-        for name, scheme in self.schemes:
-            scheme.setup(self.state)
+        state = self.state
+        equations = self.equations
+        try:
+            uadv = self.advecting_velocity
+        except AttributeError:
+            uadv = None
+        for name, scheme, *labels in self.schemes:
+            field = state.fields(name)
+            if name in dict(equations).keys():
+                eqn = dict(equations)[name]
+            else:
+                eqn = dict(equations)['X']
+                assert name in eqn.fieldlist
+            scheme.setup(state, field, eqn, u_advecting=uadv, labels=labels)
 
     def setup_timeloop(self, t, tmax, pickup):
         """
@@ -148,32 +174,27 @@ class Timestepper(object, metaclass=ABCMeta):
 
 class SemiImplicitTimestepper(Timestepper):
 
-    def __init__(self, state, *, equations, schemes=None,
+    def __init__(self, state, equation_set, *, equations, schemes=None,
                  physics_list=None, prescribed_fields=None):
 
-        super().__init__(state, equations=equations,
+        super().__init__(state, equation_set,
+                         equations=equations,
                          schemes=schemes,
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
 
         self.xstar = FieldCreator()
-        self.xstar(self.fieldlist, equations.function_space)
+        self.xstar(*equation_set.fieldlist, space=equation_set.function_space)
+
+        self.passive_advection = [(name, scheme, *labels)
+                                  for name, scheme, *labels in schemes
+                                  if name not in equation_set.fieldlist]
 
     @property
     def advecting_velocity(self):
         un = self.xn("u")
         unp1 = self.xnp1("u")
         return un + self.alpha*(unp1-un)
-
-    @property
-    def passive_advection(self):
-        """
-        Advected fields that are not part of the semi implicit step are
-        passively advected
-        """
-        return [(name, scheme)
-                for name, scheme in self.advected_fields
-                if name not in self.fieldlist]
 
     @abstractmethod
     def semi_implicit_step(self):
@@ -216,9 +237,9 @@ class CrankNicolson(SemiImplicitTimestepper):
          function that returns the field as a function of time.
     """
 
-    def __init__(self, state, *, equations, advected_fields,
-                 diffused_fields=None, physics_list=None,
-                 prescribed_fields=None, **kwargs):
+    def __init__(self, state, equation_set, *, equations=None,
+                 advected_fields=None, diffused_fields=None,
+                 physics_list=None, prescribed_fields=None, **kwargs):
 
         self.maxk = kwargs.pop("maxk", 4)
         self.maxi = kwargs.pop("maxi", 1)
@@ -226,48 +247,45 @@ class CrankNicolson(SemiImplicitTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
+        self.active_advection = [
+            (name, scheme)
+            for name, scheme in advected_fields
+            if name in equation_set.fieldlist]
+
+        self.non_advected_fields = [
+            name for name in
+            set(equation_set.fieldlist).difference(
+                set(dict(advected_fields).keys()))
+        ]
+
+        schemes = []
+        for field, scheme in advected_fields:
+            schemes.append((field, scheme, advection))
         if diffused_fields is None:
-            assert all([not t.has_label(diffusion) for t in equations()])
-            diffused_fields = []
+            assert all([not t.has_label(diffusion) for t in equation_set()]),\
+                "you have some diffusion terms but have not specified which scheme to use to apply them"
+            self.diffused_fields = []
+        else:
+            self.diffused_fields = diffused_fields
+            for field, scheme in diffused_fields:
+                schemes.append((field, scheme, diffusion))
 
-        self.advected_fields = advected_fields
-        self.diffused_fields = diffused_fields
-
-        super().__init__(state,
+        super().__init__(state, equation_set,
                          equations=equations,
-                         schemes=tuple(advected_fields + diffused_fields),
+                         schemes=schemes,
                          physics_list=physics_list,
                          prescribed_fields=prescribed_fields)
 
-        self.linear_solver = LinearTimesteppingSolver(state, equations, self.alpha)
+        self.linear_solver = LinearTimesteppingSolver(state, equation_set, self.alpha)
 
-        self.forcing = Forcing(state, equations, self.alpha)
+        self.forcing = Forcing(state, equation_set, self.alpha)
 
-        W = equations.function_space
+        W = equation_set.function_space
         self.xp = FieldCreator()
-        self.xp(self.fieldlist, W)
+        self.xp(*equation_set.fieldlist, space=W)
 
         self.xrhs = Function(W)
         self.dy = Function(W)
-
-    def setup_schemes(self):
-        # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [
-            (name, scheme)
-            for name, scheme in self.advected_fields
-            if name in self.fieldlist]
-
-        for name, scheme in self.active_advection:
-            scheme.setup(self.state, u_advecting=self.advecting_velocity,
-                         labels=[advection])
-
-        for name, scheme in self.passive_advection:
-            scheme.setup(self.state, u_advecting=self.advecting_velocity)
-
-        self.non_advected_fields = [name for name in set(self.fieldlist).difference(set(dict(self.advected_fields).keys()))]
-
-        for name, scheme in self.diffused_fields:
-            scheme.setup(self.state, labels=[diffusion])
 
     def semi_implicit_step(self):
 

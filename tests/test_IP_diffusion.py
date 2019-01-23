@@ -33,16 +33,17 @@ def setup_IPdiffusion(dirname, vector, DG):
             Space = state.spaces("HDiv_v")
         fexpr = exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2)
 
-    f = state.fields("f", Space)
+    f = state.fields("f", space=Space)
     try:
         f.interpolate(fexpr)
     except NotImplementedError:
         f.project(fexpr)
 
     mu = 5.
-    eqn = DiffusionEquation(state, f.name(), f.function_space(), kappa=kappa, mu=mu)
-    schemes = [(f.name(), BackwardEuler(state, f, eqn))]
-    stepper = Timestepper(state, schemes=schemes)
+    eqns = [("f", DiffusionEquation(state, "f", f.function_space(),
+                                    kappa=kappa, mu=mu))]
+    schemes = [("f", BackwardEuler(state))]
+    stepper = Timestepper(state, equations=eqns, schemes=schemes)
     return stepper
 
 

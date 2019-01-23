@@ -79,7 +79,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
-            self.field = state.fields(self.name, space, pickup=False)
+            self.field = state.fields(self.name, space=space, pickup=False)
             self._initialised = True
 
     @abstractmethod
@@ -554,7 +554,7 @@ class SteadyStateError(Difference):
         self.field1 = name
         self.field2 = name+'_init'
         field1 = state.fields(name)
-        field2 = state.fields(self.field2, field1.function_space())
+        field2 = state.fields(self.field2, space=field1.function_space())
         field2.assign(field1)
 
     @property
