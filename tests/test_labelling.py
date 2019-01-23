@@ -71,9 +71,9 @@ def test_label_form(label_a, labelled_form, form):
     tests that labelling a form returns a LabelledForm with the correct
     label and form
     """
-    assert(isinstance(labelled_form, LabelledForm))
-    assert(labelled_form.terms[0].has_label(label_a))
-    assert(labelled_form.terms[0].form == form)
+    assert isinstance(labelled_form, LabelledForm)
+    assert all([t.has_label(label_a) for t in labelled_form])
+    assert labelled_form.form == form
 
 
 def test_label_term(label_a, term, form):
@@ -82,9 +82,9 @@ def test_label_term(label_a, term, form):
     and form
     """
     labelled_term = label_a(term)
-    assert(isinstance(labelled_term, Term))
-    assert(labelled_term.has_label(label_a))
-    assert(labelled_term.form == form)
+    assert isinstance(labelled_term, Term)
+    assert labelled_term.has_label(label_a)
+    assert labelled_term.form == form
 
 
 def test_label_labelled_form(labelled_form, label_a, label_x):
@@ -93,11 +93,11 @@ def test_label_labelled_form(labelled_form, label_a, label_x):
     correct labels and that the label can be changed.
     """
     new = label_x(labelled_form)
-    assert(isinstance(new, LabelledForm))
-    assert([t.has_label(label_a, label_x) for t in new])
-    assert([t.get("x") == "y" for t in new])
+    assert isinstance(new, LabelledForm)
+    assert all([t.has_label(label_a, label_x) for t in new])
+    assert all([t.get("x") == "y" for t in new])
     new = label_x(new, "z")
-    assert([t.get("x") == "z" for t in new])
+    assert all([t.get("x") == "z" for t in new])
 
 
 def test_add_term(term, labelled_form):
@@ -106,34 +106,47 @@ def test_add_term(term, labelled_form):
     """
     a = term
     a += term
-    assert(isinstance(a, LabelledForm))
-    assert(len(a) == 2)
+    assert isinstance(a, LabelledForm)
+    assert len(a) == 2
     b = term
     b += None
-    assert(b == term)
+    assert b == term
     b = None
     b += term
-    assert(b == term)
+    assert b == term
     c = term
     c += labelled_form
-    assert(isinstance(c, LabelledForm))
-    assert(len(c) == 2)
+    assert isinstance(c, LabelledForm)
+    assert len(c) == 2
+    c += term
+    assert isinstance(c, LabelledForm)
+    assert len(c) == 3
 
 
-def test_add_labelled_form(term, labelled_form):
+def test_mul_term(term):
+    """
+    test that we can multiply a term by a float and Constant
+    """
+    for coeff in [1., Constant(1.)]:
+        new_term = coeff*term
+        assert isinstance(new_term, Term)
+        assert not new_term.form == term.form
+        assert new_term.labels == term.labels
+
+
+def test_add_labelled_form(form, term, labelled_form):
     """
     test that adding to a labelled form works as expected
     """
-    a = labelled_form
-    a += labelled_form
-    assert(isinstance(a, LabelledForm))
-    assert(len(a) == 2)
-    b = labelled_form + term
-    assert(isinstance(a, LabelledForm))
-    assert(len(b) == 2)
-    c = labelled_form
-    c += None
-    assert(c == c)
+    for other in [form, term, labelled_form]:
+        a = labelled_form
+        a += other
+        assert isinstance(a, LabelledForm)
+        assert len(a) == 2
+
+    b = labelled_form
+    b += None
+    assert b == b
 
 
 def test_label_map(labelled_form, label_a, label_x, form):
