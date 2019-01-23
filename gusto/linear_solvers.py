@@ -510,8 +510,8 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = [DirichletBC(Vu, 0.0, "bottom"),
-                    DirichletBC(Vu, 0.0, "top")]
+        self.bcs = [DirichletBC(Vu, Constant(0.0), "bottom"),
+                    DirichletBC(Vu, Constant(0.0), "top")]
 
     @timed_function("Gusto:LinearSolve")
     def solve(self):
