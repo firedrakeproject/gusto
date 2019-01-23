@@ -40,8 +40,10 @@ def replace_labelled(label, replacer):
         old = t.get(label)
         if old is None:
             return Term(t.form, t.labels)
+        if type(old) is bool:
+            raise ValueError("This label does not label a part of this term's form")
         # check if we need to extract part of the replacer
-        repl_expr = isinstance(replacer, ufl.core.expr.Expr)
+        repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
         size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
         extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
         if size(old) == 1:

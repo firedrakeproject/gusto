@@ -1,5 +1,7 @@
 import pytest
-from firedrake import (TestFunction, Function, FunctionSpace, UnitSquareMesh,
+from firedrake import (TestFunction, Function, FunctionSpace,
+                       VectorFunctionSpace,
+                       MixedFunctionSpace, UnitSquareMesh,
                        dx, Constant, LinearVariationalProblem,
                        LinearVariationalSolver)
 from gusto import *
@@ -16,8 +18,19 @@ def V(mesh):
 
 
 @pytest.fixture
+def W(mesh, V):
+    V_ = VectorFunctionSpace(mesh, "CG", 2)
+    return MixedFunctionSpace((V_, V))
+
+
+@pytest.fixture
 def function(V):
     return Function(V)
+
+
+@pytest.fixture
+def mixed_function(W):
+    return Function(W)
 
 
 @pytest.fixture
@@ -34,6 +47,13 @@ def label_x():
 def form(mesh, function, V):
     phi = TestFunction(V)
     return phi*function*dx
+
+
+@pytest.fixture
+def mixed_form(mesh, mixed_function, W):
+    sigma, phi = TestFunctions(W)
+    x, y = mixed_function.split()
+    return index(inner(sigma, x)*dx, 0) + index(phi*y*dx, 1)
 
 
 @pytest.fixture
@@ -156,6 +176,33 @@ def test_all_terms(labelled_form, label_x):
     assert len(new) == len(labelled_form)
     new = labelled_form.label_map(all_terms, lambda t: label_x(t))
     assert all([t.has_label(label_x) for t in new])
+
+
+def test_extract(mixed_form, mixed_function, V):
+    """
+    test that the extract function interacts correctly with the index label
+    """
+    new = Function(V)
+    a = subject(mixed_form, mixed_function)
+    a = a.label_map(lambda t: t.get("index") == 1, extract(1), drop)
+    a_old = a
+    # this would fail due to the shape mismatch is there were any
+    # terms still containing subject.split()[0]...
+    a = a.label_map(
+        all_terms, lambda t: Term(
+            ufl.replace(t.form, {t.get("subject").split()[0]: new}),
+            t.labels)
+    )
+    # ...instead nothing has happened
+    assert a.form == a_old.form
+    # this works...
+    a = a.label_map(
+        all_terms, lambda t: Term(
+            ufl.replace(t.form, {t.get("subject").split()[1]: new}),
+            t.labels)
+    )
+    # ...and the form has changed
+    assert not a.form == a_old.form
 
 
 def test_replace_test(V, labelled_form):
