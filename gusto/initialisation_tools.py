@@ -11,6 +11,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
+from gusto.configuration import logger
 from gusto.recovery import Recoverer
 
 
@@ -315,7 +316,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
-        state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
+        logger.warning("default quadrature degree most likely not sufficient for this degree element")
 
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
@@ -425,7 +426,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
 
     VDG = state.spaces("DG")
     if any(deg > 2 for deg in VDG.ufl_element().degree()):
-        state.logger.warning("default quadrature degree most likely not sufficient for this degree element")
+        logger.warning("default quadrature degree most likely not sufficient for this degree element")
 
     # apply first guesses
     theta0.assign(theta_d * 1.01)
