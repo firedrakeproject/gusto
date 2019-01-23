@@ -451,7 +451,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                # constraint equation to enforce continuity of the velocity
                # (coefficients added to make the trace coupling symmetric
                # with the terms picked up in the momentum equation)
-               + beta_cp*dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
+               + beta_cp*dl('+')*jump(thetabar_w*u, n=n)*(dS_vp + dS_hp)
                + beta_cp*dl*dot(thetabar_w*u, n)*ds_vp
                + beta_cp*dl*dot(thetabar_w*u, n)*ds_tbp)
 
