@@ -21,7 +21,20 @@ from gusto.state import build_spaces
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
+    """
+    Base class for prognostic equations
 
+    :arg state: :class:`.State` object
+    :arg function space: :class:`.FunctionSpace` object, the function
+         space that the equation is defined on
+    :arg field_names: name(s) of the prognostic field(s)
+
+    The class sets up the fields in state and registers them with the
+    diagnostics class. It defines a mass term, labelled with the
+    time_derivative label. All remaining forms must be defined in the
+    child class form method. Calling this class returns the form
+    mass_term + form
+    """
     def __init__(self, state, function_space, *field_names):
         self.state = state
         self.function_space = function_space
@@ -54,7 +67,16 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
 
 class AdvectionEquation(PrognosticEquation):
+    """
+    Class defining the advection equation.
 
+    :arg state: :class:`.State` object
+    :arg field_name: name of the prognostic field
+    :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg advecting_velocity: (optional) a :class:`Function` specifying the
+    prescribed advecting velocity
+    :kwargs: any kwargs to be passed on to the advection_form
+    """
     def __init__(self, state, field_name, function_space,
                  advecting_velocity=None,
                  **kwargs):
@@ -68,6 +90,16 @@ class AdvectionEquation(PrognosticEquation):
 
 
 class ContinuityEquation(PrognosticEquation):
+    """
+    Class defining the continuity equation.
+
+    :arg state: :class:`.State` object
+    :arg field_name: name of the prognostic field
+    :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg advecting_velocity: (optional) a :class:`Function` specifying the
+    prescribed advecting velocity
+    :kwargs: any kwargs to be passed on to the continuity_form
+    """
 
     def __init__(self, state, field_name, function_space,
                  advecting_velocity=None,
@@ -82,6 +114,16 @@ class ContinuityEquation(PrognosticEquation):
 
 
 class DiffusionEquation(PrognosticEquation):
+    """
+    Class defining the diffusion equation.
+
+    :arg state: :class:`.State` object
+    :arg field_name: name of the prognostic field
+    :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg advecting_velocity: (optional) a :class:`Function` specifying the
+    prescribed advecting velocity
+    :kwargs: any kwargs to be passed on to the diffuson_form
+    """
 
     def __init__(self, state, field_name, function_space, **kwargs):
         super().__init__(state, function_space, field_name)
@@ -92,7 +134,15 @@ class DiffusionEquation(PrognosticEquation):
 
 
 class ShallowWaterEquations(PrognosticEquation):
+    """
+    Class defining the shallow water equations.
 
+    :arg state: :class:`.State` object
+    :arg family: str, specifies the velocity space family to use
+    :arg degree: int, specifies the degree for the depth space
+    :kwargs: expressions for additional fields and discretisation options
+    to be passed to the form
+    """
     solver_parameters = {
         'ksp_type': 'preonly',
         'mat_type': 'matfree',

@@ -14,7 +14,7 @@ __all__ = ["Timestepper", "CrankNicolson"]
 
 class Timestepper(object, metaclass=ABCMeta):
     """
-    Basic timestepping class for Gusto
+    Basic timestepping class for Gusto.
 
     :arg state: a :class:`.State` object
     :arg equation_set: (optional) a :class:`.PrognosticEquation` object,
@@ -22,9 +22,11 @@ class Timestepper(object, metaclass=ABCMeta):
     :arg equations: a list of tuples (field, equation)
          pairing a field name with the :class:`.PrognosticEquation` object
          that defines the prognostic equation that the field satisfies.
-    :arg schemes: a list of tuples (field, scheme, *labels) that specify
+    :arg schemes: either a list of tuples (field, scheme, *labels) that specify
          which scheme to use to timestep the field's prognostic equation and
-         which labels, if any, to use to select part of the equation.
+         which labels, if any, to use to select part of the equation; or an
+         :class:`.Advection` object which specifies the scheme to apply to the
+         equation_set.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an ordered list of tuples, pairing a field name
          with a function that returns the field as a function of time.
@@ -174,6 +176,13 @@ class Timestepper(object, metaclass=ABCMeta):
 
 
 class SemiImplicitTimestepper(Timestepper):
+    """
+    Base class for semi implicit schemes.
+    Defines the advecting velocity to be the average of u_n and u_{n+1}.
+    After applying the semi implicit step (which is defined in the child
+    class), passively advected fields are advected and any diffusion terms
+    are applied.
+    """
 
     def __init__(self, state, equation_set, *, equations, schemes=None,
                  physics_list=None, prescribed_fields=None):
@@ -227,6 +236,8 @@ class CrankNicolson(SemiImplicitTimestepper):
     splitting and auxilliary semi-Lagrangian advection.
 
     :arg state: a :class:`.State` object
+    :arg equation_set: (optional) a :class:`.PrognosticEquation` object,
+         defined on a mixed function space
     :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
         indicating the fields to advect, and the
         :class:`~.Advection` to use.
@@ -236,6 +247,8 @@ class CrankNicolson(SemiImplicitTimestepper):
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an order list of tuples, pairing a field name with a
          function that returns the field as a function of time.
+    :kwargs: maxk is the number of outer iterations, maxi is the number of inner
+             iterations and alpha is the offcentering parameter
     """
 
     def __init__(self, state, equation_set, *, equations=None,
@@ -248,17 +261,25 @@ class CrankNicolson(SemiImplicitTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
+        # list of (field, scheme) for fields that are advected as part
+        # of the semi implicit step
         self.active_advection = [
             (name, scheme)
             for name, scheme in advected_fields
             if name in equation_set.fieldlist]
 
+        # list of fields that are part of the semi implicit step but
+        # are not advected (for example, when solving equations
+        # linearised about a state of rest the velocity advection term
+        # disappears)
         self.non_advected_fields = [
             name for name in
             set(equation_set.fieldlist).difference(
                 set(dict(advected_fields).keys()))
         ]
 
+        # create a list of (field, scheme, labels) from the
+        # advected_fields and diffused_fields that have been passed in
         schemes = []
         for field, scheme in advected_fields:
             schemes.append((field, scheme, advection))
@@ -301,7 +322,6 @@ class CrankNicolson(SemiImplicitTimestepper):
         for k in range(self.maxk):
 
             with timed_stage("Advection"):
-                # first computes ubar from state.xn and state.xnp1
                 for name, scheme in self.active_advection:
                     # advects a field from xstar and puts result in xp
                     scheme.apply(self.xstar(name), self.xp(name))

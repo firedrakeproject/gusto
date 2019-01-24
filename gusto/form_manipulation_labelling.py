@@ -12,19 +12,40 @@ extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
 
 
 def linearise(t):
+    """
+    :arg t: a :class:`.Term` object
+
+    Returns either a :class:`.Term` or a :class:`.LabelledForm` object.
+
+    The linearisation of t must have been specified by calling the
+    :class:`.linearisation` on t. If the value of the linearisation label
+    is True then t.form is already linear so return a new term with form
+    and labels unchanged. If the linearisation has been specified as a
+    :class:`.LabelledForm` then return a labelled form with terms that
+    have the linear form from l=t.get("linearisation") and inherit labels
+    from both t and l, with the labels from l overwriting those from t if
+    both present.
+    """
     t_linear = t.get("linearisation")
-    if type(t_linear) == LabelledForm:
+    if t_linear is True:
+        return Term(t.form, t.labels)
+    elif type(t_linear) == LabelledForm:
         new_labels = t.labels.copy()
         new_labels["linearisation"] = True
         return LabelledForm(functools.reduce(
             operator.add,
             [Term(l.form, dict(new_labels, **l.labels))
              for l in t_linear]))
-    elif t_linear is True:
-        return Term(t.form, t.labels)
 
 
 def replace_test(new_test):
+    """
+    :arg new_test: a :func:`TestFunction`
+
+    Returns a function that takes in t, a :class:`Term`, and returns
+    a new :class:`Term` with form containing the new_test and
+    labels=t.labels
+    """
 
     def rep(t):
         test = t.form.arguments()[0]
@@ -35,15 +56,25 @@ def replace_test(new_test):
 
 
 def replace_labelled(label, replacer):
+    """
+    :arg label: str, specifying the label of the part of the form that is
+    to be replaced
+    :arg replacer: :class:`ufl.core.expr.Expr`, :func:`Function`,
+    :func:`TrialFunction` or tuple thereof.
 
+    Returns a function that takes in t, a :class"`Term`, and returns
+    a new :class:`Term` where the part of the form labelled by label
+    has been replaced by (possibly part of) the replacer. The labels
+    remain the same.
+    """
     def rep(t):
         old = t.get(label)
         if old is None:
             return Term(t.form, t.labels)
         if type(old) is bool:
             raise ValueError("This label does not label a part of this term's form")
-        # check if we need to extract part of the replacer
         repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
+        # check if we need to extract part of the replacer
         size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
         extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
         if size(old) == 1:
@@ -74,6 +105,13 @@ def replace_labelled(label, replacer):
 
 
 def relabel_uadv(t):
+    """
+    :arg t: a :class:`Term` object
+
+    Returns a :class:`LabelledForm` with a term where the form has the
+    correct part of the subject function instead of the part labelled "uadv".
+    The advecting velocity label has been removed.
+    """
     old = t.labels["uadv"]
     new = t.get("subject").split()[0]
     new_form = ufl.replace(t.form, {old: new})

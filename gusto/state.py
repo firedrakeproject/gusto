@@ -17,7 +17,9 @@ __all__ = ["State", "build_spaces"]
 
 
 class SpaceCreator(object):
-
+    """
+    Class for storing function spaces and accessing them by name.
+    """
     def __call__(self, name, mesh=None, family=None, degree=None):
         try:
             return getattr(self, name)
@@ -28,7 +30,9 @@ class SpaceCreator(object):
 
 
 class FieldCreator(object):
-
+    """
+    Class for storing fields and accessing them by name.
+    """
     def __init__(self):
         self.fields = []
 
