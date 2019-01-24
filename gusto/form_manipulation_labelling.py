@@ -15,27 +15,22 @@ def linearise(t):
     """
     :arg t: a :class:`.Term` object
 
-    Returns either a :class:`.Term` or a :class:`.LabelledForm` object.
+    Returns a :class:`.LabelledForm` object.
 
     The linearisation of t must have been specified by calling the
-    :class:`.linearisation` on t. If the value of the linearisation label
-    is True then t.form is already linear so return a new term with form
-    and labels unchanged. If the linearisation has been specified as a
-    :class:`.LabelledForm` then return a labelled form with terms that
+    :class:`.linearisation` on t. Returns a labelled form with terms that
     have the linear form from l=t.get("linearisation") and inherit labels
     from both t and l, with the labels from l overwriting those from t if
     both present.
     """
     t_linear = t.get("linearisation")
-    if t_linear is True:
-        return Term(t.form, t.labels)
-    elif type(t_linear) == LabelledForm:
-        new_labels = t.labels.copy()
-        new_labels["linearisation"] = True
-        return LabelledForm(functools.reduce(
-            operator.add,
-            [Term(l.form, dict(new_labels, **l.labels))
-             for l in t_linear]))
+    assert type(t_linear) == LabelledForm
+    new_labels = t.labels.copy()
+    new_labels["linearisation"] = True
+    return LabelledForm(functools.reduce(
+        operator.add,
+        [Term(l.form, dict(new_labels, **l.labels))
+         for l in t_linear]))
 
 
 def replace_test(new_test):
@@ -62,7 +57,7 @@ def replace_labelled(replacer, *labels):
     :arg replacer: :class:`ufl.core.expr.Expr`, :func:`Function`,
     :func:`TrialFunction` or tuple thereof.
 
-    Returns a function that takes in t, a :class"`Term`, and returns
+    Returns a function that takes in t, a :class:`Term`, and returns
     a new :class:`Term` where the part of the form labelled by label
     has been replaced by (possibly part of) the replacer. The labels
     remain the same.
