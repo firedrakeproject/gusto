@@ -193,7 +193,7 @@ class Advection(object, metaclass=ABCMeta):
                         "prescribed advection overwritten by timeloop")
                 self.equation = self.equation.label_map(
                     lambda t: t.has_label(advecting_velocity),
-                    replace_labelled("uadv", u_advecting))
+                    replace_labelled(u_advecting, "uadv"))
 
         # setup required functions
         self.q1 = Function(self.fs)
@@ -293,11 +293,11 @@ class BackwardEuler(Advection):
     def lhs(self):
         l = self.equation.label_map(
             lambda t: t.has_label(time_derivative),
-            replace_labelled("subject", self.trial), drop)
+            replace_labelled(self.trial, "subject"), drop)
 
         l -= self.dt*self.equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled("subject", self.trial), drop)
+            replace_labelled(self.trial, "subject"), drop)
 
         return l.form
 
@@ -305,7 +305,7 @@ class BackwardEuler(Advection):
     def rhs(self):
         return self.equation.label_map(
             lambda t: t.has_label(time_derivative),
-            replace_labelled("subject", self.qs), drop).form
+            replace_labelled(self.qs, "subject"), drop).form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -348,13 +348,13 @@ class ExplicitAdvection(Advection):
     @abstractproperty
     def lhs(self):
         l = self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_true=replace_labelled("subject", self.trial),
+                                    map_if_true=replace_labelled(self.trial, "subject"),
                                     map_if_false=drop)
         return l.form
 
     @abstractproperty
     def rhs(self):
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
+        r = self.equation.label_map(all_terms, replace_labelled(self.qs, "subject"))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.dt*t)
         return r.form
 
@@ -471,14 +471,14 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        l = self.equation.label_map(all_terms, replace_labelled("subject", self.trial))
+        l = self.equation.label_map(all_terms, replace_labelled(self.trial, "subject"))
         l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.theta*self.dt*t)
         return l.form
 
     @cached_property
     def rhs(self):
 
-        r = self.equation.label_map(all_terms, replace_labelled("subject", self.qs))
+        r = self.equation.label_map(all_terms, replace_labelled(self.qs, "subject", ))
         r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -(1-self.theta)*self.dt*t)
         return r.form
 

@@ -55,10 +55,10 @@ def replace_test(new_test):
     return rep
 
 
-def replace_labelled(label, replacer):
+def replace_labelled(replacer, *labels):
     """
-    :arg label: str, specifying the label of the part of the form that is
-    to be replaced
+    :arg labels: str(s), specifying the label(s) of the part of the form
+    that is to be replaced
     :arg replacer: :class:`ufl.core.expr.Expr`, :func:`Function`,
     :func:`TrialFunction` or tuple thereof.
 
@@ -68,36 +68,39 @@ def replace_labelled(label, replacer):
     remain the same.
     """
     def rep(t):
-        old = t.get(label)
-        if old is None:
-            return Term(t.form, t.labels)
-        if type(old) is bool:
-            raise ValueError("This label does not label a part of this term's form")
-        repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
-        # check if we need to extract part of the replacer
-        size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
-        extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
-        if size(old) == 1:
-            if repl_expr:
-                new = replacer
-            elif size(replacer) == 1:
-                new = replacer
-            else:
-                new = extract(replacer, old.function_space().index)
-            replace_dict = {old: new}
-        else:
-            if repl_expr:
-                new = replacer
-                replace_dict = {extract(old, new.function_space().index): new}
-            elif size(replacer) == 1:
-                new = replacer
-                replace_dict = {extract(old, new.function_space().index): new}
-            else:
-                if type(replacer) is Function:
-                    new = split(replacer)
-                else:
+        replace_dict = {}
+        for label in labels:
+            old = t.get(label)
+            if old is None:
+                return Term(t.form, t.labels)
+            if type(old) is bool:
+                raise ValueError("This label does not label a part of this term's form")
+            repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
+            # check if we need to extract part of the replacer
+            size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
+            extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
+            if size(old) == 1:
+                if repl_expr:
                     new = replacer
-                replace_dict = {k: v for k, v in zip(old.split(), new)}
+                elif size(replacer) == 1:
+                    new = replacer
+                else:
+                    new = extract(replacer, old.function_space().index)
+                replace_dict[old] = new
+            else:
+                if repl_expr:
+                    new = replacer
+                    replace_dict[extract(old, new.function_space().index)] = new
+                elif size(replacer) == 1:
+                    new = replacer
+                    replace_dict[extract(old, new.function_space().index)] = new
+                else:
+                    if type(replacer) is Function:
+                        new = split(replacer)
+                    else:
+                        new = replacer
+                    for k, v in zip(old.split(), new):
+                        replace_dict[k] = v
         new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)
 

@@ -4,7 +4,7 @@ from firedrake import (TestFunction, Function, FunctionSpace,
                        UnitSquareMesh, as_vector,
                        dx, Constant, LinearVariationalProblem,
                        LinearVariationalSolver,
-                       TrialFunctions)
+                       TrialFunctions, errornorm)
 from gusto import *
 
 
@@ -273,7 +273,7 @@ def test_replace_labelled(V, labelled_form, label_a, label_x):
     replacer_fn = Function(V).interpolate(Constant(2.))
     t_old = labelled_form.terms[0]
 
-    new = labelled_form.label_map(all_terms, replace_labelled("x", replacer_fn))
+    new = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, "x"))
     t_new = new.terms[0]
     # check that we have a new instance of term
     assert not t_new == t_old
@@ -281,30 +281,28 @@ def test_replace_labelled(V, labelled_form, label_a, label_x):
     assert t_new.form == t_old.form
     assert t_new.labels == t_old.labels
 
-    a = labelled_form.label_map(all_terms, replace_labelled("a", replacer_tri))
+    a = labelled_form.label_map(all_terms, replace_labelled(replacer_tri, "a"))
     # check that the form now has 2 arguments because it has both test
     # and trial functions
     assert len(a.form.arguments()) == 2
 
     # check that L contains replacer_fn by solving
     # <test, trial> = <test, replacer_fn>
-    L = labelled_form.label_map(all_terms, replace_labelled("a", replacer_fn))
+    L = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, "a"))
     b = Function(V)
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
     solver.solve()
-    err = Function(V).assign(replacer_fn-b)
-    assert err.dat.data.max() < 1.e-15
+    assert errornorm(replacer_fn, b) < 1.e-15
 
     replacer_expr = 2*replacer_fn
     # check that L contains replacer_expr by solving
     # <test, trial> = <test, replacer_fn>
-    L = labelled_form.label_map(all_terms, replace_labelled("a", replacer_expr))
+    L = labelled_form.label_map(all_terms, replace_labelled(replacer_expr, "a"))
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
     solver.solve()
-    err = Function(V).assign(replacer_expr-b)
-    assert err.dat.data.max() < 1.e-14
+    assert errornorm(replacer_expr, b) < 1.e-15
 
 
 def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
@@ -319,7 +317,7 @@ def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
       with replacer
     """
     replacer_tri = TrialFunctions(W)
-    a = mixed_form.label_map(all_terms, replace_labelled("a", replacer_tri))
+    a = mixed_form.label_map(all_terms, replace_labelled(replacer_tri, "a"))
     # check that the form now has 2 arguments because it has both test
     # and trial functions
     assert len(a.form.arguments()) == 2
@@ -330,13 +328,12 @@ def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
     f, g = replacer_mixed_fn.split()
     f.interpolate(as_vector([1., 0.]))
     g.interpolate(Constant(2.))
-    L = mixed_form.label_map(all_terms, replace_labelled("a",
-                                                         replacer_mixed_fn))
+    L = mixed_form.label_map(all_terms, replace_labelled(replacer_mixed_fn,
+                                                         "a"))
     b = Function(W)
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
     solver.solve()
     err = Function(W).assign(replacer_mixed_fn-b)
     err1, err2 = err.split()
-    assert err1.dat.data.max() < 1.e-14
-    assert err2.dat.data.max() < 1.e-14
+    assert errornorm(replacer_mixed_fn, b) < 1.e-14

@@ -1,15 +1,15 @@
 from abc import ABCMeta, abstractproperty
 import functools
 import operator
-from firedrake import (Function, TestFunction, inner, dx, div,
+from firedrake import (Function, TestFunction, inner, dx, div, action,
                        SpatialCoordinate, sqrt, FunctionSpace,
-                       MixedFunctionSpace, TestFunctions)
+                       MixedFunctionSpace, TestFunctions, TrialFunctions)
 from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms,
                                                subject, time_derivative,
                                                linearisation, linearise,
                                                drop, index, advection,
-                                               relabel_uadv)
+                                               relabel_uadv, replace_labelled, Term)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
@@ -202,6 +202,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
         W = self.function_space
         w, phi = TestFunctions(W)
+        trials = TrialFunctions(W)
         X = Function(W)
         u, D = X.split()
 
@@ -217,9 +218,11 @@ class ShallowWaterEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
 
-        pressure_gradient_term = linearisation(subject(-g*div(w)*D*dx, X))
+        pressure_gradient_term = subject(-g*div(w)*D*dx, X)
+        linear_pg_term = pressure_gradient_term.label_map(
+            all_terms, replace_labelled(trials, "subject"))
 
-        u_form = u_adv + pressure_gradient_term
+        u_form = u_adv + linearisation(pressure_gradient_term, linear_pg_term)
 
         for field_name in ["coriolis", "topography"]:
             try:
@@ -231,12 +234,18 @@ class ShallowWaterEquations(PrognosticEquation):
 
             if add_term:
                 if field_name == "coriolis":
-                    u_form += linearisation(
-                        subject(field*inner(w, state.perp(u))*dx, X))
+                    coriolis_term = subject(field*inner(w, state.perp(u))*dx, X)
+                    linear_coriolis_term = coriolis_term.label_map(
+                        all_terms, replace_labelled(trials, "subject"))
+                    u_form += linearisation(coriolis_term, linear_coriolis_term)
+
                 elif field_name == "topography":
                     u_form += -g*div(w)*field*dx
 
-        D_form = linearisation(continuity_form(state, W, 1), linear_continuity_form(state, W, 1, qbar=H))
+        Dadv = continuity_form(state, W, 1)
+        Dadv_linear = linear_continuity_form(state, W, 1, qbar=H).label_map(
+            all_terms, replace_labelled(trials, "subject", "uadv"))
+        D_form = linearisation(Dadv, Dadv_linear)
 
         return index(u_form, 0) + index(D_form, 1)
 
@@ -244,5 +253,12 @@ class ShallowWaterEquations(PrognosticEquation):
 class LinearShallowWaterEquations(ShallowWaterEquations):
 
     def form(self):
+        sw_form = super().form()
 
-        return super().form().label_map(lambda t: t.has_label(linearisation), linearise, drop)
+        linear_form = sw_form.label_map(
+            lambda t: t.has_label(linearisation),
+            lambda t: Term(action(t.get("linearisation").form,
+                                  t.get("subject")),
+                           t.labels),
+            drop)
+        return linear_form
