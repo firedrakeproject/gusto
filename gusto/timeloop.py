@@ -22,11 +22,11 @@ class Timestepper(object, metaclass=ABCMeta):
     :arg equations: a list of tuples (field, equation)
          pairing a field name with the :class:`.PrognosticEquation` object
          that defines the prognostic equation that the field satisfies.
-    :arg schemes: either a list of tuples (field, scheme, *labels) that specify
-         which scheme to use to timestep the field's prognostic equation and
-         which labels, if any, to use to select part of the equation; or an
-         :class:`.Advection` object which specifies the scheme to apply to the
-         equation_set.
+    :arg schemes: either a list of tuples (field, scheme, *active_labels)
+         that specify which scheme to use to timestep the field's prognostic
+         equation and which labels, if any, to use to select part of the
+         equation; or an :class:`.Advection` object which specifies the
+         scheme to apply to the equation_set.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an ordered list of tuples, pairing a field name
          with a function that returns the field as a function of time.
@@ -94,7 +94,7 @@ class Timestepper(object, metaclass=ABCMeta):
             uadv = self.advecting_velocity
         except AttributeError:
             uadv = None
-        for name, scheme, *labels in self.schemes:
+        for name, scheme, *active_labels in self.schemes:
             field = state.fields(name)
             if name in dict(equations).keys():
                 eqn = dict(equations)[name]
@@ -102,7 +102,7 @@ class Timestepper(object, metaclass=ABCMeta):
                 eqn = dict(equations)['X']
                 assert name in eqn.fieldlist
             scheme.setup(state, field, eqn, dt=self.dt,
-                         u_advecting=uadv, labels=labels)
+                         u_advecting=uadv, active_labels=active_labels)
 
     def setup_timeloop(self, t, dt, tmax, pickup):
         """
@@ -196,8 +196,8 @@ class SemiImplicitTimestepper(Timestepper):
         self.xstar = FieldCreator()
         self.xstar(*equation_set.fieldlist, space=equation_set.function_space)
 
-        self.passive_advection = [(name, scheme, *labels)
-                                  for name, scheme, *labels in schemes
+        self.passive_advection = [(name, scheme, *active_labels)
+                                  for name, scheme, *active_labels in schemes
                                   if name not in equation_set.fieldlist]
 
     @property
@@ -278,7 +278,7 @@ class CrankNicolson(SemiImplicitTimestepper):
                 set(dict(advected_fields).keys()))
         ]
 
-        # create a list of (field, scheme, labels) from the
+        # create a list of (field, scheme, *active_labels) from the
         # advected_fields and diffused_fields that have been passed in
         schemes = []
         for field, scheme in advected_fields:

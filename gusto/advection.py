@@ -132,14 +132,15 @@ class Advection(object, metaclass=ABCMeta):
 
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, field, equation, dt, u_advecting=None, labels=None):
+    def setup(self, state, field, equation, dt, u_advecting=None,
+              active_labels=None):
 
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
         self.dt = dt
-        if labels is None:
-            labels = []
+        if active_labels is None:
+            active_labels = []
         self.field = field
         self.equation = equation()
 
@@ -154,10 +155,11 @@ class Advection(object, metaclass=ABCMeta):
             idx = field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
 
-        # select labelled terms from the equation if labels are specified
-        if len(labels) > 0:
+        # select labelled terms from the equation if active_labels are
+        # specified
+        if len(active_labels) > 0:
             self.equation = self.equation.label_map(
-                lambda t: not any(t.has_label(time_derivative, *labels)),
+                lambda t: not any(t.has_label(time_derivative, *active_labels)),
                 map_if_true=drop)
 
         # if options have been specified via an AdvectionOptions
@@ -328,7 +330,7 @@ class ExplicitAdvection(Advection):
                          limiter=limiter, options=options)
 
     def setup(self, state, field, equation, dt,
-              u_advecting=None, labels=None):
+              u_advecting=None, active_labels=None):
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -340,7 +342,7 @@ class ExplicitAdvection(Advection):
             self.ncycles = 1
 
         super().setup(state, field, equation, dt,
-                      u_advecting=u_advecting, labels=labels)
+                      u_advecting=u_advecting, active_labels=active_labels)
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
     @abstractproperty
