@@ -132,9 +132,7 @@ class LabelledForm(object):
             self.terms = list(terms)
 
     def __add__(self, other):
-        if other is None:
-            return self
-        elif isinstance(other, ufl.Form):
+        if isinstance(other, ufl.Form):
             return LabelledForm(*self, Term(other))
         elif type(other) is Term:
             return LabelledForm(*self, other)
