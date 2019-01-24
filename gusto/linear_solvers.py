@@ -10,10 +10,8 @@ from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
-                                               all_terms,
                                                linearisation, linearise,
-                                               replace_labelled,
-                                               advecting_velocity)
+                                               replace_labelled)
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 

@@ -7,7 +7,7 @@ from firedrake import (Function, TestFunction, inner, dx, div, action,
 from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms,
                                                subject, time_derivative,
-                                               linearisation, linearise,
+                                               linearisation,
                                                drop, index, advection,
                                                relabel_uadv, replace_labelled, Term)
 from gusto.diffusion import interior_penalty_diffusion_form
@@ -261,4 +261,5 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                                   t.get("subject")),
                            t.labels),
             drop)
+
         return linear_form
