@@ -1,9 +1,10 @@
 import pytest
 from firedrake import (TestFunction, Function, FunctionSpace,
-                       VectorFunctionSpace,
-                       MixedFunctionSpace, UnitSquareMesh,
+                       VectorFunctionSpace, MixedFunctionSpace,
+                       UnitSquareMesh, as_vector,
                        dx, Constant, LinearVariationalProblem,
-                       LinearVariationalSolver)
+                       LinearVariationalSolver,
+                       TrialFunctions)
 from gusto import *
 
 
@@ -50,10 +51,10 @@ def form(mesh, function, V):
 
 
 @pytest.fixture
-def mixed_form(mesh, mixed_function, W):
+def mixed_form(mesh, mixed_function, W, label_a):
     sigma, phi = TestFunctions(W)
     x, y = mixed_function.split()
-    return index(inner(sigma, x)*dx, 0) + index(phi*y*dx, 1)
+    return label_a(index(inner(sigma, x)*dx, 0) + index(phi*y*dx, 1), mixed_function)
 
 
 @pytest.fixture
@@ -149,6 +150,32 @@ def test_add_labelled_form(form, term, labelled_form):
     assert b == b
 
 
+def test_sub_labelled_form(term, labelled_form):
+    """
+    test that subtracting from a labelled form works as expected
+    """
+    for other in [term, labelled_form]:
+        a = labelled_form
+        a -= other
+        assert isinstance(a, LabelledForm)
+        assert len(a) == 2
+
+    b = labelled_form
+    b -= None
+    assert b == b
+
+
+def test_mul_labelled_form(labelled_form):
+    """
+    test that we can multiply a labelled_form by a float and Constant
+    """
+    for coeff in [1., Constant(1.)]:
+        new = coeff*labelled_form
+        assert isinstance(new, LabelledForm)
+        assert len(new) == len(labelled_form)
+        assert not new.form == labelled_form.form
+
+
 def test_label_map(labelled_form, label_a, label_x, form):
     """
     test that label_map returns a labelled_form with the label_map correctly
@@ -227,15 +254,18 @@ def test_replace_test(V, labelled_form):
     assert len(new.terms[0].form.arguments()) == 0
 
 
-def test_replace_labelled(V, labelled_form, label_a, label_x, form):
+def test_replace_labelled(V, labelled_form, label_a, label_x):
     """
-    test the replace_labelled(label, replacer) function:
+    test the replace_labelled(label, replacer) function on forms that
+    are defined on a FunctionSpace:
     * if the term does not have this label then return a new instance
       of the term with identical form and labels
     * if replacer is a TrialFunction then replace the labelled item
       with replacer
     * if replacer is a Function then replace the labelled item
       with replacer
+    * if replacer is a MixedFunction then replace the labelled item
+      with the right part of replacer
     * if replacer is a ufl expression then replace the labelled item
       with replacer
     """
@@ -275,3 +305,38 @@ def test_replace_labelled(V, labelled_form, label_a, label_x, form):
     solver.solve()
     err = Function(V).assign(replacer_expr-b)
     assert err.dat.data.max() < 1.e-14
+
+
+def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
+    """
+    test the replace_labelled(label, replacer) function on forms that
+    are defined on a MixedFunctionSpace:
+    * if replacer is TrialFunctions then replace the labelled item
+      with
+    * if replacer is a Function then replace the labelled item
+      with replacer
+    * if replacer is a ufl expression then replace the labelled item
+      with replacer
+    """
+    replacer_tri = TrialFunctions(W)
+    a = mixed_form.label_map(all_terms, replace_labelled("a", replacer_tri))
+    # check that the form now has 2 arguments because it has both test
+    # and trial functions
+    assert len(a.form.arguments()) == 2
+
+    # check that L contains replacer_fn by solving
+    # <test, trial> = <test, replacer_mixed_fn>
+    replacer_mixed_fn = Function(W)
+    f, g = replacer_mixed_fn.split()
+    f.interpolate(as_vector([1., 0.]))
+    g.interpolate(Constant(2.))
+    L = mixed_form.label_map(all_terms, replace_labelled("a",
+                                                         replacer_mixed_fn))
+    b = Function(W)
+    prob = LinearVariationalProblem(a.form, L.form, b)
+    solver = LinearVariationalSolver(prob)
+    solver.solve()
+    err = Function(W).assign(replacer_mixed_fn-b)
+    err1, err2 = err.split()
+    assert err1.dat.data.max() < 1.e-14
+    assert err2.dat.data.max() < 1.e-14
