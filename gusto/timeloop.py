@@ -63,15 +63,18 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for bc in bcs:
                 bc.apply(unp1)
 
-    def setup_timeloop(self, t, tmax, pickup):
+    def setup_timeloop(self, state, t, tmax, pickup):
         """
         Setup the timeloop by setting up diagnostics, dumping the fields and
         picking up from a previous run, if required
         """
-        self.state.setup_diagnostics()
+        if pickup:
+            t = state.pickup_from_checkpoint()
+
+        state.setup_diagnostics()
+
         with timed_stage("Dump output"):
-            self.state.setup_dump(tmax, pickup)
-            t = self.state.dump(t, pickup)
+            state.setup_dump(t, tmax, pickup)
         return t
 
     @abstractmethod
@@ -88,9 +91,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         physics updates are applied (if required).
         """
 
-        t = self.setup_timeloop(t, tmax, pickup)
-
         state = self.state
+
+        t = self.setup_timeloop(state, t, tmax, pickup)
+
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
@@ -126,7 +130,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     physics.apply()
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t)
 
         if state.output.checkpoint:
             state.chkpt.close()

@@ -1,6 +1,7 @@
-from os import path
+from os import path, makedirs
 import itertools
 from netCDF4 import Dataset
+import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
@@ -55,7 +56,7 @@ class FieldCreator(object):
 
 class PointDataOutput(object):
     def __init__(self, filename, ndt, field_points, description,
-                 field_creator, create=True):
+                 field_creator, comm, create=True):
         """Create a dump file that stores fields evaluated at points.
 
         :arg filename: The filename.
@@ -69,30 +70,32 @@ class PointDataOutput(object):
         self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
+        self.comm = comm
         if not create:
             return
-        with Dataset(filename, "w") as dataset:
-            dataset.description = "Point data for simulation {desc}".format(desc=description)
-            dataset.history = "Created {t}".format(t=time.ctime())
-            # FIXME add versioning information.
-            dataset.source = "Output from Gusto model"
-            # Appendable dimension, timesteps in the model
-            dataset.createDimension("time", ndt+1)
+        if self.comm.rank == 0:
+            with Dataset(filename, "w") as dataset:
+                dataset.description = "Point data for simulation {desc}".format(desc=description)
+                dataset.history = "Created {t}".format(t=time.ctime())
+                # FIXME add versioning information.
+                dataset.source = "Output from Gusto model"
+                # Appendable dimension, timesteps in the model
+                dataset.createDimension("time", ndt+1)
 
-            var = dataset.createVariable("time", np.float64, ("time"))
-            var.units = "seconds"
-            # Now create the variable group for each field
-            for field_name, points in field_points:
-                group = dataset.createGroup(field_name)
-                npts, dim = points.shape
-                group.createDimension("points", npts)
-                group.createDimension("geometric_dimension", dim)
-                var = group.createVariable("points", points.dtype,
-                                           ("points", "geometric_dimension"))
-                var[:] = points
-                group.createVariable(field_name,
-                                     field_creator(field_name).dat.dtype,
-                                     ("time", "points"))
+                var = dataset.createVariable("time", np.float64, ("time"))
+                var.units = "seconds"
+                # Now create the variable group for each field
+                for field_name, points in field_points:
+                    group = dataset.createGroup(field_name)
+                    npts, dim = points.shape
+                    group.createDimension("points", npts)
+                    group.createDimension("geometric_dimension", dim)
+                    var = group.createVariable("points", points.dtype,
+                                               ("points", "geometric_dimension"))
+                    var[:] = points
+                    group.createVariable(field_name,
+                                         field_creator(field_name).dat.dtype,
+                                         ("time", "points"))
 
     def dump(self, field_creator, t):
         """Evaluate and dump field data at points.
@@ -101,19 +104,25 @@ class PointDataOutput(object):
             fields.
         :arg t: Simulation time at which dump occurs.
         """
-        with Dataset(self.filename, "a") as dataset:
-            # Add new time index
-            dataset.variables["time"][self.dump_count] = t
-            for field_name, points in self.field_points:
-                vals = np.asarray(field_creator(field_name).at(points))
-                group = dataset.groups[field_name]
-                var = group.variables[field_name]
-                var[self.dump_count, :] = vals
+
+        val_list = []
+        for field_name, points in self.field_points:
+            val_list.append((field_name, np.asarray(field_creator(field_name).at(points))))
+
+        if self.comm.rank == 0:
+            with Dataset(self.filename, "a") as dataset:
+                # Add new time index
+                dataset.variables["time"][self.dump_count] = t
+                for field_name, vals in val_list:
+                    group = dataset.groups[field_name]
+                    var = group.variables[field_name]
+                    var[self.dump_count, :] = vals
+
         self.dump_count += 1
 
 
 class DiagnosticsOutput(object):
-    def __init__(self, filename, diagnostics, description, create=True):
+    def __init__(self, filename, diagnostics, description, comm, create=True):
         """Create a dump file that stores diagnostics.
 
         :arg filename: The filename.
@@ -123,19 +132,21 @@ class DiagnosticsOutput(object):
         """
         self.filename = filename
         self.diagnostics = diagnostics
+        self.comm = comm
         if not create:
             return
-        with Dataset(filename, "w") as dataset:
-            dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
-            dataset.history = "Created {t}".format(t=time.ctime())
-            dataset.source = "Output from Gusto model"
-            dataset.createDimension("time", None)
-            var = dataset.createVariable("time", np.float64, ("time", ))
-            var.units = "seconds"
-            for name in diagnostics.fields:
-                group = dataset.createGroup(name)
-                for diagnostic in diagnostics.available_diagnostics:
-                    group.createVariable(diagnostic, np.float64, ("time", ))
+        if self.comm.rank == 0:
+            with Dataset(filename, "w") as dataset:
+                dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
+                dataset.history = "Created {t}".format(t=time.ctime())
+                dataset.source = "Output from Gusto model"
+                dataset.createDimension("time", None)
+                var = dataset.createVariable("time", np.float64, ("time", ))
+                var.units = "seconds"
+                for name in diagnostics.fields:
+                    group = dataset.createGroup(name)
+                    for diagnostic in diagnostics.available_diagnostics:
+                        group.createVariable(diagnostic, np.float64, ("time", ))
 
     def dump(self, state, t):
         """Dump diagnostics.
@@ -143,16 +154,22 @@ class DiagnosticsOutput(object):
         :arg state: The :class:`State` at which to compute the diagnostic.
         :arg t: The current time.
         """
-        with Dataset(self.filename, "a") as dataset:
-            idx = dataset.dimensions["time"].size
-            dataset.variables["time"][idx:idx + 1] = t
-            for name in self.diagnostics.fields:
-                field = state.fields(name)
-                group = dataset.groups[name]
-                for dname in self.diagnostics.available_diagnostics:
-                    diagnostic = getattr(self.diagnostics, dname)
+
+        diagnostics = []
+        for fname in self.diagnostics.fields:
+            field = state.fields(fname)
+            for dname in self.diagnostics.available_diagnostics:
+                diagnostic = getattr(self.diagnostics, dname)
+                diagnostics.append((fname, dname, diagnostic(field)))
+
+        if self.comm.rank == 0:
+            with Dataset(self.filename, "a") as dataset:
+                idx = dataset.dimensions["time"].size
+                dataset.variables["time"][idx:idx + 1] = t
+                for fname, dname, value in diagnostics:
+                    group = dataset.groups[fname]
                     var = group.variables[dname]
-                    var[idx:idx + 1] = diagnostic(field)
+                    var[idx:idx + 1] = value
 
 
 class State(object):
@@ -291,7 +308,7 @@ class State(object):
             diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, tmax, pickup=False):
+    def setup_dump(self, t, tmax, pickup=False):
         """
         Setup dump files
         Check for existence of directory so as not to overwrite
@@ -302,18 +319,35 @@ class State(object):
         :arg pickup: recover state from the checkpointing file if true,
         otherwise dump and checkpoint to disk. (default is False).
         """
-        self.dumpdir = path.join("results", self.output.dirname)
-        outfile = path.join(self.dumpdir, "field_output.pvd")
-        if self.mesh.comm.rank == 0 and "pytest" not in self.output.dirname \
-           and path.exists(self.dumpdir) and not pickup:
-            raise IOError("results directory '%s' already exists" % self.dumpdir)
-        self.dumpcount = itertools.count()
-        self.dumpfile = File(outfile, project_output=self.output.project_fields, comm=self.mesh.comm)
-        if self.output.checkpoint and not pickup:
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
 
-        # make list of fields to dump
-        self.to_dump = [field for field in self.fields if field.dump]
+        if any([self.output.dump_vtus, self.output.dumplist_latlon,
+                self.output.dump_diagnostics, self.output.point_data,
+                self.output.checkpoint and not pickup]):
+            # setup output directory and check that it does not already exist
+            self.dumpdir = path.join("results", self.output.dirname)
+            running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
+            if self.mesh.comm.rank == 0 \
+               and not running_tests \
+               and path.exists(self.dumpdir) and not pickup:
+                raise IOError("results directory '%s' already exists"
+                              % self.dumpdir)
+            else:
+                if not running_tests:
+                    makedirs(self.dumpdir)
+
+        if self.output.dump_vtus:
+
+            # setup pvd output file
+            outfile = path.join(self.dumpdir, "field_output.pvd")
+            self.dumpfile = File(
+                outfile, project_output=self.output.project_fields,
+                comm=self.mesh.comm)
+
+            # make list of fields to dump
+            self.to_dump = [field for field in self.fields if field.dump]
+
+            # make dump counter
+            self.dumpcount = itertools.count()
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -324,15 +358,15 @@ class State(object):
                                     project_output=self.output.project_fields,
                                     comm=self.mesh.comm)
 
-        # make list of fields to pickup (this doesn't include diagnostic fields)
-        self.to_pickup = [field for field in self.fields if field.pickup]
-
-        # make functions on latlon mesh, as specified by dumplist_latlon
-        self.to_dump_latlon = []
-        for name in self.output.dumplist_latlon:
-            f = self.fields(name)
-            field = Function(functionspaceimpl.WithGeometry(f.function_space(), mesh_ll), val=f.topological, name=name+'_ll')
-            self.to_dump_latlon.append(field)
+            # make functions on latlon mesh, as specified by dumplist_latlon
+            self.to_dump_latlon = []
+            for name in self.output.dumplist_latlon:
+                f = self.fields(name)
+                field = Function(
+                    functionspaceimpl.WithGeometry(
+                        f.function_space(), mesh_ll),
+                    val=f.topological, name=name+'_ll')
+                self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pickup=True, in
         # which case we just need the filenames
@@ -341,68 +375,83 @@ class State(object):
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
+                                                       self.mesh.comm,
                                                        create=not pickup)
 
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
-
             ndt = int(tmax/self.timestepping.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     self.fields,
+                                                    self.mesh.comm,
                                                     create=not pickup)
 
-    def dump(self, t=0, pickup=False):
+        # if we want to checkpoint and are not picking up from a previous
+        # checkpoint file, setup the dumb checkpointing
+        if self.output.checkpoint and not pickup:
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                        mode=FILE_CREATE)
+            # make list of fields to pickup (this doesn't include
+            # diagnostic fields)
+            self.to_pickup = [field for field in self.fields if field.pickup]
+
+        # dump initial fields
+        self.dump(t)
+
+    def pickup_from_checkpoint(self):
         """
-        Dump output
         :arg t: the current model time (default is zero).
-        :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk. (default is False).
         """
-        if pickup:
-            if self.output.checkpoint:
-                # Open the checkpointing file for writing
-                chkfile = path.join(self.dumpdir, "chkpt")
-                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                    # Recover all the fields from the checkpoint
-                    for field in self.to_pickup:
-                        chk.load(field)
-                    t = chk.read_attribute("/", "time")
-                    next(self.dumpcount)
-                # Setup new checkpoint
-                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
-            else:
-                raise NotImplementedError("Must set checkpoint True if pickup")
-        else:
-
-            if self.output.dump_diagnostics:
-                # Compute diagnostic fields
-                for field in self.diagnostic_fields:
-                    field(self)
-
-                # Output diagnostic data
-                self.diagnostic_output.dump(self, t)
-
-            if len(self.output.point_data) > 0:
-                # Output pointwise data
-                self.pointdata_output.dump(self.fields, t)
-
-            # Dump all the fields to the checkpointing file (backup version)
-            if self.output.checkpoint:
+        if self.output.checkpoint:
+            # Open the checkpointing file for writing
+            chkfile = path.join(self.dumpdir, "chkpt")
+            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
-                    self.chkpt.store(field)
-                self.chkpt.write_attribute("/", "time", t)
-
-            if (next(self.dumpcount) % self.output.dumpfreq) == 0:
-                # dump fields
-                self.dumpfile.write(*self.to_dump)
-
-                # dump fields on latlon mesh
-                if len(self.output.dumplist_latlon) > 0:
-                    self.dumpfile_ll.write(*self.to_dump_latlon)
+                    chk.load(field)
+                t = chk.read_attribute("/", "time")
+                next(self.dumpcount)
+            # Setup new checkpoint
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+        else:
+            raise ValueError("Must set checkpoint True if pickup")
 
         return t
+
+    def dump(self, t):
+        """
+        Dump output
+        """
+        output = self.output
+
+        # Diagnostics:
+        # Compute diagnostic fields
+        for field in self.diagnostic_fields:
+            field(self)
+
+        if output.dump_diagnostics:
+            # Output diagnostic data
+            self.diagnostic_output.dump(self, t)
+
+        if len(output.point_data) > 0:
+            # Output pointwise data
+            self.pointdata_output.dump(self.fields, t)
+
+        # Dump all the fields to the checkpointing file (backup version)
+        if output.checkpoint:
+            for field in self.to_pickup:
+                self.chkpt.store(field)
+            self.chkpt.write_attribute("/", "time", t)
+
+        if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
+            # dump fields
+            self.dumpfile.write(*self.to_dump)
+
+            # dump fields on latlon mesh
+            if len(output.dumplist_latlon) > 0:
+                self.dumpfile_ll.write(*self.to_dump_latlon)
 
     def initialise(self, initial_conditions):
         """
