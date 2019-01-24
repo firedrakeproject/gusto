@@ -88,8 +88,12 @@ class Timestepper(object, metaclass=ABCMeta):
                 bc.apply(unp1)
 
     def setup_schemes(self):
+        """
+        Setup the timestepping schemes
+        """
         state = self.state
         equations = self.equations
+        # if the child class has defined an advecting velocity, use it
         try:
             uadv = self.advecting_velocity
         except AttributeError:
@@ -101,13 +105,13 @@ class Timestepper(object, metaclass=ABCMeta):
             else:
                 eqn = dict(equations)['X']
                 assert name in eqn.fieldlist
-            scheme.setup(state, field, eqn, dt=self.dt,
-                         u_advecting=uadv, active_labels=active_labels)
+            scheme.setup(state, field, eqn, self.dt, *active_labels,
+                         u_advecting=uadv)
 
     def setup_timeloop(self, t, dt, tmax, pickup):
         """
-        Setup the timeloop by setting up diagnostics, dumping the fields and
-        picking up from a previous run, if required
+        Setup the timeloop by setting up timestepping schemes and diagnostics,
+        dumping the fields and picking up from a previous run, if required
         """
         self.setup_schemes()
         self.state.setup_diagnostics(dt)

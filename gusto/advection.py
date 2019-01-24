@@ -64,26 +64,37 @@ class Advection(object, metaclass=ABCMeta):
         self.options = options
 
     def _setup_from_options(self, state, field, options):
-
+        """
+        :arg state: a :class:`.State` object
+        :arg field: a :func:`.Function` object - the prognostic field
+        :arg options: an :class:`AdvectionOptions` object, containing
+        options related to the spatial discretisation
+        """
         self.discretisation_option = options.name
 
         if options.name in ["embedded_dg", "recovered"]:
+            # construct the embedding space if not specified
             if options.embedding_space is None:
                 V_elt = BrokenElement(field.function_space().ufl_element())
                 self.fs = FunctionSpace(state.mesh, V_elt)
             else:
                 self.fs = options.embedding_space
+            # make functions and projector for moving between the
+            # embedding and the original spaces
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
-            test = TestFunction(self.fs)
-            self.equation = self.equation.label_map(all_terms,
-                                                    replace_test(test))
             self.x_projected = Function(field.function_space())
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
+            # replace the original test function with one defined on
+            # the embedding space, as this is the space where the
+            # advection occurs
+            test = TestFunction(self.fs)
+            self.equation = self.equation.label_map(all_terms,
+                                                    replace_test(test))
 
         if options.name == "recovered":
             # set up the necessary functions
@@ -103,6 +114,7 @@ class Advection(object, metaclass=ABCMeta):
         elif options.name == "supg":
             self.fs = field.function_space()
 
+            # construct tau, if it is not specified
             dim = state.mesh.topological_dimension()
             if options.tau is not None:
                 tau = options.tau
@@ -116,6 +128,8 @@ class Advection(object, metaclass=ABCMeta):
                         [vals[j] if i == j else 0. for i, v in enumerate(vals)]
                     ) for j in range(dim)])
                 )
+
+            # replace test function with supg test function
             test = TestFunction(self.fs)
             default_uadv = (
                 self.prescribed_uadv or Function(state.spaces("HDiv"))
@@ -130,17 +144,28 @@ class Advection(object, metaclass=ABCMeta):
             self.equation = self.equation.label_map(
                 all_terms, replace_with_supg_test)
 
+            # update default ksp_type
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, field, equation, dt, u_advecting=None,
-              active_labels=None):
+    def setup(self, state, field, equation, dt,
+              *active_labels, u_advecting=None):
+        """
+        :arg state: a :class:`.State` object
+        :arg field: a :func:`.Function` object - the prognostic field
+        :arg equation: a :class:`.PrognosticEquation` object
+        :arg dt: the timestep
+        :arg active_labels: str(s) specifying the labels of terms in the
+        form that this scheme should be applied to
+        :arg u_advecting: (optional) a ufl expression for the advecting
+        velocity. If not specified, check equation for a prescribed velocity.
+        If that is not present then treat any parts of the form labelled
+        "uadv" as the equation subject.
+        """
 
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
         self.dt = dt
-        if active_labels is None:
-            active_labels = []
         self.field = field
         # store just the form
         self.equation = equation()
@@ -336,8 +361,8 @@ class ExplicitAdvection(Advection):
         super().__init__(solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-    def setup(self, state, field, equation, dt,
-              u_advecting=None, active_labels=None):
+    def setup(self, state, field, equation, dt, *active_labels,
+              u_advecting=None):
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -348,8 +373,8 @@ class ExplicitAdvection(Advection):
             dt = dt
             self.ncycles = 1
 
-        super().setup(state, field, equation, dt,
-                      u_advecting=u_advecting, active_labels=active_labels)
+        super().setup(state, field, equation, dt, *active_labels,
+                      u_advecting=u_advecting)
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
     @abstractproperty
