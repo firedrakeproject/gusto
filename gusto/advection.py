@@ -142,6 +142,7 @@ class Advection(object, metaclass=ABCMeta):
         if active_labels is None:
             active_labels = []
         self.field = field
+        # store just the form
         self.equation = equation()
 
         try:
@@ -149,8 +150,14 @@ class Advection(object, metaclass=ABCMeta):
         except AttributeError:
             self.prescribed_uadv = False
 
+        # figure out if the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1
+        # figure out if the prognostic field is defined on a mixed
+        # function space
         mixed_function = len(field.function_space()) > 1
+        # if the equation in defined on a mixed function space, but
+        # the prognostic field isn't, then extract the parts of the
+        # equation form that involve this prognostic field.
         if mixed_equation and not mixed_function:
             idx = field.function_space().index
             self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
