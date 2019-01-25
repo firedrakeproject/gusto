@@ -46,8 +46,28 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
         state.diagnostics.register(*field_names)
 
-    def mass_term(self):
+    @abstractproperty
+    def fieldlist(self):
+        """
+        Child classes must define a list of their prognostic field names.
+        """
+        pass
 
+    @abstractproperty
+    def solver_parameters(self):
+        """
+        Child classes must define default solver parameters for the
+        mixed system.
+        """
+        pass
+
+    def mass_term(self):
+        """
+        Returns the labelled form for the mass term for self.function_space
+        with its subject labelled and the time_derivative label applied.
+        If self.function_space is a MixedFunctionSpace then label each term
+        with the index of the space it is defined on.
+        """
         if len(self.function_space) == 1:
             test = TestFunction(self.function_space)
             q = Function(self.function_space)
@@ -63,9 +83,16 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
     @abstractproperty
     def form(self):
+        """
+        Child classes should define the forms for the remaining terms
+        in the equation.
+        """
         pass
 
     def __call__(self):
+        """
+        Returns the form for this equation
+        """
         return self.mass_term() + self.form()
 
 
@@ -131,9 +158,16 @@ class ShallowWaterEquations(PrognosticEquation):
     :arg state: :class:`.State` object
     :arg family: str, specifies the velocity space family to use
     :arg degree: int, specifies the degree for the depth space
-    :kwargs: expressions for additional fields and discretisation options
-    to be passed to the form
+    :kwargs: (optional) expressions for additional fields and discretisation
+    options to be passed to the form
+
+    Default behaviour:
+    * velocity advection term in vector invariant form.
+    * Coriolis term present and the Coriolis parameter takes the value for
+    the Earth. Pass in fexpr=None for non-rotating shallow water.
     """
+    fieldlist = ['u', 'D']
+
     solver_parameters = {
         'ksp_type': 'preonly',
         'mat_type': 'matfree',
@@ -156,21 +190,23 @@ class ShallowWaterEquations(PrognosticEquation):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
+        # define the function spaces
         Vu, VD = build_spaces(state, family, degree)
         self.function_space = MixedFunctionSpace((Vu, VD))
 
-        self.fieldlist = ['u', 'D']
-
         super().__init__(state, self.function_space, *self.fieldlist)
 
+        # setup optional coriolis and topography terms, default is for
+        # the Coriolis term to be that for the Earth.
         if fexpr:
             self.setup_coriolis(state, fexpr)
-
         if bexpr:
             self.setup_topography(state, bexpr)
 
     def setup_coriolis(self, state, fexpr):
-
+        """
+        Create state.fields("coriolis").
+        """
         if fexpr == "default":
             Omega = state.parameters.Omega
             x = SpatialCoordinate(state.mesh)
@@ -182,11 +218,14 @@ class ShallowWaterEquations(PrognosticEquation):
         f.interpolate(fexpr)
 
     def setup_topography(self, state, bexpr):
-
+        """
+        Create state.fields("topography").
+        """
         b = state.fields("topography", space=state.fields("D").function_space())
         b.interpolate(bexpr)
 
     def form(self):
+
         state = self.state
         g = state.parameters.g
         H = state.parameters.H
@@ -197,24 +236,29 @@ class ShallowWaterEquations(PrognosticEquation):
         X = Function(W)
         u, D = X.split()
 
-        if self.u_advection_option == "circulation_form":
+        # define velocity advection term
+        if self.u_advection_option == "vector_invariant_form":
+            u_adv = vector_invariant_form(state, W, 0)
+        elif self.u_advection_option == "vector_advection":
+            u_adv = advection_vector_manifold_form(state, W, 0)
+        elif self.u_advection_option == "circulation_form":
             ke_form = kinetic_energy_form(state, W, 0)
             ke_form = advection.remove(ke_form)
             ke_form = ke_form.label_map(all_terms, relabel_uadv)
             u_adv = advection_equation_circulation_form(state, W, 0) + ke_form
-        elif self.u_advection_option == "vector_advection":
-            u_adv = advection_vector_manifold_form(state, W, 0)
-        elif self.u_advection_option == "vector_invariant_form":
-            u_adv = vector_invariant_form(state, W, 0)
         else:
             raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
 
+        # define pressure gradient term and its linearisation
         pressure_gradient_term = subject(-g*div(w)*D*dx, X)
         linear_pg_term = pressure_gradient_term.label_map(
             all_terms, replace_labelled(trials, "subject"))
 
+        # the base form for u contains the velocity advection term and
+        # the pressure gradient term
         u_form = u_adv + linearisation(pressure_gradient_term, linear_pg_term)
 
+        # add any additional terms
         for field_name in ["coriolis", "topography"]:
             try:
                 field = state.fields(field_name)
@@ -225,14 +269,22 @@ class ShallowWaterEquations(PrognosticEquation):
 
             if add_term:
                 if field_name == "coriolis":
+                    # define the coriolis term and its linearisation
                     coriolis_term = subject(field*inner(w, state.perp(u))*dx, X)
                     linear_coriolis_term = coriolis_term.label_map(
                         all_terms, replace_labelled(trials, "subject"))
+                    # add on the coriolis term
                     u_form += linearisation(coriolis_term, linear_coriolis_term)
 
                 elif field_name == "topography":
+                    # add on the topography term - the linearisation
+                    # is not defined as we don't usually make it part
+                    # of the linear solver, However, this will have to
+                    # be defined when we start using exponential
+                    # integrators.
                     u_form += -g*div(w)*field*dx
 
+        # define the depth continuity term and its linearisation
         Dadv = continuity_form(state, W, 1)
         Dadv_linear = linear_continuity_form(state, W, 1, qbar=H).label_map(
             all_terms, replace_labelled(trials, "subject", "uadv"))
@@ -242,10 +294,17 @@ class ShallowWaterEquations(PrognosticEquation):
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
+    """
+    Class defining the linear shallow water equations.
+    """
 
     def form(self):
+
+        # get shallow water equation form
         sw_form = super().form()
 
+        # grab the linearisation of each term and reconstruct the
+        # bilinear form
         linear_form = sw_form.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(action(t.get("linearisation").form,
