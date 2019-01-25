@@ -39,7 +39,10 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.state = state
         self.function_space = function_space
 
-        state.fields(*field_names, space=function_space)
+        dump = state.output.dumplist or field_names
+        pickup = field_names
+        state.fields(*field_names, space=function_space, dump=dump,
+                     pickup=pickup)
 
         state.diagnostics.register(*field_names)
 

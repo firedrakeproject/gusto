@@ -59,8 +59,17 @@ class FieldCreator(object):
                 else:
                     assert not hasattr(self, 'X'), "cannot have more than one mixed variable"
                     self.X = Function(space)
-                    for fname, value in zip(names, self.X.split()):
-                        self.add_field(fname, value, dump, pickup)
+                    if type(dump) == list:
+                        dump_ = dict(zip(names, [f in dump for f in names]))
+                    else:
+                        dump_ = dict(zip(names, (dump,)*len(names)))
+                    if type(pickup) is list:
+                        pickup_ = dict(zip(names,
+                                           [f in pickup for f in names]))
+                    else:
+                        pickup_ = dict(zip(names, (pickup,)*len(names)))
+                    for name, value in zip(names, self.X.split()):
+                        self.add_field(name, value, dump_[name], pickup_[name])
                     return self.X
             else:
                 raise AttributeError("No field named %s and no space provided to create a new field." % names)
