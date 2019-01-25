@@ -73,20 +73,15 @@ class AdvectionEquation(PrognosticEquation):
     :arg state: :class:`.State` object
     :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
-    :arg advecting_velocity: (optional) a :class:`Function` specifying the
-    prescribed advecting velocity
     :kwargs: any kwargs to be passed on to the advection_form
     """
     def __init__(self, state, field_name, function_space,
-                 advecting_velocity=None,
                  **kwargs):
         super().__init__(state, function_space, field_name)
-        self.uadv = advecting_velocity
         self.kwargs = kwargs
 
     def form(self):
-        return advection_form(self.state, self.function_space, uadv=self.uadv,
-                              **self.kwargs)
+        return advection_form(self.state, self.function_space, **self.kwargs)
 
 
 class ContinuityEquation(PrognosticEquation):
@@ -96,21 +91,16 @@ class ContinuityEquation(PrognosticEquation):
     :arg state: :class:`.State` object
     :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
-    :arg advecting_velocity: (optional) a :class:`Function` specifying the
-    prescribed advecting velocity
     :kwargs: any kwargs to be passed on to the continuity_form
     """
 
     def __init__(self, state, field_name, function_space,
-                 advecting_velocity=None,
                  **kwargs):
         super().__init__(state, field_name, function_space)
-        self.uadv = advecting_velocity
         self.kwargs = kwargs
 
     def form(self):
-        return continuity_form(self.state, self.function_space, uadv=self.uadv,
-                               **self.kwargs)
+        return continuity_form(self.state, self.function_space, **self.kwargs)
 
 
 class DiffusionEquation(PrognosticEquation):
@@ -120,8 +110,6 @@ class DiffusionEquation(PrognosticEquation):
     :arg state: :class:`.State` object
     :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
-    :arg advecting_velocity: (optional) a :class:`Function` specifying the
-    prescribed advecting velocity
     :kwargs: any kwargs to be passed on to the diffuson_form
     """
 

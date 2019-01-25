@@ -9,7 +9,7 @@ from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
 
-__all__ = ["Timestepper", "CrankNicolson"]
+__all__ = ["Timestepper", "PrescribedAdvectionTimestepper", "CrankNicolson"]
 
 
 class Timestepper(object, metaclass=ABCMeta):
@@ -177,6 +177,40 @@ class Timestepper(object, metaclass=ABCMeta):
             state.chkpt.close()
 
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
+
+
+class PrescribedAdvectionTimestepper(Timestepper):
+    """
+    Timestepping class for solving equations with a prescribed advecting
+    velocity
+
+    :arg state: a :class:`.State` object
+    :arg equations: a list of tuples (field, equation)
+         pairing a field name with the :class:`.PrognosticEquation` object
+         that defines the prognostic equation that the field satisfies.
+    :arg schemes: either a list of tuples (field, scheme, *active_labels)
+         that specify which scheme to use to timestep the field's prognostic
+         equation and which labels, if any, to use to select part of the
+         equation; or an :class:`.Advection` object which specifies the
+         scheme to apply to the equation_set.
+    :arg physics_list: optional list of classes that implement `physics` schemes
+    :arg prescribed_fields: an ordered list of tuples, pairing a field name
+         with a function that returns the field as a function of time.
+    """
+
+    def __init__(self, state, *,
+                 equations=None, schemes=None,
+                 physics_list=None, prescribed_fields=None):
+
+        super().__init__(state,
+                         equations=equations,
+                         schemes=schemes,
+                         physics_list=physics_list,
+                         prescribed_fields=prescribed_fields)
+
+    @property
+    def advecting_velocity(self):
+        return self.state.fields("u")
 
 
 class SemiImplicitTimestepper(Timestepper):

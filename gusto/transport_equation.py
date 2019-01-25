@@ -38,7 +38,7 @@ def surface_measures(V):
             return dS, ds
 
 
-def setup_functions(state, V, idx, uadv):
+def setup_functions(state, V, idx):
 
     X = Function(V)
     if len(V) > 1:
@@ -51,13 +51,10 @@ def setup_functions(state, V, idx, uadv):
         test = TestFunction(V)
         q = X
         ubar = Function(state.spaces("HDiv"))
-    if uadv is not None:
-        return X, test, q, uadv
-    else:
-        return X, test, q, ubar
+    return X, test, q, ubar
 
 
-def advection_form(state, V, idx=None, *, uadv=None,
+def advection_form(state, V, idx=None, *,
                    ibp=IntegrateByParts.ONCE, outflow=None):
     """
     The equation is assumed to be in the form:
@@ -72,7 +69,7 @@ def advection_form(state, V, idx=None, *, uadv=None,
               None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx, uadv)
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
@@ -97,18 +94,18 @@ def advection_form(state, V, idx=None, *, uadv=None,
     return form
 
 
-def linear_continuity_form(state, V, idx=None, *, qbar=None, uadv=None):
+def linear_continuity_form(state, V, idx=None, *, qbar=None):
 
-    X, test, _, ubar = setup_functions(state, V, idx, uadv)
+    X, test, _, ubar = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(Constant(qbar)*test*div(ubar)*dx, ubar)), X)
     return form
 
 
-def continuity_form(state, V, idx=None, *, uadv=None,
+def continuity_form(state, V, idx=None, *,
                     ibp=IntegrateByParts.ONCE):
 
-    X, test, q, ubar = setup_functions(state, V, idx, uadv)
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
@@ -130,10 +127,10 @@ def continuity_form(state, V, idx=None, *, uadv=None,
     return form
 
 
-def advection_vector_manifold_form(state, V, idx=None, *, uadv=None,
+def advection_vector_manifold_form(state, V, idx=None, *,
                                    ibp=IntegrateByParts.ONCE, outflow=None):
 
-    X, test, q, ubar = setup_functions(state, V, idx, uadv)
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
@@ -142,11 +139,11 @@ def advection_vector_manifold_form(state, V, idx=None, *, uadv=None,
     L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
     L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
 
-    form = advection_form(state, V, idx, uadv=uadv, ibp=ibp) + subject(advection(advecting_velocity(L, ubar)), X)
+    form = advection_form(state, V, idx, ibp=ibp) + subject(advection(advecting_velocity(L, ubar)), X)
     return form
 
 
-def vector_invariant_form(state, V, idx=None, *, uadv=None,
+def vector_invariant_form(state, V, idx=None, *,
                           ibp=IntegrateByParts.ONCE):
     """
     Defines the vector invariant form of the vector advection term.
@@ -157,7 +154,7 @@ def vector_invariant_form(state, V, idx=None, *, uadv=None,
               take the value None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx, uadv)
+    X, test, q, ubar = setup_functions(state, V, idx)
     dS, ds = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
@@ -209,15 +206,15 @@ def vector_invariant_form(state, V, idx=None, *, uadv=None,
     return form
 
 
-def kinetic_energy_form(state, V, idx=None, *, uadv=None):
+def kinetic_energy_form(state, V, idx=None):
 
-    X, test, q, ubar = setup_functions(state, V, idx, uadv)
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), X)
     return form
 
 
-def advection_equation_circulation_form(state, V, idx=None, *, uadv=None,
+def advection_equation_circulation_form(state, V, idx=None, *,
                                         ibp=IntegrateByParts.ONCE):
     """
     Defining the circulation form of the vector advection term.
@@ -228,7 +225,7 @@ def advection_equation_circulation_form(state, V, idx=None, *, uadv=None,
               None, "once" or "twice". Defaults to "once".
     """
     form = (
-        vector_invariant_form(state, V, idx, uadv=uadv, ibp=ibp)
-        - kinetic_energy_form(state, V, idx, uadv=uadv)
+        vector_invariant_form(state, V, idx, ibp=ibp)
+        - kinetic_energy_form(state, V, idx)
     )
     return form
