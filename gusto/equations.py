@@ -46,21 +46,6 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
         state.diagnostics.register(*field_names)
 
-    @abstractproperty
-    def fieldlist(self):
-        """
-        Child classes must define a list of their prognostic field names.
-        """
-        pass
-
-    @abstractproperty
-    def solver_parameters(self):
-        """
-        Child classes must define default solver parameters for the
-        mixed system.
-        """
-        pass
-
     def mass_term(self):
         """
         Returns the labelled form for the mass term for self.function_space
@@ -126,7 +111,7 @@ class ContinuityEquation(PrognosticEquation):
 
     def __init__(self, state, field_name, function_space,
                  **kwargs):
-        super().__init__(state, field_name, function_space)
+        super().__init__(state, function_space, field_name)
         self.kwargs = kwargs
 
     def form(self):
@@ -151,7 +136,38 @@ class DiffusionEquation(PrognosticEquation):
         return interior_penalty_diffusion_form(self.state, self.function_space, **self.kwargs)
 
 
-class ShallowWaterEquations(PrognosticEquation):
+class AdvectionDiffusionEquation(AdvectionEquation, DiffusionEquation):
+    """
+    Class defining the advection-diffusion equation.
+
+    :arg state: :class:`.State` object
+    :arg field_name: name of the prognostic field
+    :arg function_space: :class:`.FunctionSpace` object, the function
+    :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
+    """
+    def form(self):
+        return super(AdvectionEquation).form(self.state, self.function_space, **self.kwargs) + super(DiffusionEquation).form(self.state, self.function_space, **self.kwargs)
+
+
+class PrognosticMixedEquation(PrognosticEquation):
+
+    @abstractproperty
+    def fieldlist(self):
+        """
+        Child classes must define a list of their prognostic field names.
+        """
+        pass
+
+    @abstractproperty
+    def solver_parameters(self):
+        """
+        Child classes must define default solver parameters for the
+        mixed system.
+        """
+        pass
+
+
+class ShallowWaterEquations(PrognosticMixedEquation):
     """
     Class defining the shallow water equations.
 

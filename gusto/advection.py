@@ -490,9 +490,9 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, theta=0.5, solver_parameters=None):
+    def __init__(self, theta=0.5, solver_parameters=None, options=None):
 
-        super().__init__(solver_parameters=solver_parameters)
+        super().__init__(solver_parameters=solver_parameters, options=options)
 
         self.theta = theta
 
