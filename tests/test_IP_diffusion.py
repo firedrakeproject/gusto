@@ -36,7 +36,7 @@ def setup_IPdiffusion(dirname, vector, DG, tracer_setup):
         def f_exact(t):
             return (1/(1+4*t))*f_init**(1/(1+4*t))
 
-    eqns = [("f", DiffusionEquation(state, f.function_space(), "f",
+    eqns = [("f", DiffusionEquation(state, Space, "f",
                                     kappa=kappa, mu=mu))]
     f = state.fields("f", space=Space)
     try:
