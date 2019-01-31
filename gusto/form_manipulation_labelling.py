@@ -11,6 +11,17 @@ all_terms = lambda t: True
 extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
 
 
+def has_labels(*labels):
+
+    def t_has_labels(t):
+        if len(labels) == 1:
+            return t.has_label(labels[0])
+        else:
+            return any(t.has_label(*labels))
+
+    return t_has_labels
+
+
 def linearise(t):
     """
     :arg t: a :class:`.Term` object
@@ -273,6 +284,8 @@ class Label(object):
 time_derivative = Label("time_derivative")
 advection = Label("advection")
 diffusion = Label("diffusion")
+explicit = Label("explicit")
+implicit = Label("implicit")
 advecting_velocity = Label("uadv", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) in [TrialFunction, Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])
 linearisation = Label("linearisation", validator=lambda value: type(value) is LabelledForm)

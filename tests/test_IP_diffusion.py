@@ -1,63 +1,71 @@
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       VectorFunctionSpace, Constant, exp, as_vector)
+from firedrake import (VectorFunctionSpace, Constant, as_vector, norm)
 import pytest
 
 
-def setup_IPdiffusion(dirname, vector, DG):
+def setup_IPdiffusion(dirname, vector, DG, tracer_setup):
 
-    dt = 0.01
-    L = 10.
-    m = PeriodicIntervalMesh(50, L)
-    mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
+    setup = tracer_setup(geometry="slice", blob=True)
+    state = setup.state
+    dt = setup.dt
+    tmax = setup.tmax
+    f_init = setup.f_init
 
-    output = OutputParameters(dirname=dirname)
+    kappa_ = 1.
+    mu = 5.
 
-    state = State(mesh,
-                  output=output)
-
-    x = SpatialCoordinate(mesh)
-    build_spaces(state, "CG", 1, 1)
     if vector:
-        kappa = Constant([[0.05, 0.], [0., 0.05]])
+        kappa = Constant([[kappa_, 0.], [0., kappa_]])
         if DG:
-            Space = VectorFunctionSpace(mesh, "DG", 1)
+            Space = VectorFunctionSpace(state.mesh, "DG", 1)
         else:
             Space = state.spaces("HDiv")
-        fexpr = as_vector([exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2), 0.])
+        fexpr = as_vector([f_init, 0.])
+
+        def f_exact(t):
+            return as_vector([(1/(1+4*t))*f_init**(1/(1+4*t)), 0.])
+
     else:
-        kappa = 0.05
+        kappa = kappa_
         if DG:
             Space = state.spaces("DG")
         else:
             Space = state.spaces("HDiv_v")
-        fexpr = exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2)
+        fexpr = f_init
 
+        def f_exact(t):
+            return (1/(1+4*t))*f_init**(1/(1+4*t))
+
+    eqns = [("f", DiffusionEquation(state, f.function_space(), "f",
+                                    kappa=kappa, mu=mu))]
     f = state.fields("f", space=Space)
     try:
         f.interpolate(fexpr)
     except NotImplementedError:
         f.project(fexpr)
 
-    mu = 5.
-    eqns = [("f", DiffusionEquation(state, "f", f.function_space(),
-                                    kappa=kappa, mu=mu))]
     schemes = [("f", BackwardEuler())]
-    stepper = Timestepper(state, equations=eqns, schemes=schemes)
-    return stepper, dt
+
+    state.fields("f_exact", space=Space)
+    prescribed_fields = [("f_exact", f_exact)]
+
+    stepper = Timestepper(state, equations=eqns, schemes=schemes,
+                          prescribed_fields=prescribed_fields)
+    return stepper, dt, tmax
 
 
-def run(dirname, vector, DG):
+def run(dirname, vector, DG, tracer_setup):
 
-    stepper, dt = setup_IPdiffusion(dirname, vector, DG)
-    stepper.run(t=0., dt=dt, tmax=2.5)
-    return stepper.state.fields("f")
+    stepper, dt, tmax = setup_IPdiffusion(dirname, vector, DG, tracer_setup)
+    stepper.run(t=0., dt=dt, tmax=tmax)
+    return stepper.state.fields("f_minus_f_exact")
 
 
 @pytest.mark.parametrize("vector", [True, False])
 @pytest.mark.parametrize("DG", [True, False])
-def test_ipdiffusion(tmpdir, vector, DG):
+def test_ipdiffusion(tmpdir, vector, DG, tracer_setup):
 
     dirname = str(tmpdir)
-    f = run(dirname, vector, DG)
-    assert f.dat.data.max() < 0.7
+    ferr = run(dirname, vector, DG, tracer_setup)
+    err = norm(ferr)
+    assert err < 0.03

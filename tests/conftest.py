@@ -1,16 +1,16 @@
 from firedrake import (IcosahedralSphereMesh, PeriodicIntervalMesh,
                        ExtrudedMesh, SpatialCoordinate, as_vector,
-                       sin, exp)
+                       sin, exp, pi)
 from gusto import *
 from collections import namedtuple
-from math import pi
 import pytest
 
-AdvectionSetup = namedtuple('AdvectionSetup',
-                            ['state', 'dt', 'tmax', 'f_init', 'f_end', 'err'])
+opts = ('state', 'dt', 'tmax', 'f_init', 'f_end', 'err')
+TracerSetup = namedtuple('TracerSetup', opts)
+TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 
-def advection_test_sphere(tmpdir):
+def tracer_advection_sphere(tmpdir):
 
     mesh = IcosahedralSphereMesh(radius=1,
                                  refinement_level=3,
@@ -31,10 +31,10 @@ def advection_test_sphere(tmpdir):
     f_end = exp(-x[2]**2 - x[1]**2)
     err = 2.5e-2
 
-    return AdvectionSetup(state, dt, tmax, f_init, f_end, err)
+    return TracerSetup(state, dt, tmax, f_init, f_end, err)
 
 
-def advection_test_slice(tmpdir):
+def tracer_advection_slice(tmpdir):
     m = PeriodicIntervalMesh(15, 1.)
     mesh = ExtrudedMesh(m, layers=15, layer_height=1./15.)
 
@@ -52,16 +52,38 @@ def advection_test_slice(tmpdir):
     f_end = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
     err = 7e-2
 
-    return AdvectionSetup(state, dt, tmax, f_init, f_end, err)
+    return TracerSetup(state, dt, tmax, f_init, f_end, err)
+
+
+def tracer_blob_slice(tmpdir):
+    dt = 0.01
+    L = 10.
+    m = PeriodicIntervalMesh(10, L)
+    mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
+
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    diagnostic_fields = [Difference("f", "f_exact")]
+
+    state = State(mesh, output=output, diagnostic_fields=diagnostic_fields)
+    build_spaces(state, "CG", 1, 1)
+
+    x = SpatialCoordinate(mesh)
+    f_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
+
+    return TracerSetup(state=state, dt=dt, tmax=1.5, f_init=f_init)
 
 
 @pytest.fixture()
-def advection_setup(tmpdir):
+def tracer_setup(tmpdir):
 
-    def _advection_setup(geometry):
+    def _tracer_setup(geometry, blob=False):
         if geometry == "sphere":
-            return advection_test_sphere(tmpdir)
+            assert not blob
+            return tracer_advection_sphere(tmpdir)
         elif geometry == "slice":
-            return advection_test_slice(tmpdir)
+            if blob:
+                return tracer_blob_slice(tmpdir)
+            else:
+                return tracer_advection_slice(tmpdir)
 
-    return _advection_setup
+    return _tracer_setup

@@ -90,7 +90,7 @@ class AdvectionEquation(PrognosticEquation):
     :arg function_space: :class:`.FunctionSpace` object, the function
     :kwargs: any kwargs to be passed on to the advection_form
     """
-    def __init__(self, state, field_name, function_space,
+    def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
         self.kwargs = kwargs
@@ -109,7 +109,7 @@ class ContinuityEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the continuity_form
     """
 
-    def __init__(self, state, field_name, function_space,
+    def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
         self.kwargs = kwargs
@@ -128,7 +128,8 @@ class DiffusionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the diffuson_form
     """
 
-    def __init__(self, state, field_name, function_space, **kwargs):
+    def __init__(self, state, function_space, field_name, **kwargs):
+
         super().__init__(state, function_space, field_name)
         self.kwargs = kwargs
 
@@ -136,7 +137,7 @@ class DiffusionEquation(PrognosticEquation):
         return interior_penalty_diffusion_form(self.state, self.function_space, **self.kwargs)
 
 
-class AdvectionDiffusionEquation(AdvectionEquation, DiffusionEquation):
+class AdvectionDiffusionEquation(PrognosticEquation):
     """
     Class defining the advection-diffusion equation.
 
@@ -145,8 +146,16 @@ class AdvectionDiffusionEquation(AdvectionEquation, DiffusionEquation):
     :arg function_space: :class:`.FunctionSpace` object, the function
     :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
     """
+    def __init__(self, state, function_space, field_name, **kwargs):
+        super().__init__(state, function_space, field_name)
+        self.diff_kwargs = {}
+        for k in ["kappa", "mu"]:
+            assert k in kwargs.keys(), "diffusion form requires %s kwarg " % k
+            self.diff_kwargs[k] = kwargs.pop(k)
+        self.adv_kwargs = kwargs
+
     def form(self):
-        return super(AdvectionEquation).form(self.state, self.function_space, **self.kwargs) + super(DiffusionEquation).form(self.state, self.function_space, **self.kwargs)
+        return advection_form(self.state, self.function_space, **self.adv_kwargs) + interior_penalty_diffusion_form(self.state, self.function_space, **self.diff_kwargs)
 
 
 class PrognosticMixedEquation(PrognosticEquation):

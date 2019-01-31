@@ -14,12 +14,12 @@ def run(state, equations, schemes, dt, tmax):
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("ibp", [IntegrateByParts.ONCE, IntegrateByParts.TWICE])
 @pytest.mark.parametrize("space", ["broken", "dg"])
-def test_advection_embedded_dg(equation_form, ibp, space, advection_setup):
+def test_advection_embedded_dg(equation_form, ibp, space, tracer_setup):
     """
     This tests the embedded DG advection scheme for scalar fields
     in slice geometry.
     """
-    setup = advection_setup("slice")
+    setup = tracer_setup("slice")
     state = setup.state
     dt = setup.dt
     tmax = setup.tmax
@@ -30,19 +30,17 @@ def test_advection_embedded_dg(equation_form, ibp, space, advection_setup):
     fspace = state.spaces("HDiv_v")
     f_end = Function(fspace).interpolate(f_end)
 
-    eqns = []
-    schemes = []
     opts = {"broken": EmbeddedDGOptions(),
             "dg": EmbeddedDGOptions(embedding_space=state.spaces("DG"))}
 
     if equation_form == "advective":
-        eqns.append(("f", AdvectionEquation(state, "f", fspace, ibp=ibp)))
+        equations = [("f", AdvectionEquation(state, fspace, "f", ibp=ibp))]
     else:
-        eqns.append(("f", ContinuityEquation(state, "f", fspace, ibp=ibp)))
+        equations = [("f", ContinuityEquation(state, fspace, "f", ibp=ibp))]
 
     f = state.fields("f")
     f.interpolate(f_init)
-    schemes.append(("f", SSPRK3(options=opts[space])))
+    schemes = [("f", SSPRK3(options=opts[space]))]
 
-    end_field = run(state, eqns, schemes, dt, tmax)
-    assert(errornorm(end_field, f_end) < err)
+    f = run(state, equations, schemes, dt, tmax)
+    assert(errornorm(f, f_end) < err)

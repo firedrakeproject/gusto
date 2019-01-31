@@ -123,6 +123,7 @@ class Timestepper(object, metaclass=ABCMeta):
     def initialise(self, state):
         for field in self.xn:
             field.assign(state.fields(field.name()))
+        self.evaluate_prescribed_fields(state)
 
     def evaluate_prescribed_fields(self, state):
         for name, evaluation in self.prescribed_fields:
@@ -133,10 +134,9 @@ class Timestepper(object, metaclass=ABCMeta):
             old(field.name()).assign(field)
 
     def timestep(self, state):
-        for name, scheme in self.schemes:
-            old_field = getattr(self.xn, name)
-            new_field = getattr(self.xnp1, name)
-            scheme.apply(old_field, new_field)
+        for name, scheme, *active_labels in self.schemes:
+            scheme.apply(self.xn(name), self.xnp1(name))
+            self.xn(name).assign(self.xnp1(name))
 
     def run(self, t, dt, tmax, pickup=False):
         """
@@ -145,9 +145,9 @@ class Timestepper(object, metaclass=ABCMeta):
         state = self.state
         self.dt = dt
 
-        t = self.setup_timeloop(t, dt, tmax, pickup)
-
         self.initialise(state)
+
+        t = self.setup_timeloop(t, dt, tmax, pickup)
 
         while t < tmax - 0.5*dt:
             logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
@@ -210,7 +210,10 @@ class PrescribedAdvectionTimestepper(Timestepper):
 
     @property
     def advecting_velocity(self):
-        return self.state.fields("u")
+        try:
+            return self.state.fields("u")
+        except AttributeError:
+            raise ValueError("You have not specified an advecting velocity to use")
 
 
 class SemiImplicitTimestepper(Timestepper):
@@ -256,16 +259,12 @@ class SemiImplicitTimestepper(Timestepper):
         self.semi_implicit_step()
 
         for name, scheme in self.passive_advection:
-            old_field = getattr(self.xn, name)
-            new_field = getattr(self.xnp1, name)
             # advects a field from xn and puts result in xnp1
-            scheme.apply(old_field, new_field)
+            scheme.apply(self.xn(name), self.xnp1(name))
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffused_fields:
-                old_field = getattr(self.xnp1, name)
-                new_field = getattr(self.xnp1, name)
-                scheme.apply(old_field, new_field)
+                scheme.apply(self.xnp1(name), self.xnp1(name))
 
 
 class CrankNicolson(SemiImplicitTimestepper):

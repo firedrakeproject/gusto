@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        TestFunction, TrialFunction, FunctionSpace,
@@ -7,11 +7,12 @@ from firedrake import (Function, NonlinearVariationalProblem,
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger
-from gusto.form_manipulation_labelling import (all_terms,
+from gusto.form_manipulation_labelling import (all_terms, has_labels,
                                                advecting_velocity,
                                                time_derivative, drop,
                                                replace_test, replace_labelled,
-                                               extract, Term, relabel_uadv)
+                                               extract, Term, relabel_uadv,
+                                               explicit, implicit)
 from gusto.recovery import Recoverer
 
 
@@ -62,6 +63,9 @@ class Advection(object, metaclass=ABCMeta):
         self.limiter = limiter
 
         self.options = options
+
+    def _label_terms(self):
+        pass
 
     def _setup_from_options(self, state, field, options):
         """
@@ -147,8 +151,8 @@ class Advection(object, metaclass=ABCMeta):
             # update default ksp_type
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, field, equation, dt,
-              *active_labels, u_advecting=None):
+    def setup(self, state, field, equation, dt, *active_labels,
+              u_advecting=None):
         """
         :arg state: a :class:`.State` object
         :arg field: a :func:`.Function` object - the prognostic field
@@ -161,7 +165,6 @@ class Advection(object, metaclass=ABCMeta):
         If that is not present then treat any parts of the form labelled
         "uadv" as the equation subject.
         """
-
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
@@ -229,7 +232,7 @@ class Advection(object, metaclass=ABCMeta):
 
         # setup required functions
         self.q1 = Function(self.fs)
-        self.dq = Function(self.fs)
+        self.result = Function(self.fs)
         if mixed_equation and mixed_function:
             self.trial = TrialFunctions(self.fs)
             self.qs = self.q1.split()
@@ -247,6 +250,8 @@ class Advection(object, metaclass=ABCMeta):
 
         if self.solver_parameters is None:
             self.solver_parameters = default_solver_params
+
+        self._label_terms()
 
         self._initialised = True
 
@@ -292,57 +297,52 @@ class Advection(object, metaclass=ABCMeta):
                 self.Projector.project()
         x_out.assign(self.x_projected)
 
-    @abstractproperty
+    @property
     def lhs(self):
-        pass
+        l = self.equation.label_map(
+            has_labels(time_derivative, implicit),
+            map_if_true=replace_labelled(self.trial, "subject"),
+            map_if_false=drop)
+        l = l.label_map(lambda t: not t.has_label(time_derivative),
+                        lambda t: self.dt*t)
+        return l.form
 
-    @abstractproperty
+    @property
     def rhs(self):
-        pass
+        r = self.equation.label_map(
+            has_labels(time_derivative, explicit),
+            map_if_true=replace_labelled(self.qs, "subject"),
+            map_if_false=drop)
+        r = r.label_map(lambda t: not t.has_label(time_derivative),
+                        lambda t: -self.dt*t)
+        return r.form
 
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq)
+        problem = NonlinearVariationalProblem(action(self.lhs, self.result)-self.rhs, self.result)
         solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply(self, x_in, x_out):
         """
-        Function takes x as input, computes L(x) as defined by the equation,
-        and returns x_out as output.
-
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        Applies advection scheme
         """
         pass
 
 
 class BackwardEuler(Advection):
 
-    @property
-    def lhs(self):
-        l = self.equation.label_map(
-            lambda t: t.has_label(time_derivative),
-            replace_labelled(self.trial, "subject"), drop)
-
-        l -= self.dt*self.equation.label_map(
+    def _label_terms(self):
+        self.equation = self.equation.label_map(
             lambda t: not t.has_label(time_derivative),
-            replace_labelled(self.trial, "subject"), drop)
-
-        return l.form
-
-    @property
-    def rhs(self):
-        return self.equation.label_map(
-            lambda t: t.has_label(time_derivative),
-            replace_labelled(self.qs, "subject"), drop).form
+            lambda t: implicit(t))
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.result)
 
 
 class ExplicitAdvection(Advection):
@@ -377,18 +377,10 @@ class ExplicitAdvection(Advection):
                       u_advecting=u_advecting)
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
-    @abstractproperty
-    def lhs(self):
-        l = self.equation.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_true=replace_labelled(self.trial, "subject"),
-                                    map_if_false=drop)
-        return l.form
-
-    @abstractproperty
-    def rhs(self):
-        r = self.equation.label_map(all_terms, replace_labelled(self.qs, "subject"))
-        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -self.dt*t)
-        return r.form
+    def _label_terms(self):
+        self.equation = self.equation.label_map(
+            lambda t: not t.has_label(time_derivative),
+            lambda t: explicit(t))
 
     @abstractmethod
     def apply_cycle(self, x_in, x_out):
@@ -435,7 +427,7 @@ class ForwardEuler(ExplicitAdvection):
     def apply_cycle(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.result)
 
 
 class SSPRK3(ExplicitAdvection):
@@ -461,15 +453,15 @@ class SSPRK3(ExplicitAdvection):
 
         if stage == 0:
             self.solver.solve()
-            self.q1.assign(self.dq)
+            self.q1.assign(self.result)
 
         elif stage == 1:
             self.solver.solve()
-            self.q1.assign(0.75*x_in + 0.25*self.dq)
+            self.q1.assign(0.75*x_in + 0.25*self.result)
 
         elif stage == 2:
             self.solver.solve()
-            self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
+            self.q1.assign((1./3.)*x_in + (2./3.)*self.result)
 
         if self.limiter is not None:
             self.limiter.apply(self.q1)
@@ -482,6 +474,7 @@ class SSPRK3(ExplicitAdvection):
         self.q1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
+
         x_out.assign(self.q1)
 
 
@@ -517,4 +510,4 @@ class ThetaMethod(Advection):
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.result)

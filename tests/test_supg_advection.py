@@ -13,21 +13,18 @@ def run(state, equations, schemes, dt, tmax):
 
 @pytest.mark.parametrize("scheme", ["ssprk", "im"])
 @pytest.mark.parametrize("space", ["cg", "theta", "vector", "HDiv"])
-def test_advection_supg(scheme, space, advection_setup):
+def test_advection_supg(scheme, space, tracer_setup):
     """
     This tests the embedded DG advection scheme for scalar and vector fields
     in slice geometry.
     """
-    setup = advection_setup("slice")
+    setup = tracer_setup("slice")
     state = setup.state
     dt = setup.dt
     tmax = setup.tmax
     f_init = setup.f_init
     f_end_expr = setup.f_end
     err = setup.err
-
-    eqns = []
-    schemes = []
 
     if space == "cg":
         fspace = FunctionSpace(state.mesh, "CG", 1)
@@ -57,18 +54,17 @@ def test_advection_supg(scheme, space, advection_setup):
         f_end = Function(fspace).project(f_end_expr)
 
     supg_opts = SUPGOptions()
-    eqns.append(
-        ("f", AdvectionEquation(state, "f", fspace, ibp=ibp))
-    )
+    equations = [("f", AdvectionEquation(state, fspace, "f", ibp=ibp))]
     f = state.fields("f")
     try:
         f.interpolate(f_init)
     except NotImplementedError:
         f.project(f_init)
-    if scheme == "ssprk":
-        schemes.append(("f", SSPRK3(options=supg_opts)))
-    elif scheme == "im":
-        schemes.append(("f", ThetaMethod(options=supg_opts)))
 
-    end_field = run(state, eqns, schemes, dt, tmax)
-    assert errornorm(end_field, f_end) < err
+    if scheme == "ssprk":
+        schemes = [("f", SSPRK3(options=supg_opts))]
+    elif scheme == "im":
+        schemes = [("f", ThetaMethod(options=supg_opts))]
+
+    f = run(state, equations, schemes, dt, tmax)
+    assert errornorm(f, f_end) < err
