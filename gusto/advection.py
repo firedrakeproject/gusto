@@ -6,7 +6,6 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms, has_labels,
                                                advecting_velocity,
                                                time_derivative, drop,
