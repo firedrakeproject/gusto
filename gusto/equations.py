@@ -9,7 +9,8 @@ from gusto.form_manipulation_labelling import (all_terms,
                                                subject, time_derivative,
                                                linearisation,
                                                drop, index, advection,
-                                               relabel_uadv, replace_labelled, Term)
+                                               relabel_uadv, replace_labelled,
+                                               has_labels, Term)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
@@ -331,7 +332,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         # grab the linearisation of each term and reconstruct the
         # bilinear form
         linear_form = sw_form.label_map(
-            lambda t: t.has_label(linearisation),
+            has_labels(linearisation),
             lambda t: Term(action(t.get("linearisation").form,
                                   t.get("subject")),
                            t.labels),

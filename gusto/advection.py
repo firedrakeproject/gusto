@@ -194,8 +194,8 @@ class Advection(object, metaclass=ABCMeta):
         # specified
         if len(active_labels) > 0:
             self.equation = self.equation.label_map(
-                lambda t: not any(t.has_label(time_derivative, *active_labels)),
-                map_if_true=drop)
+                has_labels(time_derivative, *active_labels),
+                map_if_false=drop)
 
         # if options have been specified via an AdvectionOptions
         # class, now is the time to apply them
@@ -218,16 +218,14 @@ class Advection(object, metaclass=ABCMeta):
                     # correct part of the term's subject
                     assert mixed_function
                     self.equation = self.equation.label_map(
-                        lambda t: t.has_label(advecting_velocity),
+                        has_labels(advecting_velocity),
                         relabel_uadv)
             else:
-                # the advecting velocity is fixed over the timestep and is
-                # specified by updating self.ubar
-                if self.prescribed_uadv:
-                    logger.warning(
-                        "prescribed advection overwritten by timeloop")
+                # the advecting velocity is fixed over the timestep
+                # and is specified by the advecting_velocity property
+                # of the timestepping class
                 self.equation = self.equation.label_map(
-                    lambda t: t.has_label(advecting_velocity),
+                    has_labels(advecting_velocity),
                     replace_labelled(u_advecting, "uadv"))
 
         # setup required functions
@@ -303,8 +301,8 @@ class Advection(object, metaclass=ABCMeta):
             has_labels(time_derivative, implicit),
             map_if_true=replace_labelled(self.trial, "subject"),
             map_if_false=drop)
-        l = l.label_map(lambda t: not t.has_label(time_derivative),
-                        lambda t: self.dt*t)
+        l = l.label_map(has_labels(time_derivative),
+                        map_if_false=lambda t: self.dt*t)
         return l.form
 
     @property
@@ -313,8 +311,8 @@ class Advection(object, metaclass=ABCMeta):
             has_labels(time_derivative, explicit),
             map_if_true=replace_labelled(self.qs, "subject"),
             map_if_false=drop)
-        r = r.label_map(lambda t: not t.has_label(time_derivative),
-                        lambda t: -self.dt*t)
+        r = r.label_map(has_labels(time_derivative),
+                        map_if_false=lambda t: -self.dt*t)
         return r.form
 
     @cached_property
@@ -336,8 +334,8 @@ class BackwardEuler(Advection):
 
     def _label_terms(self):
         self.equation = self.equation.label_map(
-            lambda t: not t.has_label(time_derivative),
-            lambda t: implicit(t))
+            has_labels(time_derivative),
+            map_if_false=lambda t: implicit(t))
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -379,8 +377,8 @@ class ExplicitAdvection(Advection):
 
     def _label_terms(self):
         self.equation = self.equation.label_map(
-            lambda t: not t.has_label(time_derivative),
-            lambda t: explicit(t))
+            has_labels(time_derivative),
+            map_if_false=lambda t: explicit(t))
 
     @abstractmethod
     def apply_cycle(self, x_in, x_out):
@@ -497,14 +495,16 @@ class ThetaMethod(Advection):
     def lhs(self):
 
         l = self.equation.label_map(all_terms, replace_labelled(self.trial, "subject"))
-        l = l.label_map(lambda t: not t.has_label(time_derivative), lambda t: self.theta*self.dt*t)
+        l = l.label_map(has_labels(time_derivative),
+                        map_if_false=lambda t: self.theta*self.dt*t)
         return l.form
 
     @cached_property
     def rhs(self):
 
         r = self.equation.label_map(all_terms, replace_labelled(self.qs, "subject", ))
-        r = r.label_map(lambda t: not t.has_label(time_derivative), lambda t: -(1-self.theta)*self.dt*t)
+        r = r.label_map(has_labels(time_derivative),
+                        map_if_false=lambda t: -(1-self.theta)*self.dt*t)
         return r.form
 
     def apply(self, x_in, x_out):
