@@ -9,7 +9,7 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (drop, time_derivative,
+from gusto.form_manipulation_labelling import (drop, time_derivative, subject,
                                                linearisation, linearise,
                                                replace_labelled, has_labels)
 from gusto import thermodynamics
@@ -751,7 +751,7 @@ class LinearTimesteppingSolver(object):
         self.xrhs = Function(W)
 
         aeqn = equation.label_map(has_labels(time_derivative),
-                                  replace_labelled(trials, "subject"),
+                                  replace_labelled(trials, subject),
                                   drop)
 
         aeqn -= beta*equation.label_map(has_labels(linearisation),
@@ -759,7 +759,7 @@ class LinearTimesteppingSolver(object):
                                         drop)
 
         Leqn = equation.label_map(has_labels(time_derivative),
-                                  replace_labelled(self.xrhs.split(), "subject"),
+                                  replace_labelled(self.xrhs.split(), subject),
                                   drop)
 
         # Solver for mixed system

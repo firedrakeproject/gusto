@@ -3,6 +3,7 @@ from firedrake import (TrialFunctions, Function,
                        LinearVariationalSolver, Constant)
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
+                                               subject,
                                                advection, has_labels,
                                                replace_labelled)
 
@@ -31,16 +32,16 @@ class Forcing(object):
         trials = TrialFunctions(W)
 
         a = equation.label_map(has_labels(time_derivative),
-                               replace_labelled(trials, "subject"),
+                               replace_labelled(trials, subject),
                                drop)
         L_explicit = Constant(-(1-alpha)*dt)*equation.label_map(
             has_labels(time_derivative),
             drop,
-            replace_labelled(self.x0.split(), "subject"))
+            replace_labelled(self.x0.split(), subject))
         L_implicit = Constant(-alpha*dt)*equation.label_map(
             has_labels(time_derivative),
             drop,
-            replace_labelled(self.x0.split(), "subject"))
+            replace_labelled(self.x0.split(), subject))
 
         Vu = W.split()[0]
         if Vu.extruded:

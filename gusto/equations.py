@@ -5,11 +5,11 @@ from firedrake import (Function, TestFunction, inner, dx, div, action,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions, TrialFunctions)
 from gusto.configuration import logger
-from gusto.form_manipulation_labelling import (all_terms,
+from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
                                                subject, time_derivative,
                                                linearisation,
                                                drop, index, advection,
-                                               relabel_uadv, replace_labelled,
+                                               replace_labelled,
                                                has_labels, Term)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.transport_equation import (vector_invariant_form,
@@ -270,7 +270,9 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         elif self.u_advection_option == "circulation_form":
             ke_form = kinetic_energy_form(state, W, 0)
             ke_form = advection.remove(ke_form)
-            ke_form = ke_form.label_map(all_terms, relabel_uadv)
+            ke_form = ke_form.label_map(all_terms,
+                                        replace_labelled(subject,
+                                                         advecting_velocity))
             u_adv = advection_equation_circulation_form(state, W, 0) + ke_form
         else:
             raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
@@ -278,7 +280,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         # define pressure gradient term and its linearisation
         pressure_gradient_term = subject(-g*div(w)*D*dx, X)
         linear_pg_term = pressure_gradient_term.label_map(
-            all_terms, replace_labelled(trials, "subject"))
+            all_terms, replace_labelled(trials, subject))
 
         # the base form for u contains the velocity advection term and
         # the pressure gradient term
@@ -298,7 +300,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
                     # define the coriolis term and its linearisation
                     coriolis_term = subject(field*inner(w, state.perp(u))*dx, X)
                     linear_coriolis_term = coriolis_term.label_map(
-                        all_terms, replace_labelled(trials, "subject"))
+                        all_terms, replace_labelled(trials, subject))
                     # add on the coriolis term
                     u_form += linearisation(coriolis_term, linear_coriolis_term)
 
@@ -313,7 +315,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         # define the depth continuity term and its linearisation
         Dadv = continuity_form(state, W, 1)
         Dadv_linear = linear_continuity_form(state, W, 1, qbar=H).label_map(
-            all_terms, replace_labelled(trials, "subject", "uadv"))
+            all_terms, replace_labelled(trials, subject, advecting_velocity))
         D_form = linearisation(Dadv, Dadv_linear)
 
         return index(u_form, 0) + index(D_form, 1)
@@ -329,12 +331,11 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         # get shallow water equation form
         sw_form = super().form()
 
-        # grab the linearisation of each term and reconstruct the
-        # bilinear form
+        # grab the linearisation of each term (a bilinear form) and
+        # apply to the term's subject to get the linear form
         linear_form = sw_form.label_map(
             has_labels(linearisation),
-            lambda t: Term(action(t.get("linearisation").form,
-                                  t.get("subject")),
+            lambda t: Term(action(t.get(linearisation).form, t.get(subject)),
                            t.labels),
             drop)
 

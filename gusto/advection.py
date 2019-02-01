@@ -6,11 +6,11 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
-from gusto.form_manipulation_labelling import (all_terms, has_labels,
-                                               advecting_velocity,
+from gusto.form_manipulation_labelling import (all_terms, has_labels, index,
+                                               advecting_velocity, subject,
                                                time_derivative, drop,
                                                replace_test, replace_labelled,
-                                               extract, Term, relabel_uadv,
+                                               extract, Term,
                                                explicit, implicit)
 from gusto.recovery import Recoverer
 
@@ -137,7 +137,7 @@ class Advection(object, metaclass=ABCMeta):
             default_uadv = Function(state.spaces("HDiv"))
 
             def replace_with_supg_test(t):
-                uadv = t.get("uadv") or default_uadv
+                uadv = t.get(advecting_velocity) or default_uadv
                 test = t.form.arguments()[0]
                 new_test = test + dot(dot(uadv, tau), grad(test))
                 return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
@@ -179,7 +179,8 @@ class Advection(object, metaclass=ABCMeta):
         # equation form that involve this prognostic field.
         if mixed_equation and not mixed_function:
             idx = field.function_space().index
-            self.equation = self.equation.label_map(lambda t: t.get("index") == idx, extract(idx), drop)
+            self.equation = self.equation.label_map(
+                lambda t: t.get(index) == idx, extract(idx), drop)
 
         # select labelled terms from the equation if active_labels are
         # specified
@@ -209,21 +210,21 @@ class Advection(object, metaclass=ABCMeta):
                 assert mixed_function
                 self.equation = self.equation.label_map(
                     has_labels(advecting_velocity),
-                    relabel_uadv)
+                    replace_labelled(subject, advecting_velocity))
             else:
                 # the advecting velocity is fixed over the timestep
                 # and is specified by the advecting_velocity property
                 # of the timestepping class
                 self.equation = self.equation.label_map(
                     has_labels(advecting_velocity),
-                    replace_labelled(u_advecting, "uadv"))
+                    replace_labelled(u_advecting, advecting_velocity))
 
         # setup required functions
         self.q1 = Function(self.fs)
         self.result = Function(self.fs)
         if mixed_equation and mixed_function:
             self.trial = TrialFunctions(self.fs)
-            self.qs = self.q1.split()
+            self.qs = self.q1
             default_solver_params = equation.solver_parameters
         else:
             self.trial = TrialFunction(self.fs)
@@ -289,7 +290,7 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
         l = self.equation.label_map(
             has_labels(time_derivative, implicit),
-            map_if_true=replace_labelled(self.trial, "subject"),
+            map_if_true=replace_labelled(self.trial, subject),
             map_if_false=drop)
         l = l.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: self.dt*t)
@@ -297,10 +298,12 @@ class Advection(object, metaclass=ABCMeta):
 
     @property
     def rhs(self):
+
         r = self.equation.label_map(
             has_labels(time_derivative, explicit),
-            map_if_true=replace_labelled(self.qs, "subject"),
+            map_if_true=replace_labelled(self.qs, subject),
             map_if_false=drop)
+
         r = r.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: -self.dt*t)
         return r.form
@@ -484,7 +487,8 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        l = self.equation.label_map(all_terms, replace_labelled(self.trial, "subject"))
+        l = self.equation.label_map(all_terms,
+                                    replace_labelled(self.trial, subject))
         l = l.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
         return l.form
@@ -492,7 +496,8 @@ class ThetaMethod(Advection):
     @cached_property
     def rhs(self):
 
-        r = self.equation.label_map(all_terms, replace_labelled(self.qs, "subject", ))
+        r = self.equation.label_map(all_terms,
+                                    replace_labelled(self.qs, subject))
         r = r.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
         return r.form

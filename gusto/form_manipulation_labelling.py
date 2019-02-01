@@ -34,7 +34,7 @@ def linearise(t):
     from both t and l, with the labels from l overwriting those from t if
     both present.
     """
-    t_linear = t.get("linearisation")
+    t_linear = t.get(linearisation)
     assert type(t_linear) == LabelledForm
     new_labels = t.labels.copy()
     new_labels["linearisation"] = True
@@ -61,7 +61,7 @@ def replace_test(new_test):
     return rep
 
 
-def replace_labelled(replacer, *labels):
+def replace_labelled(replacer_in, *labels):
     """
     :arg labels: str(s), specifying the label(s) of the part of the form
     that is to be replaced
@@ -73,17 +73,39 @@ def replace_labelled(replacer, *labels):
     has been replaced by (possibly part of) the replacer. The labels
     remain the same.
     """
+
     def rep(t):
+
+        if type(replacer_in) is Label:
+            replacer = t.get(replacer_in)
+            remove_labels = True
+        else:
+            replacer = replacer_in
+            remove_labels = False
+
+        # dictionary to pass to ufl.replace
         replace_dict = {}
+
         for label in labels:
+            # get the thing we're going to replace
             old = t.get(label)
+
+            # return t unchanged if no part of it is labelled with label
             if old is None:
                 return Term(t.form, t.labels)
+
+            # if t.get(label) returns True then the label does not
+            # apply to part of the form so we cannot replace it.
             if type(old) is bool:
                 raise ValueError("This label does not label a part of this term's form")
+            # is replacer is a ufl expression
             repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
-            # check if we need to extract part of the replacer
+
+            # size returns either the length of a tuple or the length
+            # of a function's function space
             size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
+            # function to extract either part of a tuple or part of a
+            # mixed function
             extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
             if size(old) == 1:
                 if repl_expr:
@@ -107,24 +129,15 @@ def replace_labelled(replacer, *labels):
                         new = replacer
                     for k, v in zip(old.split(), new):
                         replace_dict[k] = v
+
         new_form = ufl.replace(t.form, replace_dict)
-        return Term(new_form, t.labels)
+        new_term = Term(new_form, t.labels)
+        if remove_labels:
+            for label in labels:
+                new_term = label.remove(new_term)
+        return new_term
 
     return rep
-
-
-def relabel_uadv(t):
-    """
-    :arg t: a :class:`Term` object
-
-    Returns a :class:`LabelledForm` with a term where the form has the
-    correct part of the subject function instead of the part labelled "uadv".
-    The advecting velocity label has been removed.
-    """
-    old = t.labels["uadv"]
-    new = t.get("subject").split()[0]
-    new_form = ufl.replace(t.form, {old: new})
-    return advecting_velocity.remove(Term(new_form, t.labels))
 
 
 class Term(object):
@@ -140,8 +153,8 @@ class Term(object):
         self.form = form
         self.labels = label_dict or {}
 
-    def get(self, key, default=None):
-        return self.labels.get(key)
+    def get(self, label, default=None):
+        return self.labels.get(label.label)
 
     def has_label(self, *labels):
         if len(labels) == 1:
