@@ -134,9 +134,7 @@ class Advection(object, metaclass=ABCMeta):
 
             # replace test function with supg test function
             test = TestFunction(self.fs)
-            default_uadv = (
-                self.prescribed_uadv or Function(state.spaces("HDiv"))
-            )
+            default_uadv = Function(state.spaces("HDiv"))
 
             def replace_with_supg_test(t):
                 uadv = t.get("uadv") or default_uadv
@@ -160,8 +158,7 @@ class Advection(object, metaclass=ABCMeta):
         :arg active_labels: str(s) specifying the labels of terms in the
         form that this scheme should be applied to
         :arg u_advecting: (optional) a ufl expression for the advecting
-        velocity. If not specified, check equation for a prescribed velocity.
-        If that is not present then treat any parts of the form labelled
+        velocity. If not present then treat any parts of the form labelled
         "uadv" as the equation subject.
         """
         if self._initialised:
@@ -171,11 +168,6 @@ class Advection(object, metaclass=ABCMeta):
         self.field = field
         # store just the form
         self.equation = equation()
-
-        try:
-            self.prescribed_uadv = equation.uadv
-        except AttributeError:
-            self.prescribed_uadv = False
 
         # figure out if the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1
@@ -211,14 +203,13 @@ class Advection(object, metaclass=ABCMeta):
         if any([t.has_label(advecting_velocity) for t in self.equation]):
             # setup advecting velocity
             if u_advecting is None:
-                if not self.prescribed_uadv:
-                    # the advecting velocity is calculated as part of this
-                    # timestepping scheme and must be replaced with the
-                    # correct part of the term's subject
-                    assert mixed_function
-                    self.equation = self.equation.label_map(
-                        has_labels(advecting_velocity),
-                        relabel_uadv)
+                # the advecting velocity is calculated as part of this
+                # timestepping scheme and must be replaced with the
+                # correct part of the term's subject
+                assert mixed_function
+                self.equation = self.equation.label_map(
+                    has_labels(advecting_velocity),
+                    relabel_uadv)
             else:
                 # the advecting velocity is fixed over the timestep
                 # and is specified by the advecting_velocity property
