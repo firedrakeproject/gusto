@@ -289,14 +289,12 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
     :arg moisture (optional): list of names of moisture fields.
     """
 
-    # Solver parameters for the Lagrange multiplier system
-    # NOTE: The reduced operator is not symmetric
     solver_parameters = {'mat_type': 'matfree',
-                         'pmat_type': 'matfree',
                          'ksp_type': 'preonly',
                          'pc_type': 'python',
                          'pc_python_type': 'firedrake.SCPC',
                          'pc_sc_eliminate_fields': '0, 1',
+                         # The reduced operator is not symmetric
                          'condensed_field': {'ksp_type': 'fgmres',
                                              'ksp_rtol': 1.0e-8,
                                              'ksp_atol': 1.0e-8,
@@ -304,7 +302,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                                              'pc_type': 'gamg',
                                              'pc_gamg_sym_graph': True,
                                              'mg_levels': {'ksp_type': 'gmres',
-                                                           'ksp_max_its': 5,
+                                                           'ksp_max_it': 5,
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
@@ -449,8 +447,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
                + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
                # constraint equation to enforce continuity of the velocity
-               # (coefficients added to make the trace coupling symmetric
-               # with the terms picked up in the momentum equation)
+               # (coeffs added to make the off-diagonal blocks symmetric)
                + beta_cp*dl('+')*jump(thetabar_w*u, n=n)*(dS_vp + dS_hp)
                + beta_cp*dl*dot(thetabar_w*u, n)*ds_vp
                + beta_cp*dl*dot(thetabar_w*u, n)*ds_tbp)
