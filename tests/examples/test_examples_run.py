@@ -19,7 +19,8 @@ compressible_examples = ["compressible_eady.py",
                          "sk_hydrostatic.py",
                          "sk_linear_advection.py",
                          "sk_nonlinear.py",
-                         "tracer.py"]
+                         "tracer.py",
+                         "unsaturated_bubble.py"]
 
 
 @pytest.fixture(params=glob.glob("%s/*.py" % examples_dir),
