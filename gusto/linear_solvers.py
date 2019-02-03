@@ -447,10 +447,9 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
                + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
                # constraint equation to enforce continuity of the velocity
-               # (coeffs added to make the off-diagonal blocks symmetric)
-               + beta_cp*dl('+')*jump(thetabar_w*u, n=n)*(dS_vp + dS_hp)
-               + beta_cp*dl*dot(thetabar_w*u, n)*ds_vp
-               + beta_cp*dl*dot(thetabar_w*u, n)*ds_tbp)
+               + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
+               + dl*dot(u, n)*ds_vp
+               + dl*dot(u, n)*ds_tbp)
 
         if mu is not None:
             eqn += dt*mu*inner(w, k)*inner(u, k)*dx
