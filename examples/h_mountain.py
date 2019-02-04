@@ -61,7 +61,8 @@ if hybridization:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=30,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
 
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
@@ -165,7 +166,6 @@ if hybridization:
               # So for reconstruction, we eliminate rho into u
               'pc_sc_eliminate_fields': '1, 0',
               'condensed_field': {'ksp_type': 'fgmres',
-                                  'ksp_monitor_true_residual': True,
                                   'ksp_rtol': 1.0e-8,
                                   'ksp_atol': 1.0e-8,
                                   'ksp_max_it': 100,

@@ -54,7 +54,8 @@ if limit:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dumplist=['u'],
-                          perturbation_fields=['theta'])
+                          perturbation_fields=['theta'],
+                          log_level='INFO')
 
 params = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)

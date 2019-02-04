@@ -63,7 +63,8 @@ if hybridization:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['rho', 'theta', 'ExnerPi'])
+                          perturbation_fields=['rho', 'theta', 'ExnerPi'],
+                          log_level='INFO')
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided

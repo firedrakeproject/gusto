@@ -32,7 +32,8 @@ if hybridization:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=10,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
 
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
