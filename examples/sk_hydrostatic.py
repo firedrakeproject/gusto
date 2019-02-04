@@ -92,7 +92,6 @@ theta0.interpolate(theta_b + theta_pert)
 params = {'pc_type': 'fieldsplit',
           'pc_fieldsplit_type': 'schur',
           'ksp_type': 'gmres',
-          'ksp_monitor_true_residual': True,
           'ksp_max_it': 100,
           'ksp_gmres_restart': 50,
           'pc_fieldsplit_schur_fact_type': 'FULL',
