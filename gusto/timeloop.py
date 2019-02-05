@@ -362,16 +362,6 @@ class MovingMeshAdvectionStep(AdvectionStep):
                       zip(state.fieldlist, x_mid.split())}
         self.X0 = X0
         self.X1 = X1
-        cell = state.mesh_new.ufl_cell().cellname()
-        V1_elt = FiniteElement("BDM", cell, 2)
-
-        V0 = FunctionSpace(state.mesh_new, V1_elt)
-        V1 = FunctionSpace(state.mesh_new, "DG", 1)
-        W = MixedFunctionSpace((V0, V1))
-        x_mid_new = Function(W)
-        self.x_mid_new = {name: func for (name, func) in
-                          zip(state.fieldlist, x_mid_new.split())}
-        self.x_mid_new["f"] = Function(V1)
 
         self.v = Function(state.mesh.coordinates.function_space())
         self.v_V1 = Function(state.spaces("HDiv"))
@@ -386,7 +376,10 @@ class MovingMeshAdvectionStep(AdvectionStep):
                 if isinstance(advection, NoAdvection):
                     pass
                 elif (hasattr(advection.equation, "continuity") and advection.equation.continuity) or isinstance(advection.equation, EulerPoincare):
-                    self._projections[field] = "yes"
+                    eqn = advection.equation
+                    lhs = eqn.mass_term(eqn.trial)
+                    rhs = eqn.mass_term(x_in[field])
+                    self._projections[field] = (lhs, rhs)
         return self._projections
 
     def apply(self, x_in, x_out):
@@ -436,27 +429,24 @@ class MovingMeshAdvectionStep(AdvectionStep):
             advection.update_ubar((1 - self.alpha)*(un - self.v_V1))
             advection.apply(x_in[field], self.x_mid[field])
 
-            # put mesh_new into mesh so it gets into LHS of projections
             if field in self.projections(self.x_mid).keys():
-                self.state.mesh_new.coordinates.dat.data[:] = X1.dat.data[:]
-                soln = Function(self.x_mid_new[field].function_space())
-                test_o = TestFunction(self.x_mid[field].function_space())
-                L = inner(test_o, self.x_mid[field])*dx
-                with assemble(L).dat.vec_ro as v:
+                lhs, rhs = self.projections(self.x_mid)[field]
+                with assemble(rhs).dat.vec as v:
                     Lvec = v
-                test = TestFunction(self.x_mid_new[field].function_space())
-                trial = TrialFunction(self.x_mid_new[field].function_space())
-                amat = assemble(inner(test, trial)*dx)
+
+                self.state.mesh.coordinates.assign(X1)
+
+                amat = assemble(lhs)
                 amat.force_evaluation()
                 a = amat.M.handle
                 ksp = PETSc.KSP().create()
                 ksp.setOperators(a)
                 ksp.setFromOptions()
-                with soln.dat.vec as x:
-                    ksp.solve(Lvec, x)
-                self.x_mid[field].dat.data[:] = soln.dat.data[:]
-            self.state.mesh.coordinates.assign(X1)
 
+                with self.x_mid[field].dat.vec as x:
+                    ksp.solve(Lvec, x)
+
+            self.state.mesh.coordinates.assign(X1)
             # advect field on new mesh
             advection.update_ubar(self.alpha*(unp1 - self.v1_V1))
             advection.apply(self.x_mid[field], x_out[field])
