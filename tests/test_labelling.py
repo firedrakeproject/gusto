@@ -96,9 +96,9 @@ def test_label_labelled_form(labelled_form, label_a, label_x):
     new = label_x(labelled_form)
     assert isinstance(new, LabelledForm)
     assert all([t.has_label(label_a, label_x) for t in new])
-    assert all([t.get("x") == "y" for t in new])
+    assert all([t.get(label_x) == "y" for t in new])
     new = label_x(new, "z")
-    assert all([t.get("x") == "z" for t in new])
+    assert all([t.get(label_x) == "z" for t in new])
 
 
 def test_add_term(term, labelled_form):
@@ -184,8 +184,8 @@ def test_label_map(labelled_form, label_a, label_x, form):
     a = labelled_form + label_x(form)
     new = a.label_map(lambda t: t.has_label(label_a), lambda t: label_x(t, "z"), lambda t: label_x(t, "q"))
     assert isinstance(new, LabelledForm)
-    assert all([t.get("x") == "z" for t in new if "a" in t.labels.keys()])
-    assert all([t.get("x") == "q" for t in new if "a" not in t.labels.keys()])
+    assert all([t.get(label_x) == "z" for t in new if "a" in t.labels.keys()])
+    assert all([t.get(label_x) == "q" for t in new if "a" not in t.labels.keys()])
 
 
 def test_identity(labelled_form, label_a):
@@ -224,13 +224,13 @@ def test_extract(mixed_form, mixed_function, V):
     """
     new = Function(V)
     a = subject(mixed_form, mixed_function)
-    a = a.label_map(lambda t: t.get("index") == 1, extract(1), drop)
+    a = a.label_map(lambda t: t.get(index) == 1, extract(1), drop)
     a_old = a
-    # this would fail due to the shape mismatch is there were any
+    # this would fail due to the shape mismatch if there were any
     # terms still containing subject.split()[0]...
     a = a.label_map(
         all_terms, lambda t: Term(
-            ufl.replace(t.form, {t.get("subject").split()[0]: new}),
+            ufl.replace(t.form, {t.get(subject).split()[0]: new}),
             t.labels)
     )
     # ...instead nothing has happened
@@ -238,7 +238,7 @@ def test_extract(mixed_form, mixed_function, V):
     # this works...
     a = a.label_map(
         all_terms, lambda t: Term(
-            ufl.replace(t.form, {t.get("subject").split()[1]: new}),
+            ufl.replace(t.form, {t.get(subject).split()[1]: new}),
             t.labels)
     )
     # ...and the form has changed
@@ -273,7 +273,7 @@ def test_replace_labelled(V, labelled_form, label_a, label_x):
     replacer_fn = Function(V).interpolate(Constant(2.))
     t_old = labelled_form.terms[0]
 
-    new = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, "x"))
+    new = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, label_x))
     t_new = new.terms[0]
     # check that we have a new instance of term
     assert not t_new == t_old
@@ -281,14 +281,14 @@ def test_replace_labelled(V, labelled_form, label_a, label_x):
     assert t_new.form == t_old.form
     assert t_new.labels == t_old.labels
 
-    a = labelled_form.label_map(all_terms, replace_labelled(replacer_tri, "a"))
+    a = labelled_form.label_map(all_terms, replace_labelled(replacer_tri, label_a))
     # check that the form now has 2 arguments because it has both test
     # and trial functions
     assert len(a.form.arguments()) == 2
 
     # check that L contains replacer_fn by solving
     # <test, trial> = <test, replacer_fn>
-    L = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, "a"))
+    L = labelled_form.label_map(all_terms, replace_labelled(replacer_fn, label_a))
     b = Function(V)
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
@@ -298,7 +298,7 @@ def test_replace_labelled(V, labelled_form, label_a, label_x):
     replacer_expr = 2*replacer_fn
     # check that L contains replacer_expr by solving
     # <test, trial> = <test, replacer_fn>
-    L = labelled_form.label_map(all_terms, replace_labelled(replacer_expr, "a"))
+    L = labelled_form.label_map(all_terms, replace_labelled(replacer_expr, label_a))
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
     solver.solve()
@@ -317,7 +317,7 @@ def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
       with replacer
     """
     replacer_tri = TrialFunctions(W)
-    a = mixed_form.label_map(all_terms, replace_labelled(replacer_tri, "a"))
+    a = mixed_form.label_map(all_terms, replace_labelled(replacer_tri, label_a))
     # check that the form now has 2 arguments because it has both test
     # and trial functions
     assert len(a.form.arguments()) == 2
@@ -329,7 +329,7 @@ def test_replace_labelled_mixed(W, mixed_form, label_a, label_x):
     f.interpolate(as_vector([1., 0.]))
     g.interpolate(Constant(2.))
     L = mixed_form.label_map(all_terms, replace_labelled(replacer_mixed_fn,
-                                                         "a"))
+                                                         label_a))
     b = Function(W)
     prob = LinearVariationalProblem(a.form, L.form, b)
     solver = LinearVariationalSolver(prob)
