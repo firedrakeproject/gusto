@@ -88,15 +88,15 @@ def replace_labelled(replacer_in, *labels):
 
         for label in labels:
             # get the thing we're going to replace
-            old = t.get(label)
+            labelled = t.get(label)
 
             # return t unchanged if no part of it is labelled with label
-            if old is None:
+            if labelled is None:
                 return Term(t.form, t.labels)
 
             # if t.get(label) returns True then the label does not
             # apply to part of the form so we cannot replace it.
-            if type(old) is bool:
+            if type(labelled) is bool:
                 raise ValueError("This label does not label a part of this term's form")
             # is replacer is a ufl expression
             repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
@@ -104,37 +104,44 @@ def replace_labelled(replacer_in, *labels):
             # size returns either the length of a tuple or the length
             # of a function's function space
             size = lambda q: len(q) if type(q) is tuple else len(q.function_space())
-            # function to extract either part of a tuple or part of a
-            # mixed function
-            extract = lambda q, idx: q[idx] if type(q) is tuple else q.split()[idx]
+
+            # if either replacer or labelled are Functions defined on
+            # a mixed function space then split them to get a tuple of
+            # functions
+            if type(replacer) is Function and size(replacer) > 1:
+                new = replacer.split()
+            else:
+                new = replacer
+            if type(labelled) is Function and size(labelled) > 1:
+                old = labelled.split()
+            else:
+                old = labelled
+
+            # constract the replace_dict = {old: new}, comparing the
+            # sizes of the part to be replaced and its replacement to
+            # figure out if we need to extract just one component of
+            # either of them
             if size(old) == 1:
-                if repl_expr:
-                    new = replacer
-                elif size(replacer) == 1:
-                    new = replacer
-                else:
-                    new = extract(replacer, old.function_space().index)
+                if not repl_expr and size(new) > 1:
+                    new = new[old.function_space().index]
                 replace_dict[old] = new
             else:
-                if repl_expr:
-                    new = replacer
-                    replace_dict[extract(old, new.function_space().index)] = new
-                elif size(replacer) == 1:
-                    new = replacer
-                    replace_dict[extract(old, new.function_space().index)] = new
+                if repl_expr or size(new) == 1:
+                    replace_dict[old[new.function_space().index]] = new
                 else:
-                    if type(replacer) is Function:
-                        new = split(replacer)
-                    else:
-                        new = replacer
-                    for k, v in zip(old.split(), new):
+                    for k, v in zip(old, new):
                         replace_dict[k] = v
 
+        # construct new form and term
         new_form = ufl.replace(t.form, replace_dict)
         new_term = Term(new_form, t.labels)
+
+        # if we have replaced a labelled part of the form with another
+        # labelled part then we need to remove the original label
         if remove_labels:
             for label in labels:
                 new_term = label.remove(new_term)
+
         return new_term
 
     return rep
