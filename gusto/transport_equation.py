@@ -75,11 +75,8 @@ class TransportEquation(object, metaclass=ABCMeta):
         if state.output.log_level == DEBUG:
             self.solver_parameters["ksp_monitor_true_residual"] = True
 
-    def mass_term(self, q, domain=None):
-        if domain is None:
-            return inner(self.test, q)*dx
-        else:
-            return inner(self.test, q)*dx(domain=domain)
+    def mass_term(self, q):
+        return inner(self.test, q)*dx
 
     @abstractmethod
     def advection_term(self):
