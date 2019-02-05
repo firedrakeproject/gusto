@@ -5,7 +5,8 @@ from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
 from gusto.advection import NoAdvection
 from gusto.moving_mesh.utility_functions import spherical_logarithm
-from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver
+from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver, FiniteElement, FunctionSpace, MixedFunctionSpace, TestFunction, TrialFunction, inner, assemble, dx, VectorFunctionSpace
+from firedrake.petsc import PETSc
 
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
 
@@ -140,8 +141,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
 
             if state.timestepping.move_mesh:
-                # This is used as the "old mesh" domain in projections
-                state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
+
                 self.X0.assign(self.X1)
 
                 self.mesh_generator.pre_meshgen_callback()
@@ -257,8 +257,6 @@ class CrankNicolson(BaseTimestepper):
         for k in range(state.timestepping.maxk):
 
             if state.timestepping.move_mesh:
-                # This is used as the "old mesh" domain in projections
-                state.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
                 self.X0.assign(self.X1)
 
                 self.mesh_generator.pre_meshgen_callback()
@@ -364,6 +362,16 @@ class MovingMeshAdvectionStep(AdvectionStep):
                       zip(state.fieldlist, x_mid.split())}
         self.X0 = X0
         self.X1 = X1
+        cell = state.mesh_new.ufl_cell().cellname()
+        V1_elt = FiniteElement("BDM", cell, 2)
+
+        V0 = FunctionSpace(state.mesh_new, V1_elt)
+        V1 = FunctionSpace(state.mesh_new, "DG", 1)
+        W = MixedFunctionSpace((V0, V1))
+        x_mid_new = Function(W)
+        self.x_mid_new = {name: func for (name, func) in
+                          zip(state.fieldlist, x_mid_new.split())}
+        self.x_mid_new["f"] = Function(V1)
 
         self.v = Function(state.mesh.coordinates.function_space())
         self.v_V1 = Function(state.spaces("HDiv"))
@@ -373,15 +381,12 @@ class MovingMeshAdvectionStep(AdvectionStep):
     def projections(self, x_in):
         if not hasattr(self, "_projections"):
             self._projections = {}
+                
             for field, advection in self.advected_fields:
                 if isinstance(advection, NoAdvection):
                     pass
                 elif (hasattr(advection.equation, "continuity") and advection.equation.continuity) or isinstance(advection.equation, EulerPoincare):
-                    eqn = advection.equation
-                    LHS = eqn.mass_term(eqn.trial)
-                    RHS = eqn.mass_term(x_in[field], domain=self.state.mesh_old)
-                    prob = LinearVariationalProblem(LHS, RHS, x_in[field], constant_jacobian=False)
-                    self._projections[field] = LinearVariationalSolver(prob)
+                    self._projections[field] = "yes"
         return self._projections
 
     def apply(self, x_in, x_out):
@@ -432,10 +437,25 @@ class MovingMeshAdvectionStep(AdvectionStep):
             advection.apply(x_in[field], self.x_mid[field])
 
             # put mesh_new into mesh so it gets into LHS of projections
-            self.state.mesh.coordinates.assign(X1)
-
             if field in self.projections(self.x_mid).keys():
-                self.projections(self.x_mid)[field].solve()
+                self.state.mesh_new.coordinates.dat.data[:] = X1.dat.data[:]
+                soln = Function(self.x_mid_new[field].function_space())
+                test_o = TestFunction(self.x_mid[field].function_space())
+                L = inner(test_o, self.x_mid[field])*dx
+                with assemble(L).dat.vec_ro as v:
+                    Lvec = v
+                test = TestFunction(self.x_mid_new[field].function_space())
+                trial = TrialFunction(self.x_mid_new[field].function_space())
+                amat = assemble(inner(test, trial)*dx)
+                amat.force_evaluation()
+                a = amat.M.handle
+                ksp = PETSc.KSP().create()
+                ksp.setOperators(a)
+                ksp.setFromOptions()
+                with soln.dat.vec as x:
+                    ksp.solve(Lvec, x)
+                self.x_mid[field].dat.data[:] = soln.dat.data[:]
+            self.state.mesh.coordinates.assign(X1)
 
             # advect field on new mesh
             advection.update_ubar(self.alpha*(unp1 - self.v1_V1))

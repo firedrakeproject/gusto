@@ -3,7 +3,7 @@ from firedrake import split, LinearVariationalProblem, \
     TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal, \
     div, dx, jump, avg, dS_v, dS_h, inner, MixedFunctionSpace, dot, grad, \
     Function, VectorSpaceBasis
-from firedrake.solving_utils import flatten_parameters
+from firedrake.petsc import flatten_parameters
 
 from gusto.configuration import DEBUG
 from gusto import thermodynamics

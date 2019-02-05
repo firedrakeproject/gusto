@@ -333,7 +333,10 @@ for (int i=0; i<xi.dofs; i++) {
         self.monitor.m_old.assign(self.monitor.m)
 
         # Generate new mesh, coords put in self.x
-        self.mesh_solv.solve()
+        try:
+            self.mesh_solv.solve()
+        except:
+            print("mesh solver did not converge - oh well, continuing anyway!")
 
         # Move data from internal mesh to output mesh.
         if self.samecoorddegree:

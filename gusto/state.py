@@ -223,8 +223,8 @@ class State(object):
 
         if self.timestepping.move_mesh:
             self.constant_jacobian = False
-            xold = Function(mesh.coordinates)
-            self.mesh_old = Mesh(xold)
+            xnew = Function(mesh.coordinates)
+            self.mesh_new = Mesh(xnew)
         else:
             self.constant_jacobian = True
 

@@ -83,8 +83,11 @@ for ref_level, dt in ref_dt.items():
         state.fields("u").project(uexpr)
         state.fields("D").interpolate(Dexpr)
 
+    def reinterpolate_coriolis():
+        state.fields("coriolis").interpolate(fexpr)
+
     monitor = MonitorFunction(state.fields("D"))
-    mesh_generator = OptimalTransportMeshGenerator(mesh, monitor)
+    mesh_generator = OptimalTransportMeshGenerator(mesh, monitor, post_meshgen_callback=reinterpolate_coriolis)
 
     mesh_generator.get_first_mesh(initialise_fn)
 
