@@ -5,7 +5,7 @@ from gusto.linear_solvers import IncompressibleSolver
 from gusto.transport_equation import EulerPoincare
 from gusto.advection import NoAdvection
 from gusto.moving_mesh.utility_functions import spherical_logarithm
-from firedrake import DirichletBC, Function, LinearVariationalProblem, LinearVariationalSolver, FiniteElement, FunctionSpace, MixedFunctionSpace, TestFunction, TrialFunction, inner, assemble, dx, VectorFunctionSpace
+from firedrake import DirichletBC, Function, assemble
 from firedrake.petsc import PETSc
 
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
@@ -371,7 +371,6 @@ class MovingMeshAdvectionStep(AdvectionStep):
     def projections(self, x_in):
         if not hasattr(self, "_projections"):
             self._projections = {}
-                
             for field, advection in self.advected_fields:
                 if isinstance(advection, NoAdvection):
                     pass
