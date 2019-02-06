@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds, ds_v, ds_t, ds_b, VectorElement,
+                       ds_v, ds_t, ds_b, VectorElement,
                        outer, sign, cross, CellNormal, Constant,
                        curl, BrokenElement, FunctionSpace)
 from gusto.configuration import logger, DEBUG, SUPGOptions
