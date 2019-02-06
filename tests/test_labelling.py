@@ -101,6 +101,18 @@ def test_label_labelled_form(labelled_form, label_a, label_x):
     assert all([t.get(label_x) == "z" for t in new])
 
 
+def test_remove_label(form, labelled_form, label_a):
+    """
+    test that we can remove labels from both terms and labelled forms
+    """
+    t = Term(form, {label_a.label: label_a.value})
+    assert t.has_label(label_a)
+    t_new = label_a.remove(t)
+    assert not t_new.has_label(label_a)
+    new_labelled_form = label_a.remove(labelled_form)
+    assert not any([t.has_label(label_a) for t in new_labelled_form])
+
+
 def test_add_term(term, labelled_form):
     """
     test that adding to a term works as expected
