@@ -1,7 +1,7 @@
 import ufl
 import functools
 import operator
-from firedrake import Function, TrialFunction, Constant, split
+from firedrake import Function, TrialFunction, Constant
 from firedrake.formmanipulation import split_form
 
 
@@ -12,6 +12,11 @@ extract = lambda idx: lambda t: Term(split_form(t.form)[idx].form, t.labels)
 
 
 def has_labels(*labels):
+    """:arg labels: the :class:`Label` object(s)
+
+    Returns a function that takes in a :class:`Term` object and checks
+    whether is has the label(s).
+    """
 
     def t_has_labels(t):
         if len(labels) == 1:
@@ -63,19 +68,22 @@ def replace_test(new_test):
 
 def replace_labelled(replacer_in, *labels):
     """
-    :arg labels: str(s), specifying the label(s) of the part of the form
-    that is to be replaced
+    :arg labels: :class:`Label` objects specifying the label(s) of the
+    part of the form that is to be replaced
     :arg replacer: :class:`ufl.core.expr.Expr`, :func:`Function`,
-    :func:`TrialFunction` or tuple thereof.
+    :func:`TrialFunction`, or tuple thereof, or a :class:`Label` object.
 
     Returns a function that takes in t, a :class:`Term`, and returns
     a new :class:`Term` where the part of the form labelled by label
     has been replaced by (possibly part of) the replacer. The labels
-    remain the same.
+    remain the same, unless the replacer is another labelled part of
+    the form, in which case the original label is removed.
     """
 
     def rep(t):
 
+        # if replacer_in is aa label, we need to grab that part of the
+        # form and flag that the original label needs to be removed
         if type(replacer_in) is Label:
             replacer = t.get(replacer_in)
             remove_labels = True
@@ -90,7 +98,8 @@ def replace_labelled(replacer_in, *labels):
             # get the thing we're going to replace
             labelled = t.get(label)
 
-            # return t unchanged if no part of it is labelled with label
+            # return a new term with form and labels identical to t if
+            # no part of the form is labelled with label
             if labelled is None:
                 return Term(t.form, t.labels)
 
@@ -98,8 +107,13 @@ def replace_labelled(replacer_in, *labels):
             # apply to part of the form so we cannot replace it.
             if type(labelled) is bool:
                 raise ValueError("This label does not label a part of this term's form")
-            # is replacer is a ufl expression
-            repl_expr = isinstance(replacer, ufl.core.expr.Expr) and not isinstance(replacer, Function)
+
+            # flag if replacer is a ufl expression - if it is then we
+            # trust it is of the right shape below
+            repl_expr = (
+                isinstance(replacer, ufl.core.expr.Expr)
+                and not isinstance(replacer, Function)
+            )
 
             # size returns either the length of a tuple or the length
             # of a function's function space
