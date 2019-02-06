@@ -449,11 +449,10 @@ class VectorInvariant(TransportEquation):
                 perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
             else:
                 perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
-            gradperp = lambda u: perp(grad(u))
 
             if self.ibp == IntegrateByParts.ONCE:
                 L = (
-                    -inner(gradperp(inner(self.test, perp(self.ubar))), q)*dx
+                    -inner(perp(grad(inner(self.test, perp(self.ubar)))), q)*dx
                     - inner(jump(inner(self.test, perp(self.ubar)), n),
                             perp_u_upwind(q))*self.dS
                 )
