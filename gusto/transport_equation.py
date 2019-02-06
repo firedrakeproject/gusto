@@ -113,7 +113,7 @@ class LinearAdvection(TransportEquation):
         self.qbar = qbar
 
         # currently only used with the following option combinations:
-        if self.continuity and ibp is not "once":
+        if self.continuity and ibp != "once":
             raise NotImplementedError("If we are solving a linear continuity equation, we integrate by parts once")
         if not self.continuity and ibp is not None:
             raise NotImplementedError("If we are solving a linear advection equation, we do not integrate by parts.")

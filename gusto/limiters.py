@@ -61,13 +61,13 @@ class ThetaLimiter(object):
         # check this is the right space, only currently working for 2D extruded mesh
         if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
             # check that horizontal degree is 1 and vertical degree is 2
-            if self.Vt.ufl_element().degree()[0] is not 1 or \
-               self.Vt.ufl_element().degree()[1] is not 2:
+            if self.Vt.ufl_element().degree()[0] != 1 or \
+               self.Vt.ufl_element().degree()[1] != 2:
                 raise ValueError('This is not the right limiter for this space.')
             # check that continuity of the spaces is correct
             # this will fail if the space does not use broken elements
-            if self.Vt.ufl_element()._element.sobolev_space()[0].name is not 'L2' or \
-               self.Vt.ufl_element()._element.sobolev_space()[1].name is not 'H1':
+            if self.Vt.ufl_element()._element.sobolev_space()[0].name != 'L2' or \
+               self.Vt.ufl_element()._element.sobolev_space()[1].name != 'H1':
                 raise ValueError('This is not the right limiter for this space.')
         else:
             logger.warning('This limiter may not work for the space you are using.')
