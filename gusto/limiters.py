@@ -1,8 +1,6 @@
 from __future__ import absolute_import, print_function, division
 from gusto.configuration import logger
-from firedrake import dx
-from firedrake.function import Function
-from firedrake.functionspace import FunctionSpace
+from firedrake import dx, BrokenElement, Function, FunctionSpace
 from firedrake.parloops import par_loop, READ, RW, INC
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
@@ -51,14 +49,15 @@ class ThetaLimiter(object):
     the central nodes to prevent new maxima or minima forming.
     """
 
-    def __init__(self, equation):
+    def __init__(self, space):
         """
         Initialise limiter
 
-        :param space : equation, as we need the broken space attached to it
+        :param space: the space in which theta lies.
+        It should be the DG1xCG2 space.
         """
 
-        self.Vt = equation.space
+        self.Vt = FunctionSpace(space.mesh(), BrokenElement(space.ufl_element()))
         # check this is the right space, only currently working for 2D extruded mesh
         if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
             # check that horizontal degree is 1 and vertical degree is 2

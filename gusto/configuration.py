@@ -58,6 +58,7 @@ class OutputParameters(Configuration):
     #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
     #: default value "warning"
     log_level = WARNING
+    dump_vtus = True
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []

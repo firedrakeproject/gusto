@@ -157,16 +157,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybridization:
-    params = {'ksp_type': 'gmres',
-              'ksp_rtol': 1.0e-8,
-              'pc_type': 'gamg',
-              'pc_gamg_sym_graph': True,
-              'mg_levels': {'ksp_type': 'richardson',
-                            'ksp_max_it': 5,
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu'}}
-    linear_solver = HybridizedCompressibleSolver(state, solver_parameters=params,
-                                                 overwrite_solver_parameters=True)
+    linear_solver = HybridizedCompressibleSolver(state)
 else:
     # LU parameters
     params = {'pc_type': 'lu',

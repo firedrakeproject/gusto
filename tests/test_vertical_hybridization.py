@@ -69,16 +69,19 @@ def run_compressible_balance_test(dirname):
                                'pc_factor_mat_solver_type': 'mumps'}
     }
     solve(a == L, w_hybrid, bcs=bcs, solver_parameters=hybrid_params)
-    _, pi_hybrid = w_hybrid.split()
+    v_hybrid, pi_hybrid = w_hybrid.split()
 
     ref_params = {'ksp_type': 'preonly',
                   'mat_type': 'aij',
                   'pc_type': 'lu',
                   'pc_factor_mat_solver_type': 'mumps'}
     solve(a == L, w_ref, bcs=bcs, solver_parameters=ref_params)
-    _, pi_ref = w_ref.split()
+    v_ref, pi_ref = w_ref.split()
 
-    return errornorm(pi_ref, pi_hybrid, norm_type="L2")
+    v_error = errornorm(v_ref, v_hybrid, norm_type="L2")
+    pi_error = errornorm(pi_ref, pi_hybrid, norm_type="L2")
+
+    return v_error, pi_error
 
 
 def test_compressible_balance_hybrid(tmpdir):
@@ -92,6 +95,7 @@ def test_compressible_balance_hybrid(tmpdir):
     """
 
     dirname = str(tmpdir)
-    error = run_compressible_balance_test(dirname)
+    v_error, pi_error = run_compressible_balance_test(dirname)
 
-    assert error < 1.0e-9
+    assert v_error < 1.0e-9
+    assert pi_error < 1.0e-9
