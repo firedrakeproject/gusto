@@ -518,7 +518,6 @@ class State(object):
 
             self.W = MixedFunctionSpace((V0, V1))
 
-
     def _allocate_state(self):
         """
         Construct Functions to store the state variables.
