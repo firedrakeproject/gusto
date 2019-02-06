@@ -65,7 +65,7 @@ def surface_measures(V):
             ele = V.ufl_element()
 
             # Broken elements are discontinuous so need dS_v and dS_h
-            if type(ele) == BrokenElement:
+            if is_dg(V):
                 return (dS_v + dS_h)
 
             # Figure out which spaces we have
