@@ -64,7 +64,7 @@ def test_advection_supg(scheme, space, tracer_setup):
     if scheme == "ssprk":
         schemes = [("f", SSPRK3(options=supg_opts))]
     elif scheme == "im":
-        schemes = [("f", ThetaMethod(options=supg_opts))]
+        schemes = [("f", ImplicitMidpoint(options=supg_opts))]
 
     f = run(state, equations, schemes, dt, tmax)
     assert errornorm(f, f_end) < err

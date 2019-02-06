@@ -15,7 +15,7 @@ from gusto.form_manipulation_labelling import (all_terms, has_labels, index,
 from gusto.recovery import Recoverer
 
 
-__all__ = ["BackwardEuler", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["BackwardEuler", "ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def embedded_dg(original_apply):
@@ -46,9 +46,9 @@ class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
-    :arg solver_parameters: solver_parameters
-    :arg limiter: :class:`.Limiter` object.
-    :arg options: :class:`.AdvectionOptions` object
+    :arg solver_parameters: (optional) solver_parameters
+    :arg limiter: (optional) :class:`.Limiter` object.
+    :arg options: (optional) :class:`.AdvectionOptions` object
     """
 
     def __init__(self, *,
@@ -64,10 +64,24 @@ class Advection(object, metaclass=ABCMeta):
         self.options = options
 
     def _label_terms(self):
+        """
+        Function to label the terms of the equation form. This function is
+        specific to the timestepping scheme so is implemented in the child
+        classes.
+        """
         pass
 
     def _setup_from_options(self, state, field, options):
         """
+        This function deals with any spatial discretisation options
+        specified in the :class:`.AdvectionOptions` object passed in
+        when the class was instantiated. This includes setting up the
+        functions and projections required for embedded DG and recovered
+        advection schemes; constructing the supg test function; and
+        replacing the test function in the equation form with that defined
+        on the correct space (for embedded DG and recovered schemes) or
+        with an amended test function (for supg).
+
         :arg state: a :class:`.State` object
         :arg field: a :func:`.Function` object - the prognostic field
         :arg options: an :class:`AdvectionOptions` object, containing
@@ -151,15 +165,22 @@ class Advection(object, metaclass=ABCMeta):
     def setup(self, state, field, equation, dt, *active_labels,
               u_advecting=None):
         """
+        This function is called from the Timstepper class. At this point
+        we have all the information we need to extract the required parts
+        of the form, replace the test function (if required by the spatial
+        discretisation options) and setup the functions and solver parameters
+        for the timestepping scheme.
+
         :arg state: a :class:`.State` object
         :arg field: a :func:`.Function` object - the prognostic field
         :arg equation: a :class:`.PrognosticEquation` object
         :arg dt: the timestep
-        :arg active_labels: str(s) specifying the labels of terms in the
-        form that this scheme should be applied to
+        :arg active_labels: :class:`Label` object(s) specifying the label(s)
+        of terms in the form that this scheme should be applied to
         :arg u_advecting: (optional) a ufl expression for the advecting
         velocity. If not present then treat any parts of the form labelled
-        "uadv" as the equation subject.
+        advecting_velocity as the equation subject (i.e. they are part of
+        the solution to be computed by this scheme).
         """
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
@@ -169,9 +190,9 @@ class Advection(object, metaclass=ABCMeta):
         # store just the form
         self.equation = equation()
 
-        # figure out if the equation is defined on a mixed function space
+        # is the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1
-        # figure out if the prognostic field is defined on a mixed
+        # is the prognostic field is defined on a mixed
         # function space
         mixed_function = len(field.function_space()) > 1
         # if the equation in defined on a mixed function space, but
@@ -207,7 +228,7 @@ class Advection(object, metaclass=ABCMeta):
                 # the advecting velocity is calculated as part of this
                 # timestepping scheme and must be replaced with the
                 # correct part of the term's subject
-                assert mixed_function
+                assert mixed_function, "We expect the advecting velocity to be specified unless we are applying this timestepping scheme to a mixed system of equations"
                 self.equation = self.equation.label_map(
                     has_labels(advecting_velocity),
                     replace_labelled(subject, advecting_velocity))
@@ -222,13 +243,17 @@ class Advection(object, metaclass=ABCMeta):
         # setup required functions
         self.q1 = Function(self.fs)
         self.result = Function(self.fs)
+
+        # setup trial function(s) and solver parameters.
         if mixed_equation and mixed_function:
             self.trial = TrialFunctions(self.fs)
-            self.qs = self.q1
+            # for a mixed system the default solver parameters are an
+            # attribute of the :class:`PrognosticMixedEquations` object
             default_solver_params = equation.solver_parameters
         else:
             self.trial = TrialFunction(self.fs)
-            self.qs = self.q1
+            # the default ksp_type will be different if the matrix is
+            # not symmetric, so if we are using supg or a theta method
             try:
                 ksp_type = self.default_ksp_type
             except AttributeError:
@@ -237,9 +262,12 @@ class Advection(object, metaclass=ABCMeta):
                                      'pc_type': 'bjacobi',
                                      'sub_pc_type': 'ilu'}
 
+        # use default solver parameters if the user has not specified
+        # any on instantiating this class
         if self.solver_parameters is None:
             self.solver_parameters = default_solver_params
 
+        # label the terms explicit or implicit
         self._label_terms()
 
         self._initialised = True
@@ -301,7 +329,7 @@ class Advection(object, metaclass=ABCMeta):
 
         r = self.equation.label_map(
             has_labels(time_derivative, explicit),
-            map_if_true=replace_labelled(self.qs, subject),
+            map_if_true=replace_labelled(self.q1, subject),
             map_if_false=drop)
 
         r = r.label_map(has_labels(time_derivative),
@@ -324,8 +352,15 @@ class Advection(object, metaclass=ABCMeta):
 
 
 class BackwardEuler(Advection):
+    """
+    Class to implement the backward Euler timestepping scheme:
+    y_(n+1) - dt*F(y_(n+1)) = y_n
+    """
 
     def _label_terms(self):
+        """
+        Labels all terms implicit
+        """
         self.equation = self.equation.label_map(
             has_labels(time_derivative),
             map_if_false=lambda t: implicit(t))
@@ -341,8 +376,9 @@ class ExplicitAdvection(Advection):
     Base class for explicit advection schemes.
 
     :arg subcycles: (optional) integer specifying number of subcycles to perform
-    :arg solver_parameters: solver_parameters
-    :arg limiter: :class:`.Limiter` object.
+    :arg solver_parameters: (optional) solver_parameters
+    :arg limiter: (optional) :class:`.Limiter` object.
+    :arg options: (optional) :class:`.AdvectionOptions` object
     """
 
     def __init__(self, subcycles=None, solver_parameters=None,
@@ -366,9 +402,14 @@ class ExplicitAdvection(Advection):
 
         super().setup(state, field, equation, dt, *active_labels,
                       u_advecting=u_advecting)
+
+        # setup functions to store the result of each cycle
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
     def _label_terms(self):
+        """
+        Labels all terms explicit
+        """
         self.equation = self.equation.label_map(
             has_labels(time_derivative),
             map_if_false=lambda t: explicit(t))
@@ -387,7 +428,7 @@ class ExplicitAdvection(Advection):
     @embedded_dg
     def apply(self, x_in, x_out):
         """
-        Function takes x as input, computes L(x) as defined by the equation,
+        Function takes x as input, computes F(x) as defined by the equation,
         and returns x_out as output.
 
         :arg x: :class:`.Function` object, the input Function.
@@ -403,8 +444,7 @@ class ExplicitAdvection(Advection):
 class ForwardEuler(ExplicitAdvection):
     """
     Class to implement the forward Euler timestepping scheme:
-    y_(n+1) = y_n + dt*L(y_n)
-    where L is the advection operator
+    y_(n+1) = y_n + dt*F(y_n)
     """
 
     @cached_property
@@ -425,11 +465,11 @@ class SSPRK3(ExplicitAdvection):
     """
     Class to implement the Strongly Structure Preserving Runge Kutta 3-stage
     timestepping method:
-    y^1 = y_n + L(y_n)
-    y^2 = (3/4)y_n + (1/4)(y^1 + L(y^1))
-    y_(n+1) = (1/3)y_n + (2/3)(y^2 + L(y^2))
+    y^1 = y_n + F(y_n)
+    y^2 = (3/4)y_n + (1/4)(y^1 + F(y^1))
+    y_(n+1) = (1/3)y_n + (2/3)(y^2 + F(y^2))
     where subscripts indicate the timelevel, superscripts indicate the stage
-    number and L is the advection operator.
+    number.
     """
 
     @cached_property
@@ -472,9 +512,14 @@ class SSPRK3(ExplicitAdvection):
 class ThetaMethod(Advection):
     """
     Class to implement the theta timestepping method:
-    y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
+    y_(n+1) + dt*theta*F(y_(n+1))) = y_n - dt*(1-theta)*F(y_n)
+    to solve the equation dy/dt + F(y) = 0.
+
+    :arg theta: value of theta
+    :arg solver_parameters: (optional) solver_parameters
+    :arg options: (optional) :class:`.AdvectionOptions` object
     """
-    def __init__(self, theta=0.5, solver_parameters=None, options=None):
+    def __init__(self, theta, solver_parameters=None, options=None):
 
         super().__init__(solver_parameters=solver_parameters, options=options)
 
@@ -497,7 +542,7 @@ class ThetaMethod(Advection):
     def rhs(self):
 
         r = self.equation.label_map(all_terms,
-                                    replace_labelled(self.qs, subject))
+                                    replace_labelled(self.q1, subject))
         r = r.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
         return r.form
@@ -506,3 +551,21 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.result)
+
+
+class ImplicitMidpoint(ThetaMethod):
+    """
+    Class to implement the implicit midpoint timestepping method:
+    y_(n+1) + 0.5*dt*F(y_(n+1))) = y_n - 0.5*dt*F(y_n)
+    to solve the equation dy/dt + F(y) = 0.
+
+    :arg solver_parameters: (optional) solver_parameters
+    :arg options: (optional) :class:`.AdvectionOptions` object
+    """
+    def __init__(self, solver_parameters=None, options=None):
+
+        super().__init__(theta=0.5, solver_parameters=solver_parameters,
+                         options=options)
+
+    def apply(self, x_in, x_out):
+        super().apply(x_in, x_out)

@@ -32,7 +32,7 @@ def run(setup, ibp, scheme, vector):
     if scheme == "ssprk":
         schemes = [("f", SSPRK3())]
     elif scheme == "im":
-        schemes = [("f", ThetaMethod())]
+        schemes = [("f", ImplicitMidpoint())]
 
     timestepper = PrescribedAdvectionTimestepper(
         state, equations=equations, schemes=schemes)
