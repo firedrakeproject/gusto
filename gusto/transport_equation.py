@@ -18,15 +18,7 @@ class IntegrateByParts(Enum):
 
 
 def is_cg(V):
-    # find out if we are CG
-    nvertex = V.ufl_domain().ufl_cell().num_vertices()
-    entity_dofs = V.finat_element.entity_dofs()
-    # If there are as many dofs on vertices as there are vertices,
-    # assume a continuous space.
-    try:
-        return sum(map(len, entity_dofs[0].values())) == nvertex
-    except KeyError:
-        return sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+    return V.ufl_element().sobolev_space().name == "H1"
 
 
 def surface_measures(V, direction=None):
@@ -309,18 +301,30 @@ class SUPGAdvection(AdvectionEquation):
         if ibp == IntegrateByParts.NEVER and not is_cg(V):
             raise ValueError("are you very sure you don't need surface terms?")
 
+        # set default SUPG parameters
         if supg_params is None:
             supg_params = SUPGOptions()
-        # set default SUPG parameters
-        dt = state.timestepping.dt
+
         dim = state.mesh.topological_dimension()
         if supg_params.tau is not None:
+            # if tau is provided, check that is has the right size
             tau = supg_params.tau
             assert tau.ufl_shape == (dim, dim)
         else:
-            vals = [supg_params.default*dt]*dim
-            for component, value in supg_params.tau_components:
-                vals[state.components.component] = value
+            # create tuple of default values of size dim
+            dt = state.timestepping.dt
+            default_vals = [supg_params.default*dt]*dim
+            # check for directions is which the space is discontinuous
+            # so that we don't apply supg in that direction
+            space = V.ufl_element().sobolev_space()
+            if space.name == "H1":
+                vals = default_vals
+            elif space.name in ["HDiv", "DirectionalH"]:
+                vals = [default_vals[i] if space[i].name == "L2" else 0. for i in range(dim)]
+            elif space.name == "L2":
+                raise ValueError("You are trying to apply SUPG on a discontinuous space")
+            else:
+                raise ValueError("I don't know what to do with space %s" % space)
             tau = Constant(tuple([
                 tuple(
                     [vals[j] if i == j else 0. for i, v in enumerate(vals)]

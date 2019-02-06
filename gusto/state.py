@@ -11,7 +11,7 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        dx, op2, par_loop, READ, WRITE, DumbCheckpoint,
                        FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector)
 import numpy as np
-from gusto.configuration import logger, set_log_handler, XYComponents, XZComponents, XYZComponents
+from gusto.configuration import logger, set_log_handler
 
 __all__ = ["State"]
 
@@ -487,10 +487,6 @@ class State(object):
         if vertical_degree is not None:
             # horizontal base spaces
             cell = mesh._base_mesh.ufl_cell().cellname()
-            if cell is "interval":
-                self.components = XZComponents
-            else:
-                self.components = XYZComponents
             S1 = FiniteElement(family, cell, horizontal_degree+1)
             S2 = FiniteElement("DG", cell, horizontal_degree)
 
@@ -520,8 +516,8 @@ class State(object):
             V0 = self.spaces("HDiv", mesh, V1_elt)
             V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
-            self.components = XYComponents
             self.W = MixedFunctionSpace((V0, V1))
+
 
     def _allocate_state(self):
         """
