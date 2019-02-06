@@ -76,6 +76,7 @@ def surface_measures(V):
                 spaces = [ele.sobolev_space()[i].name for i in range(dim)]
 
             # Based on the space names, these ones are discontinuous
+            # enough to require surface terms
             discont = [i for i, name in enumerate(spaces) if name in ["L2", "HDiv"]]
             # as the mesh is extruded, the dim-1 element of discont
             # tells us about the vertical discontinuity
