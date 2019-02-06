@@ -1,9 +1,9 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad,
-                       Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace,
-                       assemble, LinearSolver)
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
+                       dot, grad, Function, VectorSpaceBasis, BrokenElement, FunctionSpace,
+                       MixedFunctionSpace, assemble, LinearSolver)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
@@ -321,8 +321,14 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        # Turn monitor on for the trace system when running in debug mode
         if logger.isEnabledFor(DEBUG):
+            # Set outer solver to GMRES and turn on KSP monitor for the outer system
+            self.solver_parameters["ksp_type"] = "gmres"
+            self.solver_parameters["mat_type"] = "aij"
+            self.solver_parameters["pmat_type"] = "matfree"
+            self.solver_parameters["ksp_monitor_true_residual"] = True
+
+            # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = True
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
@@ -387,38 +393,8 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         dS_vp = dS_v(degree=(self.quadrature_degree))
         dS_hp = dS_h(degree=(self.quadrature_degree))
         ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_tbp = ds_t(degree=(self.quadrature_degree)) + ds_b(degree=(self.quadrature_degree))
-
-        # Mass matrix for the trace space
-        _l0 = TrialFunction(Vtrace)
-        _dl = TestFunction(Vtrace)
-        tM = assemble(_dl('+')*_l0('+')*(dS_v + dS_h)
-                      + _dl*_l0*ds_v + _dl*_l0*(ds_t + ds_b))
-
-        Lrhobar = Function(Vtrace)
-        Lpibar = Function(Vtrace)
-        rhopi_solver = LinearSolver(tM, solver_parameters={'ksp_type': 'cg',
-                                                           'pc_type': 'bjacobi',
-                                                           'sub_pc_type': 'ilu'},
-                                    options_prefix='rhobarpibar_solver')
-
-        # Project field averages into functions on the trace space
-        rhobar_avg = Function(Vtrace)
-        pibar_avg = Function(Vtrace)
-
-        def _traceRHS(f):
-            return (_dl('+')*avg(f)*(dS_v + dS_h)
-                    + _dl*f*ds_v + _dl*f*(ds_t + ds_b))
-
-        assemble(_traceRHS(rhobar), tensor=Lrhobar)
-        assemble(_traceRHS(pibar), tensor=Lpibar)
-
-        # Project averages of coefficients into the trace space
-        with timed_region("Gusto:HybridProjectRhobar"):
-            rhopi_solver.solve(rhobar_avg, Lrhobar)
-
-        with timed_region("Gusto:HybridProjectPibar"):
-            rhopi_solver.solve(pibar_avg, Lpibar)
+        ds_tbp = (ds_t(degree=(self.quadrature_degree))
+                  + ds_b(degree=(self.quadrature_degree)))
 
         # Add effect of density of water upon theta
         if self.moisture is not None:
@@ -431,27 +407,63 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             theta_w = theta
             thetabar_w = thetabar
 
-        # "broken" u, rho, and trace system
-        eqn = (inner(w, (state.h_project(u) - u_in))*dx
-               - beta_cp*div(theta_w*V(w))*pibar*dxp
-               # following does nothing but is preserved in the comments
-               # to remind us why (because V(w) is purely vertical).
-               # + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_vp
-               + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_hp
-               + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
-               - beta_cp*div(thetabar_w*w)*pi*dxp
-               + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-               + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
-               # trace terms appearing after integrating momentum equation
-               + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-               + beta_cp*dot(thetabar_w*w, n)*l0*ds_vp
-               + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
-               # constraint equation to enforce continuity of the velocity
-               # (scaled by the background theta state)
-               + dl('+')*jump(thetabar_w*u, n=n)*(dS_vp + dS_hp)
-               + dl*dot(thetabar_w*u, n)*ds_vp
-               + dl*dot(thetabar_w*u, n)*ds_tbp)
+        _l0 = TrialFunction(Vtrace)
+        _dl = TestFunction(Vtrace)
+        a_tr = _dl('+')*_l0('+')*(dS_vp + dS_hp) + _dl*_l0*ds_vp + _dl*_l0*ds_tbp
 
+        def L_tr(f):
+            return _dl('+')*avg(f)*(dS_vp + dS_hp) + _dl*f*ds_vp + _dl*f*ds_tbp
+
+        cg_ilu_parameters = {'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
+        # Project field averages into functions on the trace space
+        rhobar_avg = Function(Vtrace)
+        pibar_avg = Function(Vtrace)
+
+        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
+        pi_avg_prb = LinearVariationalProblem(a_tr, L_tr(pibar), pibar_avg)
+
+        rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
+                                                 solver_parameters=cg_ilu_parameters,
+                                                 options_prefix='rhobar_avg_solver')
+        pi_avg_solver = LinearVariationalSolver(pi_avg_prb,
+                                                solver_parameters=cg_ilu_parameters,
+                                                options_prefix='pibar_avg_solver')
+
+        with timed_region("Gusto:HybridProjectRhobar"):
+            rho_avg_solver.solve()
+
+        with timed_region("Gusto:HybridProjectPibar"):
+            pi_avg_solver.solve()
+
+        # "broken" u, rho, and trace system
+        # NOTE: no ds_v integrals since equations are defined on
+        # a periodic (or sphere) base mesh.
+        eqn = (
+            # momentum equation
+            inner(w, (state.h_project(u) - u_in))*dx
+            - beta_cp*div(theta_w*V(w))*pibar*dxp
+            + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*(dS_vp + dS_hp)
+            + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
+            - beta_cp*div(thetabar_w*w)*pi*dxp
+            # trace terms appearing after integrating momentum equation
+            + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
+            + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
+            # mass continuity equation
+            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
+            + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            # term added because u.n=0 is enforced weakly via the traces
+            + beta*phi*dot(u, n)*rhobar_avg*ds_tb
+            # constraint equation to enforce continuity of the velocity
+            # through the interior facets and weakly impose the no-slip
+            # condition
+            + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
+            + dl*dot(u, n)*ds_tbp
+        )
+
+        # contribution of the sponge term
         if mu is not None:
             eqn += dt*mu*inner(w, k)*inner(u, k)*dx
 
@@ -500,9 +512,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters={'ksp_type': 'cg',
-                                                                       'pc_type': 'bjacobi',
-                                                                       'pc_sub_type': 'ilu'},
+                                                    solver_parameters=cg_ilu_parameters,
                                                     options_prefix='thetabacksubstitution')
 
         # Store boundary conditions for the div-conforming velocity to apply
