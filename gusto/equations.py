@@ -87,8 +87,8 @@ class AdvectionEquation(PrognosticEquation):
     Class defining the advection equation.
 
     :arg state: :class:`.State` object
-    :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg field_name: name of the prognostic field
     :kwargs: any kwargs to be passed on to the advection_form
     """
     def __init__(self, state, function_space, field_name,
@@ -105,8 +105,8 @@ class ContinuityEquation(PrognosticEquation):
     Class defining the continuity equation.
 
     :arg state: :class:`.State` object
-    :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg field_name: name of the prognostic field
     :kwargs: any kwargs to be passed on to the continuity_form
     """
 
@@ -124,8 +124,8 @@ class DiffusionEquation(PrognosticEquation):
     Class defining the diffusion equation.
 
     :arg state: :class:`.State` object
-    :arg field_name: name of the prognostic field
     :arg function_space: :class:`.FunctionSpace` object, the function
+    :arg field_name: name of the prognostic field
     :kwargs: any kwargs to be passed on to the diffuson_form
     """
 
@@ -160,6 +160,11 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 
 
 class PrognosticMixedEquation(PrognosticEquation):
+    """
+    Base class for the equation set defined on a mixed function space.
+    Child classes must define their fieldlist and solver parameters for
+    the mixed system.
+    """
 
     @abstractproperty
     def fieldlist(self):
