@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_t, ds_b, VectorElement,
+                       ds_v, ds_t, ds_b, VectorElement, as_ufl,
                        outer, sign, cross, CellNormal, Constant,
                        curl, BrokenElement, FunctionSpace)
 from gusto.configuration import logger, DEBUG, SUPGOptions
@@ -378,7 +378,7 @@ class SUPGAdvection(AdvectionEquation):
         if supg_params.tau is not None:
             # if tau is provided, check that is has the right size
             tau = supg_params.tau
-            assert tau.ufl_shape == (dim, dim)
+            assert as_ufl(tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
         else:
             # create tuple of default values of size dim
             dt = state.timestepping.dt
