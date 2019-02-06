@@ -2,8 +2,8 @@ from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
-                       dot, grad, Function, VectorSpaceBasis, BrokenElement, FunctionSpace,
-                       MixedFunctionSpace, assemble, LinearSolver)
+                       dot, grad, Function, VectorSpaceBasis, BrokenElement,
+                       FunctionSpace, MixedFunctionSpace)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
