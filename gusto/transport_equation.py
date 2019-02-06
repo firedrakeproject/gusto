@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds, ds_v, ds_t, ds_b,
+                       ds, ds_v, ds_t, ds_b, VectorElement,
                        outer, sign, cross, CellNormal, Constant,
                        curl, BrokenElement, FunctionSpace)
 from gusto.configuration import logger, DEBUG, SUPGOptions
@@ -18,7 +18,23 @@ class IntegrateByParts(Enum):
 
 
 def is_cg(V):
-    return V.ufl_element().sobolev_space().name == "H1"
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space().name == "H1"
+
+
+def is_dg(V):
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return True
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space().name == "L2" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space().name == "L2"
 
 
 def surface_measures(V, direction=None):
@@ -295,6 +311,8 @@ class SUPGAdvection(AdvectionEquation):
                          solver_params=solver_params,
                          outflow=outflow)
 
+        if is_dg(V):
+            raise ValueError("You are trying to apply SUPG on a discontinuous space")
         # if using SUPG we either integrate by parts twice, or not at all
         if ibp == IntegrateByParts.ONCE:
             raise ValueError("if using SUPG we don't integrate by parts once")
@@ -316,15 +334,15 @@ class SUPGAdvection(AdvectionEquation):
             default_vals = [supg_params.default*dt]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction
-            space = V.ufl_element().sobolev_space()
-            if space.name == "H1":
+            if is_cg(V):
                 vals = default_vals
-            elif space.name in ["HDiv", "DirectionalH"]:
-                vals = [default_vals[i] if space[i].name == "L2" else 0. for i in range(dim)]
-            elif space.name == "L2":
-                raise ValueError("You are trying to apply SUPG on a discontinuous space")
             else:
-                raise ValueError("I don't know what to do with space %s" % space)
+                space = V.ufl_element().sobolev_space()
+                if space.name in ["HDiv", "DirectionalH"]:
+                    vals = [default_vals[i] if space[i].name == "H1"
+                            else 0. for i in range(dim)]
+                else:
+                    raise ValueError("I don't know what to do with space %s" % space)
             tau = Constant(tuple([
                 tuple(
                     [vals[j] if i == j else 0. for i, v in enumerate(vals)]
