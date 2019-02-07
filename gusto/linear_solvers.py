@@ -445,7 +445,10 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             # momentum equation
             inner(w, (state.h_project(u) - u_in))*dx
             - beta_cp*div(theta_w*V(w))*pibar*dxp
-            + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*(dS_vp + dS_hp)
+            # following does nothing but is preserved in the comments
+            # to remind us why (because V(w) is purely vertical).
+            # + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_vp
+            + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_hp
             + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
             - beta_cp*div(thetabar_w*w)*pi*dxp
             # trace terms appearing after integrating momentum equation
