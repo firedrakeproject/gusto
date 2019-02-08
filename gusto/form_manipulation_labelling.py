@@ -282,6 +282,8 @@ class Label(object):
         self.validator = validator
 
     def __call__(self, target, value=None):
+        # if value is provided, check that we have a validator function
+        # and validate the value, otherwise use default value
         if value is not None:
             assert(self.validator)
             assert(self.validator(value))
