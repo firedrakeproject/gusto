@@ -12,8 +12,12 @@ __all__ = ["Forcing"]
 
 class Forcing(object):
     """
-    Base class for forcing terms for Gusto.
+    Class to compute forcing terms for split forcing and advection schemes.
 
+    :arg equation: a :class:`PrognosticEquation` object containing the
+    form for the equation to be solved
+    :arg dt: timestep
+    :arg alpha: off-centering parameter
     """
 
     def __init__(self, equation, dt, alpha):
@@ -28,7 +32,9 @@ class Forcing(object):
         self._build_forcing_solver(W, eqn, dt, alpha)
 
     def _build_forcing_solver(self, W, equation, dt, alpha):
-
+        """
+        Builds the forcing solvers for the explicit and the implicit steps
+        """
         trials = TrialFunctions(W)
 
         a = equation.label_map(has_labels(time_derivative),
