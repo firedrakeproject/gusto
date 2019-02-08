@@ -44,7 +44,11 @@ timestepping = TimesteppingParameters(dt=dt)
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
-output = OutputParameters(dirname='gw_incompressible', dumpfreq=10, dumplist=['u'], perturbation_fields=['b'])
+output = OutputParameters(dirname='gw_incompressible',
+                          dumpfreq=10,
+                          dumplist=['u'],
+                          perturbation_fields=['b'],
+                          log_level='INFO')
 
 # class containing physical parameters
 # all values not explicitly set here use the default values provided
