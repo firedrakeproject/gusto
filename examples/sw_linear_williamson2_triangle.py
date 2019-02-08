@@ -58,7 +58,7 @@ D0.interpolate(Dexpr)
 state.initialise([('u', u0),
                   ('D', D0)])
 
-Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp="once", equation_form="continuity")
+Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp=IntegrateByParts.ONCE, equation_form="continuity")
 advected_fields = []
 advected_fields.append(("u", NoAdvection(state, u0, None)))
 advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))

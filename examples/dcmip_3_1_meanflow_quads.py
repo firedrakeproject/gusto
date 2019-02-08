@@ -134,7 +134,6 @@ state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = SUPGAdvection(state, Vt,
-                         supg_params={"dg_direction": "horizontal"},
                          equation_form="advective")
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))

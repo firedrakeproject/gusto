@@ -90,7 +90,7 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp="once", equation_form="continuity")
+rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp=IntegrateByParts.ONCE, equation_form="continuity")
 thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
 advected_fields = []
 advected_fields.append(("u", NoAdvection(state, u0, None)))

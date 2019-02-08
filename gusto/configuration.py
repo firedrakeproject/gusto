@@ -157,3 +157,10 @@ class RecoveredOptions(AdvectionOptions):
     recovered_space = None
     broken_space = None
     boundary_method = None
+
+
+class SUPGOptions(AdvectionOptions):
+
+    name = "supg"
+    tau = None
+    default = 1/sqrt(15)

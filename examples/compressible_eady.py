@@ -207,7 +207,7 @@ state.set_reference_profiles([('rho', rho_b),
 # we need a DG funciton space for the embedded DG advection scheme
 ueqn = AdvectionEquation(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"})
+thetaeqn = SUPGAdvection(state, Vt)
 
 advected_fields = []
 advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
