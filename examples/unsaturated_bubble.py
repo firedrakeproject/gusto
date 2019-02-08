@@ -240,7 +240,10 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
                    ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
-linear_solver = HybridizedCompressibleSolver(state, moisture=moisture) if hybridization else CompressibleSolver(state, moisture=moisture)
+if hybridization:
+    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+else:
+    linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)

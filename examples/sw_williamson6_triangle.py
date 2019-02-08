@@ -22,7 +22,10 @@ mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sw_rossby_wave_ll', dumpfreq=24, dumplist_latlon=['D'])
+output = OutputParameters(dirname='sw_rossby_wave_ll',
+                          dumpfreq=24,
+                          dumplist_latlon=['D'],
+                          log_level='INFO')
 parameters = ShallowWaterParameters(H=H)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]

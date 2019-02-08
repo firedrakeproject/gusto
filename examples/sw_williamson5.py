@@ -30,7 +30,12 @@ for ref_level, dt in ref_dt.items():
     mesh.init_cell_orientations(x)
 
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D'], dumpfreq=100)
+
+    output = OutputParameters(dirname=dirname,
+                              dumplist_latlon=['D'],
+                              dumpfreq=100,
+                              log_level='INFO')
+
     diagnostic_fields = [Sum('D', 'topography')]
 
     state = State(mesh, horizontal_degree=1,

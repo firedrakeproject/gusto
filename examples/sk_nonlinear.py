@@ -40,7 +40,8 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
-                          point_data=[('theta_perturbation', points)])
+                          point_data=[('theta_perturbation', points)],
+                          log_level='INFO')
 
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
