@@ -22,9 +22,12 @@ class Forcing(object, metaclass=ABCMeta):
     terms (namely the Euler Poincare term) should not be added.
     :arg extra_terms: extra terms to add to the u component of the forcing
     term - these will be multiplied by the appropriate test function.
+    :arg solver_parameters: an option dictionary containing solver parameters
+    to use on the mass solve.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+    def __init__(self, state, euler_poincare=True, linear=False,
+                 extra_terms=None, moisture=None, solver_parameters=None):
         self.state = state
         if linear:
             self.euler_poincare = False
@@ -50,6 +53,13 @@ class Forcing(object, metaclass=ABCMeta):
         self.topography = hasattr(state.fields, "topography")
         self.extra_terms = extra_terms
         self.moisture = moisture
+
+        if solver_parameters is None:
+            solver_parameters = {'ksp_type': 'cg',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
+
+        self.solver_parameters = solver_parameters
 
         # some constants to use for scaling terms
         self.scaling = Constant(1.)
@@ -115,7 +125,7 @@ class Forcing(object, metaclass=ABCMeta):
             a, L, self.uF, bcs=bcs
         )
 
-        solver_parameters = {}
+        solver_parameters = self.solver_parameters
         if logger.isEnabledFor(DEBUG):
             solver_parameters["ksp_monitor_true_residual"] = True
         self.u_forcing_solver = LinearVariationalSolver(
@@ -224,7 +234,7 @@ class CompressibleForcing(Forcing):
 
             theta_problem = LinearVariationalProblem(a, L, self.thetaF)
 
-            solver_parameters = {}
+            solver_parameters = self.solver_parameters
             if logger.isEnabledFor(DEBUG):
                 solver_parameters["ksp_monitor_true_residual"] = True
             self.theta_solver = LinearVariationalSolver(
@@ -272,7 +282,7 @@ class IncompressibleForcing(Forcing):
         divergence_problem = LinearVariationalProblem(
             a, L, self.divu)
 
-        solver_parameters = {}
+        solver_parameters = self.solver_parameters
 
         if logger.isEnabledFor(DEBUG):
             solver_parameters["ksp_monitor_true_residual"] = True
@@ -382,7 +392,7 @@ class CompressibleEadyForcing(CompressibleForcing):
             a, L, self.thetaF
         )
 
-        solver_parameters = {}
+        solver_parameters = self.solver_parameters
         if logger.isEnabledFor(DEBUG):
             solver_parameters["ksp_monitor_true_residual"] = True
         self.theta_forcing_solver = LinearVariationalSolver(
