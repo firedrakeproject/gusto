@@ -72,10 +72,23 @@ void maxify(double *a, double *b) {
 
 
 class DiagnosticField(object, metaclass=ABCMeta):
+    """
+    Base class for all diagnostic fields.
 
-    def __init__(self, required_fields=()):
+    :arg required_fields: iterable of labels denoting the
+                          required fields to compute the
+                          diagnostic field.
+    :arg degree: optional integer denoting the degree of
+                 the finite element space to interpolate
+                 into. If unspecified, a default value
+                 will be used instead (usually a lowest
+                 order finite element space).
+    """
+
+    def __init__(self, required_fields=(), degree=None):
         self._initialised = False
         self.required_fields = required_fields
+        self.degree = degree
 
     @abstractproperty
     def name(self):
@@ -85,7 +98,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
     def setup(self, state, space=None):
         if not self._initialised:
             if space is None:
-                space = state.spaces("DG0", state.mesh, "DG", 0)
+                degree = self.degree or 0
+                space = state.spaces("DG%s" % degree, state.mesh, "DG", degree)
             self.field = state.fields(self.name, space, pickup=False)
             self._initialised = True
 
@@ -121,7 +135,8 @@ class VelocityX(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            degree = self.degree or 1
+            space = state.spaces("CG%s" % degree, state.mesh, "CG", degree)
             super(VelocityX, self).setup(state, space=space)
 
     def compute(self, state):
@@ -135,7 +150,8 @@ class VelocityZ(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            degree = self.degree or 1
+            space = state.spaces("CG%s" % degree, state.mesh, "CG", degree)
             super(VelocityZ, self).setup(state, space=space)
 
     def compute(self, state):
@@ -149,7 +165,8 @@ class VelocityY(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            degree = self.degree or 1
+            space = state.spaces("CG%s" % degree, state.mesh, "CG", degree)
             super(VelocityY, self).setup(state, space=space)
 
     def compute(self, state):
@@ -176,7 +193,8 @@ class Gradient(DiagnosticField):
             except IndexError:
                 field_dim = 1
             shape = (mesh_dim, ) * field_dim
-            space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
+            degree = self.degree or 1
+            space = TensorFunctionSpace(state.mesh, "CG", degree, shape=shape)
             super().setup(state, space=space)
 
         f = state.fields(self.fname)
@@ -323,7 +341,8 @@ class ExnerPi(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            degree = self.degree or 1
+            space = state.spaces("CG%s" % degree, state.mesh, "CG", degree)
             super(ExnerPi, self).setup(state, space=space)
 
     def compute(self, state):
@@ -579,7 +598,8 @@ class Precipitation(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("DG0", state.mesh, "DG", 0)
+            degree = self.degree or 0
+            space = state.spaces("DG%s" % degree, state.mesh, "DG", degree)
             super().setup(state, space=space)
 
             rain = state.fields('rain')
