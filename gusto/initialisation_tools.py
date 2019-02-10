@@ -281,7 +281,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
                                   top=False, pi_boundary=Constant(1.0),
                                   max_outer_solve_count=40,
                                   max_theta_solve_count=5,
-                                  max_inner_solve_count=3):
+                                  max_inner_solve_count=3,
+                                  params=None):
     """
     Given a wet equivalent potential temperature, theta_e, and the total moisture
     content, water_t, compute a hydrostatically balance virtual potential temperature,
@@ -304,6 +305,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     :arg max_theta_solve_count: Max number of iterations for theta solver (middle part of solve).
     :arg max_inner_solve_count: Max number of iterations on the inner most
                                 loop for the water vapour solver.
+    :arg params: an optional dictionary of solver parameters to pass to the
+                 compressible hydrostatic solver.
     """
 
     theta0 = state.fields('theta')
@@ -345,7 +348,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
                                          pi_boundary=pi_boundary, water_t=water_t,
-                                         solve_for_rho=True)
+                                         solve_for_rho=True,
+                                         params=params)
 
         # damp solution
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
@@ -384,13 +388,15 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                      pi_boundary=pi_boundary,
-                                     water_t=water_t, solve_for_rho=True)
+                                     water_t=water_t, solve_for_rho=True,
+                                     params=params)
 
 
 def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                     top=False, pi_boundary=Constant(1.0),
                                     max_outer_solve_count=40,
-                                    max_inner_solve_count=20):
+                                    max_inner_solve_count=20,
+                                    params=None):
     """
     Given vertical profiles for dry potential temperature
     and relative humidity compute hydrostatically balanced
@@ -411,6 +417,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     :arg pi_boundary: The value of pi on the specified boundary.
     :arg max_outer_solve_count: Max number of iterations for outer loop of balance solver.
     :arg max_inner_solve_count: Max number of iterations for inner loop of balanace solver.
+    :arg params: an optional dictionary of solver parameters to pass to the
+                 compressible hydrostatic solver.
     """
 
     theta0 = state.fields('theta')
@@ -460,7 +468,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
                                          pi_boundary=pi_boundary, water_t=water_v0,
-                                         solve_for_rho=True)
+                                         solve_for_rho=True,
+                                         params=params)
 
         # damp solution
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
@@ -495,4 +504,5 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                      pi_boundary=pi_boundary,
-                                     water_t=water_v0, solve_for_rho=True)
+                                     water_t=water_v0, solve_for_rho=True,
+                                     params=params)
