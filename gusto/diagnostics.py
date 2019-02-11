@@ -2,7 +2,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, \
-    TensorFunctionSpace, SpatialCoordinate
+    TensorFunctionSpace, SpatialCoordinate, VectorFunctionSpace, as_vector
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
@@ -10,6 +10,7 @@ from gusto.recovery import Recoverer
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
+           "SphericalComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
            "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
            "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
            "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError",
@@ -194,6 +195,65 @@ class Gradient(DiagnosticField):
         self.solver.solve()
         return self.field
 
+
+class SphericalComponent(DiagnosticField):
+
+    def __init__(self, name):
+        super().__init__()
+        self.fname = name
+
+    def setup(self, state):
+        if not self._initialised:
+            # check geometric dimension is 3D
+            if state.mesh.geometric_dimension() != 3:
+                raise ValueError('Spherical components only work in 3D!')
+            space = FunctionSpace(state.mesh, "CG", 1)
+            super().setup(state, space=space)
+
+        V = VectorFunctionSpace(state.mesh, "CG", 1)
+        self.x, self.y, self.z = SpatialCoordinate(state.mesh)
+        self.x_hat = Function(V).interpolate(as_vector([Constant(1.0), 0.0, 0.0]))
+        self.y_hat = Function(V).interpolate(as_vector([0.0, Constant(1.0), 0.0]))
+        self.z_hat = Function(V).interpolate(as_vector([0.0, 0.0, Constant(1.0)]))
+        self.R = sqrt(self.x**2 + self.y**2)
+        self.r = sqrt(self.x**2 + self.y**2 + self.z**2)
+        self.f = state.fields(self.fname)
+        if len(self.f) != 3:
+            raise ValueError('Components can only be found of a vector function space in 3D.')
+
+class MeridionalComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_meridional_component"
+    
+    def compute(self, state):
+        lambda_hat = (self.x * self.y_hat - self.y * self.x_hat) / self.R
+        return self.field.project(dot(self.f, lambda_hat))
+
+class ZonalComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_zonal_component"
+    
+    def compute(self, state):
+        theta_hat = (-self.x * self.z * self.x_hat / self.R
+                     - self.y * self.z * self.y_hat / self.R
+                     + self.R * self.z_hat) / self.r
+        return self.field.project(dot(self.f, theta_hat))
+
+
+class RadialComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_radial_component"
+    
+    def compute(self, state):
+        r_hat = (self.x * self.x_hat + self.y * self.y_hat + self.z * self.z_hat) / self.r
+        return self.field.project(dot(self.f, r_hat))
+        
 
 class RichardsonNumber(DiagnosticField):
     name = "RichardsonNumber"
