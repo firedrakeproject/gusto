@@ -215,10 +215,10 @@ class SphericalComponent(DiagnosticField):
         self.x_hat = Function(V).interpolate(as_vector([Constant(1.0), 0.0, 0.0]))
         self.y_hat = Function(V).interpolate(as_vector([0.0, Constant(1.0), 0.0]))
         self.z_hat = Function(V).interpolate(as_vector([0.0, 0.0, Constant(1.0)]))
-        self.R = sqrt(self.x**2 + self.y**2)
-        self.r = sqrt(self.x**2 + self.y**2 + self.z**2)
+        self.R = sqrt(self.x**2 + self.y**2)  # distance from z axis
+        self.r = sqrt(self.x**2 + self.y**2 + self.z**2)  # distance from origin
         self.f = state.fields(self.fname)
-        if len(self.f) != 3:
+        if np.prod(self.f.ufl_shape) != 3:
             raise ValueError('Components can only be found of a vector function space in 3D.')
 
 

@@ -38,7 +38,10 @@ def setup_sw(dirname, euler_poincare):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_RelativeVorticity'),
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
-                                    'SWPotentialEnstrophy_from_AbsoluteVorticity')]
+                                    'SWPotentialEnstrophy_from_AbsoluteVorticity'),
+                         MeridionalComponent('u'),
+                         ZonalComponent('u'),
+                         RadialComponent('u')]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
