@@ -221,22 +221,24 @@ class SphericalComponent(DiagnosticField):
         if len(self.f) != 3:
             raise ValueError('Components can only be found of a vector function space in 3D.')
 
+
 class MeridionalComponent(SphericalComponent):
 
     @property
     def name(self):
         return self.fname+"_meridional_component"
-    
+
     def compute(self, state):
         lambda_hat = (self.x * self.y_hat - self.y * self.x_hat) / self.R
         return self.field.project(dot(self.f, lambda_hat))
+
 
 class ZonalComponent(SphericalComponent):
 
     @property
     def name(self):
         return self.fname+"_zonal_component"
-    
+
     def compute(self, state):
         theta_hat = (-self.x * self.z * self.x_hat / self.R
                      - self.y * self.z * self.y_hat / self.R
@@ -249,11 +251,11 @@ class RadialComponent(SphericalComponent):
     @property
     def name(self):
         return self.fname+"_radial_component"
-    
+
     def compute(self, state):
         r_hat = (self.x * self.x_hat + self.y * self.y_hat + self.z * self.z_hat) / self.r
         return self.field.project(dot(self.f, r_hat))
-        
+
 
 class RichardsonNumber(DiagnosticField):
     name = "RichardsonNumber"
