@@ -206,15 +206,15 @@ class SphericalComponent(DiagnosticField):
         if not self._initialised:
             # check geometric dimension is 3D
             if state.mesh.geometric_dimension() != 3:
-                raise ValueError('Spherical components only work in 3D!')
+                raise ValueError('Spherical components only work when the geometric dimension is 3!')
             space = FunctionSpace(state.mesh, "CG", 1)
             super().setup(state, space=space)
 
         V = VectorFunctionSpace(state.mesh, "CG", 1)
         self.x, self.y, self.z = SpatialCoordinate(state.mesh)
-        self.x_hat = Function(V).interpolate(as_vector([Constant(1.0), 0.0, 0.0]))
-        self.y_hat = Function(V).interpolate(as_vector([0.0, Constant(1.0), 0.0]))
-        self.z_hat = Function(V).interpolate(as_vector([0.0, 0.0, Constant(1.0)]))
+        self.x_hat = Function(V).interpolate(Constant(as_vector([1.0, 0.0, 0.0])))
+        self.y_hat = Function(V).interpolate(Constant(as_vector([0.0, 1.0, 0.0])))
+        self.z_hat = Function(V).interpolate(Constant(as_vector([0.0, 0.0, 1.0])))
         self.R = sqrt(self.x**2 + self.y**2)  # distance from z axis
         self.r = sqrt(self.x**2 + self.y**2 + self.z**2)  # distance from origin
         self.f = state.fields(self.fname)
@@ -226,10 +226,12 @@ class MeridionalComponent(SphericalComponent):
 
     @property
     def name(self):
-        return self.fname+"_meridional_component"
+        return self.fname+"_meridional"
 
     def compute(self, state):
-        lambda_hat = (self.x * self.y_hat - self.y * self.x_hat) / self.R
+        lambda_hat = (-self.x * self.z * self.x_hat / self.R
+                      - self.y * self.z * self.y_hat / self.R
+                      + self.R * self.z_hat) / self.r
         return self.field.project(dot(self.f, lambda_hat))
 
 
@@ -237,20 +239,18 @@ class ZonalComponent(SphericalComponent):
 
     @property
     def name(self):
-        return self.fname+"_zonal_component"
+        return self.fname+"_zonal"
 
     def compute(self, state):
-        theta_hat = (-self.x * self.z * self.x_hat / self.R
-                     - self.y * self.z * self.y_hat / self.R
-                     + self.R * self.z_hat) / self.r
-        return self.field.project(dot(self.f, theta_hat))
+        phi_hat = (self.x * self.y_hat - self.y * self.x_hat) / self.R
+        return self.field.project(dot(self.f, phi_hat))
 
 
 class RadialComponent(SphericalComponent):
 
     @property
     def name(self):
-        return self.fname+"_radial_component"
+        return self.fname+"_radial"
 
     def compute(self, state):
         r_hat = (self.x * self.x_hat + self.y * self.y_hat + self.z * self.z_hat) / self.r
