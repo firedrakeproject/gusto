@@ -71,7 +71,7 @@ class Advection(object, metaclass=ABCMeta):
         """
         pass
 
-    def _setup_from_options(self, state, field, options):
+    def _setup_from_options(self, state, fs, options):
         """
         This function deals with any spatial discretisation options
         specified in the :class:`.AdvectionOptions` object passed in
@@ -83,7 +83,7 @@ class Advection(object, metaclass=ABCMeta):
         with an amended test function (for supg).
 
         :arg state: a :class:`.State` object
-        :arg field: a :func:`.Function` object - the prognostic field
+        :arg fs: the function space of the field
         :arg options: an :class:`AdvectionOptions` object, containing
         options related to the spatial discretisation
         """
@@ -92,7 +92,7 @@ class Advection(object, metaclass=ABCMeta):
         if options.name in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
             if options.embedding_space is None:
-                V_elt = BrokenElement(field.function_space().ufl_element())
+                V_elt = BrokenElement(fs.ufl_element())
                 self.fs = FunctionSpace(state.mesh, V_elt)
             else:
                 self.fs = options.embedding_space
@@ -100,7 +100,7 @@ class Advection(object, metaclass=ABCMeta):
             # embedding and the original spaces
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
-            self.x_projected = Function(field.function_space())
+            self.x_projected = Function(fs)
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
@@ -115,7 +115,7 @@ class Advection(object, metaclass=ABCMeta):
 
         if options.name == "recovered":
             # set up the necessary functions
-            self.x_in = Function(field.function_space())
+            self.x_in = Function(fs)
             x_rec = Function(options.recovered_space)
             x_brok = Function(options.broken_space)
 
@@ -162,7 +162,7 @@ class Advection(object, metaclass=ABCMeta):
             # update default ksp_type
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, field, equation, dt, *active_labels,
+    def setup(self, state, equation, dt, *active_labels,
               u_advecting=None):
         """
         This function is called from the Timstepper class. At this point
@@ -172,7 +172,6 @@ class Advection(object, metaclass=ABCMeta):
         for the timestepping scheme.
 
         :arg state: a :class:`.State` object
-        :arg field: a :func:`.Function` object - the prognostic field
         :arg equation: a :class:`.PrognosticEquation` object
         :arg dt: the timestep
         :arg active_labels: :class:`Label` object(s) specifying the label(s)
@@ -186,7 +185,8 @@ class Advection(object, metaclass=ABCMeta):
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
         self.dt = dt
-        self.field = field
+        self.field_name = equation.field_name
+        fs = equation.function_space
         # store just the form
         self.equation = equation()
 
@@ -194,12 +194,12 @@ class Advection(object, metaclass=ABCMeta):
         mixed_equation = len(equation.function_space) > 1
         # is the prognostic field is defined on a mixed
         # function space
-        mixed_function = len(field.function_space()) > 1
+        mixed_function = len(fs) > 1
         # if the equation in defined on a mixed function space, but
         # the prognostic field isn't, then extract the parts of the
         # equation form that involve this prognostic field.
         if mixed_equation and not mixed_function:
-            idx = field.function_space().index
+            idx = fs.index
             self.equation = self.equation.label_map(
                 lambda t: t.get(index) == idx, extract(idx), drop)
 
@@ -216,10 +216,10 @@ class Advection(object, metaclass=ABCMeta):
             if mixed_equation and mixed_function:
                 raise NotImplementedError("%s options not implemented for mixed problems" % self.options.name)
             else:
-                self._setup_from_options(state, field, self.options)
+                self._setup_from_options(state, fs, self.options)
         else:
             self.discretisation_option = None
-            self.fs = field.function_space()
+            self.fs = fs
 
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.equation]):
@@ -340,7 +340,7 @@ class Advection(object, metaclass=ABCMeta):
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(action(self.lhs, self.result)-self.rhs, self.result)
-        solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
+        solver_name = self.field_name+self.equation.__class__.__name__+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
@@ -388,7 +388,7 @@ class ExplicitAdvection(Advection):
         super().__init__(solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-    def setup(self, state, field, equation, dt, *active_labels,
+    def setup(self, state, equation, dt, *active_labels,
               u_advecting=None):
 
         # if user has specified a number of subcycles, then save this
@@ -400,7 +400,7 @@ class ExplicitAdvection(Advection):
             dt = dt
             self.ncycles = 1
 
-        super().setup(state, field, equation, dt, *active_labels,
+        super().setup(state, equation, dt, *active_labels,
                       u_advecting=u_advecting)
 
         # setup functions to store the result of each cycle
