@@ -3,22 +3,22 @@ from gusto import *
 import pytest
 
 
-def run(state, equations, schemes, dt, tmax):
+def run(state, equations_schemes, dt, tmax):
 
     timestepper = PrescribedAdvectionTimestepper(
-        state, equations=equations, schemes=schemes)
+        state, equations_schemes)
     timestepper.run(0, dt=dt, tmax=tmax)
     return timestepper.state.fields("f")
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "im"])
 @pytest.mark.parametrize("space", ["cg", "theta", "vector", "HDiv"])
-def test_advection_supg(scheme, space, tracer_setup):
+def test_advection_supg(tmpdir, scheme, space, tracer_setup):
     """
     This tests the embedded DG advection scheme for scalar and vector fields
     in slice geometry.
     """
-    setup = tracer_setup("slice")
+    setup = tracer_setup(tmpdir, "slice")
     state = setup.state
     dt = setup.dt
     tmax = setup.tmax
@@ -54,7 +54,7 @@ def test_advection_supg(scheme, space, tracer_setup):
         f_end = Function(fspace).project(f_end_expr)
 
     supg_opts = SUPGOptions()
-    equations = [("f", AdvectionEquation(state, fspace, "f", ibp=ibp))]
+    equation = AdvectionEquation(state, fspace, "f", ibp=ibp)
     f = state.fields("f")
     try:
         f.interpolate(f_init)
@@ -62,9 +62,9 @@ def test_advection_supg(scheme, space, tracer_setup):
         f.project(f_init)
 
     if scheme == "ssprk":
-        schemes = [("f", SSPRK3(options=supg_opts))]
+        equations_schemes = [(equation, SSPRK3(options=supg_opts))]
     elif scheme == "im":
-        schemes = [("f", ImplicitMidpoint(options=supg_opts))]
+        equations_schemes = [(equation, ImplicitMidpoint(options=supg_opts))]
 
-    f = run(state, equations, schemes, dt, tmax)
+    f = run(state, equations_schemes, dt, tmax)
     assert errornorm(f, f_end) < err

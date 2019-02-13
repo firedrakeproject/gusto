@@ -36,36 +36,25 @@ class PrognosticEquation(object, metaclass=ABCMeta):
     child class form method. Calling this class returns the form
     mass_term + form
     """
-    def __init__(self, state, function_space, *field_names):
+    def __init__(self, state, function_space, field_name):
+
         self.state = state
         self.function_space = function_space
+        self.field_name = field_name
 
-        dump = state.output.dumplist or field_names
-        pickup = field_names
-        state.fields(*field_names, space=function_space, dump=dump,
-                     pickup=pickup)
+        dump = state.output.dumplist or True
+        state.fields(field_name, space=function_space, dump=dump)
 
-        state.diagnostics.register(*field_names)
+        state.diagnostics.register(field_name)
 
     def mass_term(self):
         """
         Returns the labelled form for the mass term for self.function_space
         with its subject labelled and the time_derivative label applied.
-        If self.function_space is a MixedFunctionSpace then label each term
-        with the index of the space it is defined on.
         """
-        if len(self.function_space) == 1:
-            test = TestFunction(self.function_space)
-            q = Function(self.function_space)
-            return subject(time_derivative(inner(q, test)*dx), q)
-        else:
-            tests = TestFunctions(self.function_space)
-            qs = Function(self.function_space)
-            return functools.reduce(
-                operator.add,
-                (index(subject(
-                    time_derivative(inner(q, test)*dx), qs), tests.index(test))
-                 for q, test in zip(qs.split(), tests)))
+        test = TestFunction(self.function_space)
+        q = Function(self.function_space)
+        return subject(time_derivative(inner(q, test)*dx), q)
 
     @abstractproperty
     def form(self):
@@ -162,12 +151,40 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 class PrognosticMixedEquation(PrognosticEquation):
     """
     Base class for the equation set defined on a mixed function space.
-    Child classes must define their fieldlist and solver parameters for
+    Child classes must define their fields and solver parameters for
     the mixed system.
     """
 
+    def __init__(self, state, function_space, field_name):
+
+        self.state = state
+        self.function_space = function_space
+        self.field_name = field_name
+
+        assert len(function_space) == len(self.fields)
+
+        dump = state.output.dumplist or self.fields
+        state.fields(field_name, *self.fields, space=function_space,
+                     dump=dump)
+
+        state.diagnostics.register(*self.fields)
+
+    def mass_term(self):
+        """
+        Returns the labelled form for the mass term for self.function_space
+        with its subject labelled and the time_derivative label applied.
+        Also labels each term with the index of the space it is defined on.
+        """
+        tests = TestFunctions(self.function_space)
+        qs = Function(self.function_space)
+        return functools.reduce(
+            operator.add,
+            (index(subject(
+                time_derivative(inner(q, test)*dx), qs), tests.index(test))
+             for q, test in zip(qs.split(), tests)))
+
     @abstractproperty
-    def fieldlist(self):
+    def fields(self):
         """
         Child classes must define a list of their prognostic field names.
         """
@@ -197,7 +214,8 @@ class ShallowWaterEquations(PrognosticMixedEquation):
     * Coriolis term present and the Coriolis parameter takes the value for
     the Earth. Pass in fexpr=None for non-rotating shallow water.
     """
-    fieldlist = ['u', 'D']
+    name = "sw"
+    fields = ['u', 'D']
 
     solver_parameters = {
         'ksp_type': 'preonly',
@@ -223,9 +241,9 @@ class ShallowWaterEquations(PrognosticMixedEquation):
 
         # define the function spaces
         Vu, VD = build_spaces(state, family, degree)
-        self.function_space = MixedFunctionSpace((Vu, VD))
+        W = MixedFunctionSpace((Vu, VD))
 
-        super().__init__(state, self.function_space, *self.fieldlist)
+        super().__init__(state, W, self.name)
 
         # setup optional coriolis and topography terms, default is for
         # the Coriolis term to be that for the Earth.

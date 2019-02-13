@@ -54,7 +54,7 @@ def setup_sw(dirname, scheme):
                                 advected_fields=advected_fields)
     elif scheme == "SSPRK3":
         scheme = SSPRK3()
-        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
+        stepper = Timestepper(state, [(eqns, scheme)])
 
     return stepper, dt, 2*day
 

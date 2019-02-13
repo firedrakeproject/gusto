@@ -74,9 +74,9 @@ def tracer_blob_slice(tmpdir):
 
 
 @pytest.fixture()
-def tracer_setup(tmpdir):
+def tracer_setup():
 
-    def _tracer_setup(geometry, blob=False):
+    def _tracer_setup(tmpdir, geometry, blob=False):
         if geometry == "sphere":
             assert not blob
             return tracer_advection_sphere(tmpdir)

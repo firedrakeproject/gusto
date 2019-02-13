@@ -21,6 +21,10 @@ class SpaceCreator(object):
     Class for storing function spaces and accessing them by name.
     """
     def __call__(self, name, mesh=None, family=None, degree=None):
+        """
+        If the named space already exists then return it; otherwise
+        create it using the information provided.
+        """
         try:
             return getattr(self, name)
         except AttributeError:
@@ -37,42 +41,73 @@ class FieldCreator(object):
         self.fields = []
 
     def add_field(self, name, value, dump, pickup):
+        """
+        adds a field to this class
+        :arg name: str, the name of the field
+        :arg value: :class:`Function` the value of this field
+        :arg dump: bool, whether this field is written to the output file
+        :arg pickup: bool, whether to pickup this field which picking up
+        from a checkpointed state
+        """
         setattr(self, name, value)
         value.dump = dump
         value.pickup = pickup
         value.rename(name)
         self.fields.append(value)
 
-    def __call__(self, *names, space=None, dump=True, pickup=True):
+    def __call__(self, name, *subfield_names, space=None,
+                 dump=False, pickup=False):
+        """
+        If the named field already exists then return it; otherwise
+        create it on the provided space.
+        """
         try:
-            if len(names) == 1:
-                return getattr(self, names[0])
-            else:
-                raise AttributeError("I don't want to")
+            return getattr(self, name)
         except AttributeError:
-            if space is not None:
-                assert len(names) == len(space), "must specify one name per function space in %s" % space
-                if len(space) == 1:
-                    value = Function(space)
-                    self.add_field(names[0], value, dump, pickup)
-                    return value
-                else:
-                    assert not hasattr(self, 'X'), "cannot have more than one mixed variable"
-                    self.X = Function(space)
-                    if type(dump) == list:
-                        dump_ = dict(zip(names, [f in dump for f in names]))
-                    else:
-                        dump_ = dict(zip(names, (dump,)*len(names)))
-                    if type(pickup) is list:
-                        pickup_ = dict(zip(names,
-                                           [f in pickup for f in names]))
-                    else:
-                        pickup_ = dict(zip(names, (pickup,)*len(names)))
-                    for name, value in zip(names, self.X.split()):
-                        self.add_field(name, value, dump_[name], pickup_[name])
-                    return self.X
+
+            if space is None:
+                raise AttributeError("No field named %s and no space provided to create a new field." % name)
+
+            if len(space) == 1:
+                # create function, add field and return value
+                assert not subfield_names, "cannot name subfields if there aren't any"
+                value = Function(space)
+                self.add_field(name, value, dump, pickup)
+                return value
             else:
-                raise AttributeError("No field named %s and no space provided to create a new field." % names)
+                # create mixed function and add it
+                mixed_function = Function(space)
+                self.add_field(name, mixed_function, dump=False, pickup=True)
+
+                # create a dict field_name: dump to indicate whether
+                # to dump field - use default value of dump if dump
+                # has not been passed in
+                if type(dump) == list:
+                    dump_ = dict(zip(subfield_names,
+                                     [f in dump for f in subfield_names]))
+                else:
+                    dump_ = dict(zip(subfield_names,
+                                     (dump,)*len(subfield_names)))
+
+                # create a dict field_name: pickup to indicate whether
+                # to pickup the field after checkpointing - use
+                # default value of pickup if pickup has not been passed in
+                if type(pickup) is list:
+                    pickup_ = dict(zip(subfield_names,
+                                       [f in pickup for f in subfield_names]))
+                else:
+                    pickup_ = dict(zip(subfield_names,
+                                       (pickup,)*len(subfield_names)))
+
+                # if subfield_names have been passed in we need to
+                # split the mixed function and add the resulting
+                # fields so that they can later be accessed by name
+                if subfield_names:
+                    assert len(subfield_names) == len(space), "must specify one name per funciton space in %s" % space
+                    for name, value in zip(subfield_names,
+                                           mixed_function.split()):
+                        self.add_field(name, value, dump_[name], pickup_[name])
+                return getattr(self, name)
 
     def __iter__(self):
         return iter(self.fields)
@@ -192,13 +227,10 @@ class State(object):
     """
 
     def __init__(self, mesh,
-                 hydrostatic=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
-
-        self.hydrostatic = hydrostatic
 
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -251,12 +283,6 @@ class State(object):
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
-
-        # project test function for hydrostatic case
-        if self.hydrostatic:
-            self.h_project = lambda u: u - self.k*inner(u, self.k)
-        else:
-            self.h_project = lambda u: u
 
         #  Constant to hold current time
         self.t = Constant(0.0)

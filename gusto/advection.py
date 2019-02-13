@@ -120,7 +120,7 @@ class Advection(object, metaclass=ABCMeta):
             x_brok = Function(options.broken_space)
 
             # set up interpolators and projectors
-            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
+            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=fs, boundary_method=options.boundary_method)  # recovered function
             self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
             if self.limiter is not None:
@@ -128,9 +128,10 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
                 # when the "average" method comes into firedrake master, this will be
                 # self.x_out_projector = Projector(x_brok, self.x_projected, method="average")
-        elif options.name == "supg":
-            self.fs = field.function_space()
 
+        elif options.name == "supg":
+
+            self.fs = fs
             # construct tau, if it is not specified
             dim = state.mesh.topological_dimension()
             if options.tau is not None:
@@ -147,7 +148,7 @@ class Advection(object, metaclass=ABCMeta):
                 )
 
             # replace test function with supg test function
-            test = TestFunction(self.fs)
+            test = TestFunction(fs)
             default_uadv = Function(state.spaces("HDiv"))
 
             def replace_with_supg_test(t):
@@ -163,7 +164,7 @@ class Advection(object, metaclass=ABCMeta):
             self.default_ksp_type = 'gmres'
 
     def setup(self, state, equation, dt, *active_labels,
-              u_advecting=None):
+              field_name=None, u_advecting=None):
         """
         This function is called from the Timstepper class. At this point
         we have all the information we need to extract the required parts
@@ -185,16 +186,23 @@ class Advection(object, metaclass=ABCMeta):
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
 
         self.dt = dt
-        self.field_name = equation.field_name
-        fs = equation.function_space
+        if field_name is None:
+            self.field_name = equation.field_name
+            fs = equation.function_space
+        else:
+            self.field_name = field_name
+            fs = state.fields(field_name).function_space()
+
         # store just the form
         self.equation = equation()
 
         # is the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1
+
         # is the prognostic field is defined on a mixed
         # function space
         mixed_function = len(fs) > 1
+
         # if the equation in defined on a mixed function space, but
         # the prognostic field isn't, then extract the parts of the
         # equation form that involve this prognostic field.
@@ -389,7 +397,7 @@ class ExplicitAdvection(Advection):
                          limiter=limiter, options=options)
 
     def setup(self, state, equation, dt, *active_labels,
-              u_advecting=None):
+              field_name=None, u_advecting=None):
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -401,7 +409,7 @@ class ExplicitAdvection(Advection):
             self.ncycles = 1
 
         super().setup(state, equation, dt, *active_labels,
-                      u_advecting=u_advecting)
+                      field_name=field_name, u_advecting=u_advecting)
 
         # setup functions to store the result of each cycle
         self.x = [Function(self.fs)]*(self.ncycles+1)

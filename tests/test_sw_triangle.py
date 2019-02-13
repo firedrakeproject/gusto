@@ -72,10 +72,10 @@ def setup_sw(dirname, scheme, uopt):
                                 advected_fields=advected_fields)
     elif scheme == "ImplicitMidpoint":
         scheme = ImplicitMidpoint()
-        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
+        stepper = Timestepper(state, [(eqns, scheme)])
     elif scheme == "SSPRK3":
         scheme = SSPRK3()
-        stepper = Timestepper(state, equation_set=eqns, schemes=scheme)
+        stepper = Timestepper(state, [(eqns, scheme)])
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
