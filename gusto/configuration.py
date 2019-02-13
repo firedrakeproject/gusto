@@ -2,13 +2,13 @@
 Some simple tools for making model configuration nicer.
 """
 from abc import ABCMeta, abstractproperty
-from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "XYComponents", "XZComponents", "XYZComponents"]
+__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions"]
+
 
 logger = logging.getLogger("gusto")
 
@@ -47,6 +47,7 @@ class OutputParameters(Configuration):
     #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
     #: default value "warning"
     log_level = WARNING
+    dump_vtus = True
     dumpfreq = 1
     dumplist = None
     dumplist_latlon = []
@@ -152,21 +153,4 @@ class SUPGOptions(AdvectionOptions):
 
     name = "supg"
     tau = None
-    tau_components = ()
     default = 1/sqrt(15)
-
-
-class XYComponents(Enum):
-    x = 0
-    y = 1
-
-
-class XZComponents(Enum):
-    x = 0
-    z = 1
-
-
-class XYZComponents(Enum):
-    x = 0
-    y = 1
-    z = 2

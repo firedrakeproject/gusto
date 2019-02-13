@@ -18,7 +18,6 @@ R = 6371220.
 H = 5960.
 
 # setup input that doesn't change with ref level or dt
-fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
@@ -30,7 +29,11 @@ for ref_level, dt in ref_dt.items():
     global_normal = x
     mesh.init_cell_orientations(x)
 
-    output = OutputParameters(dirname=dirname, dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    output = OutputParameters(dirname=dirname,
+                              dumplist_latlon=['D', 'D_error'],
+                              steady_state_error_fields=['D', 'u'],
+                              log_level='INFO')
+
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(),

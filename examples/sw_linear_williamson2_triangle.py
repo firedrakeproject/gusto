@@ -21,8 +21,10 @@ mesh = IcosahedralSphereMesh(radius=R,
 x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
-fieldlist = ['u', 'D']
-output = OutputParameters(dirname='sw_linear_w2', steady_state_error_fields=['u', 'D'])
+output = OutputParameters(dirname='sw_linear_w2',
+                          steady_state_error_fields=['u', 'D'],
+                          log_level='INFO')
+
 parameters = ShallowWaterParameters(H=H)
 
 state = State(mesh, dt=dt,

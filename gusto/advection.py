@@ -6,6 +6,7 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
+from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (all_terms, has_labels, index,
                                                advecting_velocity, subject,
                                                time_derivative, drop,
@@ -135,12 +136,23 @@ class Advection(object, metaclass=ABCMeta):
             # construct tau, if it is not specified
             dim = state.mesh.topological_dimension()
             if options.tau is not None:
-                tau = options.tau
-                assert tau.ufl_shape == (dim, dim)
+                # if tau is provided, check that is has the right size
+                tau = supg_params.tau
+                assert as_ufl(tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
             else:
-                vals = [options.default*self.dt]*dim
-                for component, value in options.tau_components:
-                    vals[state.components.component] = value
+                # create tuple of default values of size dim
+                default_vals = [supg_params.default*self.dt]*dim
+                # check for directions is which the space is discontinuous
+                # so that we don't apply supg in that direction
+                if is_cg(V):
+                    vals = default_vals
+                else:
+                    space = V.ufl_element().sobolev_space()
+                    if space.name in ["HDiv", "DirectionalH"]:
+                        vals = [default_vals[i] if space[i].name == "H1"
+                                else 0. for i in range(dim)]
+                    else:
+                        raise ValueError("I don't know what to do with space %s" % space)
                 tau = Constant(tuple([
                     tuple(
                         [vals[j] if i == j else 0. for i, v in enumerate(vals)]
@@ -276,6 +288,8 @@ class Advection(object, metaclass=ABCMeta):
         # any on instantiating this class
         if self.solver_parameters is None:
             self.solver_parameters = default_solver_params
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = True
 
         # label the terms explicit or implicit
         self._label_terms()

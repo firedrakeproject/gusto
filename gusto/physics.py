@@ -4,7 +4,7 @@ from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import EmbeddedDGOptions, RecoveredOptions
+from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function,
                        min_value, max_value, as_vector, BrokenElement, FunctionSpace,
                        Constant, pi, Projector)
@@ -230,7 +230,7 @@ class Fallout(Physics):
             elif state.horizontal_degree == 1 and state.vertical_degree == 1:
                 limiter = ThetaLimiter(Vt)
             else:
-                state.logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
+                logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
                 limiter = NoLimiter()
         else:
             limiter = None

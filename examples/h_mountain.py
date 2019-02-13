@@ -61,7 +61,8 @@ if hybridization:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=30,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
 
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
@@ -157,14 +158,23 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybridization:
-    params = {'ksp_type': 'gmres',
-              'ksp_rtol': 1.0e-8,
-              'pc_type': 'gamg',
-              'pc_gamg_sym_graph': True,
-              'mg_levels': {'ksp_type': 'richardson',
-                            'ksp_max_it': 5,
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu'}}
+    params = {'mat_type': 'matfree',
+              'ksp_type': 'preonly',
+              'pc_type': 'python',
+              'pc_python_type': 'firedrake.SCPC',
+              # Velocity mass operator is singular in the hydrostatic case.
+              # So for reconstruction, we eliminate rho into u
+              'pc_sc_eliminate_fields': '1, 0',
+              'condensed_field': {'ksp_type': 'fgmres',
+                                  'ksp_rtol': 1.0e-8,
+                                  'ksp_atol': 1.0e-8,
+                                  'ksp_max_it': 100,
+                                  'pc_type': 'gamg',
+                                  'pc_gamg_sym_graph': True,
+                                  'mg_levels': {'ksp_type': 'gmres',
+                                                'ksp_max_it': 5,
+                                                'pc_type': 'bjacobi',
+                                                'sub_pc_type': 'ilu'}}}
     linear_solver = HybridizedCompressibleSolver(state, solver_parameters=params,
                                                  overwrite_solver_parameters=True)
 else:

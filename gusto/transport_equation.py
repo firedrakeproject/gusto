@@ -5,6 +5,12 @@ from firedrake import (Function, TestFunction, TestFunctions, FacetNormal,
                        outer, sign, cross, CellNormal,
                        curl, Constant)
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject
+=======
+                       ds_v, ds_t, ds_b, VectorElement, as_ufl,
+                       outer, sign, cross, CellNormal, Constant,
+                       curl, BrokenElement, FunctionSpace)
+from gusto.configuration import logger, DEBUG, SUPGOptions
+>>>>>>> origin
 
 
 __all__ = ["IntegrateByParts", "advection_form", "continuity_form"]
@@ -17,25 +23,85 @@ class IntegrateByParts(Enum):
 
 
 def is_cg(V):
-    # find out if we are CG
-    nvertex = V.ufl_domain().ufl_cell().num_vertices()
-    entity_dofs = V.finat_element.entity_dofs()
-    # If there are as many dofs on vertices as there are vertices,
-    # assume a continuous space.
-    try:
-        return sum(map(len, entity_dofs[0].values())) == nvertex
-    except KeyError:
-        return sum(map(len, entity_dofs[(0, 0)].values())) == nvertex
+    """
+    Function to check is a given space, V, is CG. Broken elements are
+    always discontinuous; for vector elements we check the names of
+    the sobolev spaces of the subelements and for all other elements
+    we just check the sobolev space name.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space().name == "H1"
+
+
+def is_dg(V):
+    """
+    Function to check is a given space, V, is DG. Broken elements are
+    always discontinuous; for vector elements we check the names of
+    the sobolev spaces of the subelements and for all other elements
+    we just check the sobolev space name.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return True
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space().name == "L2" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space().name == "L2"
 
 
 def surface_measures(V):
+    """
+    Function returning the correct surface measures to use for the
+    given function space, V, based on its continuity and also on
+    whether the underlying mesh is extruded.
+    """
+    # CG spaces don't require surface terms
     if is_cg(V):
-        return None, None
+        return None
     else:
+        # for extruded meshes we have to unpick things
         if V.extruded:
-            return (dS_h + dS_v), (ds_b + ds_t + ds_v)
+            dim = V.mesh().topological_dimension()
+            ele = V.ufl_element()
+
+            # Broken elements are discontinuous so need dS_v and dS_h
+            if is_dg(V):
+                return (dS_v + dS_h)
+
+            # Figure out which spaces we have
+            elif type(ele) == VectorElement:
+                spaces = [ele._sub_elements[i].sobolev_space().name
+                          for i in range(dim)]
+            else:
+                spaces = [ele.sobolev_space()[i].name for i in range(dim)]
+
+            # Based on the space names, these ones are discontinuous
+            # enough to require surface terms
+            discont = [i for i, name in enumerate(spaces) if name in ["L2", "HDiv"]]
+            # as the mesh is extruded, the dim-1 element of discont
+            # tells us about the vertical discontinuity
+            is_discontinuous_v = dim-1 in discont
+            # check now for horizontal discontinuity
+            is_discontinuous_h = any([i in discont for i in range(dim-1)])
+
+            # return surface measures
+            if is_discontinuous_h and is_discontinuous_v:
+                return (dS_v + dS_h)
+            elif is_discontinuous_h:
+                return dS_v
+            elif is_discontinuous_v:
+                return dS_h
+            else:
+                raise ValueError("Sorry, we have failed to figure out the surface measures for this space")
         else:
-            return dS, ds
+            # if we're here we're discontinuous in some way, but not
+            # on an extruded mesh so things are easy
+            return dS
 
 
 def setup_functions(state, V, idx):
@@ -80,6 +146,7 @@ def advection_form(state, V, idx=None, *,
     if dS is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
+        self.dS = surface_measures(V)
 
         L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
@@ -189,7 +256,7 @@ def vector_invariant_form(state, V, idx=None, *,
 
         if ibp == IntegrateByParts.ONCE:
             L = (
-                -inner(gradperp(inner(test, perp(ubar))), q)*dx
+                -inner(perp(grad(inner(test, perp(ubar)))), q)*dx
                 - inner(jump(inner(test, perp(ubar)), n),
                         perp_u_upwind(q))*dS
             )

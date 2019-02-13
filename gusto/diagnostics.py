@@ -2,14 +2,22 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, \
-    TensorFunctionSpace
+    TensorFunctionSpace, SpatialCoordinate, VectorFunctionSpace, as_vector
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
 from gusto.recovery import Recoverer
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient", "RichardsonNumber", "Energy", "KineticEnergy", "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError", "Perturbation", "PotentialVorticity", "Theta_e", "InternalEnergy", "Dewpoint", "Temperature", "Theta_d", "RelativeHumidity", "HydrostaticImbalance", "RelativeVorticity", "AbsoluteVorticity", "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy", "Precipitation"]
+__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
+           "SphericalComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
+           "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
+           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
+           "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError",
+           "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
+           "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
+           "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
 
 
 class Diagnostics(object):
@@ -189,6 +197,67 @@ class Gradient(DiagnosticField):
         return self.field
 
 
+class SphericalComponent(DiagnosticField):
+
+    def __init__(self, name):
+        super().__init__()
+        self.fname = name
+
+    def setup(self, state):
+        if not self._initialised:
+            # check geometric dimension is 3D
+            if state.mesh.geometric_dimension() != 3:
+                raise ValueError('Spherical components only work when the geometric dimension is 3!')
+            space = FunctionSpace(state.mesh, "CG", 1)
+            super().setup(state, space=space)
+
+        V = VectorFunctionSpace(state.mesh, "CG", 1)
+        self.x, self.y, self.z = SpatialCoordinate(state.mesh)
+        self.x_hat = Function(V).interpolate(Constant(as_vector([1.0, 0.0, 0.0])))
+        self.y_hat = Function(V).interpolate(Constant(as_vector([0.0, 1.0, 0.0])))
+        self.z_hat = Function(V).interpolate(Constant(as_vector([0.0, 0.0, 1.0])))
+        self.R = sqrt(self.x**2 + self.y**2)  # distance from z axis
+        self.r = sqrt(self.x**2 + self.y**2 + self.z**2)  # distance from origin
+        self.f = state.fields(self.fname)
+        if np.prod(self.f.ufl_shape) != 3:
+            raise ValueError('Components can only be found of a vector function space in 3D.')
+
+
+class MeridionalComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_meridional"
+
+    def compute(self, state):
+        lambda_hat = (-self.x * self.z * self.x_hat / self.R
+                      - self.y * self.z * self.y_hat / self.R
+                      + self.R * self.z_hat) / self.r
+        return self.field.project(dot(self.f, lambda_hat))
+
+
+class ZonalComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_zonal"
+
+    def compute(self, state):
+        phi_hat = (self.x * self.y_hat - self.y * self.x_hat) / self.R
+        return self.field.project(dot(self.f, phi_hat))
+
+
+class RadialComponent(SphericalComponent):
+
+    @property
+    def name(self):
+        return self.fname+"_radial"
+
+    def compute(self, state):
+        r_hat = (self.x * self.x_hat + self.y * self.y_hat + self.z * self.z_hat) / self.r
+        return self.field.project(dot(self.f, r_hat))
+
+
 class RichardsonNumber(DiagnosticField):
     name = "RichardsonNumber"
 
@@ -327,145 +396,209 @@ class ExnerPi(DiagnosticField):
         return self.field.interpolate(Pi)
 
 
-class Theta_e(DiagnosticField):
+class Sum(DiagnosticField):
+
+    def __init__(self, field1, field2):
+        super().__init__(required_fields=(field1, field2))
+        self.field1 = field1
+        self.field2 = field2
+
+    @property
+    def name(self):
+        return self.field1+"_plus_"+self.field2
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.fields(self.field1).function_space()
+            super(Sum, self).setup(state, space=space)
+
+    def compute(self, state):
+        field1 = state.fields(self.field1)
+        field2 = state.fields(self.field2)
+        return self.field.assign(field1 + field2)
+
+
+class Difference(DiagnosticField):
+
+    def __init__(self, field1, field2):
+        super().__init__(required_fields=(field1, field2))
+        self.field1 = field1
+        self.field2 = field2
+
+    @property
+    def name(self):
+        return self.field1+"_minus_"+self.field2
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.fields(self.field1).function_space()
+            super(Difference, self).setup(state, space=space)
+
+    def compute(self, state):
+        field1 = state.fields(self.field1)
+        field2 = state.fields(self.field2)
+        return self.field.assign(field1 - field2)
+
+
+class SteadyStateError(Difference):
+
+    def __init__(self, state, name):
+        DiagnosticField.__init__(self)
+        self.field1 = name
+        self.field2 = name+'_init'
+        field1 = state.fields(name)
+        field2 = state.fields(self.field2, field1.function_space())
+        field2.assign(field1)
+
+    @property
+    def name(self):
+        return self.field1+"_error"
+
+
+class Perturbation(Difference):
+
+    def __init__(self, name):
+        self.field1 = name
+        self.field2 = name+'bar'
+        DiagnosticField.__init__(self, required_fields=(self.field1, self.field2))
+
+    @property
+    def name(self):
+        return self.field1+"_perturbation"
+
+
+class ThermodynamicDiagnostic(DiagnosticField):
+    name = "thermodynamic_diagnostic"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.fields("theta").function_space()
+            broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
+            boundary_method = 'physics' if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
+            super().setup(state, space=space)
+
+            # now let's attach all of our fields
+            self.u = state.fields("u")
+            self.rho = state.fields("rho")
+            self.theta = state.fields("theta")
+            self.rho_averaged = Function(space)
+            self.recoverer = Recoverer(self.rho, self.rho_averaged, VDG=broken_space, boundary_method=boundary_method)
+            try:
+                self.r_v = state.fields("water_v")
+            except NotImplementedError:
+                self.r_v = Constant(0.0)
+            try:
+                self.r_c = state.fields("water_c")
+            except NotImplementedError:
+                self.r_c = Constant(0.0)
+            try:
+                self.rain = state.fields("rain")
+            except NotImplementedError:
+                self.rain = Constant(0.0)
+
+            # now let's store the most common expressions
+            self.pi = thermodynamics.pi(state.parameters, self.rho_averaged, self.theta)
+            self.T = thermodynamics.T(state.parameters, self.theta, self.pi, r_v=self.r_v)
+            self.p = thermodynamics.p(state.parameters, self.pi)
+            self.r_l = self.r_c + self.rain
+            self.r_t = self.r_v + self.r_c + self.rain
+
+    def compute(self, state):
+        self.recoverer.project()
+
+
+class Theta_e(ThermodynamicDiagnostic):
     name = "Theta_e"
 
-    def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(Theta_e, self).setup(state, space=space)
-
     def compute(self, state):
-        theta = state.fields('theta')
-        rho0 = state.fields('rho')
-        w_v = state.fields('water_v')
-        w_c = state.fields('water_c')
-        w_t = w_c + w_v
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
-        rho = Function(theta.function_space())
-        rho_recoverer = Recoverer(rho_broken, rho)
+        super().compute(state)
 
-        rho_broken.interpolate(rho0)
-        rho_recoverer.project()
-        pi = thermodynamics.pi(state.parameters, rho, theta)
-        p = thermodynamics.p(state.parameters, pi)
-        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
-
-        return self.field.interpolate(thermodynamics.theta_e(state.parameters, T, p, w_v, w_t))
+        return self.field.assign(thermodynamics.theta_e(state.parameters, self.T, self.p, self.r_v, self.r_t))
 
 
-class InternalEnergy(DiagnosticField):
+class InternalEnergy(ThermodynamicDiagnostic):
     name = "InternalEnergy"
 
+    def compute(self, state):
+        super().compute(state)
+
+        return self.field.assign(thermodynamics.internal_energy(state.parameters, self.rho_averaged, self.T, r_v=self.r_v, r_l=self.r_l))
+
+
+class PotentialEnergy(ThermodynamicDiagnostic):
+    name = "PotentialEnergy"
+
     def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(InternalEnergy, self).setup(state, space=space)
+        super().setup(state)
+        self.x = SpatialCoordinate(state.mesh)
 
     def compute(self, state):
-        theta = state.fields('theta')
-        rho0 = state.fields('rho')
-        w_v = state.fields('water_v')
-        w_c = state.fields('water_c')
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
-        rho = Function(theta.function_space())
-        rho_recoverer = Recoverer(rho_broken, rho)
+        super().compute(state)
 
-        rho_broken.interpolate(rho0)
-        rho_recoverer.project()
-        pi = thermodynamics.pi(state.parameters, rho, theta)
-        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
-
-        return self.field.interpolate(thermodynamics.internal_energy(state.parameters, rho, T, r_v=w_v, r_l=w_c))
+        return self.field.interpolate(self.rho_averaged * (1 + self.r_t) * state.parameters.g * dot(self.x, state.k))
 
 
-class Dewpoint(DiagnosticField):
+class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
+    name = "ThermodynamicKineticEnergy"
+
+    def compute(self, state):
+        super().compute(state)
+
+        return self.field.project(0.5 * self.rho_averaged * (1 + self.r_t) * dot(self.u, self.u))
+
+
+class Dewpoint(ThermodynamicDiagnostic):
     name = "Dewpoint"
 
-    def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(Dewpoint, self).setup(state, space=space)
-
     def compute(self, state):
-        theta = state.fields('theta')
-        rho0 = state.fields('rho')
-        w_v = state.fields('water_v')
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
-        rho = Function(theta.function_space())
-        rho_recoverer = Recoverer(rho_broken, rho)
+        super().compute(state)
 
-        rho_broken.interpolate(rho0)
-        rho_recoverer.project()
-        pi = thermodynamics.pi(state.parameters, rho, theta)
-        p = thermodynamics.p(state.parameters, pi)
-
-        return self.field.interpolate(thermodynamics.T_dew(state.parameters, p, w_v))
+        return self.field.assign(thermodynamics.T_dew(state.parameters, self.p, self.r_v))
 
 
-class Temperature(DiagnosticField):
+class Temperature(ThermodynamicDiagnostic):
     name = "Temperature"
 
-    def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(Temperature, self).setup(state, space=space)
-
     def compute(self, state):
-        theta = state.fields('theta')
-        rho0 = state.fields('rho')
-        w_v = state.fields('water_v')
+        super().compute(state)
 
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
-        rho = Function(theta.function_space())
-        rho_recoverer = Recoverer(rho_broken, rho)
-
-        rho_broken.interpolate(rho0)
-        rho_recoverer.project()
-        pi = thermodynamics.pi(state.parameters, rho, theta)
-
-        return self.field.interpolate(thermodynamics.T(state.parameters, theta, pi, r_v=w_v))
+        return self.field.assign(self.T)
 
 
-class Theta_d(DiagnosticField):
+class Theta_d(ThermodynamicDiagnostic):
     name = "Theta_d"
 
-    def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(Theta_d, self).setup(state, space=space)
-
     def compute(self, state):
-        theta = state.fields('theta')
-        w_v = state.fields('water_v')
-        epsilon = state.parameters.R_d / state.parameters.R_v
+        super().compute(state)
 
-        return self.field.interpolate(theta / (1 + w_v / epsilon))
+        return self.field.assign(self.theta / (1 + self.r_v * state.parameters.R_v / state.parameters.R_d))
 
 
-class RelativeHumidity(DiagnosticField):
+class RelativeHumidity(ThermodynamicDiagnostic):
     name = "RelativeHumidity"
 
-    def setup(self, state):
-        if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
-            super(RelativeHumidity, self).setup(state, space=space)
+    def compute(self, state):
+        super().compute(state)
+
+        return self.field.assign(thermodynamics.RH(state.parameters, self.r_v, self.T, self.p))
+
+
+class Pressure(ThermodynamicDiagnostic):
+    name = "Pressure_Vt"
 
     def compute(self, state):
-        theta = state.fields('theta')
-        rho0 = state.fields('rho')
-        w_v = state.fields('water_v')
-        rho_broken = Function(FunctionSpace(state.mesh, BrokenElement(theta.function_space().ufl_element())))
-        rho = Function(theta.function_space())
-        rho_recoverer = Recoverer(rho_broken, rho)
+        super().compute(state)
 
-        rho_broken.interpolate(rho0)
-        rho_recoverer.project()
-        pi = thermodynamics.pi(state.parameters, rho, theta)
-        T = thermodynamics.T(state.parameters, theta, pi, r_v=w_v)
-        p = thermodynamics.p(state.parameters, pi)
+        return self.field.assign(self.p)
 
-        return self.field.interpolate(thermodynamics.RH(state.parameters, w_v, T, p))
+
+class Pi_Vt(ThermodynamicDiagnostic):
+    name = "Pi_Vt"
+
+    def compute(self, state):
+        super().compute(state)
+
+        return self.field.assign(self.pi)
 
 
 class HydrostaticImbalance(DiagnosticField):
@@ -474,7 +607,7 @@ class HydrostaticImbalance(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("Vv")
-            super(HydrostaticImbalance, self).setup(state, space=space)
+            super().setup(state, space=space)
             rho = state.fields("rho")
             rhobar = state.fields("rhobar")
             theta = state.fields("theta")
@@ -507,7 +640,7 @@ class HydrostaticImbalance(DiagnosticField):
 class Sum(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Sum, self).__init__(required_fields=(field1, field2))
+        super().__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -529,7 +662,7 @@ class Sum(DiagnosticField):
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
-        super(Difference, self).__init__(required_fields=(field1, field2))
+        super().__init__(required_fields=(field1, field2))
         self.field1 = field1
         self.field2 = field2
 
@@ -581,7 +714,7 @@ class Precipitation(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("DG0", state.mesh, "DG", 0)
-            super(Precipitation, self).setup(state, space=space)
+            super().setup(state, space=space)
 
             rain = state.fields('rain')
             rho = state.fields('rho')

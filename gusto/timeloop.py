@@ -98,16 +98,17 @@ class Timestepper(object, metaclass=ABCMeta):
                                  u_advecting=uadv)
                     self.schemes.append((eq.field_name, scheme))
 
-    def setup_timeloop(self, t, dt, tmax, pickup):
+    def setup_timeloop(self, state, t, dt, tmax, pickup):
         """
         Setup the timeloop by setting up timestepping schemes and diagnostics,
         dumping the fields and picking up from a previous run, if required
         """
+        if pickup:
+            t = state.pickup_from_checkpoint()
         self.setup_schemes()
         self.state.setup_diagnostics(dt)
         with timed_stage("Dump output"):
-            self.state.setup_dump(dt, tmax, pickup)
-            t = self.state.dump(t, pickup)
+            t = self.state.setup_dump(t, dt, tmax, pickup)
         return t
 
     def initialise(self, state):
@@ -142,7 +143,7 @@ class Timestepper(object, metaclass=ABCMeta):
         # initialise the fields in xn
         self.initialise(state)
 
-        t = self.setup_timeloop(t, dt, tmax, pickup)
+        t = self.setup_timeloop(state, t, dt, tmax, pickup)
 
         while t < tmax - 0.5*dt:
             logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
@@ -163,7 +164,7 @@ class Timestepper(object, metaclass=ABCMeta):
             self.update_fields(state.fields, self.xnp1)
 
             with timed_stage("Dump output"):
-                state.dump(t, pickup=False)
+                state.dump(t)
 
         if state.output.checkpoint:
             state.chkpt.close()
