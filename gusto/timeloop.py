@@ -16,16 +16,13 @@ class Timestepper(object, metaclass=ABCMeta):
     Basic timestepping class for Gusto.
 
     :arg state: a :class:`.State` object
-    :arg equation_set: (optional) a :class:`.PrognosticEquation` object,
-         defined on a mixed function space
-    :arg equations: a list of tuples (field, equation)
-         pairing a field name with the :class:`.PrognosticEquation` object
-         that defines the prognostic equation that the field satisfies.
-    :arg schemes: either a list of tuples (field, scheme, *active_labels)
-         that specify which scheme to use to timestep the field's prognostic
-         equation and which labels, if any, to use to select part of the
-         equation; or a :class:`.Advection` object which specifies the
-         scheme to apply to the equation_set.
+    :arg equations_schemes: a list of tuples (equation, schemes)
+         pairing a :class:`.PrognosticEquation` object with the scheme(s)
+         to use to timestep it. The schemes entry can be a :class:`.Advection`
+         object which is applied to the entire equation, or a tuple of
+         (scheme, *active_labels) where scheme is a :class:`.Advection`
+         object and the active_labels are :class:`.Label` objects that
+         specify which parts of the equation to apply this scheme to.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an ordered list of tuples, pairing a field name
          with a function that returns the field as a function of time.
@@ -53,7 +50,7 @@ class Timestepper(object, metaclass=ABCMeta):
     def _setup_timeloop_fields(self):
         """
         Sets up fields to contain the values at time levels n and n+1,
-        getting the fields name and function space from the equation
+        getting the field's name and function space from the equation
         """
         self.xn = FieldCreator()
         self.xnp1 = FieldCreator()
@@ -158,9 +155,6 @@ class Timestepper(object, metaclass=ABCMeta):
             # steps fields from xn to xnp1
             self.timestep(state)
 
-            # update xn
-            self.update_fields(self.xn, self.xnp1)
-
             with timed_stage("Physics"):
                 for physics in self.physics_list:
                     physics.apply()
@@ -183,14 +177,13 @@ class PrescribedAdvectionTimestepper(Timestepper):
     velocity
 
     :arg state: a :class:`.State` object
-    :arg equations: a list of tuples (field, equation)
-         pairing a field name with the :class:`.PrognosticEquation` object
-         that defines the prognostic equation that the field satisfies.
-    :arg schemes: either a list of tuples (field, scheme, *active_labels)
-         that specify which scheme to use to timestep the field's prognostic
-         equation and which labels, if any, to use to select part of the
-         equation; or an :class:`.Advection` object which specifies the
-         scheme to apply to the equation_set.
+    :arg equations_schemes: a list of tuples (equation, schemes)
+         pairing a :class:`.PrognosticEquation` object with the scheme(s)
+         to use to timestep it. The schemes entry can be a :class:`.Advection`
+         object which is applied to the entire equation, or a tuple of
+         (scheme, *active_labels) where scheme is a :class:`.Advection`
+         object and the active_labels are :class:`.Label` objects that
+         specify which parts of the equation to apply this scheme to.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an ordered list of tuples, pairing a field name
          with a function that returns the field as a function of time.
@@ -229,6 +222,13 @@ class CrankNicolson(Timestepper):
     :arg diffused_fields: (optional) iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffuse, and the
         :class:`~.Diffusion` to use.
+    :arg equations_schemes: a list of tuples (equation, schemes)
+         pairing a :class:`.PrognosticEquation` object with the scheme(s)
+         to use to timestep it. The schemes entry can be a :class:`.Advection`
+         object which is applied to the entire equation, or a tuple of
+         (scheme, *active_labels) where scheme is a :class:`.Advection`
+         object and the active_labels are :class:`.Label` objects that
+         specify which parts of the equation to apply this scheme to.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an order list of tuples, pairing a field name with a
          function that returns the field as a function of time.
@@ -277,6 +277,7 @@ class CrankNicolson(Timestepper):
         for name, _ in self.diffused_fields:
             assert name in equation_set.fields, "The diffused fields list is for specifying diffusion schemes for fields in the equation_set. To add additional fields, equations and schemes, please use the equations_schemes arg."
 
+        # this list is for additional equations and schemes, such as tracers
         if equations_schemes is None:
             equations_schemes = []
 
@@ -287,11 +288,23 @@ class CrankNicolson(Timestepper):
 
     @property
     def advecting_velocity(self):
+        """
+        This defines the advecting velocity as the average of the velocity
+        at time level n and that at time level n+1.
+        """
         un = self.xn("u")
         unp1 = self.xnp1("u")
         return un + self.alpha*(unp1-un)
 
     def _setup_timeloop_fields(self):
+        """
+        Sets up fields to contain the values at time levels n and n+1, as
+        well as intermediate fields xstar (the results of applying the
+        first forcing step) and xp (the result of applying the
+        advection schemes). We also need functions to hold the
+        solution of the linear system and the residual.
+
+        """
         equation_set = self.equation_set
         self.xn = FieldCreator()
         self.xnp1 = FieldCreator()
@@ -315,7 +328,14 @@ class CrankNicolson(Timestepper):
         self.dy = Function(equation_set.function_space)
 
     def setup_schemes(self):
+        """
+        Setup the timestepping schemes, supplying the advection and
+        diffusion labels for fields in the equation_set.
+        """
         super().setup_schemes()
+
+        # set up the schemes used for advection and diffusion of
+        # fields in the equation_set
         for name, scheme in self.active_advection:
             scheme.setup(self.state, self.equation_set, self.dt,
                          advection, field_name=name,
@@ -326,6 +346,11 @@ class CrankNicolson(Timestepper):
                          u_advecting=self.advecting_velocity)
 
     def setup_timeloop(self, t, dt, tmax, pickup):
+        """
+        Setup the timeloop by setting up timestepping schemes and diagnostics,
+        dumping the fields and picking up from a previous run, if required.
+        We also need to set up the linear solver and the forcing solvers.
+        """
         t = super().setup_timeloop(t, dt, tmax, pickup)
         self.linear_solver = LinearTimesteppingSolver(self.equation_set,
                                                       dt, self.alpha)
@@ -333,7 +358,11 @@ class CrankNicolson(Timestepper):
         return t
 
     def timestep(self, state):
-
+        """
+        This defines the timestep for the CrankNicolson scheme. First the
+        semi_implicit_step timesteps the equation_set, then any additional
+        equations are solved and finally diffusion is applied.
+        """
         self.semi_implicit_step()
 
         for name, scheme in self.equations_schemes:
@@ -345,6 +374,13 @@ class CrankNicolson(Timestepper):
                 scheme.apply(self.xnp1(name), self.xnp1(name))
 
     def semi_implicit_step(self):
+        """
+        The semi implicit step for the CrankNicholson scheme. This applies
+        the forcing terms (defined as those that are not labelled
+        advection) for alpha*dt, then applies the advection schemes to
+        the advection terms and finally applies the forcing terms for
+        (1-alpha)*dt.
+        """
 
         fname = self.equation_set.name
         with timed_stage("Apply forcing terms"):
