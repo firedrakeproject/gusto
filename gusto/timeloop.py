@@ -108,7 +108,7 @@ class Timestepper(object, metaclass=ABCMeta):
         self.setup_schemes()
         self.state.setup_diagnostics(dt)
         with timed_stage("Dump output"):
-            t = self.state.setup_dump(t, dt, tmax, pickup)
+            self.state.setup_dump(t, dt, tmax, pickup)
         return t
 
     def initialise(self, state):
@@ -346,13 +346,13 @@ class CrankNicolson(Timestepper):
                          diffusion, field_name=name,
                          u_advecting=self.advecting_velocity)
 
-    def setup_timeloop(self, t, dt, tmax, pickup):
+    def setup_timeloop(self, state, t, dt, tmax, pickup):
         """
         Setup the timeloop by setting up timestepping schemes and diagnostics,
         dumping the fields and picking up from a previous run, if required.
         We also need to set up the linear solver and the forcing solvers.
         """
-        t = super().setup_timeloop(t, dt, tmax, pickup)
+        t = super().setup_timeloop(state, t, dt, tmax, pickup)
         self.linear_solver = LinearTimesteppingSolver(self.equation_set,
                                                       dt, self.alpha)
         self.forcing = Forcing(self.equation_set, dt, self.alpha)
