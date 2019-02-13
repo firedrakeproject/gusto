@@ -432,7 +432,7 @@ class Difference(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.fields(self.field1).function_space()
-            super(Difference, self).setup(state, space=space)
+            super().setup(state, space=space)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -447,7 +447,7 @@ class SteadyStateError(Difference):
         self.field1 = name
         self.field2 = name+'_init'
         field1 = state.fields(name)
-        field2 = state.fields(self.field2, field1.function_space())
+        field2 = state.fields(self.field2, space=field1.function_space())
         field2.assign(field1)
 
     @property
