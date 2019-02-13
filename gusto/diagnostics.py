@@ -637,28 +637,6 @@ class HydrostaticImbalance(DiagnosticField):
         return self.field[1]
 
 
-class Sum(DiagnosticField):
-
-    def __init__(self, field1, field2):
-        super().__init__(required_fields=(field1, field2))
-        self.field1 = field1
-        self.field2 = field2
-
-    @property
-    def name(self):
-        return self.field1+"_plus_"+self.field2
-
-    def setup(self, state):
-        if not self._initialised:
-            space = state.fields(self.field1).function_space()
-            super(Sum, self).setup(state, space=space)
-
-    def compute(self, state):
-        field1 = state.fields(self.field1)
-        field2 = state.fields(self.field2)
-        return self.field.assign(field1 + field2)
-
-
 class Difference(DiagnosticField):
 
     def __init__(self, field1, field2):
@@ -679,33 +657,6 @@ class Difference(DiagnosticField):
         field1 = state.fields(self.field1)
         field2 = state.fields(self.field2)
         return self.field.assign(field1 - field2)
-
-
-class SteadyStateError(Difference):
-
-    def __init__(self, state, name):
-        DiagnosticField.__init__(self)
-        self.field1 = name
-        self.field2 = name+'_init'
-        field1 = state.fields(name)
-        field2 = state.fields(self.field2, space=field1.function_space())
-        field2.assign(field1)
-
-    @property
-    def name(self):
-        return self.field1+"_error"
-
-
-class Perturbation(Difference):
-
-    def __init__(self, name):
-        self.field1 = name
-        self.field2 = name+'bar'
-        DiagnosticField.__init__(self, required_fields=(self.field1, self.field2))
-
-    @property
-    def name(self):
-        return self.field1+"_perturbation"
 
 
 class Precipitation(DiagnosticField):

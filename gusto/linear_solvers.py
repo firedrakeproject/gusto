@@ -1,26 +1,19 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
-<<<<<<< HEAD
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, inner, dot, grad,
-                       Function, VectorSpaceBasis, BrokenElement, FunctionSpace, MixedFunctionSpace,
-                       assemble, LinearSolver, Tensor, AssembledVector, Constant)
-=======
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
-                       dot, grad, Function, VectorSpaceBasis, BrokenElement,
+                       TestFunction, TrialFunction, lhs, rhs, DirichletBC,
+                       FacetNormal,
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb,
+                       inner, dot, grad,
+                       Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace)
->>>>>>> origin
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-<<<<<<< HEAD
 from gusto.form_manipulation_labelling import (drop, time_derivative, subject,
                                                linearisation, linearise,
                                                replace_labelled, has_labels)
-=======
->>>>>>> origin
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -732,7 +725,6 @@ class LinearTimesteppingSolver(object):
         self._setup_solver(equation(), W, dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
-
     def _setup_solver(self, equation, W, dt, alpha):
 
         beta = Constant(-dt*alpha)

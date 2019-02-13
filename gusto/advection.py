@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        TestFunction, TrialFunction, FunctionSpace,
-                       TrialFunctions, action,
+                       TrialFunctions, action, as_ufl,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
@@ -14,6 +14,7 @@ from gusto.form_manipulation_labelling import (all_terms, has_labels, index,
                                                extract, Term,
                                                explicit, implicit)
 from gusto.recovery import Recoverer
+from gusto.transport_equation import is_cg
 
 
 __all__ = ["BackwardEuler", "ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
@@ -137,17 +138,17 @@ class Advection(object, metaclass=ABCMeta):
             dim = state.mesh.topological_dimension()
             if options.tau is not None:
                 # if tau is provided, check that is has the right size
-                tau = supg_params.tau
+                tau = options.tau
                 assert as_ufl(tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
             else:
                 # create tuple of default values of size dim
-                default_vals = [supg_params.default*self.dt]*dim
+                default_vals = [options.default*self.dt]*dim
                 # check for directions is which the space is discontinuous
                 # so that we don't apply supg in that direction
-                if is_cg(V):
+                if is_cg(fs):
                     vals = default_vals
                 else:
-                    space = V.ufl_element().sobolev_space()
+                    space = fs.ufl_element().sobolev_space()
                     if space.name in ["HDiv", "DirectionalH"]:
                         vals = [default_vals[i] if space[i].name == "H1"
                                 else 0. for i in range(dim)]

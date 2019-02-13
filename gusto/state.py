@@ -266,14 +266,6 @@ class State(object):
 
         # The mesh
         self.mesh = mesh
-        dim = mesh.topological_dimension()
-        if dim == 2:
-            if mesh.coordinates.function_space().extruded:
-                self.components = XZComponents
-            else:
-                self.components = XYComponents
-        else:
-            self.components = XYZComponents
 
         self.fields = FieldCreator()
         self.spaces = SpaceCreator()
@@ -287,6 +279,7 @@ class State(object):
             self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
         #  build the vertical normal and define perp for 2d geometries
+        dim = mesh.topological_dimension()
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))

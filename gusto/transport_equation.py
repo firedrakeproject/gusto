@@ -1,16 +1,10 @@
 from enum import Enum
 from firedrake import (Function, TestFunction, TestFunctions, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds, ds_v, ds_t, ds_b,
+                       ds, VectorElement,
                        outer, sign, cross, CellNormal,
-                       curl, Constant)
+                       curl, Constant, BrokenElement)
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject
-=======
-                       ds_v, ds_t, ds_b, VectorElement, as_ufl,
-                       outer, sign, cross, CellNormal, Constant,
-                       curl, BrokenElement, FunctionSpace)
-from gusto.configuration import logger, DEBUG, SUPGOptions
->>>>>>> origin
 
 
 __all__ = ["IntegrateByParts", "advection_form", "continuity_form"]
@@ -136,7 +130,7 @@ def advection_form(state, V, idx=None, *,
     """
 
     X, test, q, ubar = setup_functions(state, V, idx)
-    dS, ds = surface_measures(q.function_space())
+    dS = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
@@ -146,7 +140,6 @@ def advection_form(state, V, idx=None, *,
     if dS is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
-        self.dS = surface_measures(V)
 
         L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
@@ -173,7 +166,7 @@ def continuity_form(state, V, idx=None, *,
                     ibp=IntegrateByParts.ONCE):
 
     X, test, q, ubar = setup_functions(state, V, idx)
-    dS, ds = surface_measures(q.function_space())
+    dS = surface_measures(q.function_space())
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
@@ -198,7 +191,7 @@ def advection_vector_manifold_form(state, V, idx=None, *,
                                    ibp=IntegrateByParts.ONCE, outflow=None):
 
     X, test, q, ubar = setup_functions(state, V, idx)
-    dS, ds = surface_measures(q.function_space())
+    dS = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
@@ -222,7 +215,7 @@ def vector_invariant_form(state, V, idx=None, *,
     """
 
     X, test, q, ubar = setup_functions(state, V, idx)
-    dS, ds = surface_measures(q.function_space())
+    dS = surface_measures(q.function_space())
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
@@ -252,7 +245,6 @@ def vector_invariant_form(state, V, idx=None, *,
             perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
         else:
             perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
-        gradperp = lambda u: perp(grad(u))
 
         if ibp == IntegrateByParts.ONCE:
             L = (
