@@ -6,14 +6,15 @@ from math import pi
 from netCDF4 import Dataset
 import pytest
 
+R = 6371220.
+H = 5960.
+day = 24.*60.*60.
+u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
+
 
 def setup_sw(dirname, euler_poincare):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
-
-    R = 6371220.
-    H = 5960.
-    day = 24.*60.*60.
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
@@ -38,7 +39,10 @@ def setup_sw(dirname, euler_poincare):
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
                                     'SWPotentialEnstrophy_from_RelativeVorticity'),
                          Difference('SWPotentialEnstrophy_from_PotentialVorticity',
-                                    'SWPotentialEnstrophy_from_AbsoluteVorticity')]
+                                    'SWPotentialEnstrophy_from_AbsoluteVorticity'),
+                         MeridionalComponent('u'),
+                         ZonalComponent('u'),
+                         RadialComponent('u')]
 
     state = State(mesh, vertical_degree=None, horizontal_degree=1,
                   family="BDM",
@@ -51,7 +55,6 @@ def setup_sw(dirname, euler_poincare):
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
-    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     Omega = parameters.Omega
     g = parameters.g
@@ -140,3 +143,15 @@ def test_sw_setup(tmpdir, euler_poincare):
 
     enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_AbsoluteVorticity"]
     assert enstrophy_diff["max"][-1] < 1.e-15
+
+    # these checks are for the diagnostics of the velocity in spherical components
+    tolerance = 0.05
+
+    u_meridional = data.groups["u_meridional"]
+    assert u_meridional["max"][0] < tolerance * u_max
+
+    u_radial = data.groups["u_radial"]
+    assert u_radial["max"][0] < tolerance * u_max
+
+    u_zonal = data.groups["u_zonal"]
+    assert u_max * (1 - tolerance) < u_zonal["max"][0] < u_max * (1 + tolerance)
