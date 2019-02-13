@@ -176,11 +176,13 @@ class Advection(object, metaclass=ABCMeta):
         :arg equation: a :class:`.PrognosticEquation` object
         :arg dt: the timestep
         :arg active_labels: :class:`Label` object(s) specifying the label(s)
-        of terms in the form that this scheme should be applied to
+             of terms in the form that this scheme should be applied to
+        :arg field_name: (optional) str, naming the prognostic field. This
+             is necessary when solving for a subfield of a mixed system.
         :arg u_advecting: (optional) a ufl expression for the advecting
-        velocity. If not present then treat any parts of the form labelled
-        advecting_velocity as the equation subject (i.e. they are part of
-        the solution to be computed by this scheme).
+             velocity. If not present then treat any parts of the form
+             labelled advecting_velocity as the equation subject (i.e.
+             they are part of the solution to be computed by this scheme).
         """
         if self._initialised:
             raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
