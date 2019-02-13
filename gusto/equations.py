@@ -42,8 +42,10 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.function_space = function_space
         self.field_name = field_name
 
+        # default is to dump the field unless user has specified
+        # otherwise when setting up the output parameters
         dump = state.output.dumplist or True
-        state.fields(field_name, space=function_space, dump=dump)
+        state.fields(field_name, space=function_space, dump=dump, pickup=True)
 
         state.diagnostics.register(field_name)
 
@@ -153,19 +155,31 @@ class PrognosticMixedEquation(PrognosticEquation):
     Base class for the equation set defined on a mixed function space.
     Child classes must define their fields and solver parameters for
     the mixed system.
+
+    :arg state: :class:`.State` object
+    :arg function space: :class:`.FunctionSpace` object, the function
+         space that the equations are defined on - this should be a
+         mixed function space
+
+    The class sets up the fields in state and registers them with the
+    diagnostics class. It defines a mass term, labelled with the
+    time_derivative label. All remaining forms must be defined in the
+    child class form method. Calling this class returns the form
+    mass_term + form
     """
 
-    def __init__(self, state, function_space, field_name):
+    def __init__(self, state, function_space):
 
         self.state = state
         self.function_space = function_space
-        self.field_name = field_name
 
-        assert len(function_space) == len(self.fields)
+        assert len(function_space) == len(self.fields), "size of function space and number of fields should match"
 
+        # default is to dump all fields unless user has specified
+        # otherwise when setting up the output parameters
         dump = state.output.dumplist or self.fields
-        state.fields(field_name, *self.fields, space=function_space,
-                     dump=dump)
+        state.fields(self.field_name, *self.fields, space=function_space,
+                     dump=dump, pickup=True)
 
         state.diagnostics.register(*self.fields)
 
@@ -182,6 +196,14 @@ class PrognosticMixedEquation(PrognosticEquation):
             (index(subject(
                 time_derivative(inner(q, test)*dx), qs), tests.index(test))
              for q, test in zip(qs.split(), tests)))
+
+    @abstractproperty
+    def field_name(self):
+        """
+        Child classes must define a name to use to access the mixed
+        prognostic fields
+        """
+        pass
 
     @abstractproperty
     def fields(self):
@@ -214,7 +236,8 @@ class ShallowWaterEquations(PrognosticMixedEquation):
     * Coriolis term present and the Coriolis parameter takes the value for
     the Earth. Pass in fexpr=None for non-rotating shallow water.
     """
-    name = "sw"
+    field_name = "sw"
+
     fields = ['u', 'D']
 
     solver_parameters = {
@@ -243,7 +266,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         Vu, VD = build_spaces(state, family, degree)
         W = MixedFunctionSpace((Vu, VD))
 
-        super().__init__(state, W, self.name)
+        super().__init__(state, W)
 
         # setup optional coriolis and topography terms, default is for
         # the Coriolis term to be that for the Earth.

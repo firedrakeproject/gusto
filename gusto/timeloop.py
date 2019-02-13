@@ -311,13 +311,13 @@ class CrankNicolson(Timestepper):
         self.xstar = FieldCreator()
         self.xp = FieldCreator()
 
-        self.xn(equation_set.name, *equation_set.fields,
+        self.xn(equation_set.field_name, *equation_set.fields,
                 space=equation_set.function_space)
-        self.xnp1(equation_set.name, *equation_set.fields,
+        self.xnp1(equation_set.field_name, *equation_set.fields,
                   space=equation_set.function_space)
-        self.xstar(equation_set.name, *equation_set.fields,
+        self.xstar(equation_set.field_name, *equation_set.fields,
                    space=equation_set.function_space)
-        self.xp(equation_set.name, *equation_set.fields,
+        self.xp(equation_set.field_name, *equation_set.fields,
                 space=equation_set.function_space)
 
         for eq, _ in self.equations_schemes:
@@ -382,7 +382,7 @@ class CrankNicolson(Timestepper):
         (1-alpha)*dt.
         """
 
-        fname = self.equation_set.name
+        fname = self.equation_set.field_name
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(self.xn(fname), self.xn(fname),
                                self.xstar(fname), label="explicit")
