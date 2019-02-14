@@ -116,8 +116,8 @@ class Forcing(object, metaclass=ABCMeta):
         a = self.mass_term()
         L = self.forcing_term()
         if self.Vu.extruded:
-            bcs = [DirichletBC(self.Vu, 0.0, "bottom"),
-                   DirichletBC(self.Vu, 0.0, "top")]
+            bcs = [DirichletBC(self.Vu, Constant(0.0), "bottom"),
+                   DirichletBC(self.Vu, Constant(0.0), "top")]
         else:
             bcs = None
 
@@ -197,13 +197,13 @@ class CompressibleForcing(Forcing):
 
     def theta_forcing(self):
 
-        cv = self.state.parameters.cv
-        cp = self.state.parameters.cp
-        c_vv = self.state.parameters.c_vv
-        c_pv = self.state.parameters.c_pv
-        c_pl = self.state.parameters.c_pl
-        R_d = self.state.parameters.R_d
-        R_v = self.state.parameters.R_v
+        cv = Constant(self.state.parameters.cv)
+        cp = Constant(self.state.parameters.cp)
+        c_vv = Constant(self.state.parameters.c_vv)
+        c_pv = Constant(self.state.parameters.c_pv)
+        c_pl = Constant(self.state.parameters.c_pl)
+        R_d = Constant(self.state.parameters.R_d)
+        R_v = Constant(self.state.parameters.R_v)
 
         u0, _, theta0 = split(self.x0)
         water_v = self.state.fields('water_v')
