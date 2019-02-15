@@ -195,13 +195,14 @@ class Term(object):
 
     __radd__ = __add__
 
-    def __rmul__(self, other):
+    def __mul__(self, other):
         if type(other) is float:
             other = Constant(other)
         elif type(other) is not Constant:
             return NotImplemented
         return Term(other*self.form, self.labels)
 
+    __rmul__ = __mul__
 
 class LabelledForm(object):
     __slots__ = ["terms"]
@@ -234,12 +235,14 @@ class LabelledForm(object):
         else:
             return NotImplemented
 
-    def __rmul__(self, other):
+    def __mul__(self, other):
         if type(other) is float:
             other = Constant(other)
         elif type(other) is not Constant:
             return NotImplemented
         return self.label_map(all_terms, lambda t: Term(other*t.form, t.labels))
+
+    __rmul__ = __mul__
 
     def __iter__(self):
         return iter(self.terms)
