@@ -230,33 +230,6 @@ def test_all_terms(labelled_form, label_x):
     assert all([t.has_label(label_x) for t in new])
 
 
-def test_extract(mixed_form, mixed_function, V):
-    """
-    test that the extract function interacts correctly with the index label
-    """
-    new = Function(V)
-    a = subject(mixed_form, mixed_function)
-    a = a.label_map(lambda t: t.get(index) == 1, extract(1), drop)
-    a_old = a
-    # this would fail due to the shape mismatch if there were any
-    # terms still containing subject.split()[0]...
-    a = a.label_map(
-        all_terms, lambda t: Term(
-            ufl.replace(t.form, {t.get(subject).split()[0]: new}),
-            t.labels)
-    )
-    # ...instead nothing has happened
-    assert a.form == a_old.form
-    # this works...
-    a = a.label_map(
-        all_terms, lambda t: Term(
-            ufl.replace(t.form, {t.get(subject).split()[1]: new}),
-            t.labels)
-    )
-    # ...and the form has changed
-    assert not a.form == a_old.form
-
-
 def test_replace_test(V, labelled_form):
     """
     test that the replace_test function replaces the TestFunction in the form
