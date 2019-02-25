@@ -396,6 +396,10 @@ class State(object):
             # diagnostic fields)
             self.to_pickup = [field for field in self.fields if field.pickup]
 
+        # if we want to checkpoint then make a checkpoint counter
+        if self.output.checkpoint:
+            self.chkptcount = itertools.count()
+
         # dump initial fields
         self.dump(t)
 
@@ -439,7 +443,7 @@ class State(object):
             self.pointdata_output.dump(self.fields, t)
 
         # Dump all the fields to the checkpointing file (backup version)
-        if output.checkpoint:
+        if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
             for field in self.to_pickup:
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
