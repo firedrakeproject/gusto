@@ -204,6 +204,7 @@ class Term(object):
 
     __rmul__ = __mul__
 
+
 class LabelledForm(object):
     __slots__ = ["terms"]
 
