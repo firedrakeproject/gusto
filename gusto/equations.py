@@ -4,7 +4,6 @@ import operator
 from firedrake import (Function, TestFunction, inner, dx, div, action,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions, TrialFunctions)
-from gusto.configuration import logger
 from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
                                                subject, time_derivative,
                                                linearisation,
@@ -19,6 +18,22 @@ from gusto.transport_equation import (vector_invariant_form,
                                       advection_vector_manifold_form,
                                       kinetic_energy_form)
 from gusto.state import build_spaces
+
+
+def mass_form(function_space):
+
+    if len(function_space) == 1:
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        return subject(time_derivative(inner(q, test)*dx), q)
+    else:
+        tests = TestFunctions(function_space)
+        qs = Function(function_space)
+        return functools.reduce(
+            operator.add,
+            (index(subject(
+                time_derivative(inner(q, test)*dx), qs), tests.index(test))
+             for q, test in zip(qs.split(), tests)))
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
@@ -49,29 +64,6 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
         state.diagnostics.register(field_name)
 
-    def mass_term(self):
-        """
-        Returns the labelled form for the mass term for self.function_space
-        with its subject labelled and the time_derivative label applied.
-        """
-        test = TestFunction(self.function_space)
-        q = Function(self.function_space)
-        return subject(time_derivative(inner(q, test)*dx), q)
-
-    @abstractproperty
-    def form(self):
-        """
-        Child classes should define the forms for the remaining terms
-        in the equation.
-        """
-        pass
-
-    def __call__(self):
-        """
-        Returns the form for this equation
-        """
-        return self.mass_term() + self.form()
-
 
 class AdvectionEquation(PrognosticEquation):
     """
@@ -85,10 +77,10 @@ class AdvectionEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
-        self.kwargs = kwargs
-
-    def form(self):
-        return advection_form(self.state, self.function_space, **self.kwargs)
+        self.residual = (
+            mass_form(function_space)
+            + advection_form(state, function_space, **kwargs)
+        )
 
 
 class ContinuityEquation(PrognosticEquation):
@@ -104,10 +96,10 @@ class ContinuityEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
-        self.kwargs = kwargs
-
-    def form(self):
-        return continuity_form(self.state, self.function_space, **self.kwargs)
+        self.residual = (
+            mass_form(function_space)
+            + continuity_form(state, function_space, **kwargs)
+        )
 
 
 class DiffusionEquation(PrognosticEquation):
@@ -123,10 +115,10 @@ class DiffusionEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name, **kwargs):
 
         super().__init__(state, function_space, field_name)
-        self.kwargs = kwargs
-
-    def form(self):
-        return interior_penalty_diffusion_form(self.state, self.function_space, **self.kwargs)
+        self.residual = (
+            mass_form(function_space)
+            + interior_penalty_diffusion_form(state, function_space, **kwargs)
+        )
 
 
 class AdvectionDiffusionEquation(PrognosticEquation):
@@ -182,20 +174,6 @@ class PrognosticMixedEquation(PrognosticEquation):
                      dump=dump, pickup=True)
 
         state.diagnostics.register(*self.fields)
-
-    def mass_term(self):
-        """
-        Returns the labelled form for the mass term for self.function_space
-        with its subject labelled and the time_derivative label applied.
-        Also labels each term with the index of the space it is defined on.
-        """
-        tests = TestFunctions(self.function_space)
-        qs = Function(self.function_space)
-        return functools.reduce(
-            operator.add,
-            (index(subject(
-                time_derivative(inner(q, test)*dx), qs), tests.index(test))
-             for q, test in zip(qs.split(), tests)))
 
     @abstractproperty
     def field_name(self):
@@ -258,7 +236,8 @@ class ShallowWaterEquations(PrognosticMixedEquation):
 
         fexpr = kwargs.pop("fexpr", "default")
         bexpr = kwargs.pop("bexpr", None)
-        self.u_advection_option = kwargs.pop("u_advection_option", "vector_invariant_form")
+        u_advection_option = kwargs.pop("u_advection_option", "vector_invariant_form")
+        linear = kwargs.pop("linear", False)
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
@@ -268,52 +247,20 @@ class ShallowWaterEquations(PrognosticMixedEquation):
 
         super().__init__(state, W)
 
-        # setup optional coriolis and topography terms, default is for
-        # the Coriolis term to be that for the Earth.
-        if fexpr:
-            self.setup_coriolis(state, fexpr)
-        if bexpr:
-            self.setup_topography(state, bexpr)
-
-    def setup_coriolis(self, state, fexpr):
-        """
-        Create state.fields("coriolis").
-        """
-        if fexpr == "default":
-            Omega = state.parameters.Omega
-            x = SpatialCoordinate(state.mesh)
-            R = sqrt(inner(x, x))
-            fexpr = 2*Omega*x[2]/R
-
-        V = FunctionSpace(state.mesh, "CG", 1)
-        f = state.fields("coriolis", space=V)
-        f.interpolate(fexpr)
-
-    def setup_topography(self, state, bexpr):
-        """
-        Create state.fields("topography").
-        """
-        b = state.fields("topography", space=state.fields("D").function_space())
-        b.interpolate(bexpr)
-
-    def form(self):
-
-        state = self.state
         g = state.parameters.g
         H = state.parameters.H
 
-        W = self.function_space
         w, phi = TestFunctions(W)
         trials = TrialFunctions(W)
         X = Function(W)
         u, D = X.split()
 
         # define velocity advection term
-        if self.u_advection_option == "vector_invariant_form":
+        if u_advection_option == "vector_invariant_form":
             u_adv = vector_invariant_form(state, W, 0)
-        elif self.u_advection_option == "vector_advection":
+        elif u_advection_option == "vector_advection":
             u_adv = advection_vector_manifold_form(state, W, 0)
-        elif self.u_advection_option == "circulation_form":
+        elif u_advection_option == "circulation_form":
             ke_form = kinetic_energy_form(state, W, 0)
             ke_form = advection.remove(ke_form)
             ke_form = ke_form.label_map(all_terms,
@@ -321,7 +268,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
                                                          advecting_velocity))
             u_adv = advection_equation_circulation_form(state, W, 0) + ke_form
         else:
-            raise ValueError("Invalid u_advection_option: %s" % self.u_advection_option)
+            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
 
         # define pressure gradient term and its linearisation
         pressure_gradient_term = subject(-g*div(w)*D*dx, X)
@@ -332,31 +279,35 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         # the pressure gradient term
         u_form = u_adv + linearisation(pressure_gradient_term, linear_pg_term)
 
-        # add any additional terms
-        for field_name in ["coriolis", "topography"]:
-            try:
-                field = state.fields(field_name)
-                add_term = True
-            except AttributeError:
-                logger.info("field %s not present" % field_name)
-                add_term = False
+        # setup optional coriolis and topography terms, default is for
+        # the Coriolis term to be that for the Earth.
+        if fexpr:
+            if fexpr == "default":
+                Omega = state.parameters.Omega
+                x = SpatialCoordinate(state.mesh)
+                R = sqrt(inner(x, x))
+                fexpr = 2*Omega*x[2]/R
 
-            if add_term:
-                if field_name == "coriolis":
-                    # define the coriolis term and its linearisation
-                    coriolis_term = subject(field*inner(w, state.perp(u))*dx, X)
-                    linear_coriolis_term = coriolis_term.label_map(
-                        all_terms, replace_labelled(trials, subject))
-                    # add on the coriolis term
-                    u_form += linearisation(coriolis_term, linear_coriolis_term)
+            V = FunctionSpace(state.mesh, "CG", 1)
+            f = state.fields("coriolis", space=V)
+            f.interpolate(fexpr)
 
-                elif field_name == "topography":
-                    # add on the topography term - the linearisation
-                    # is not defined as we don't usually make it part
-                    # of the linear solver, However, this will have to
-                    # be defined when we start using exponential
-                    # integrators.
-                    u_form += -g*div(w)*field*dx
+            # define the coriolis term and its linearisation
+            coriolis_term = subject(f*inner(w, state.perp(u))*dx, X)
+            linear_coriolis_term = coriolis_term.label_map(
+                all_terms, replace_labelled(trials, subject))
+            # add on the coriolis term
+            u_form += linearisation(coriolis_term, linear_coriolis_term)
+
+        if bexpr:
+            b = state.fields("topography", space=state.fields("D").function_space())
+            b.interpolate(bexpr)
+            # add on the topography term - the linearisation
+            # is not defined as we don't usually make it part
+            # of the linear solver, However, this will have to
+            # be defined when we start using exponential
+            # integrators.
+            u_form += -g*div(w)*b*dx
 
         # define the depth continuity term and its linearisation
         Dadv = continuity_form(state, W, 1)
@@ -364,25 +315,17 @@ class ShallowWaterEquations(PrognosticMixedEquation):
             all_terms, replace_labelled(trials, subject, advecting_velocity))
         D_form = linearisation(Dadv, Dadv_linear)
 
-        return index(u_form, 0) + index(D_form, 1)
+        self.residual = mass_form(W) + index(u_form, 0) + index(D_form, 1)
 
-
-class LinearShallowWaterEquations(ShallowWaterEquations):
-    """
-    Class defining the linear shallow water equations.
-    """
-
-    def form(self):
-
-        # get shallow water equation form
-        sw_form = super().form()
-
-        # grab the linearisation of each term (a bilinear form) and
-        # apply to the term's subject to get the linear form
-        linear_form = sw_form.label_map(
-            has_labels(linearisation),
-            lambda t: Term(action(t.get(linearisation).form, t.get(subject)),
-                           t.labels),
-            drop)
-
-        return linear_form
+        if linear:
+            # grab the linearisation of each term (a bilinear form) and
+            # apply to the term's subject to get the linear form
+            linear_form = (
+                self.residual.label_map(
+                    has_labels(linearisation),
+                    lambda t: Term(
+                        action(t.get(linearisation).form, t.get(subject)),
+                        t.labels),
+                    drop)
+            )
+            self.residual = mass_form(W) + linear_form

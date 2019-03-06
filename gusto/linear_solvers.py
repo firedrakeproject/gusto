@@ -722,7 +722,7 @@ class LinearTimesteppingSolver(object):
 
         # setup the solver
         W = equation.function_space
-        self._setup_solver(equation(), W, dt, alpha)
+        self._setup_solver(equation.residual, W, dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self, equation, W, dt, alpha):

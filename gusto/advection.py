@@ -209,7 +209,7 @@ class Advection(object, metaclass=ABCMeta):
             fs = state.fields(field_name).function_space()
 
         # store just the form
-        self.equation = equation()
+        self.equation = equation.residual
 
         # is the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1

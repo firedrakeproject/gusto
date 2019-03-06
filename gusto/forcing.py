@@ -27,7 +27,7 @@ class Forcing(object):
         self.x0 = Function(W)
         self.xF = Function(W)
 
-        eqn = equation().label_map(has_labels(advection), drop)
+        eqn = equation.residual.label_map(has_labels(advection), drop)
         assert len(eqn) > 1
         self._build_forcing_solver(W, eqn, dt, alpha)
 
