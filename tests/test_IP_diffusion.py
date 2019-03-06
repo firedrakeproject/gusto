@@ -3,9 +3,8 @@ from firedrake import (VectorFunctionSpace, Constant, as_vector, norm)
 import pytest
 
 
-def setup_IPdiffusion(dirname, vector, DG, tracer_setup):
+def setup_IPdiffusion(setup, vector, DG):
 
-    setup = tracer_setup(geometry="slice", blob=True)
     state = setup.state
     dt = setup.dt
     tmax = setup.tmax
@@ -36,27 +35,27 @@ def setup_IPdiffusion(dirname, vector, DG, tracer_setup):
         def f_exact(t):
             return (1/(1+4*t))*f_init**(1/(1+4*t))
 
-    eqns = [("f", DiffusionEquation(state, Space, "f",
-                                    kappa=kappa, mu=mu))]
+    equations_schemes = [
+        (DiffusionEquation(state, Space, "f", kappa=kappa, mu=mu),
+         BackwardEuler())]
     f = state.fields("f", space=Space)
     try:
         f.interpolate(fexpr)
     except NotImplementedError:
         f.project(fexpr)
 
-    schemes = [("f", BackwardEuler())]
 
     state.fields("f_exact", space=Space)
     prescribed_fields = [("f_exact", f_exact)]
 
-    stepper = Timestepper(state, equations=eqns, schemes=schemes,
+    stepper = Timestepper(state, equations_schemes=equations_schemes,
                           prescribed_fields=prescribed_fields)
     return stepper, dt, tmax
 
 
-def run(dirname, vector, DG, tracer_setup):
+def run(setup, vector, DG):
 
-    stepper, dt, tmax = setup_IPdiffusion(dirname, vector, DG, tracer_setup)
+    stepper, dt, tmax = setup_IPdiffusion(setup, vector, DG)
     stepper.run(t=0., dt=dt, tmax=tmax)
     return stepper.state.fields("f_minus_f_exact")
 
@@ -65,7 +64,7 @@ def run(dirname, vector, DG, tracer_setup):
 @pytest.mark.parametrize("DG", [True, False])
 def test_ipdiffusion(tmpdir, vector, DG, tracer_setup):
 
-    dirname = str(tmpdir)
-    ferr = run(dirname, vector, DG, tracer_setup)
+    setup = tracer_setup(tmpdir, geometry="slice", blob=True)
+    ferr = run(setup, vector, DG)
     err = norm(ferr)
     assert err < 0.03
