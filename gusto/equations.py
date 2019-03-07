@@ -132,14 +132,17 @@ class AdvectionDiffusionEquation(PrognosticEquation):
     """
     def __init__(self, state, function_space, field_name, **kwargs):
         super().__init__(state, function_space, field_name)
-        self.diff_kwargs = {}
+        dkwargs = {}
         for k in ["kappa", "mu"]:
             assert k in kwargs.keys(), "diffusion form requires %s kwarg " % k
-            self.diff_kwargs[k] = kwargs.pop(k)
-        self.adv_kwargs = kwargs
+            dkwargs[k] = kwargs.pop(k)
+        akwargs = kwargs
 
-    def form(self):
-        return advection_form(self.state, self.function_space, **self.adv_kwargs) + interior_penalty_diffusion_form(self.state, self.function_space, **self.diff_kwargs)
+        self.residual = (
+            mass_form(function_space)
+            + advection_form(state, function_space, **akwargs)
+            + interior_penalty_diffusion_form(state, function_space, **dkwargs)
+        )
 
 
 class PrognosticMixedEquation(PrognosticEquation):
