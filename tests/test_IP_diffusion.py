@@ -44,7 +44,6 @@ def setup_IPdiffusion(setup, vector, DG):
     except NotImplementedError:
         f.project(fexpr)
 
-
     state.fields("f_exact", space=Space)
     prescribed_fields = [("f_exact", f_exact)]
 
