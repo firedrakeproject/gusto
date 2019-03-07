@@ -1,6 +1,4 @@
 from abc import ABCMeta, abstractproperty
-import functools
-import operator
 from firedrake import (Function, TestFunction, inner, dx, div, action,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions, TrialFunctions)
@@ -18,22 +16,6 @@ from gusto.transport_equation import (vector_invariant_form,
                                       advection_vector_manifold_form,
                                       kinetic_energy_form)
 from gusto.state import build_spaces
-
-
-def mass_form(function_space):
-
-    if len(function_space) == 1:
-        test = TestFunction(function_space)
-        q = Function(function_space)
-        return subject(time_derivative(inner(q, test)*dx), q)
-    else:
-        tests = TestFunctions(function_space)
-        qs = Function(function_space)
-        return functools.reduce(
-            operator.add,
-            (index(subject(
-                time_derivative(inner(q, test)*dx), qs), tests.index(test))
-             for q, test in zip(qs.split(), tests)))
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
@@ -77,9 +59,13 @@ class AdvectionEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
+
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
         self.residual = (
-            mass_form(function_space)
-            + advection_form(state, function_space, **kwargs)
+            mass_form + advection_form(state, function_space, **kwargs)
         )
 
 
@@ -96,9 +82,13 @@ class ContinuityEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  **kwargs):
         super().__init__(state, function_space, field_name)
+
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
         self.residual = (
-            mass_form(function_space)
-            + continuity_form(state, function_space, **kwargs)
+            mass_form + continuity_form(state, function_space, **kwargs)
         )
 
 
@@ -115,8 +105,13 @@ class DiffusionEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name, **kwargs):
 
         super().__init__(state, function_space, field_name)
+
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
         self.residual = (
-            mass_form(function_space)
+            mass_form
             + interior_penalty_diffusion_form(state, function_space, **kwargs)
         )
 
@@ -138,8 +133,12 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             dkwargs[k] = kwargs.pop(k)
         akwargs = kwargs
 
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
         self.residual = (
-            mass_form(function_space)
+            mass_form
             + advection_form(state, function_space, **akwargs)
             + interior_penalty_diffusion_form(state, function_space, **dkwargs)
         )
@@ -258,6 +257,12 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         X = Function(W)
         u, D = X.split()
 
+        # define mass term
+        mass_form = (
+            index(subject(time_derivative(inner(u, w)*dx), u), 0)
+            + index(subject(time_derivative(inner(D, phi)*dx), D), 1)
+        )
+
         # define velocity advection term
         if u_advection_option == "vector_invariant_form":
             u_adv = vector_invariant_form(state, W, 0)
@@ -318,7 +323,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
             all_terms, replace_labelled(trials, subject, advecting_velocity))
         D_form = linearisation(Dadv, Dadv_linear)
 
-        self.residual = mass_form(W) + index(u_form, 0) + index(D_form, 1)
+        self.residual = mass_form + index(u_form, 0) + index(D_form, 1)
 
         if linear:
             # grab the linearisation of each term (a bilinear form) and
@@ -331,4 +336,4 @@ class ShallowWaterEquations(PrognosticMixedEquation):
                         t.labels),
                     drop)
             )
-            self.residual = mass_form(W) + linear_form
+            self.residual = mass_form + linear_form
