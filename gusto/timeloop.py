@@ -270,7 +270,8 @@ class CrankNicolson(Timestepper):
         # equation_set and contain diffusion terms - these will be
         # applied after the semi implicit step
         if diffused_fields is None:
-            assert all([not t.has_label(diffusion) for t in equation_set()]),\
+            assert all(
+                [not t.has_label(diffusion) for t in equation_set.residual]),\
                 "you have some diffusion terms but have not specified which scheme to use to apply them"
             self.diffused_fields = []
         else:
