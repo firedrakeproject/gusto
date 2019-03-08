@@ -69,16 +69,16 @@ def setup_sw(dirname, scheme, uopt):
     # build time stepper
     if scheme == "CrankNicolson":
         advected_fields = []
-        advected_fields.append(("u", ImplicitMidpoint()))
-        advected_fields.append(("D", SSPRK3()))
+        advected_fields.append(ImplicitMidpoint(state, eqns, advection, field_name="u"))
+        advected_fields.append(SSPRK3(state, eqns, advection, field_name="D"))
         stepper = CrankNicolson(state, equation_set=eqns,
                                 advected_fields=advected_fields)
     elif scheme == "ImplicitMidpoint":
-        scheme = ImplicitMidpoint()
-        stepper = Timestepper(state, [(eqns, scheme)])
+        scheme = ImplicitMidpoint(state, eqns)
+        stepper = Timestepper(state, scheme)
     elif scheme == "SSPRK3":
-        scheme = SSPRK3()
-        stepper = Timestepper(state, [(eqns, scheme)])
+        scheme = SSPRK3(state, eqns)
+        stepper = Timestepper(state, scheme)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R

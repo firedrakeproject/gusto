@@ -3,10 +3,9 @@ from gusto import *
 import pytest
 
 
-def run(state, equations_schemes, dt, tmax):
+def run(state, schemes, dt, tmax):
 
-    timestepper = PrescribedAdvectionTimestepper(
-        state, equations_schemes)
+    timestepper = PrescribedAdvectionTimestepper(state, schemes)
     timestepper.run(0, dt=dt, tmax=tmax)
     return timestepper.state.fields("f")
 
@@ -62,9 +61,9 @@ def test_advection_supg(tmpdir, scheme, space, tracer_setup):
         f.project(f_init)
 
     if scheme == "ssprk":
-        equations_schemes = [(equation, SSPRK3(options=supg_opts))]
+        schemes = [SSPRK3(state, equation, options=supg_opts)]
     elif scheme == "im":
-        equations_schemes = [(equation, ImplicitMidpoint(options=supg_opts))]
+        schemes = [ImplicitMidpoint(state, equation, options=supg_opts)]
 
-    f = run(state, equations_schemes, dt, tmax)
+    f = run(state, schemes, dt, tmax)
     assert errornorm(f, f_end) < err

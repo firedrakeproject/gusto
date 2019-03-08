@@ -30,12 +30,11 @@ def run(setup, ibp, scheme, vector):
     f.interpolate(f_init)
 
     if scheme == "ssprk":
-        equations_schemes = [(equation, SSPRK3())]
+        schemes = [SSPRK3(state, equation)]
     elif scheme == "im":
-        equations_schemes = [(equation, ImplicitMidpoint())]
+        schemes = [ImplicitMidpoint(state, equation)]
 
-    timestepper = PrescribedAdvectionTimestepper(
-        state, equations_schemes)
+    timestepper = PrescribedAdvectionTimestepper(state, schemes)
     timestepper.run(0, dt=dt, tmax=tmax)
 
     return timestepper.state.fields("f"), f_end

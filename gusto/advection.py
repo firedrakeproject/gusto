@@ -48,22 +48,93 @@ class Advection(object, metaclass=ABCMeta):
     """
     Base class for advection schemes.
 
+    :arg state: a :class:`.State` object
+    :arg equation: a :class:`.PrognosticEquation` object
+    :arg field_name: (optional) str, naming the prognostic field. This
+     is necessary when solving for a subfield of a mixed system.
     :arg solver_parameters: (optional) solver_parameters
     :arg limiter: (optional) :class:`.Limiter` object.
     :arg options: (optional) :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, *,
+    def __init__(self, state, equation,
+                 *active_labels,
+                 field_name=None,
                  solver_parameters=None,
                  limiter=None, options=None):
 
-        self._initialised = False
+        if field_name is None:
+            self.field_name = equation.field_name
+            fs = equation.function_space
+        else:
+            self.field_name = field_name
+            fs = state.fields(field_name).function_space()
 
-        self.solver_parameters = solver_parameters
+        self.dt = Constant(0.)
+
+        # store just the form
+        self.equation = equation.residual
+
+        # is the equation is defined on a mixed function space
+        mixed_equation = len(equation.function_space) > 1
+
+        # is the prognostic field is defined on a mixed
+        # function space
+        mixed_function = len(fs) > 1
+
+        # if the equation in defined on a mixed function space, but
+        # the prognostic field isn't, then extract the parts of the
+        # equation form that involve this prognostic field.
+        if mixed_equation and not mixed_function:
+            idx = fs.index
+            self.equation = self.equation.label_map(
+                lambda t: t.get(index) == idx, extract(idx), drop)
+
+        if len(active_labels) > 0:
+            self.extract_labelled_terms(*active_labels)
+
+        # if options have been specified via an AdvectionOptions
+        # class, now is the time to apply them
+        if options is not None:
+            if mixed_equation and mixed_function:
+                raise NotImplementedError("%s options not implemented for mixed problems" % options.name)
+            else:
+                self._setup_from_options(state, fs, options)
+        else:
+            self.discretisation_option = None
+            self.fs = fs
+
+        # setup required functions
+        self.q1 = Function(self.fs)
+        self.result = Function(self.fs)
+
+        # setup trial function(s) and solver parameters.
+        if mixed_equation and mixed_function:
+            self.trial = TrialFunctions(self.fs)
+            # for a mixed system the default solver parameters are an
+            # attribute of the :class:`PrognosticMixedEquations` object
+            default_solver_params = equation.solver_parameters
+        else:
+            self.trial = TrialFunction(self.fs)
+            # the default ksp_type will be different if the matrix is
+            # not symmetric, so if we are using supg or a theta method
+            default_solver_params = {'ksp_type': 'cg',
+                                     'pc_type': 'bjacobi',
+                                     'sub_pc_type': 'ilu'}
+
+        # use default solver parameters if the user has not specified
+        # any on instantiating this class
+        if solver_parameters is None:
+            self.solver_parameters = default_solver_params
+        else:
+            self.solver_parameters = solver_parameters
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = True
+
+        # label the terms explicit or implicit
+        self._label_terms()
 
         self.limiter = limiter
-
-        self.options = options
 
     def _label_terms(self):
         """
@@ -176,73 +247,7 @@ class Advection(object, metaclass=ABCMeta):
             # update default ksp_type
             self.default_ksp_type = 'gmres'
 
-    def setup(self, state, equation, dt, *active_labels,
-              field_name=None, u_advecting=None):
-        """
-        This function is called from the Timstepper class. At this point
-        we have all the information we need to extract the required parts
-        of the form, replace the test function (if required by the spatial
-        discretisation options) and setup the functions and solver parameters
-        for the timestepping scheme.
-
-        :arg state: a :class:`.State` object
-        :arg equation: a :class:`.PrognosticEquation` object
-        :arg dt: the timestep
-        :arg active_labels: :class:`Label` object(s) specifying the label(s)
-             of terms in the form that this scheme should be applied to
-        :arg field_name: (optional) str, naming the prognostic field. This
-             is necessary when solving for a subfield of a mixed system.
-        :arg u_advecting: (optional) a ufl expression for the advecting
-             velocity. If not present then treat any parts of the form
-             labelled advecting_velocity as the equation subject (i.e.
-             they are part of the solution to be computed by this scheme).
-        """
-        if self._initialised:
-            raise RuntimeError("Trying to setup an advection scheme that has already been setup.")
-
-        self.dt = dt
-        if field_name is None:
-            self.field_name = equation.field_name
-            fs = equation.function_space
-        else:
-            self.field_name = field_name
-            fs = state.fields(field_name).function_space()
-
-        # store just the form
-        self.equation = equation.residual
-
-        # is the equation is defined on a mixed function space
-        mixed_equation = len(equation.function_space) > 1
-
-        # is the prognostic field is defined on a mixed
-        # function space
-        mixed_function = len(fs) > 1
-
-        # if the equation in defined on a mixed function space, but
-        # the prognostic field isn't, then extract the parts of the
-        # equation form that involve this prognostic field.
-        if mixed_equation and not mixed_function:
-            idx = fs.index
-            self.equation = self.equation.label_map(
-                lambda t: t.get(index) == idx, extract(idx), drop)
-
-        # select labelled terms from the equation if active_labels are
-        # specified
-        if len(active_labels) > 0:
-            self.equation = self.equation.label_map(
-                has_labels(time_derivative, *active_labels),
-                map_if_false=drop)
-
-        # if options have been specified via an AdvectionOptions
-        # class, now is the time to apply them
-        if self.options is not None:
-            if mixed_equation and mixed_function:
-                raise NotImplementedError("%s options not implemented for mixed problems" % self.options.name)
-            else:
-                self._setup_from_options(state, fs, self.options)
-        else:
-            self.discretisation_option = None
-            self.fs = fs
+    def replace_uadv(self, u_advecting):
 
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.equation]):
@@ -251,7 +256,7 @@ class Advection(object, metaclass=ABCMeta):
                 # the advecting velocity is calculated as part of this
                 # timestepping scheme and must be replaced with the
                 # correct part of the term's subject
-                assert mixed_function, "We expect the advecting velocity to be specified unless we are applying this timestepping scheme to a mixed system of equations"
+                assert len(self.fs) > 1, "We expect the advecting velocity to be specified unless we are applying this timestepping scheme to a mixed system of equations"
                 self.equation = self.equation.label_map(
                     has_labels(advecting_velocity),
                     replace_labelled(subject, advecting_velocity))
@@ -263,39 +268,21 @@ class Advection(object, metaclass=ABCMeta):
                     has_labels(advecting_velocity),
                     replace_labelled(u_advecting, advecting_velocity))
 
-        # setup required functions
-        self.q1 = Function(self.fs)
-        self.result = Function(self.fs)
+    def extract_labelled_terms(self, *active_labels):
+        """
+        :arg active_labels: :class:`Label` object(s) specifying the label(s)
+             of terms in the form that this scheme should be applied to
+        """
+        # select labelled terms from the equation if active_labels are
+        # specified
+        if len(active_labels) > 0:
+            self.equation = self.equation.label_map(
+                has_labels(time_derivative, *active_labels),
+                map_if_false=drop)
 
-        # setup trial function(s) and solver parameters.
-        if mixed_equation and mixed_function:
-            self.trial = TrialFunctions(self.fs)
-            # for a mixed system the default solver parameters are an
-            # attribute of the :class:`PrognosticMixedEquations` object
-            default_solver_params = equation.solver_parameters
-        else:
-            self.trial = TrialFunction(self.fs)
-            # the default ksp_type will be different if the matrix is
-            # not symmetric, so if we are using supg or a theta method
-            try:
-                ksp_type = self.default_ksp_type
-            except AttributeError:
-                ksp_type = 'cg'
-            default_solver_params = {'ksp_type': ksp_type,
-                                     'pc_type': 'bjacobi',
-                                     'sub_pc_type': 'ilu'}
-
-        # use default solver parameters if the user has not specified
-        # any on instantiating this class
-        if self.solver_parameters is None:
-            self.solver_parameters = default_solver_params
-        if logger.isEnabledFor(DEBUG):
-            self.solver_parameters["ksp_monitor_true_residual"] = True
-
-        # label the terms explicit or implicit
-        self._label_terms()
-
-        self._initialised = True
+    def setup(self, dt, u_advecting=None):
+        self.dt.assign(dt)
+        self.replace_uadv(u_advecting)
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -406,15 +393,19 @@ class ExplicitAdvection(Advection):
     :arg options: (optional) :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, subcycles=None, solver_parameters=None,
+    def __init__(self, state, equation,
+                 *active_labels,
+                 field_name=None,
+                 subcycles=None, solver_parameters=None,
                  limiter=None, options=None):
 
         self.subcycles = subcycles
-        super().__init__(solver_parameters=solver_parameters,
+        super().__init__(state, equation, *active_labels,
+                         field_name=field_name,
+                         solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-    def setup(self, state, equation, dt, *active_labels,
-              field_name=None, u_advecting=None):
+    def setup(self, dt, u_advecting=None):
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -425,8 +416,7 @@ class ExplicitAdvection(Advection):
             dt = dt
             self.ncycles = 1
 
-        super().setup(state, equation, dt, *active_labels,
-                      field_name=field_name, u_advecting=u_advecting)
+        super().setup(dt, u_advecting=u_advecting)
 
         # setup functions to store the result of each cycle
         self.x = [Function(self.fs)]*(self.ncycles+1)
@@ -544,9 +534,15 @@ class ThetaMethod(Advection):
     :arg solver_parameters: (optional) solver_parameters
     :arg options: (optional) :class:`.AdvectionOptions` object
     """
-    def __init__(self, theta, solver_parameters=None, options=None):
+    def __init__(self, state, equation, theta,
+                 *active_labels,
+                 field_name=None,
+                 solver_parameters=None, options=None):
 
-        super().__init__(solver_parameters=solver_parameters, options=options)
+        super().__init__(state, equation,
+                         *active_labels,
+                         field_name=field_name,
+                         solver_parameters=solver_parameters, options=options)
 
         self.theta = theta
 
@@ -587,10 +583,14 @@ class ImplicitMidpoint(ThetaMethod):
     :arg solver_parameters: (optional) solver_parameters
     :arg options: (optional) :class:`.AdvectionOptions` object
     """
-    def __init__(self, solver_parameters=None, options=None):
+    def __init__(self, state, equation,
+                 *active_labels,
+                 field_name=None,
+                 solver_parameters=None, options=None):
 
-        super().__init__(theta=0.5, solver_parameters=solver_parameters,
+        super().__init__(state, equation,
+                         0.5,
+                         *active_labels,
+                         field_name=field_name,
+                         solver_parameters=solver_parameters,
                          options=options)
-
-    def apply(self, x_in, x_out):
-        super().apply(x_in, x_out)

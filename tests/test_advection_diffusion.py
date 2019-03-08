@@ -23,16 +23,15 @@ def run(setup):
         xs = x[0] - 0.5*L
         return (1/(1+4*t))*((exp(-d*(2*xs+d)) + exp(d*(2*xs-d)))*f_init)**(1/(1+4*t))
 
-    equations_schemes = [
-        (AdvectionDiffusionEquation(state, fspace, "f", kappa=1., mu=5),
-         ((SSPRK3(), advection), (BackwardEuler(), diffusion)))]
+    equation = AdvectionDiffusionEquation(state, fspace, "f", kappa=1., mu=5)
+    schemes = [SSPRK3(state, equation, advection),
+               BackwardEuler(state, equation, diffusion)]
     f = state.fields("f")
     f.interpolate(f_init)
 
     prescribed_fields = [("f_exact", f_exact)]
     timestepper = PrescribedAdvectionTimestepper(
-        state, equations_schemes,
-        prescribed_fields=prescribed_fields)
+        state, schemes, prescribed_fields=prescribed_fields)
 
     timestepper.run(0, dt=dt, tmax=tmax)
     return timestepper.state.fields("f_minus_f_exact")
