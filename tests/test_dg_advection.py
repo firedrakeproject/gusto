@@ -6,7 +6,6 @@ import pytest
 def run(setup, ibp, scheme, vector):
 
     state = setup.state
-    dt = setup.dt
     tmax = setup.tmax
     f_init = setup.f_init
     f_end = setup.f_end
@@ -35,7 +34,7 @@ def run(setup, ibp, scheme, vector):
         schemes = [ImplicitMidpoint(state, equation)]
 
     timestepper = PrescribedAdvectionTimestepper(state, schemes)
-    timestepper.run(0, dt=dt, tmax=tmax)
+    timestepper.run(0, tmax=tmax)
 
     return timestepper.state.fields("f"), f_end
 

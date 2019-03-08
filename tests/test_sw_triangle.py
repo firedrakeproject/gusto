@@ -46,7 +46,7 @@ def setup_sw(dirname, scheme, uopt):
                          ZonalComponent('u'),
                          RadialComponent('u')]
 
-    state = State(mesh,
+    state = State(mesh, dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
@@ -90,13 +90,13 @@ def setup_sw(dirname, scheme, uopt):
     pv_analytical = state.fields("AnalyticalPotentialVorticity", space=vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
-    return stepper, dt, 0.25*day
+    return stepper, 0.25*day
 
 
 def run_sw(dirname, scheme, uopt="vector_invariant_form"):
 
-    stepper, dt, tmax = setup_sw(dirname, scheme, uopt)
-    stepper.run(t=0, dt=dt, tmax=tmax)
+    stepper, tmax = setup_sw(dirname, scheme, uopt)
+    stepper.run(t=0, tmax=tmax)
 
 
 def check_errors(filename):

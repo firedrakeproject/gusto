@@ -3,10 +3,10 @@ from gusto import *
 import pytest
 
 
-def run(state, schemes, dt, tmax):
+def run(state, schemes, tmax):
 
     timestepper = PrescribedAdvectionTimestepper(state, schemes)
-    timestepper.run(0, dt=dt, tmax=tmax)
+    timestepper.run(0, tmax=tmax)
     return timestepper.state.fields("f")
 
 
@@ -21,7 +21,6 @@ def test_advection_embedded_dg(tmpdir, equation_form, ibp, space,
     """
     setup = tracer_setup(tmpdir, "slice")
     state = setup.state
-    dt = setup.dt
     tmax = setup.tmax
     f_init = setup.f_init
     f_end = setup.f_end
@@ -42,5 +41,5 @@ def test_advection_embedded_dg(tmpdir, equation_form, ibp, space,
     f.interpolate(f_init)
     schemes = [SSPRK3(state, equation, options=opts[space])]
 
-    f = run(state, schemes, dt, tmax)
+    f = run(state, schemes, tmax)
     assert(errornorm(f, f_end) < err)

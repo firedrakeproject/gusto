@@ -5,7 +5,6 @@ from gusto import *
 def run(setup):
 
     state = setup.state
-    dt = setup.dt
     tmax = setup.tmax
     f_init = setup.f_init
 
@@ -33,7 +32,7 @@ def run(setup):
     timestepper = PrescribedAdvectionTimestepper(
         state, schemes, prescribed_fields=prescribed_fields)
 
-    timestepper.run(0, dt=dt, tmax=tmax)
+    timestepper.run(0, tmax=tmax)
     return timestepper.state.fields("f_minus_f_exact")
 
 

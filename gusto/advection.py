@@ -70,7 +70,7 @@ class Advection(object, metaclass=ABCMeta):
             self.field_name = field_name
             fs = state.fields(field_name).function_space()
 
-        self.dt = Constant(0.)
+        self.dt = state.dt
 
         # store just the form
         self.equation = equation.residual
@@ -280,8 +280,7 @@ class Advection(object, metaclass=ABCMeta):
                 has_labels(time_derivative, *active_labels),
                 map_if_false=drop)
 
-    def setup(self, dt, u_advecting=None):
-        self.dt.assign(dt)
+    def setup(self, u_advecting=None):
         self.replace_uadv(u_advecting)
 
     def pre_apply(self, x_in, discretisation_option):
@@ -399,24 +398,18 @@ class ExplicitAdvection(Advection):
                  subcycles=None, solver_parameters=None,
                  limiter=None, options=None):
 
-        self.subcycles = subcycles
         super().__init__(state, equation, *active_labels,
                          field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-    def setup(self, dt, u_advecting=None):
-
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if self.subcycles is not None:
-            dt = dt/self.subcycles
+        if subcycles is not None:
+            self.dt = self.dt/subcycles
             self.ncycles = self.subcycles
         else:
-            dt = dt
             self.ncycles = 1
-
-        super().setup(dt, u_advecting=u_advecting)
 
         # setup functions to store the result of each cycle
         self.x = [Function(self.fs)]*(self.ncycles+1)

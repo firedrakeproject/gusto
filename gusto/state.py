@@ -237,13 +237,14 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
+    :arg dt: The model timestep.
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh,
+    def __init__(self, mesh, dt,
                  output=None,
                  parameters=None,
                  diagnostics=None,
@@ -253,6 +254,8 @@ class State(object):
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
             self.output = output
+
+        self.dt = dt
         self.parameters = parameters
 
         if diagnostics is not None:
@@ -304,7 +307,7 @@ class State(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
 
-    def setup_diagnostics(self, dt):
+    def setup_diagnostics(self):
         """
         Add special case diagnostic fields
         """
@@ -321,13 +324,10 @@ class State(object):
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
         for diagnostic in self.diagnostic_fields:
-            if diagnostic.name == "CourantNumber":
-                diagnostic.setup(self, dt)
-            else:
-                diagnostic.setup(self)
+            diagnostic.setup(self)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, t, dt, tmax, pickup=False):
+    def setup_dump(self, t, tmax, pickup=False):
         """
         Setup dump files
         Check for existence of directory so as not to overwrite
@@ -399,7 +399,7 @@ class State(object):
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
 
-            ndt = int(tmax/dt)
+            ndt = int(tmax/self.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,

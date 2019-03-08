@@ -91,9 +91,9 @@ class Timestepper(object, metaclass=ABCMeta):
             uadv = None
 
         for scheme in schemes:
-            scheme.setup(self.dt, u_advecting=uadv)
+            scheme.setup(u_advecting=uadv)
 
-    def setup_timeloop(self, state, t, dt, tmax, pickup):
+    def setup_timeloop(self, state, t, tmax, pickup):
         """
         Setup the timeloop by setting up timestepping schemes and diagnostics,
         dumping the fields and picking up from a previous run, if required
@@ -101,9 +101,9 @@ class Timestepper(object, metaclass=ABCMeta):
         if pickup:
             t = state.pickup_from_checkpoint()
         self.setup_schemes(self.schemes)
-        self.state.setup_diagnostics(dt)
+        self.state.setup_diagnostics()
         with timed_stage("Dump output"):
-            self.state.setup_dump(t, dt, tmax, pickup)
+            self.state.setup_dump(t, tmax, pickup)
         return t
 
     def initialise(self, state):
@@ -129,17 +129,17 @@ class Timestepper(object, metaclass=ABCMeta):
             scheme.apply(self.xn(field_name), self.xnp1(field_name))
             self.xn(field_name).assign(self.xnp1(field_name))
 
-    def run(self, t, dt, tmax, pickup=False):
+    def run(self, t, tmax, pickup=False):
         """
         This is the timeloop.
         """
         state = self.state
-        self.dt = dt
+        dt = state.dt
 
         # initialise the fields in xn
         self.initialise(state)
 
-        t = self.setup_timeloop(state, t, dt, tmax, pickup)
+        t = self.setup_timeloop(state, t, tmax, pickup)
 
         while t < tmax - 0.5*dt:
             logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
@@ -323,18 +323,18 @@ class CrankNicolson(Timestepper):
         self.xrhs = Function(equation_set.function_space)
         self.dy = Function(equation_set.function_space)
 
-    def setup_timeloop(self, state, t, dt, tmax, pickup):
+    def setup_timeloop(self, state, t, tmax, pickup):
         """
         Setup the timeloop by setting up timestepping schemes and diagnostics,
         dumping the fields and picking up from a previous run, if required.
         We also need to set up the linear solver and the forcing solvers.
         """
-        t = super().setup_timeloop(state, t, dt, tmax, pickup)
+        t = super().setup_timeloop(state, t, tmax, pickup)
         super().setup_schemes(self.active_advection)
         super().setup_schemes(self.diffused_fields)
         self.linear_solver = LinearTimesteppingSolver(self.equation_set,
-                                                      dt, self.alpha)
-        self.forcing = Forcing(self.equation_set, dt, self.alpha)
+                                                      state.dt, self.alpha)
+        self.forcing = Forcing(self.equation_set, state.dt, self.alpha)
         return t
 
     def timestep(self, state):
