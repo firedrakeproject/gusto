@@ -198,7 +198,7 @@ class Term(object):
     def __mul__(self, other):
         if type(other) is float:
             other = Constant(other)
-        elif type(other) is not Constant:
+        elif type(other) not in [Constant, ufl.algebra.Product]:
             return NotImplemented
         return Term(other*self.form, self.labels)
 
@@ -239,7 +239,7 @@ class LabelledForm(object):
     def __mul__(self, other):
         if type(other) is float:
             other = Constant(other)
-        elif type(other) is not Constant:
+        elif type(other) not in [Constant, ufl.algebra.Product]:
             return NotImplemented
         return self.label_map(all_terms, lambda t: Term(other*t.form, t.labels))
 
