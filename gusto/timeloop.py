@@ -91,7 +91,7 @@ class Timestepper(object, metaclass=ABCMeta):
             uadv = None
 
         for scheme in schemes:
-            scheme.setup(u_advecting=uadv)
+            scheme.replace_advecting_velocity(uadv)
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """

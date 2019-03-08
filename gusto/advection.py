@@ -91,7 +91,7 @@ class Advection(object, metaclass=ABCMeta):
                 lambda t: t.get(index) == idx, extract(idx), drop)
 
         if len(active_labels) > 0:
-            self.extract_labelled_terms(*active_labels)
+            self._extract_labelled_terms(*active_labels)
 
         # if options have been specified via an AdvectionOptions
         # class, now is the time to apply them
@@ -135,6 +135,18 @@ class Advection(object, metaclass=ABCMeta):
         self._label_terms()
 
         self.limiter = limiter
+
+    def _extract_labelled_terms(self, *active_labels):
+        """
+        :arg active_labels: :class:`Label` object(s) specifying the label(s)
+             of terms in the form that this scheme should be applied to
+        """
+        # select labelled terms from the equation if active_labels are
+        # specified
+        if len(active_labels) > 0:
+            self.equation = self.equation.label_map(
+                has_labels(time_derivative, *active_labels),
+                map_if_false=drop)
 
     def _label_terms(self):
         """
@@ -247,7 +259,7 @@ class Advection(object, metaclass=ABCMeta):
             # update default ksp_type
             self.default_ksp_type = 'gmres'
 
-    def replace_uadv(self, u_advecting):
+    def replace_advecting_velocity(self, u_advecting):
 
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.equation]):
@@ -267,21 +279,6 @@ class Advection(object, metaclass=ABCMeta):
                 self.equation = self.equation.label_map(
                     has_labels(advecting_velocity),
                     replace_labelled(u_advecting, advecting_velocity))
-
-    def extract_labelled_terms(self, *active_labels):
-        """
-        :arg active_labels: :class:`Label` object(s) specifying the label(s)
-             of terms in the form that this scheme should be applied to
-        """
-        # select labelled terms from the equation if active_labels are
-        # specified
-        if len(active_labels) > 0:
-            self.equation = self.equation.label_map(
-                has_labels(time_derivative, *active_labels),
-                map_if_false=drop)
-
-    def setup(self, u_advecting=None):
-        self.replace_uadv(u_advecting)
 
     def pre_apply(self, x_in, discretisation_option):
         """
