@@ -6,7 +6,7 @@ import pytest
 def setup_IPdiffusion(setup, vector, DG):
 
     state = setup.state
-    dt = setup.dt
+    dt = state.dt
     tmax = setup.tmax
     f_init = setup.f_init
 
@@ -20,9 +20,7 @@ def setup_IPdiffusion(setup, vector, DG):
         else:
             Space = state.spaces("HDiv")
         fexpr = as_vector([f_init, 0.])
-
-        def f_exact(t):
-            return as_vector([(1/(1+4*t))*f_init**(1/(1+4*t)), 0.])
+        f_exact_expr = as_vector([(1/(1+4*tmax))*f_init**(1/(1+4*tmax)), 0.])
 
     else:
         kappa = kappa_
@@ -32,31 +30,30 @@ def setup_IPdiffusion(setup, vector, DG):
             Space = state.spaces("HDiv_v")
         fexpr = f_init
 
-        def f_exact(t):
-            return (1/(1+4*t))*f_init**(1/(1+4*t))
+        f_exact_expr = (1/(1+4*tmax))*f_init**(1/(1+4*tmax))
 
-    equations_schemes = [
-        (DiffusionEquation(state, Space, "f", kappa=kappa, mu=mu),
-         BackwardEuler())]
+    eqn = DiffusionEquation(state, Space, "f", kappa=kappa, mu=mu)
+    schemes = [BackwardEuler(state, eqn)]
     f = state.fields("f", space=Space)
+    f_exact = Function(Space)
     try:
         f.interpolate(fexpr)
+        f_exact.interpolate(f_exact_expr)
     except NotImplementedError:
         f.project(fexpr)
+        f_exact.project(f_exact_expr)
 
-    state.fields("f_exact", space=Space)
-    prescribed_fields = [("f_exact", f_exact)]
-
-    stepper = Timestepper(state, equations_schemes=equations_schemes,
-                          prescribed_fields=prescribed_fields)
-    return stepper, dt, tmax
+    stepper = Timestepper(state, schemes=schemes)
+    return stepper, dt, tmax, f_exact
 
 
 def run(setup, vector, DG):
 
-    stepper, dt, tmax = setup_IPdiffusion(setup, vector, DG)
-    stepper.run(t=0., dt=dt, tmax=tmax)
-    return stepper.state.fields("f_minus_f_exact")
+    stepper, dt, tmax, f_exact = setup_IPdiffusion(setup, vector, DG)
+    stepper.run(t=0., tmax=tmax)
+    f = stepper.state.fields("f")
+    ferr = Function(f.function_space()).assign(f-f_exact)
+    return ferr
 
 
 @pytest.mark.parametrize("vector", [True, False])

@@ -17,23 +17,23 @@ def run(setup):
     u = state.fields("u", space=state.spaces("HDiv"))
     u.project(as_vector([10., 0.]))
 
-    def f_exact(t):
-        d = 5.
-        xs = x[0] - 0.5*L
-        return (1/(1+4*t))*((exp(-d*(2*xs+d)) + exp(d*(2*xs-d)))*f_init)**(1/(1+4*t))
-
     equation = AdvectionDiffusionEquation(state, fspace, "f", kappa=1., mu=5)
     schemes = [SSPRK3(state, equation, advection),
                BackwardEuler(state, equation, diffusion)]
     f = state.fields("f")
     f.interpolate(f_init)
 
-    prescribed_fields = [("f_exact", f_exact)]
-    timestepper = PrescribedAdvectionTimestepper(
-        state, schemes, prescribed_fields=prescribed_fields)
+    timestepper = PrescribedAdvectionTimestepper(state, schemes)
 
     timestepper.run(0, tmax=tmax)
-    return timestepper.state.fields("f_minus_f_exact")
+
+    d = 5.
+    xs = x[0] - 0.5*L
+    f_exact_expr = (1/(1+4*tmax))*((exp(-d*(2*xs+d)) + exp(d*(2*xs-d)))*f_init)**(1/(1+4*tmax))
+    f_exact = Function(f.function_space()).interpolate(f_exact_expr)
+    ferr = Function(f.function_space()).assign(f-f_exact)
+
+    return ferr
 
 
 def test_advection_diffusion(tmpdir, tracer_setup):
