@@ -62,8 +62,6 @@ def tracer_blob_slice(tmpdir):
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    parameters = CompressibleParameters()
-
     state = State(mesh, dt=dt, output=output, parameters=parameters)
     build_spaces(state, "CG", 1, 1)
 
@@ -73,17 +71,35 @@ def tracer_blob_slice(tmpdir):
     return TracerSetup(state=state, tmax=1.5, f_init=f_init)
 
 
+def atmospheric_blob_slice(tmpdir):
+
+    dt = 1.
+    L = 10.
+    m = PeriodicIntervalMesh(10, L)
+    mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
+    parameters = CompressibleParameters()
+    state = State(mesh, dt=dt, output=output, parameters=parameters)
+    build_spaces(state, "CG", 1, 1)
+
+    return TracerSetup(state=state, tmax=10)
+
+
 @pytest.fixture()
 def tracer_setup():
 
-    def _tracer_setup(tmpdir, geometry, blob=False):
+    def _tracer_setup(tmpdir, geometry, blob=False, atmosphere=False):
         if geometry == "sphere":
             assert not blob
+            assert not atmosphere
             return tracer_advection_sphere(tmpdir)
         elif geometry == "slice":
-            if blob:
+            if blob and atmosphere:
+                return atmospheric_blob_slice(tmpdir)
+            elif blob:
                 return tracer_blob_slice(tmpdir)
             else:
+                assert not atmosphere
                 return tracer_advection_slice(tmpdir)
 
     return _tracer_setup

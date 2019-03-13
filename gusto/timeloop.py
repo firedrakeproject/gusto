@@ -152,12 +152,12 @@ class Timestepper(object, metaclass=ABCMeta):
             # steps fields from xn to xnp1
             self.timestep(state)
 
+            self.update_fields(self.xn, self.xnp1)
+            self.update_fields(state.fields, self.xnp1)
+
             with timed_stage("Physics"):
                 for physics in self.physics_list:
                     physics.apply()
-
-            self.update_fields(self.xn, self.xnp1)
-            self.update_fields(state.fields, self.xnp1)
 
             with timed_stage("Dump output"):
                 state.dump(t)

@@ -473,7 +473,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
         if not self._initialised:
             space = state.fields("theta").function_space()
             broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
-            boundary_method = 'physics' if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
+            boundary_method = 'physics' if space.ufl_element().degree()[1] == 1 else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
@@ -492,7 +492,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
                 self.r_c = Constant(0.0)
             try:
                 self.rain = state.fields("rain")
-            except NotImplementedError:
+            except AttributeError:
                 self.rain = Constant(0.0)
 
             # now let's store the most common expressions

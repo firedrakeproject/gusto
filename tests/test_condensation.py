@@ -17,37 +17,39 @@ def run(setup):
     L = 10.
     x = SpatialCoordinate(state.mesh)
 
-    u = state.fields("u", space=state.spaces("HDiv"))
+    u = state.fields("u", space=state.spaces("HDiv"), dump=True)
     rho = state.fields("rho", space=state.spaces("DG"))
-    theta = state.fields("theta", space=state.spaces("HDiv_v"))
-    water_v = state.fields("water_v", space=state.spaces("HDiv_v"))
-    water_c = state.fields("water_c", space=state.spaces("HDiv_v"))
+    theta = state.fields("theta", space=state.spaces("HDiv_v"), dump=True)
+    water_v = state.fields("water_v", space=state.spaces("HDiv_v"), dump=True)
+    water_c = state.fields("water_c", space=state.spaces("HDiv_v"), dump=True)
 
     # Isentropic background state
     Vrho = rho.function_space()
     Vtheta = theta.function_space()
-    Tsurf = Constant(300.)
+    Tsurf = Constant(280.)
     rhosurf = Constant(1.0)
 
     theta.interpolate(Tsurf)
     rho.interpolate(rhosurf)
 
     # set up water_v
-    xc = 500.
-    zc = 350.
-    rc = 250.
+    xc = 5.
+    zc = 3.5
+    rc = 2.5
     r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
-    w_expr = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
+    w_expr = conditional(r > rc, 0., 0.01*(1. + cos((pi/rc)*r)))
 
     water_v.interpolate(w_expr)
 
     rho_eqn = ContinuityEquation(state, Vrho, "rho")
+    theta_eqn = AdvectionEquation(state, Vtheta, "theta")
     water_v_eqn = AdvectionEquation(state, Vtheta, "water_v")
     water_c_eqn = AdvectionEquation(state, Vtheta, "water_c")
 
     supg_opts = SUPGOptions()
 
     schemes = [SSPRK3(state, rho_eqn, advection),
+               SSPRK3(state, theta_eqn, options=supg_opts),
                SSPRK3(state, water_v_eqn, options=supg_opts),
                SSPRK3(state, water_c_eqn, options=supg_opts)]
 
@@ -55,7 +57,7 @@ def run(setup):
     Vpsi = FunctionSpace(state.mesh, "CG", 2)
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
 
-    u_max = 20.0
+    u_max = 0.1
 
     def u_evaluation(t):
         psi_expr = ((-u_max * L / pi)
@@ -78,13 +80,19 @@ def run(setup):
         physics_list=physics_list, prescribed_fields=prescribed_fields)
     timestepper.run(t=0, tmax=tmax)
 
+    # want to check that water is conserved
     water_t_T = assemble((water_c + water_v) * dx)
 
-    return abs(water_t_0 - water_t_T) / water_t_0
+    # also want to check that some condensation has happened!
+    one = Function(Vtheta).interpolate(Constant(1.0))
+    cloud = assemble(water_c * dx) / assemble(one * dx)
+
+    return abs(water_t_0 - water_t_T) / water_t_0, cloud
 
 
 def test_condensation(tmpdir, tracer_setup):
 
-    setup = tracer_setup(tmpdir, geometry="slice", blob=True)
-    err = run(setup)
+    setup = tracer_setup(tmpdir, "slice", blob=True, atmosphere=True)
+    err, cloud = run(setup)
     assert err < 1e-12
+    assert cloud > 1e-12
