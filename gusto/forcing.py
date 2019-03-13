@@ -524,7 +524,7 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         K = inner(un, un)/3. + inner(un, u0)/3. + inner(u0, u0)/3.
         dim = state.mesh.topological_dimension()
         z = SpatialCoordinate(state.mesh)[dim-1]
-       g = state.parameters.g
+        g = state.parameters.g
         Prhs = g*z + 0.5*K + gauss_quadrature(Hbyrho, self.gauss_deg)
         Peqn = phi*(rho_ - Prhs)*dx
         Pproblem = LinearVariationalProblem(lhs(Peqn), rhs(Peqn), state.P)
