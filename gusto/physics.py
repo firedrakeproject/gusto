@@ -60,7 +60,7 @@ class Condensation(Physics):
         try:
             rain = state.fields('rain')
             water_l = self.water_c + rain
-        except NotImplementedError:
+        except AttributeError:
             water_l = self.water_c
 
         # declare function space
@@ -68,7 +68,7 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
-        if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
+        if Vt.ufl_element().degree()[1] == 1 and state.mesh.geometric_dimension() == 2:
             boundary_method = 'physics'
         else:
             boundary_method = None
@@ -77,7 +77,7 @@ class Condensation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv

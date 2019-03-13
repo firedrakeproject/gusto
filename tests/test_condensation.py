@@ -2,7 +2,7 @@ from os import path
 from gusto import *
 from firedrake import (as_vector, Constant, sin, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, FunctionSpace,
-                       Function, sqrt, conditional, cos)
+                       Function, sqrt, conditional, cos, assemble)
 from netCDF4 import Dataset
 from math import pi
 
@@ -14,18 +14,7 @@ def run(setup):
 
     state = setup.state
     tmax = setup.tmax
-
-    # declare grid shape, with length L and height H
-    L = 1000.
-    H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
-
-    tmax = 10.0
-
-    # make mesh
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
+    L = 10.
     x = SpatialCoordinate(state.mesh)
 
     u = state.fields("u", space=state.spaces("HDiv"))
@@ -35,14 +24,13 @@ def run(setup):
     water_c = state.fields("water_c", space=state.spaces("HDiv_v"))
 
     # Isentropic background state
-    Vt = theta.function_space()
+    Vrho = rho.function_space()
+    Vtheta = theta.function_space()
     Tsurf = Constant(300.)
+    rhosurf = Constant(1.0)
 
-    theta_b = Function(Vt).interpolate(Tsurf)
-
-    # Calculate initial rho
-    compressible_hydrostatic_balance(state, theta_b, rho,
-                                     solve_for_rho=True)
+    theta.interpolate(Tsurf)
+    rho.interpolate(rhosurf)
 
     # set up water_v
     xc = 500.
@@ -56,6 +44,8 @@ def run(setup):
     rho_eqn = ContinuityEquation(state, Vrho, "rho")
     water_v_eqn = AdvectionEquation(state, Vtheta, "water_v")
     water_c_eqn = AdvectionEquation(state, Vtheta, "water_c")
+
+    supg_opts = SUPGOptions()
 
     schemes = [SSPRK3(state, rho_eqn, advection),
                SSPRK3(state, water_v_eqn, options=supg_opts),

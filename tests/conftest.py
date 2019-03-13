@@ -62,8 +62,9 @@ def tracer_blob_slice(tmpdir):
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    parameters = CompressibleParameters()
 
-    state = State(mesh, dt=dt, output=output)
+    state = State(mesh, dt=dt, output=output, parameters=parameters)
     build_spaces(state, "CG", 1, 1)
 
     x = SpatialCoordinate(mesh)
