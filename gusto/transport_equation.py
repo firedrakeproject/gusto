@@ -124,6 +124,8 @@ class TransportEquation(object, metaclass=ABCMeta):
 
         # set up functions required for forms
         self.ubar = Function(state.spaces("HDiv"))
+        if self.state.hamiltonian:
+            self.dbar = Function(state.spaces("DG"))
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
@@ -400,6 +402,7 @@ class SUPGAdvection(AdvectionEquation):
                     [vals[j] if i == j else 0. for i, v in enumerate(vals)]
                 ) for j in range(dim)])
             )
+        self.state.tau = tau
         dtest = dot(dot(self.ubar, tau), grad(self.test))
         self.test += dtest
 
@@ -422,6 +425,9 @@ class VectorInvariant(TransportEquation):
 
         if state.mesh.topological_dimension() == 3 and ibp == IntegrateByParts.TWICE:
             raise NotImplementedError("ibp=twice is not implemented for 3d problems")
+
+        if self.state.hamiltonian:
+            self.test = self.test*self.dbar
 
     def advection_term(self, q):
 
@@ -466,7 +472,8 @@ class VectorInvariant(TransportEquation):
                                  perp(self.ubar))*perp(q), n)*self.dS
                 )
 
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+        if not self.state.hamiltonian:
+            L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
 
         return L
 
@@ -485,5 +492,9 @@ class EulerPoincare(VectorInvariant):
 
     def advection_term(self, q):
         L = super().advection_term(q)
-        L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
+        if self.state.hamiltonian:
+            if not hasattr(q, "number"):
+                L -= 2*div(self.test)*inner(self.state.h_project(self.ubar), self.ubar)*dx
+        else:
+            L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L

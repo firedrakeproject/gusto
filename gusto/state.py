@@ -202,6 +202,7 @@ class State(object):
                  family="RT",
                  Coriolis=None, sponge_function=None,
                  hydrostatic=None,
+                 hamiltonian=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -215,6 +216,7 @@ class State(object):
         self.Omega = Coriolis
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
+        self.hamiltonian = hamiltonian
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -275,6 +277,10 @@ class State(object):
             self.h_project = lambda u: u - self.k*inner(u, self.k)
         else:
             self.h_project = lambda u: u
+
+        # save SUPG parameter for Hamiltonian forcing
+        if self.hamiltonian:
+            self.tau = 0
 
         #  Constant to hold current time
         self.t = Constant(0.0)
@@ -535,7 +541,11 @@ class State(object):
         self.xrhs = Function(W)
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
-
+        if self.hamiltonian:
+            self.u_rec = Function(W.split()[0])
+            self.P = Function(W.split()[1])
+            if self.vertical_degree is not None:
+                self.T = Function(W.split()[2])
 
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
