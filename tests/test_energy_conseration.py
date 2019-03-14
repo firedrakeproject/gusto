@@ -170,16 +170,15 @@ def run_energy_test(dirname, test_case):
 def test_energy_conservation(tmpdir):
     dirname = str(tmpdir)
     run_energy_test(dirname, "SWE")
-    filename = path.join("results", dirname, "energy_SWE/diagnostics.nc")
+    filename = path.join(dirname, "energy_SWE/diagnostics.nc")
     data = Dataset(filename, "r")
     En_err_SWE = data.groups["ShallowWaterKineticEnergy_plus_ShallowWaterPotentialEnergy"]
 
     run_energy_test(dirname, "Euler")
-    filename = path.join("results", dirname, "energy_Euler/diagnostics.nc")
+    filename = path.join(dirname, "energy_Euler/diagnostics.nc")
     data = Dataset(filename, "r")
     En_err_Euler = data.groups["CompressibleEnergy"]
 
     assert max([abs((En_err_SWE["total"][i] - En_err_SWE["total"][0])/En_err_SWE["total"][i]) for i in range(len(En_err_SWE["total"]))]) < 5.e-13
     assert max([abs((En_err_Euler["total"][i] - En_err_Euler["total"][0])/En_err_Euler["total"][i]) for i in range(len(En_err_Euler["total"]))]) < 1.e-7
 
-test_energy_conservation("test_outcome_Var_G")
