@@ -26,11 +26,11 @@ def setup_sw(dirname, scheme):
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
 
-    state = State(mesh,
+    state = State(mesh, dt=dt,
                   output=output,
                   parameters=parameters)
 
-    eqns = LinearShallowWaterEquations(state, family="BDM", degree=1)
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1, linear=True)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -49,20 +49,20 @@ def setup_sw(dirname, scheme):
     # build time stepper
     if scheme == "CrankNicolson":
         advected_fields = []
-        advected_fields.append(("D", ForwardEuler()))
+        advected_fields.append(ForwardEuler(state, eqns, advection, field_name="D"))
         stepper = CrankNicolson(state, equation_set=eqns,
                                 advected_fields=advected_fields)
     elif scheme == "SSPRK3":
-        scheme = SSPRK3()
-        stepper = Timestepper(state, [(eqns, scheme)])
+        scheme = SSPRK3(state, eqns)
+        stepper = Timestepper(state, scheme)
 
-    return stepper, dt, 2*day
+    return stepper, 2*day
 
 
 def run_sw(dirname, scheme):
 
-    stepper, dt, tmax = setup_sw(dirname, scheme)
-    stepper.run(t=0, dt=dt, tmax=tmax)
+    stepper, tmax = setup_sw(dirname, scheme)
+    stepper.run(t=0, tmax=tmax)
 
 
 @pytest.mark.parametrize("scheme", ["CrankNicolson", "SSPRK3"])
