@@ -41,77 +41,54 @@ class FieldCreator(object):
     def __init__(self):
         self.fields = []
 
-    def add_field(self, name, value, dump, pickup):
-        """
-        adds a field to this class
-        :arg name: str, the name of the field
-        :arg value: :class:`Function` the value of this field
-        :arg dump: bool, whether this field is written to the output file
-        :arg pickup: bool, whether to pickup this field which picking up
-        from a checkpointed state
-        """
+    def add_field(self, name, value):
         setattr(self, name, value)
-        value.dump = dump
-        value.pickup = pickup
         value.rename(name)
         self.fields.append(value)
 
-    def __call__(self, name, *subfield_names, space=None,
-                 dump=False, pickup=False):
-        """
-        If the named field already exists then return it; otherwise
-        create it on the provided space.
-        """
-        try:
-            return getattr(self, name)
-        except AttributeError:
+    def create_field(self, name, *subfield_names, space=None):
+        if len(space) == 1:
+            value = Function(space)
+            self.add_field(name, value)
+        else:
+            mixed_function = Function(space)
+            self.add_field(name, mixed_function)
+            if subfield_names is not None:
+                assert len(subfield_names) == len(space)
+                for name, value in zip(subfield_names, mixed_function.split()):
+                    self.add_field(name, value)
 
-            if space is None:
-                raise AttributeError("No field named %s and no space provided to create a new field." % name)
-
-            if len(space) == 1:
-                # create function, add field and return value
-                assert not subfield_names, "cannot name subfields if there aren't any"
-                value = Function(space)
-                self.add_field(name, value, dump, pickup)
-                return value
-            else:
-                # create mixed function and add it
-                mixed_function = Function(space)
-                self.add_field(name, mixed_function, dump=False, pickup=True)
-
-                # create a dict field_name: dump to indicate whether
-                # to dump field - use default value of dump if dump
-                # has not been passed in
-                if type(dump) == list:
-                    dump_ = dict(zip(subfield_names,
-                                     [f in dump for f in subfield_names]))
-                else:
-                    dump_ = dict(zip(subfield_names,
-                                     (dump,)*len(subfield_names)))
-
-                # create a dict field_name: pickup to indicate whether
-                # to pickup the field after checkpointing - use
-                # default value of pickup if pickup has not been passed in
-                if type(pickup) is list:
-                    pickup_ = dict(zip(subfield_names,
-                                       [f in pickup for f in subfield_names]))
-                else:
-                    pickup_ = dict(zip(subfield_names,
-                                       (pickup,)*len(subfield_names)))
-
-                # if subfield_names have been passed in we need to
-                # split the mixed function and add the resulting
-                # fields so that they can later be accessed by name
-                if subfield_names:
-                    assert len(subfield_names) == len(space), "must specify one name per funciton space in %s" % space
-                    for name, value in zip(subfield_names,
-                                           mixed_function.split()):
-                        self.add_field(name, value, dump_[name], pickup_[name])
-                return getattr(self, name)
+    def __call__(self, name):
+        return getattr(self, name)
 
     def __iter__(self):
         return iter(self.fields)
+
+
+class StateFields(FieldCreator):
+
+    def __init__(self, *fields_to_dump):
+        super().__init__()
+        self.fields_to_dump = set(fields_to_dump)
+        self.fields_to_pickup = set(())
+
+    def add_field(self, name, value):
+        super().add_field(name, value)
+        value.dump = name in self.fields_to_dump
+        value.pickup = name in self.fields_to_pickup
+
+    def __call__(self, name, *subfield_names, space=None, dump=True, pickup=True):
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            if space is None:
+                raise AttributeError("No field named %s and no space provided to create a new field." % name)
+            if dump and len(space) == 1:
+                self.fields_to_dump.add(name)
+            if pickup:
+                self.fields_to_pickup.add(name)
+            self.create_field(name, *subfield_names, space=space)
+            return getattr(self, name)
 
 
 class PointDataOutput(object):
@@ -270,7 +247,9 @@ class State(object):
         # The mesh
         self.mesh = mesh
 
-        self.fields = FieldCreator()
+        if output.dumplist is None:
+            dumplist = []
+        self.fields = StateFields(*dumplist)
         self.spaces = SpaceCreator()
 
         self.dumpfile = None

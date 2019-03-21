@@ -9,7 +9,6 @@ def run(setup):
     f_init = setup.f_init
 
     fspace = state.spaces("DG")
-    state.fields("f_exact", space=fspace)
 
     x = SpatialCoordinate(state.mesh)
     L = 10.

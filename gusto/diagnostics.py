@@ -74,8 +74,9 @@ void maxify(double *a, double *b) {
 
 class DiagnosticField(object, metaclass=ABCMeta):
 
-    def __init__(self, required_fields=()):
+    def __init__(self, dump=True, required_fields=()):
         self._initialised = False
+        self.dump = dump
         self.required_fields = required_fields
 
     @abstractproperty
@@ -87,7 +88,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
-            self.field = state.fields(self.name, space=space, pickup=False)
+            self.field = state.fields(self.name, space=space,
+                                      dump=self.dump, pickup=False)
             self._initialised = True
 
     @abstractmethod

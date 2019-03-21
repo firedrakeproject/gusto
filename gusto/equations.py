@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractproperty
-from firedrake import (Function, TestFunction, inner, dx, div, action,
+from firedrake import (Function, TestFunction, inner, dx, div,
                        SpatialCoordinate, sqrt, FunctionSpace,
                        MixedFunctionSpace, TestFunctions, TrialFunctions)
 from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
@@ -16,6 +16,7 @@ from gusto.transport_equation import (vector_invariant_form,
                                       advection_vector_manifold_form,
                                       kinetic_energy_form)
 from gusto.state import build_spaces
+from ufl import replace
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
@@ -328,12 +329,20 @@ class ShallowWaterEquations(PrognosticMixedEquation):
         if linear:
             # grab the linearisation of each term (a bilinear form) and
             # apply to the term's subject to get the linear form
-            linear_form = (
-                self.residual.label_map(
-                    has_labels(linearisation),
-                    lambda t: Term(
-                        action(t.get(linearisation).form, t.get(subject)),
-                        t.labels),
-                    drop)
-            )
+            def linearise_term(t):
+                t_lin = t.get(linearisation)
+
+                def get_action(tl):
+                    subj = tl.get(subject).split()
+                    new_form = replace(tl.form, {trials[0]: subj[0],
+                                                 trials[1]: subj[1]})
+                    t.labels.update(tl.labels)
+                    return Term(new_form, t.labels)
+
+                return t_lin.label_map(all_terms, get_action)
+
+            linear_form = self.residual.label_map(
+                has_labels(linearisation),
+                linearise_term,
+                drop)
             self.residual = mass_form + linear_form

@@ -72,8 +72,9 @@ class Advection(object, metaclass=ABCMeta):
 
         self.dt = state.dt
 
-        # store just the form
-        self.equation = equation.residual
+        # store the equation an residual
+        self.equation = equation
+        self.residual = equation.residual
 
         # is the equation is defined on a mixed function space
         mixed_equation = len(equation.function_space) > 1
@@ -87,7 +88,7 @@ class Advection(object, metaclass=ABCMeta):
         # equation form that involve this prognostic field.
         if mixed_equation and not mixed_function:
             idx = fs.index
-            self.equation = self.equation.label_map(
+            self.residual = self.residual.label_map(
                 lambda t: t.get(index) == idx, extract(idx), drop)
 
         if len(active_labels) > 0:
@@ -144,7 +145,7 @@ class Advection(object, metaclass=ABCMeta):
         # select labelled terms from the equation if active_labels are
         # specified
         if len(active_labels) > 0:
-            self.equation = self.equation.label_map(
+            self.residual = self.residual.label_map(
                 has_labels(time_derivative, *active_labels),
                 map_if_false=drop)
 
@@ -195,7 +196,7 @@ class Advection(object, metaclass=ABCMeta):
             # the embedding space, as this is the space where the
             # advection occurs
             test = TestFunction(self.fs)
-            self.equation = self.equation.label_map(all_terms,
+            self.residual = self.residual.label_map(all_terms,
                                                     replace_test(test))
 
         if options.name == "recovered":
@@ -253,7 +254,7 @@ class Advection(object, metaclass=ABCMeta):
                 new_test = test + dot(dot(uadv, tau), grad(test))
                 return advecting_velocity(Term(ufl.replace(t.form, {test: new_test}), t.labels), uadv)
 
-            self.equation = self.equation.label_map(
+            self.residual = self.residual.label_map(
                 all_terms, replace_with_supg_test)
 
             # update default ksp_type
@@ -262,21 +263,21 @@ class Advection(object, metaclass=ABCMeta):
     def replace_advecting_velocity(self, u_advecting):
 
         # replace the advecting velocity in any terms that contain it
-        if any([t.has_label(advecting_velocity) for t in self.equation]):
+        if any([t.has_label(advecting_velocity) for t in self.residual]):
             # setup advecting velocity
             if u_advecting is None:
                 # the advecting velocity is calculated as part of this
                 # timestepping scheme and must be replaced with the
                 # correct part of the term's subject
                 assert len(self.fs) > 1, "We expect the advecting velocity to be specified unless we are applying this timestepping scheme to a mixed system of equations"
-                self.equation = self.equation.label_map(
+                self.residual = self.residual.label_map(
                     has_labels(advecting_velocity),
                     replace_labelled(subject, advecting_velocity))
             else:
                 # the advecting velocity is fixed over the timestep
                 # and is specified by the advecting_velocity property
                 # of the timestepping class
-                self.equation = self.equation.label_map(
+                self.residual = self.residual.label_map(
                     has_labels(advecting_velocity),
                     replace_labelled(u_advecting, advecting_velocity))
 
@@ -324,7 +325,7 @@ class Advection(object, metaclass=ABCMeta):
 
     @property
     def lhs(self):
-        l = self.equation.label_map(
+        l = self.residual.label_map(
             has_labels(time_derivative, implicit),
             map_if_true=replace_labelled(self.trial, subject),
             map_if_false=drop)
@@ -335,7 +336,7 @@ class Advection(object, metaclass=ABCMeta):
     @property
     def rhs(self):
 
-        r = self.equation.label_map(
+        r = self.residual.label_map(
             has_labels(time_derivative, explicit),
             map_if_true=replace_labelled(self.q1, subject),
             map_if_false=drop)
@@ -348,7 +349,7 @@ class Advection(object, metaclass=ABCMeta):
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(action(self.lhs, self.result)-self.rhs, self.result)
-        solver_name = self.field_name+self.equation.__class__.__name__+self.__class__.__name__
+        solver_name = self.field_name+self.residual.__class__.__name__+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
@@ -369,7 +370,7 @@ class BackwardEuler(Advection):
         """
         Labels all terms implicit
         """
-        self.equation = self.equation.label_map(
+        self.residual = self.residual.label_map(
             has_labels(time_derivative),
             map_if_false=lambda t: implicit(t))
 
@@ -415,7 +416,7 @@ class ExplicitAdvection(Advection):
         """
         Labels all terms explicit
         """
-        self.equation = self.equation.label_map(
+        self.residual = self.residual.label_map(
             has_labels(time_derivative),
             map_if_false=lambda t: explicit(t))
 
@@ -543,7 +544,7 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
 
-        l = self.equation.label_map(all_terms,
+        l = self.residual.label_map(all_terms,
                                     replace_labelled(self.trial, subject))
         l = l.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
@@ -552,7 +553,7 @@ class ThetaMethod(Advection):
     @cached_property
     def rhs(self):
 
-        r = self.equation.label_map(all_terms,
+        r = self.residual.label_map(all_terms,
                                     replace_labelled(self.q1, subject))
         r = r.label_map(has_labels(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)

@@ -11,6 +11,17 @@ from firedrake import DirichletBC, Function
 __all__ = ["Timestepper", "PrescribedAdvectionTimestepper", "CrankNicolson"]
 
 
+class TimeLevelFields(FieldCreator):
+
+    def __init__(self, *equations):
+        super().__init__()
+        for eqn in equations:
+            name = eqn.field_name
+            space = eqn.function_space
+            subfield_names = eqn.fields if hasattr(eqn, "fields") else []
+            self.create_field(name, *subfield_names, space=space)
+
+
 class Timestepper(object, metaclass=ABCMeta):
     """
     Basic timestepping class for Gusto.
@@ -57,14 +68,8 @@ class Timestepper(object, metaclass=ABCMeta):
         Sets up fields to contain the values at time levels n and n+1,
         getting the field's name and function space from the equation
         """
-        self.xn = FieldCreator()
-        self.xnp1 = FieldCreator()
-
-        for scheme in self.schemes:
-            field_name = scheme.field_name
-            space = self.state.fields(field_name).function_space()
-            self.xn(field_name, space=space)
-            self.xnp1(field_name, space=space)
+        self.xn = TimeLevelFields(*[scheme.equation for scheme in self.schemes])
+        self.xnp1 = TimeLevelFields(*[scheme.equation for scheme in self.schemes])
 
     def _apply_bcs(self):
         """
@@ -299,29 +304,15 @@ class CrankNicolson(Timestepper):
         solution of the linear system and the residual.
 
         """
-        equation_set = self.equation_set
-        self.xn = FieldCreator()
-        self.xnp1 = FieldCreator()
-        self.xstar = FieldCreator()
-        self.xp = FieldCreator()
+        self.xn = TimeLevelFields(
+            *[self.equation_set, *[scheme.equation for scheme in self.schemes]])
+        self.xnp1 = TimeLevelFields(
+            *[self.equation_set, *[scheme.equation for scheme in self.schemes]])
+        self.xstar = TimeLevelFields(self.equation_set)
+        self.xp = TimeLevelFields(self.equation_set)
 
-        self.xn(equation_set.field_name, *equation_set.fields,
-                space=equation_set.function_space)
-        self.xnp1(equation_set.field_name, *equation_set.fields,
-                  space=equation_set.function_space)
-        self.xstar(equation_set.field_name, *equation_set.fields,
-                   space=equation_set.function_space)
-        self.xp(equation_set.field_name, *equation_set.fields,
-                space=equation_set.function_space)
-
-        for scheme in self.schemes:
-            field_name = scheme.field_name
-            space = self.state.fields(field_name).function_space()
-            self.xn(field_name, space=space)
-            self.xnp1(field_name, space=space)
-
-        self.xrhs = Function(equation_set.function_space)
-        self.dy = Function(equation_set.function_space)
+        self.xrhs = Function(self.equation_set.function_space)
+        self.dy = Function(self.equation_set.function_space)
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """
