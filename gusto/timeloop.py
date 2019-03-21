@@ -323,8 +323,12 @@ class CrankNicolson(Timestepper):
         t = super().setup_timeloop(state, t, tmax, pickup)
         super().setup_schemes(self.active_advection)
         super().setup_schemes(self.diffused_fields)
-        self.linear_solver = LinearTimesteppingSolver(self.equation_set,
-                                                      state.dt, self.alpha)
+        if hasattr(self.equation_set, "linear_solver"):
+            self.linear_solver = self.equation_set.linear_solver
+        else:
+            self.linear_solver = LinearTimesteppingSolver(self.equation_set,
+                                                          state.dt, self.alpha)
+
         self.forcing = Forcing(self.equation_set, state.dt, self.alpha)
         return t
 
