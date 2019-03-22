@@ -72,7 +72,7 @@ def setup_sk(dirname):
     advected_fields.append(SSPRK3(state, eqns, advection, field_name="theta"))
 
     # build time stepper
-    stepper = CrankNicolson(state, equation_set=eqns, advected_fields=advected_fields)
+    stepper = CrankNicolson(state, equation_set=eqns, schemes=advected_fields)
 
     return stepper, 2*dt
 

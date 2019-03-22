@@ -3,7 +3,6 @@ from pyop2.profiling import timed_stage
 from gusto.advection import Advection
 from gusto.configuration import logger
 from gusto.forcing import Forcing
-from gusto.form_manipulation_labelling import advection, diffusion
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
@@ -238,8 +237,7 @@ class CrankNicolson(Timestepper):
              iterations and alpha is the offcentering parameter
     """
 
-    def __init__(self, state, equation_set, advected_fields,
-                 diffused_fields=None, schemes=None,
+    def __init__(self, state, equation_set, schemes=None,
                  physics_list=None, prescribed_fields=None, **kwargs):
 
         self.maxk = kwargs.pop("maxk", 4)
@@ -250,12 +248,8 @@ class CrankNicolson(Timestepper):
 
         self.equation_set = equation_set
 
-        for scheme in advected_fields:
-            assert scheme.field_name in equation_set.fields, "The advected fields list is for specifying advection schemes for fields in the equation_set. To add additional fields, equations and schemes, please use the equations_schemes arg."
-
-        # list of (field, scheme) for fields that are advected as part
-        # of the semi implicit step
-        self.active_advection = advected_fields
+        self.active_advection = [scheme for scheme in schemes
+                                 if scheme.field_name in equation_set.fields]
 
         # list of fields that are part of the semi implicit step but
         # are not advected (for example, when solving equations
@@ -264,21 +258,8 @@ class CrankNicolson(Timestepper):
         self.non_advected_fields = [
             name for name in
             set(equation_set.fields).difference(
-                set([scheme.field_name for scheme in advected_fields]))
+                set([scheme.field_name for scheme in self.active_advection]))
         ]
-
-        # list of (field, scheme) for fields that are in the
-        # equation_set and contain diffusion terms - these will be
-        # applied after the semi implicit step
-        if diffused_fields is None:
-            assert all(
-                [not t.has_label(diffusion) for t in equation_set.residual]),\
-                "you have some diffusion terms but have not specified which scheme to use to apply them"
-            self.diffused_fields = []
-        else:
-            self.diffused_fields = diffused_fields
-        for name, _ in self.diffused_fields:
-            assert name in equation_set.fields, "The diffused fields list is for specifying diffusion schemes for fields in the equation_set. To add additional fields, equations and schemes, please use the equations_schemes arg."
 
         super().__init__(state,
                          schemes,
@@ -321,8 +302,8 @@ class CrankNicolson(Timestepper):
         We also need to set up the linear solver and the forcing solvers.
         """
         t = super().setup_timeloop(state, t, tmax, pickup)
-        super().setup_schemes(self.active_advection)
-        super().setup_schemes(self.diffused_fields)
+
+        self.schemes = [scheme for scheme in self.schemes if scheme not in self.active_advection]
         if hasattr(self.equation_set, "linear_solver"):
             self.linear_solver = self.equation_set.linear_solver
         else:
@@ -344,11 +325,6 @@ class CrankNicolson(Timestepper):
             field_name = scheme.field_name
             scheme.apply(self.xn(field_name), self.xnp1(field_name))
             self.xn(field_name).assign(self.xnp1(field_name))
-
-        with timed_stage("Diffusion"):
-            for field_name, scheme in self.diffused_fields:
-                field_name = scheme.field_name
-                scheme.apply(self.xnp1(field_name), self.xnp1(field_name))
 
     def semi_implicit_step(self):
         """

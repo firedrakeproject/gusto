@@ -7,7 +7,7 @@ from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
                                                subject, time_derivative,
                                                linearisation,
                                                drop, index, advection,
-                                               replace_labelled,
+                                               replace_labelled, name,
                                                has_labels, Term, LabelledForm)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.linear_solvers import CompressibleSolver
@@ -434,8 +434,11 @@ class CompressibleEulerEquations(PrognosticMixedEquation):
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
 
         # define pressure gradient term and its linearisation
-        pressure_gradient_term = subject(
-            cp*(-div(theta*w)*pi*dx + jump(theta*w, n)*avg(pi)*dS_v), u
+        pressure_gradient_term = (
+            name(subject(
+                cp*(-div(theta*w)*pi*dx
+                    + jump(theta*w, n)*avg(pi)*dS_v), X),
+                 "pressure_gradient")
         )
 
         # define gravity term and its linearisation
@@ -454,7 +457,7 @@ class CompressibleEulerEquations(PrognosticMixedEquation):
         # define the density continuity term and its linearisation
         rho_adv = continuity_form(state, W, 1)
 
-        # define the  potential temperatur advection term and its linearisation
+        # define the potential temperature advection term and its linearisation
         theta_adv = advection_form(state, W, 2)
 
         self.residual = (
@@ -463,3 +466,50 @@ class CompressibleEulerEquations(PrognosticMixedEquation):
         )
 
         self.linear_solver = CompressibleSolver(state, self)
+
+
+class MoistCompressibleEulerEquations(CompressibleEulerEquations):
+
+    def __init__(self, state, family, horizontal_degree, vertical_degree,
+                 **kwargs):
+
+        super().__init__(state, family, horizontal_degree, vertical_degree,
+                         **kwargs)
+
+        self.auxiliary_fields = ["water_v", "water_c"]
+        V = state.spaces("DG")
+        water_v = state.fields("water_v", space=V)
+        water_c = state.fields("water_c", space=V)
+        water_t = water_v + water_c
+        print(water_t)
+        u = state.fields("u")
+        theta = state.fields("theta")
+
+        cv = state.parameters.cv
+        cp = state.parameters.cp
+        c_vv = state.parameters.c_vv
+        c_pv = state.parameters.c_pv
+        c_pl = state.parameters.c_pl
+        R_d = state.parameters.R_d
+        R_v = state.parameters.R_v
+        c_vml = cv + water_v * c_vv + water_c * c_pl
+        c_pml = cp + water_v * c_pv + water_c * c_pl
+        R_m = R_d + water_v * R_v
+
+        def rescale_theta(t):
+            s = t.get(subject).split()[-1]
+            print(s)
+            print(s/(1+water_t))
+            new_form = replace(t.form, {s: s/(1+water_t)})
+            return Term(new_form, t.labels)
+
+        for t in self.residual:
+            if t.get(name) == "pressure_gradient":
+                print(t.form)
+        self.residual = self.residual.label_map(
+            lambda t: t.get(name) == "pressure_gradient",
+            rescale_theta)
+        for t in self.residual:
+            if t.get(name) == "pressure_gradient":
+                print(t.form)
+        self.residual -= theta * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u)

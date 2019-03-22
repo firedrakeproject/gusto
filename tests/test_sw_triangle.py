@@ -72,7 +72,7 @@ def setup_sw(dirname, scheme, uopt):
         advected_fields.append(ImplicitMidpoint(state, eqns, advection, field_name="u"))
         advected_fields.append(SSPRK3(state, eqns, advection, field_name="D"))
         stepper = CrankNicolson(state, equation_set=eqns,
-                                advected_fields=advected_fields)
+                                schemes=advected_fields)
     elif scheme == "ImplicitMidpoint":
         scheme = ImplicitMidpoint(state, eqns)
         stepper = Timestepper(state, scheme)

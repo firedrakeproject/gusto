@@ -29,21 +29,18 @@ def setup_saturated(dirname):
     recovered = True
     degree = 0 if recovered else 1
 
-    fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [Theta_e()]
 
-    state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
-                  family="CG",
-                  timestepping=timestepping,
+    state = State(mesh, dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
+
+    eqns = MoistCompressibleEulerEquations(state, family="CG",
+                                           horizontal_degree=degree,
+                                           vertical_degree=degree)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -51,7 +48,6 @@ def setup_saturated(dirname):
     theta0 = state.fields("theta")
     water_v0 = state.fields("water_v", theta0.function_space())
     water_c0 = state.fields("water_c", theta0.function_space())
-    moisture = ['water_v', 'water_c']
 
     # spaces
     Vu = u0.function_space()
@@ -94,37 +90,27 @@ def setup_saturated(dirname):
         theta_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=Vt_brok)
-        ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
-        rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
-        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
+        advected_fields = [SSPRK3(state, eqns, advection, field_name="u",
+                                  options=u_opts),
+                           SSPRK3(state, eqns, advection, field_name="rho",
+                                  options=rho_opts),
+                           SSPRK3(state, eqns, advection, field_name="theta",
+                                  options=theta_opts)]
     else:
-        ueqn = EulerPoincare(state, Vu)
-        rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+        advected_fields = [ImplicitMidpoint(state, eqns, advection,
+                                            field_name="u"),
+                           SSPRK3(state, eqns, advection, field_name="rho"),
+                           SSPRK3(state, eqns, advection, field_name="theta")]
 
-    advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
-                       ('theta', SSPRK3(state, theta0, thetaeqn)),
-                       ('water_v', SSPRK3(state, water_v0, thetaeqn)),
-                       ('water_c', SSPRK3(state, water_c0, thetaeqn))]
-    if recovered:
-        advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
-    else:
-        advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
-
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
-
-    # Set up forcing
-    if recovered:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
-    else:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture)
+    advected_fields.append(SSPRK3(state, eqns, advection, field_name="water_v"))
+    advected_fields.append(SSPRK3(state, eqns, advection, field_name="water_c"))
 
     # add physics
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing, physics_list=physics_list)
+    stepper = CrankNicolson(state, equation_set=eqns,
+                            schemes=advected_fields, physics_list=physics_list)
 
     return stepper, tmax
 
