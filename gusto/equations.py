@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractproperty
 from firedrake import (Function, TestFunction, inner, dx, div, cross, jump,
                        SpatialCoordinate, sqrt, FunctionSpace, avg, dS_v,
                        MixedFunctionSpace, TestFunctions, TrialFunctions,
-                       FacetNormal, dot, grad)
+                       FacetNormal)
 from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
                                                subject, time_derivative,
                                                linearisation,
@@ -10,7 +10,7 @@ from gusto.form_manipulation_labelling import (all_terms, advecting_velocity,
                                                replace_labelled, name,
                                                has_labels, Term, LabelledForm)
 from gusto.diffusion import interior_penalty_diffusion_form
-from gusto.linear_solvers import CompressibleSolver
+from gusto.linear_solvers import CompressibleSolver, IncompressibleSolver
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (vector_invariant_form,
                                       continuity_form, advection_form,
@@ -359,7 +359,7 @@ class ShallowWaterEquations(PrognosticMixedEquation):
 
 class CompressibleEulerEquations(PrognosticMixedEquation):
 
-    field_name = "compressible"
+    field_name = "compressible_euler"
 
     fields = ['u', 'rho', 'theta']
 
@@ -406,8 +406,8 @@ class CompressibleEulerEquations(PrognosticMixedEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         u, rho, theta = X.split()
-        rhobar = state.fields("rhobar", space=Vr)
-        thetabar = state.fields("thetabar", space=Vth)
+        state.fields("rhobar", space=Vr)
+        state.fields("thetabar", space=Vth)
         pi = Pi(self.state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
@@ -513,3 +513,98 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
             if t.get(name) == "pressure_gradient":
                 print(t.form)
         self.residual -= theta * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u)
+
+
+class IncompressibleBoussinesqEquations(PrognosticMixedEquation):
+
+    field_name = "incompressible_boussinesq"
+
+    fields = ['u', 'p', 'b']
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    def __init__(self, state, family, horizontal_degree, vertical_degree,
+                 **kwargs):
+
+        u_advection_option = kwargs.pop("u_advection_option", "vector_invariant_form")
+        Omega = kwargs.pop("Omega", None)
+        linear = kwargs.pop("linear", False)
+        if kwargs:
+            raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
+
+        # define the function spaces
+        Vu, Vp, Vb = build_spaces(state, family, horizontal_degree,
+                                  vertical_degree)
+        W = MixedFunctionSpace((Vu, Vp, Vb))
+
+        super().__init__(state, W)
+
+        g = state.parameters.g
+        w, phi, gamma = TestFunctions(W)
+        trials = TrialFunctions(W)
+        X = Function(W)
+        u, p, b = X.split()
+        state.fields("bbar", space=Vb)
+
+        # define mass term
+        mass_form = (
+            index(subject(time_derivative(inner(u, w)*dx), u), 0)
+            + index(subject(time_derivative(inner(p, phi)*dx), p), 1)
+            + index(subject(time_derivative(inner(b, gamma)*dx), b), 2)
+        )
+
+        # define velocity advection term
+        if u_advection_option == "vector_invariant_form":
+            u_adv = vector_invariant_form(state, W, 0)
+        elif u_advection_option == "vector_advection":
+            u_adv = advection_vector_manifold_form(state, W, 0)
+        elif u_advection_option == "circulation_form":
+            ke_form = kinetic_energy_form(state, W, 0)
+            ke_form = advection.remove(ke_form)
+            ke_form = ke_form.label_map(all_terms,
+                                        replace_labelled(subject,
+                                                         advecting_velocity))
+            u_adv = advection_equation_circulation_form(state, W, 0) + ke_form
+        else:
+            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+
+        # define pressure gradient term and its linearisation
+        pressure_gradient_term = subject(div(phi)*p*dx, X)
+
+        # define gravity term and its linearisation
+        gravity_term = subject(g*b*inner(state.k, w)*dx, X)
+
+        # the base form for u contains the velocity advection term,
+        # the pressure gradient term and the gravity term
+        u_form = u_adv + pressure_gradient_term + gravity_term
+
+        # define the coriolis term and its linearisation
+        if Omega is not None:
+            coriolis_term = subject(inner(cross(2*Omega, u), w)*dx, X)
+            # add on the coriolis term
+            u_form += coriolis_term
+
+        # define the incompressibility condition
+        incompressibility = Term(phi*div(u)*dx)
+
+        # define the buoyancy advection term
+        b_adv = advection_form(state, W, 2)
+
+        self.residual = (
+            mass_form + index(u_form, 0) + index(incompressibility, 1)
+            + index(b_adv, 2)
+        )
+
+        self.linear_solver = IncompressibleSolver(state, self)
