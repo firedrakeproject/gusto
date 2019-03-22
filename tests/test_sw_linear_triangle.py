@@ -1,43 +1,36 @@
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, Function)
+                       as_vector)
 from math import pi
 from netCDF4 import Dataset
+import pytest
 
 
-def setup_sw(dirname):
+def setup_sw(dirname, scheme):
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
     R = 6371220.
     H = 2000.
     day = 24.*60.*60.
+    if scheme == "CrankNicolson":
+        dt = 3600.
+    elif scheme == "SSPRK3":
+        dt = 500.
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=3600.)
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
-    diagnostics = Diagnostics(*fieldlist)
 
-    state = State(mesh, horizontal_degree=1,
-                  family="BDM",
-                  timestepping=timestepping,
+    state = State(mesh, dt=dt,
                   output=output,
-                  parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist)
+                  parameters=parameters)
 
-    # Coriolis
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1, linear=True)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -45,6 +38,7 @@ def setup_sw(dirname):
     D0 = state.fields("D")
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    Omega = parameters.Omega
     g = parameters.g
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
@@ -52,32 +46,29 @@ def setup_sw(dirname):
     state.initialise([('u', u0),
                       ('D', D0)])
 
-    Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp=IntegrateByParts.ONCE, equation_form="continuity")
-    advected_fields = []
-    advected_fields.append(("u", NoAdvection(state, u0, None)))
-    advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
-
-    linear_solver = ShallowWaterSolver(state)
-
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state, linear=True)
-
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    if scheme == "CrankNicolson":
+        advected_fields = []
+        advected_fields.append(ForwardEuler(state, eqns, advection, field_name="D"))
+        stepper = CrankNicolson(state, equation_set=eqns,
+                                advected_fields=advected_fields)
+    elif scheme == "SSPRK3":
+        scheme = SSPRK3(state, eqns)
+        stepper = Timestepper(state, scheme)
 
     return stepper, 2*day
 
 
-def run_sw(dirname):
+def run_sw(dirname, scheme):
 
-    stepper, tmax = setup_sw(dirname)
+    stepper, tmax = setup_sw(dirname, scheme)
     stepper.run(t=0, tmax=tmax)
 
 
-def test_sw_linear(tmpdir):
+@pytest.mark.parametrize("scheme", ["CrankNicolson", "SSPRK3"])
+def test_sw_linear(tmpdir, scheme):
     dirname = str(tmpdir)
-    run_sw(dirname)
+    run_sw(dirname, scheme)
     filename = path.join(dirname, "sw_linear_w2/diagnostics.nc")
     data = Dataset(filename, "r")
 

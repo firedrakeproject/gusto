@@ -1,68 +1,66 @@
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       VectorFunctionSpace, Constant, exp, as_vector)
+from firedrake import (VectorFunctionSpace, Constant, as_vector, norm)
 import pytest
 
 
-def setup_IPdiffusion(dirname, vector, DG):
+def setup_IPdiffusion(setup, vector, DG):
 
-    dt = 0.01
-    L = 10.
-    m = PeriodicIntervalMesh(50, L)
-    mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
+    state = setup.state
+    dt = state.dt
+    tmax = setup.tmax
+    f_init = setup.f_init
 
-    fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=dt)
-    parameters = CompressibleParameters()
-    output = OutputParameters(dirname=dirname)
+    kappa_ = 1.
+    mu = 5.
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
-                  parameters=parameters,
-                  output=output,
-                  fieldlist=fieldlist)
-
-    x = SpatialCoordinate(mesh)
     if vector:
-        kappa = Constant([[0.05, 0.], [0., 0.05]])
+        kappa = Constant([[kappa_, 0.], [0., kappa_]])
         if DG:
-            Space = VectorFunctionSpace(mesh, "DG", 1)
+            Space = VectorFunctionSpace(state.mesh, "DG", 1)
         else:
             Space = state.spaces("HDiv")
-        fexpr = as_vector([exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2), 0.])
+        fexpr = as_vector([f_init, 0.])
+        f_exact_expr = as_vector([(1/(1+4*tmax))*f_init**(1/(1+4*tmax)), 0.])
+
     else:
-        kappa = 0.05
+        kappa = kappa_
         if DG:
             Space = state.spaces("DG")
         else:
             Space = state.spaces("HDiv_v")
-        fexpr = exp(-(L/2.-x[0])**2 - (L/2.-x[1])**2)
+        fexpr = f_init
 
-    f = state.fields("f", Space)
+        f_exact_expr = (1/(1+4*tmax))*f_init**(1/(1+4*tmax))
+
+    eqn = DiffusionEquation(state, Space, "f", kappa=kappa, mu=mu)
+    schemes = [BackwardEuler(state, eqn)]
+    f = state.fields("f", space=Space)
+    f_exact = Function(Space)
     try:
         f.interpolate(fexpr)
+        f_exact.interpolate(f_exact_expr)
     except NotImplementedError:
         f.project(fexpr)
+        f_exact.project(f_exact_expr)
 
-    mu = 5.
-    f_diffusion = InteriorPenalty(state, f.function_space(), kappa=kappa, mu=mu)
-    diffused_fields = [("f", f_diffusion)]
-    stepper = AdvectionDiffusion(state, diffused_fields=diffused_fields)
-    return stepper
+    stepper = Timestepper(state, schemes=schemes)
+    return stepper, dt, tmax, f_exact
 
 
-def run(dirname, vector, DG):
+def run(setup, vector, DG):
 
-    stepper = setup_IPdiffusion(dirname, vector, DG)
-    stepper.run(t=0., tmax=2.5)
-    return stepper.state.fields("f")
+    stepper, dt, tmax, f_exact = setup_IPdiffusion(setup, vector, DG)
+    stepper.run(t=0., tmax=tmax)
+    f = stepper.state.fields("f")
+    ferr = Function(f.function_space()).assign(f-f_exact)
+    return ferr
 
 
 @pytest.mark.parametrize("vector", [True, False])
 @pytest.mark.parametrize("DG", [True, False])
-def test_ipdiffusion(tmpdir, vector, DG):
+def test_ipdiffusion(tmpdir, vector, DG, tracer_setup):
 
-    dirname = str(tmpdir)
-    f = run(dirname, vector, DG)
-    assert f.dat.data.max() < 0.7
+    setup = tracer_setup(tmpdir, geometry="slice", blob=True)
+    ferr = run(setup, vector, DG)
+    err = norm(ferr)
+    assert err < 0.03

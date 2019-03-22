@@ -1,36 +1,13 @@
-from abc import ABCMeta, abstractmethod
-from firedrake import (TestFunction, TrialFunction, Function,
+from firedrake import (TestFunction, Function,
                        inner, outer, grad, avg, dx, dS_h, dS_v,
-                       FacetNormal, LinearVariationalProblem,
-                       LinearVariationalSolver, action)
+                       FacetNormal)
+from gusto.form_manipulation_labelling import subject, diffusion
 
 
-__all__ = ["InteriorPenalty"]
+__all__ = ["interior_penalty_diffusion_form"]
 
 
-class Diffusion(object, metaclass=ABCMeta):
-    """
-    Base class for diffusion schemes for gusto.
-
-    :arg state: :class:`.State` object.
-    """
-
-    def __init__(self, state):
-        self.state = state
-
-    @abstractmethod
-    def apply(self, x, x_out):
-        """
-        Function takes x as input, computes F(x) and returns x_out
-        as output.
-
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
-        """
-        pass
-
-
-class InteriorPenalty(Diffusion):
+def interior_penalty_diffusion_form(state, V, *, kappa, mu):
     """
     Interior penalty diffusion method
 
@@ -44,30 +21,20 @@ class InteriorPenalty(Diffusion):
 
     """
 
-    def __init__(self, state, V, kappa, mu, bcs=None):
-        super(InteriorPenalty, self).__init__(state)
+    gamma = TestFunction(V)
+    phi = Function(V)
+    n = FacetNormal(state.mesh)
 
-        dt = state.timestepping.dt
-        gamma = TestFunction(V)
-        phi = TrialFunction(V)
-        self.phi1 = Function(V)
-        n = FacetNormal(state.mesh)
-        a = inner(gamma, phi)*dx + dt*inner(grad(gamma), grad(phi)*kappa)*dx
+    form = subject(inner(grad(gamma), grad(phi)*kappa)*dx, phi)
 
-        def get_flux_form(dS, M):
+    def get_flux_form(dS, M):
 
-            fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
-                      - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
-                      + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
-            return fluxes
+        fluxes = (-inner(2*avg(outer(phi, n)), avg(grad(gamma)*M))
+                  - inner(avg(grad(phi)*M), 2*avg(outer(gamma, n)))
+                  + mu*inner(2*avg(outer(phi, n)), 2*avg(outer(gamma, n)*kappa)))*dS
+        return fluxes
 
-        a += dt*get_flux_form(dS_v, kappa)
-        a += dt*get_flux_form(dS_h, kappa)
-        L = inner(gamma, phi)*dx
-        problem = LinearVariationalProblem(a, action(L, self.phi1), self.phi1, bcs=bcs)
-        self.solver = LinearVariationalSolver(problem)
+    form += subject(get_flux_form(dS_v, kappa), phi)
+    form += subject(get_flux_form(dS_h, kappa), phi)
 
-    def apply(self, x_in, x_out):
-        self.phi1.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.phi1)
+    return diffusion(form)

@@ -321,7 +321,7 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
+    if Vt.ufl_element().degree() == (0, 1):
         boundary_method = 'physics'
     else:
         boundary_method = None
@@ -432,7 +432,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension == 2:
+    if Vt.ufl_element().degree() == (0, 1):
         method = 'physics'
     else:
         method = None

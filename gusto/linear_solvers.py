@@ -1,19 +1,24 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
-                       dot, grad, Function, VectorSpaceBasis, BrokenElement,
+                       TestFunction, TrialFunction, lhs, rhs, DirichletBC,
+                       FacetNormal,
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb,
+                       inner, dot, grad,
+                       Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
+from gusto.form_manipulation_labelling import (drop, time_derivative, subject,
+                                               linearisation, linearise,
+                                               replace_labelled, has_labels)
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["CompressibleSolver", "IncompressibleSolver", "ShallowWaterSolver",
+__all__ = ["CompressibleSolver", "IncompressibleSolver", "LinearTimesteppingSolver",
            "HybridizedCompressibleSolver"]
 
 
@@ -30,10 +35,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, equation, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.equation = equation
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -695,71 +701,64 @@ class IncompressibleSolver(TimesteppingSolver):
         b.assign(self.b)
 
 
-class ShallowWaterSolver(TimesteppingSolver):
+class LinearTimesteppingSolver(object):
     """
-    Timestepping linear solver object for the nonlinear shallow water
-    equations with prognostic variables u and D. The linearized system
-    is solved using a hybridized-mixed method.
+    Timestepping linear solver object.
     """
+    def __init__(self, equation, dt, alpha, solver_parameters=None,
+                 overwrite_solver_parameters=False):
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
+        if solver_parameters is not None:
+            if not overwrite_solver_parameters:
+                p = flatten_parameters(self.solver_parameters)
+                p.update(flatten_parameters(solver_parameters))
+                solver_parameters = p
+            self.solver_parameters = solver_parameters
+        else:
+            self.solver_parameters = equation.solver_parameters
+
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = True
+
+        # setup the solver
+        W = equation.function_space
+        self._setup_solver(equation.residual, W, dt, alpha)
 
     @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self):
-        state = self.state
-        H_ = state.parameters.H
-        g_ = state.parameters.g
-        beta_ = state.timestepping.dt*state.timestepping.alpha
+    def _setup_solver(self, equation, W, dt, alpha):
 
-        # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
-        H = Constant(H_)
-        g = Constant(g_)
+        beta = Constant(-dt*alpha)
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        trials = TrialFunctions(W)
+        self.xrhs = Function(W)
 
-        W = state.W
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        aeqn = equation.label_map(has_labels(time_derivative),
+                                  replace_labelled(trials, subject),
+                                  drop)
 
-        eqn = (
-            inner(w, u) - beta*g*div(w)*D
-            - inner(w, u_in)
-            + phi*D + beta*H*phi*div(u)
-            - phi*D_in
-        )*dx
+        aeqn -= beta*equation.label_map(has_labels(linearisation),
+                                        linearise,
+                                        drop)
 
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+        Leqn = equation.label_map(has_labels(time_derivative),
+                                  replace_labelled(self.xrhs.split(), subject),
+                                  drop)
 
-        # Place to put result of u rho solver
-        self.uD = Function(W)
+        # Solver for mixed system
+        self.dy = Function(W)
+        problem = LinearVariationalProblem(aeqn.form, Leqn.form, self.dy)
 
-        # Solver for u, D
-        uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
-
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result self.dy.
         """
 
-        self.uD_solver.solve()
+        self.xrhs.assign(xrhs)
+        self.solver.solve()
+        dy.assign(self.dy)

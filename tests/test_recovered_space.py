@@ -72,12 +72,12 @@ def setup_recovered_space(dirname):
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
                                       boundary_method="density")
-    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
-                                    options=recovered_opts)
+    tracereqn = continuity_equation(state, VDG0)
 
     # build advection dictionary
     advected_fields = []
-    advected_fields.append(('tracer', SSPRK3(state, tracer0, tracereqn)))
+    advected_fields.append(('tracer', SSPRK3(state, tracer0, tracereqn,
+                                             options=recovered_opts)))
 
     # build time stepper
     stepper = AdvectionDiffusion(state, advected_fields)

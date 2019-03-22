@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from gusto.transport_equation import EmbeddedDGAdvection
+from gusto.equations import AdvectionEquation
 from gusto.recovery import Recoverer
 from gusto.advection import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
@@ -60,7 +60,7 @@ class Condensation(Physics):
         try:
             rain = state.fields('rain')
             water_l = self.water_c + rain
-        except NotImplementedError:
+        except AttributeError:
             water_l = self.water_c
 
         # declare function space
@@ -68,7 +68,7 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
-        if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
+        if Vt.ufl_element().degree() == (0, 1):
             boundary_method = 'physics'
         else:
             boundary_method = None
@@ -77,7 +77,7 @@ class Condensation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv
@@ -213,7 +213,7 @@ class Fallout(Physics):
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered space
-        if state.horizontal_degree == 0 and state.vertical_degree == 0:
+        if Vt.ufl_element().degree() == (0, 1):
             VDG1 = FunctionSpace(Vt.mesh(), "DG", 1)
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
@@ -223,14 +223,11 @@ class Fallout(Physics):
         else:
             advect_options = EmbeddedDGOptions()
 
-        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, options=advect_options)
-
         # decide which limiter to use
         if self.limit:
-            if state.horizontal_degree == 0 and state.vertical_degree == 0:
+            if Vt.ufl_element().degree() == (0, 1):
                 limiter = VertexBasedLimiter(VDG1)
-            elif state.horizontal_degree == 1 and state.vertical_degree == 1:
+            elif Vt.ufl_element().degree() == (1, 2):
                 limiter = ThetaLimiter(Vt)
             else:
                 logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
@@ -239,12 +236,16 @@ class Fallout(Physics):
             limiter = None
 
         # sedimentation will happen using a full advection method
-        self.advection_method = SSPRK3(state, self.rain, advection_equation, limiter=limiter)
+        eqn = AdvectionEquation(state, Vt, "rain", outflow=True)
+        self.advection_method = SSPRK3(state, eqn,
+                                       options=advect_options,
+                                       limiter=limiter)
+        # terms of eqn are on LHS, so need to replace velocity with self.v
+        self.advection_method.replace_advecting_velocity(-self.v)
 
     def apply(self):
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
 
 

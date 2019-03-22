@@ -74,8 +74,9 @@ void maxify(double *a, double *b) {
 
 class DiagnosticField(object, metaclass=ABCMeta):
 
-    def __init__(self, required_fields=()):
+    def __init__(self, dump=True, required_fields=()):
         self._initialised = False
+        self.dump = dump
         self.required_fields = required_fields
 
     @abstractproperty
@@ -87,7 +88,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             if space is None:
                 space = state.spaces("DG0", state.mesh, "DG", 0)
-            self.field = state.fields(self.name, space, pickup=False)
+            self.field = state.fields(self.name, space=space,
+                                      dump=self.dump, pickup=False)
             self._initialised = True
 
     @abstractmethod
@@ -113,7 +115,7 @@ class CourantNumber(DiagnosticField):
 
     def compute(self, state):
         u = state.fields("u")
-        dt = Constant(state.timestepping.dt)
+        dt = Constant(state.dt)
         return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
 
 
@@ -431,7 +433,7 @@ class Difference(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.fields(self.field1).function_space()
-            super(Difference, self).setup(state, space=space)
+            super().setup(state, space=space)
 
     def compute(self, state):
         field1 = state.fields(self.field1)
@@ -446,7 +448,7 @@ class SteadyStateError(Difference):
         self.field1 = name
         self.field2 = name+'_init'
         field1 = state.fields(name)
-        field2 = state.fields(self.field2, field1.function_space())
+        field2 = state.fields(self.field2, space=field1.function_space())
         field2.assign(field1)
 
     @property
@@ -473,7 +475,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
         if not self._initialised:
             space = state.fields("theta").function_space()
             broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
-            boundary_method = 'physics' if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
+            boundary_method = 'physics' if Vt.ufl_element().degree() == (0, 1) else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
@@ -492,7 +494,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
                 self.r_c = Constant(0.0)
             try:
                 self.rain = state.fields("rain")
-            except NotImplementedError:
+            except AttributeError:
                 self.rain = Constant(0.0)
 
             # now let's store the most common expressions
@@ -634,6 +636,28 @@ class HydrostaticImbalance(DiagnosticField):
     def compute(self, state):
         self.imbalance_solver.solve()
         return self.field[1]
+
+
+class Difference(DiagnosticField):
+
+    def __init__(self, field1, field2):
+        super().__init__(required_fields=(field1, field2))
+        self.field1 = field1
+        self.field2 = field2
+
+    @property
+    def name(self):
+        return self.field1+"_minus_"+self.field2
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.fields(self.field1).function_space()
+            super(Difference, self).setup(state, space=space)
+
+    def compute(self, state):
+        field1 = state.fields(self.field1)
+        field2 = state.fields(self.field2)
+        return self.field.assign(field1 - field2)
 
 
 class Precipitation(DiagnosticField):
