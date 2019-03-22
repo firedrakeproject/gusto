@@ -29,9 +29,6 @@ points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 
-fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt)
-
 dirname = 'sk_nonlinear'
 if hybridization:
     dirname += '_hybridization'
@@ -44,20 +41,17 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters()
-diagnostics = Diagnostics(*fieldlist)
 g = parameters.g
 Tsurf = 300.
 
 diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbation"), RichardsonNumber("theta", g/Tsurf), Gradient("theta")]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="CG",
-              timestepping=timestepping,
+state = State(mesh, dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
+
+eqns = CompressibleEulerEquations(state, "CG", 1, 1)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -104,29 +98,17 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+    theta_opts = SUPGOptions()
 else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+    theta_opts = EmbeddedDGOptions()
 advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-
-# Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-compressible_forcing = CompressibleForcing(state)
+advected_fields.append(ImplicitMidpoint(state, eqns, advection, field_name="u"))
+advected_fields.append(SSPRK3(state, eqns, advection, field_name="rho"))
+advected_fields.append(SSPRK3(state, eqns, advection, field_name="theta", options=theta_opts))
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing)
+stepper = CrankNicolson(state, equation_set=eqns, schemes=advected_fields)
 
 stepper.run(t=0, tmax=tmax)

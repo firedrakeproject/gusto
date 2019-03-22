@@ -243,6 +243,7 @@ class CompressibleSolver(TimesteppingSolver):
         Apply the solver with rhs xrhs and result dy.
         """
 
+        self.xrhs.assign(xrhs)
         with timed_region("Gusto:VelocityDensitySolve"):
             self.urho_solver.solve()
 
@@ -255,6 +256,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.theta_solver.solve()
 
         theta.assign(self.theta)
+        dy.assign(self.dy)
 
 
 class HybridizedCompressibleSolver(TimesteppingSolver):
