@@ -52,6 +52,6 @@ def test_precipitation(tmpdir, moist_setup):
     setup = moist_setup(tmpdir, "narrow")
     total_rain_final, total_rms_rain = run(setup)
     # check final amount of rain is very small
-    assert total_rain_final < 1e-12
+    assert total_rain_final < 1e-4
     # check final rms rain
-    assert total_rms_rain < 1e-12
+    assert total_rms_rain < 1e-4

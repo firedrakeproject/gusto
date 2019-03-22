@@ -92,10 +92,10 @@ def condensation_slice(tmpdir):
 
 def precipitation_slice(tmpdir):
 
-    dt = 0.025
+    dt = 0.05
     Ld = 10.
-    m = PeriodicIntervalMesh(10, 0.5*Ld)
-    mesh = ExtrudedMesh(m, layers=20, layer_height=0.5)
+    m = PeriodicIntervalMesh(5, 0.5*Ld)
+    mesh = ExtrudedMesh(m, layers=10, layer_height=1.0)
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
     parameters = CompressibleParameters()
     diagnostic_fields = [Precipitation()]
@@ -104,7 +104,7 @@ def precipitation_slice(tmpdir):
                   diagnostic_fields=diagnostic_fields)
     build_spaces(state, "CG", 1, 1)
 
-    return MoistSetup(state=state, tmax=2, Ld=Ld)
+    return MoistSetup(state=state, tmax=1, Ld=Ld)
 
 
 @pytest.fixture()

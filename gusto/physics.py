@@ -240,12 +240,12 @@ class Fallout(Physics):
         self.advection_method = SSPRK3(state, eqn,
                                        options=advect_options,
                                        limiter=limiter)
+        # terms of eqn are on LHS, so need to replace velocity with self.v
         self.advection_method.replace_advecting_velocity(-self.v)
 
     def apply(self):
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        #self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
 
 
