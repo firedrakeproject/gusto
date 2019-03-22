@@ -15,19 +15,16 @@ def setup_sk(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO)
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
+    state = State(mesh, dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
+
+    eqns = CompressibleEulerEquations(state, "CG", 1, 1)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -69,23 +66,13 @@ def setup_sk(dirname):
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt)
     advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-
-    # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    advected_fields.append(ImplicitMidpoint(state, eqns, advection, field_name="u"))
+    advected_fields.append(SSPRK3(state, eqns, advection, field_name="rho"))
+    advected_fields.append(SSPRK3(state, eqns, advection, field_name="theta"))
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing)
+    stepper = CrankNicolson(state, equation_set=eqns, schemes=advected_fields)
 
     return stepper, 2*dt
 
@@ -95,5 +82,5 @@ def test_checkpointing(tmpdir):
     dirname = str(tmpdir)
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0., tmax=tmax)
-    dt = stepper.state.timestepping.dt
+    dt = stepper.state.dt
     stepper.run(t=0, tmax=2*tmax+dt, pickup=True)

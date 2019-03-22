@@ -249,6 +249,8 @@ class State(object):
 
         if output.dumplist is None:
             dumplist = []
+        else:
+            dumplist = output.dumplist
         self.fields = StateFields(*dumplist)
         self.spaces = SpaceCreator()
 
@@ -502,7 +504,7 @@ def build_spaces(state, family, horizontal_degree, vertical_degree=None):
         V2 = state.spaces("DG", mesh, V3_elt)
         Vtheta = state.spaces("HDiv_v", mesh, V2t_elt)
         Vw = state.spaces("Vv", mesh, V2v_elt)
-        return V1, V2, Vtheta, Vw
+        return V1, V2, Vtheta
 
     else:
         cell = mesh.ufl_cell().cellname()

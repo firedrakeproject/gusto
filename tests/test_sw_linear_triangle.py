@@ -51,7 +51,7 @@ def setup_sw(dirname, scheme):
         advected_fields = []
         advected_fields.append(ForwardEuler(state, eqns, advection, field_name="D"))
         stepper = CrankNicolson(state, equation_set=eqns,
-                                advected_fields=advected_fields)
+                                schemes=advected_fields)
     elif scheme == "SSPRK3":
         scheme = SSPRK3(state, eqns)
         stepper = Timestepper(state, scheme)

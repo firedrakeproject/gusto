@@ -105,10 +105,12 @@ class CompressibleSolver(TimesteppingSolver):
                                        'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+    def __init__(self, state, equation, alpha=0.5,
+                 quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
         self.moisture = moisture
+        self.alpha = 0.5
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -118,15 +120,15 @@ class CompressibleSolver(TimesteppingSolver):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, equation, solver_parameters, overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
+        Dt = state.dt
+        beta_ = Dt*self.alpha
         cp = state.parameters.cp
-        mu = state.mu
+        mu = None
         Vu = state.spaces("HDiv")
         Vtheta = state.spaces("HDiv_v")
         Vrho = state.spaces("DG")
@@ -137,7 +139,10 @@ class CompressibleSolver(TimesteppingSolver):
         beta_cp = Constant(beta_ * cp)
 
         # Split up the rhs vector (symbolically)
-        u_in, rho_in, theta_in = split(state.xrhs)
+        W = self.equation.function_space
+        self.xrhs = Function(W)
+        self.dy = Function(W)
+        u_in, rho_in, theta_in = split(self.xrhs)
 
         # Build the reduced function space for u,rho
         M = MixedFunctionSpace((Vu, Vrho))
@@ -185,7 +190,7 @@ class CompressibleSolver(TimesteppingSolver):
             thetabar_w = thetabar
 
         eqn = (
-            inner(w, (state.h_project(u) - u_in))*dx
+            inner(w, (u - u_in))*dx
             - beta_cp*div(theta_w*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
@@ -233,16 +238,17 @@ class CompressibleSolver(TimesteppingSolver):
                                                     options_prefix='thetabacksubstitution')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result dy.
         """
 
+        self.xrhs.assign(xrhs)
         with timed_region("Gusto:VelocityDensitySolve"):
             self.urho_solver.solve()
 
         u1, rho1 = self.urho.split()
-        u, rho, theta = self.state.dy.split()
+        u, rho, theta = self.dy.split()
         u.assign(u1)
         rho.assign(rho1)
 
@@ -250,6 +256,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.theta_solver.solve()
 
         theta.assign(self.theta)
+        dy.assign(self.dy)
 
 
 class HybridizedCompressibleSolver(TimesteppingSolver):
@@ -337,7 +344,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = True
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, None, solver_parameters, overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
@@ -598,16 +605,19 @@ class IncompressibleSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, solver_parameters=None,
-                 overwrite_solver_parameters=False):
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+    def __init__(self, state, equation, alpha=0.5,
+                 quadrature_degree=None, solver_parameters=None,
+                 overwrite_solver_parameters=False, moisture=None):
+        self.alpha = alpha
+        super().__init__(state, equation,
+                         solver_parameters, overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
-        mu = state.mu
+        Dt = state.dt
+        beta_ = Dt*self.alpha
+        mu = None
         Vu = state.spaces("HDiv")
         Vb = state.spaces("HDiv_v")
         Vp = state.spaces("DG")
@@ -617,7 +627,10 @@ class IncompressibleSolver(TimesteppingSolver):
         beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
-        u_in, p_in, b_in = split(state.xrhs)
+        W = self.equation.function_space
+        self.xrhs = Function(W)
+        self.dy = Function(W)
+        u_in, p_in, b_in = split(self.xrhs)
 
         # Build the reduced function space for u,p
         M = MixedFunctionSpace((Vu, Vp))
@@ -682,16 +695,16 @@ class IncompressibleSolver(TimesteppingSolver):
         self.b_solver = LinearVariationalSolver(b_problem)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result self.dy.
         """
-
+        self.xrhs.assign(xrhs)
         with timed_region("Gusto:VelocityPressureSolve"):
             self.up_solver.solve()
 
         u1, p1 = self.up.split()
-        u, p, b = self.state.dy.split()
+        u, p, b = self.dy.split()
         u.assign(u1)
         p.assign(p1)
 
@@ -699,6 +712,7 @@ class IncompressibleSolver(TimesteppingSolver):
             self.b_solver.solve()
 
         b.assign(self.b)
+        dy.assign(self.dy)
 
 
 class LinearTimesteppingSolver(object):

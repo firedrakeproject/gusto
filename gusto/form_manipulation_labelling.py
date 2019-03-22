@@ -231,6 +231,8 @@ class LabelledForm(object):
             return LabelledForm(*self, Constant(-1.)*other)
         elif type(other) is LabelledForm:
             return LabelledForm(*self, *[Constant(-1.)*t for t in other])
+        elif type(other) is ufl.algebra.Product:
+            return LabelledForm(*self, Term(Constant(-1.)*other))
         elif other is None:
             return self
         else:
@@ -322,6 +324,7 @@ class Label(object):
 
 
 time_derivative = Label("time_derivative")
+name = Label("name", validator=lambda value: type(value) == str)
 advection = Label("advection")
 diffusion = Label("diffusion")
 explicit = Label("explicit")

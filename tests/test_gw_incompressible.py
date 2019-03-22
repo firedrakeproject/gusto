@@ -14,17 +14,14 @@ def setup_gw(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'p', 'b']
-    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
     parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="RTCF",
-                  timestepping=timestepping,
+    state = State(mesh, dt=dt,
                   output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist)
+                  parameters=parameters)
+
+    eqns = IncompressibleBoussinesqEquations(state, "RTCF", 1, 1)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -43,15 +40,13 @@ def setup_gw(dirname):
                       ('p', p0),
                       ('b', b0)])
 
-    # Set up forcing
-    forcing = IncompressibleForcing(state)
-
+    forcing = Forcing(eqns, dt, 0.5)
     return state, forcing
 
 
 def run_gw_incompressible(dirname):
 
-    state, forcing = setup_gw(dirname)
+    state = setup_gw(dirname)
     dt = state.timestepping.dt
     forcing.apply(dt, state.xn, state.xn, state.xn)
     u = state.xn.split()[0]
