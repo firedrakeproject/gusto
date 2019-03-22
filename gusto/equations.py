@@ -406,8 +406,8 @@ class CompressibleEulerEquations(PrognosticMixedEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         u, rho, theta = X.split()
-        state.fields("rhobar", space=Vr)
-        state.fields("thetabar", space=Vth)
+        state.fields("rhobar", space=Vr, dump=False)
+        state.fields("thetabar", space=Vth, dump=False)
         pi = Pi(self.state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
