@@ -68,7 +68,7 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
-        if Vt.ufl_element().degree()[1] == 1 and state.mesh.geometric_dimension() == 2:
+        if Vt.ufl_element().degree() == (0, 1):
             boundary_method = 'physics'
         else:
             boundary_method = None
@@ -213,7 +213,7 @@ class Fallout(Physics):
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered space
-        if state.horizontal_degree == 0 and state.vertical_degree == 0:
+        if Vt.ufl_element().degree() == (0, 1):
             VDG1 = FunctionSpace(Vt.mesh(), "DG", 1)
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
@@ -225,9 +225,9 @@ class Fallout(Physics):
 
         # decide which limiter to use
         if self.limit:
-            if state.horizontal_degree == 0 and state.vertical_degree == 0:
+            if Vt.ufl_element().degree() == (0, 1):
                 limiter = VertexBasedLimiter(VDG1)
-            elif state.horizontal_degree == 1 and state.vertical_degree == 1:
+            elif Vt.ufl_element().degree() == (1, 2):
                 limiter = ThetaLimiter(Vt)
             else:
                 logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
@@ -236,15 +236,16 @@ class Fallout(Physics):
             limiter = None
 
         # sedimentation will happen using a full advection method
-        eqn = AdvectionEquation(state, Vt, outflow=True)
-        self.advection_method = SSPRK3(state, self.rain, eqn,
+        eqn = AdvectionEquation(state, Vt, "rain", outflow=True)
+        self.advection_method = SSPRK3(state, eqn,
                                        options=advect_options,
                                        limiter=limiter)
+        self.advection_method.replace_advecting_velocity(-self.v)
 
     def apply(self):
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.update_ubar(self.v, self.v, 0)
+        #self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
 
 

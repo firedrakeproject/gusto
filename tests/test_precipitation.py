@@ -1,8 +1,7 @@
 from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, \
-    SpatialCoordinate, ExtrudedMesh, sqrt, \
-    conditional, cos
+from firedrake import (SpatialCoordinate, sqrt, assemble,
+                       conditional, cos, norm)
 from netCDF4 import Dataset
 from math import pi
 
@@ -11,91 +10,48 @@ from math import pi
 # method in physics.py. The test passes if there is no
 # rain remaining at the end of the test.
 
+def run(setup):
 
-def setup_fallout(dirname):
+    state = setup.state
+    tmax = setup.tmax
+    Ld = setup.Ld
+    x, z = SpatialCoordinate(state.mesh)
 
-    # declare grid shape, with length L and height H
-    L = 10.
-    H = 10.
-    nlayers = 10
-    ncolumns = 10
-
-    # make mesh
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-    x = SpatialCoordinate(mesh)
-
-    fieldlist = ['u', 'rho', 'theta', 'rain']
-    timestepping = TimesteppingParameters(dt=0.1, maxk=4, maxi=1)
-    output = OutputParameters(dirname=dirname+"/fallout",
-                              dumpfreq=10,
-                              dumplist=['rain'])
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Precipitation()]
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
-                  timestepping=timestepping,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
-
-    # declare initial fields
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
-
-    # spaces
-    Vt = theta0.function_space()
-
-    # declare tracer field and a background field
-    rain0 = state.fields("rain", Vt)
+    u = state.fields("u", space=state.spaces("HDiv"))
+    rho = state.fields("rho", space=state.spaces("DG"))
+    rain = state.fields("rain", space=state.spaces("HDiv_v"), dump=True)
+    rainfall_velocity = state.fields("rainfall_velocity", space=state.spaces("HDiv"))
 
     # set up rain
-    xc = L / 2
-    zc = H / 2
-    rc = H / 4
-    r = sqrt((x[0] - xc) ** 2 + (x[1] - zc) ** 2)
-    rain_expr = conditional(r > rc, 0., 1e-3 * (cos(pi * r / (rc * 2))) ** 2)
+    xc = Ld / 4
+    zc = Ld / 2
+    rc = Ld / 4
+    r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
+    rain_expr = conditional(r > rc, 5e-4, 5e-4 + 1e-3 * (cos(pi * r / (rc * 2))) ** 2)
 
-    rain0.interpolate(rain_expr)
+    rho.assign(1.0)
+    rain.interpolate(rain_expr)
 
-    rho0.assign(1.0)
+    schemes = []
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('rain', rain0)])
+    physics_list = [Fallout(state, moments=AdvectedMoments.M0)]
 
-    # build advection dictionary
-    advected_fields = []
-    advected_fields.append(("u", NoAdvection(state, u0, None)))
-    advected_fields.append(("rho", NoAdvection(state, rho0, None)))
-    advected_fields.append(("rain", NoAdvection(state, rain0, None)))
+    timestepper = PrescribedAdvectionTimestepper(
+        state, schemes,
+        physics_list=physics_list)
+    timestepper.run(t=0, tmax=tmax)
 
-    physics_list = [Fallout(state)]
+    one = Function(rain.function_space()).assign(1.0)
+    total_rain_final = assemble(rain * dx) / assemble(one * dx)
+    total_rms_rain = norm(rain) / assemble(one * dx)
 
-    # build time stepper
-    stepper = AdvectionDiffusion(state, advected_fields, physics_list=physics_list)
+    return total_rain_final, total_rms_rain
 
-    return stepper, 10.0
+def test_precipitation(tmpdir, moist_setup):
 
-
-def run_fallout(dirname):
-
-    stepper, tmax = setup_fallout(dirname)
-    stepper.run(t=0, tmax=tmax)
-
-
-def test_fallout_setup(tmpdir):
-
-    dirname = str(tmpdir)
-    run_fallout(dirname)
-    filename = path.join(dirname, "fallout/diagnostics.nc")
-    data = Dataset(filename, "r")
-
-    rain = data.groups["rain"]
-    final_rain = rain.variables["total"][-1]
-    final_rms_rain = rain.variables["rms"][-1]
-
-    assert abs(final_rain) < 1e-4
-    assert abs(final_rms_rain) < 1e-4
+    setup = moist_setup(tmpdir, "narrow")
+    total_rain_final, total_rms_rain = run(setup)
+    # check final amount of rain is very small
+    assert total_rain_final < 1e-12
+    # check final rms rain
+    assert total_rms_rain < 1e-12

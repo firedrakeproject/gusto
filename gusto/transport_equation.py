@@ -1,7 +1,7 @@
 from enum import Enum
 from firedrake import (Function, TestFunction, TestFunctions, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds, VectorElement,
+                       ds_v, ds_b, ds_t, ds, VectorElement,
                        outer, sign, cross, CellNormal,
                        curl, Constant, BrokenElement)
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject
@@ -148,7 +148,10 @@ def advection_form(state, V, idx=None, *,
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
     if outflow is not None:
-        L += test*un*q*ds
+        if V.extruded:
+            L += test*un*q*(ds_b + ds_t + ds_v)
+        else:
+            L += test*un*q*ds
 
     form = subject(advection(advecting_velocity(L, ubar)), X)
     return form

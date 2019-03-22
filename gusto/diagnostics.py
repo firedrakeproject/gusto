@@ -475,7 +475,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
         if not self._initialised:
             space = state.fields("theta").function_space()
             broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
-            boundary_method = 'physics' if space.ufl_element().degree()[1] == 1 else None
+            boundary_method = 'physics' if Vt.ufl_element().degree() == (0, 1) else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
