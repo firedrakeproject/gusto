@@ -41,15 +41,17 @@ def setup_gw(dirname):
                       ('b', b0)])
 
     forcing = Forcing(eqns, dt, 0.5)
-    return state, forcing
+    return state, eqns, forcing
 
 
 def run_gw_incompressible(dirname):
 
-    state = setup_gw(dirname)
-    dt = state.timestepping.dt
-    forcing.apply(dt, state.xn, state.xn, state.xn)
-    u = state.xn.split()[0]
+    state, eqns, forcing = setup_gw(dirname)
+    print(eqns.field_name)
+    xn = Function(eqns.function_space)
+    xn.assign(state.fields(eqns.field_name))
+    forcing.apply(xn, xn, xn, "explicit")
+    u = xn.split()[0]
     w = Function(state.spaces("DG")).interpolate(u[2])
     return w
 

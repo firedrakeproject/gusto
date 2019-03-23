@@ -1,9 +1,9 @@
-from firedrake import (TrialFunctions, Function,
+from firedrake import (TrialFunctions, Function, TestFunctions, dx,
                        DirichletBC, LinearVariationalProblem,
                        LinearVariationalSolver, Constant)
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (drop, time_derivative,
-                                               subject,
+                                               subject, name, index,
                                                advection, has_labels,
                                                replace_labelled)
 
@@ -37,13 +37,25 @@ class Forcing(object):
         """
         trials = TrialFunctions(W)
 
-        a = equation.label_map(has_labels(time_derivative),
-                               replace_labelled(trials, subject),
-                               drop)
-        L_explicit = Constant(-(1-alpha)*dt)*equation.label_map(
+        a_explicit = equation.label_map(has_labels(time_derivative),
+                                        replace_labelled(trials, subject),
+                                        drop)
+
+        L_explicit = equation.label_map(
+            lambda t: t.get(name) == "incompressible",
+            drop)
+        L_explicit = Constant(-(1-alpha)*dt)*L_explicit.label_map(
             has_labels(time_derivative),
             drop,
             replace_labelled(self.x0.split(), subject))
+
+        a_implicit = a_explicit
+        for t in equation:
+            if t.get(name) == "incompressible":
+                idx = t.get(index)
+                test = TestFunctions(W)[idx]
+                a_implicit += trials[idx]*test*dx
+
         L_implicit = Constant(-alpha*dt)*equation.label_map(
             has_labels(time_derivative),
             drop,
@@ -57,11 +69,11 @@ class Forcing(object):
             bcs = None
 
         explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs
+            a_explicit.form, L_explicit.form, self.xF, bcs=bcs
         )
 
         implicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_implicit.form, self.xF, bcs=bcs
+            a_implicit.form, L_implicit.form, self.xF, bcs=bcs
         )
 
         solver_parameters = {}

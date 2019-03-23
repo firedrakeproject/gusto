@@ -561,7 +561,6 @@ class IncompressibleBoussinesqEquations(PrognosticMixedEquation):
         # define mass term
         mass_form = (
             index(subject(time_derivative(inner(u, w)*dx), u), 0)
-            + index(subject(time_derivative(inner(p, phi)*dx), p), 1)
             + index(subject(time_derivative(inner(b, gamma)*dx), b), 2)
         )
 
@@ -581,10 +580,10 @@ class IncompressibleBoussinesqEquations(PrognosticMixedEquation):
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
 
         # define pressure gradient term and its linearisation
-        pressure_gradient_term = subject(div(phi)*p*dx, X)
+        pressure_gradient_term = subject(div(w)*p*dx, X)
 
         # define gravity term and its linearisation
-        gravity_term = subject(g*b*inner(state.k, w)*dx, X)
+        gravity_term = subject(b*inner(state.k, w)*dx, X)
 
         # the base form for u contains the velocity advection term,
         # the pressure gradient term and the gravity term
@@ -597,7 +596,7 @@ class IncompressibleBoussinesqEquations(PrognosticMixedEquation):
             u_form += coriolis_term
 
         # define the incompressibility condition
-        incompressibility = Term(phi*div(u)*dx)
+        incompressibility = name(phi*div(u)*dx, "incompressible")
 
         # define the buoyancy advection term
         b_adv = advection_form(state, W, 2)
