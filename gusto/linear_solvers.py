@@ -141,7 +141,6 @@ class CompressibleSolver(TimesteppingSolver):
         # Split up the rhs vector (symbolically)
         W = self.equation.function_space
         self.xrhs = Function(W)
-        self.dy = Function(W)
         u_in, rho_in, theta_in = split(self.xrhs)
 
         # Build the reduced function space for u,rho
@@ -248,7 +247,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.urho_solver.solve()
 
         u1, rho1 = self.urho.split()
-        u, rho, theta = self.dy.split()
+        u, rho, theta = dy.split()
         u.assign(u1)
         rho.assign(rho1)
 
@@ -256,7 +255,6 @@ class CompressibleSolver(TimesteppingSolver):
             self.theta_solver.solve()
 
         theta.assign(self.theta)
-        dy.assign(self.dy)
 
 
 class HybridizedCompressibleSolver(TimesteppingSolver):
