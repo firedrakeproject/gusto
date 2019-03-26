@@ -1,9 +1,9 @@
 from enum import Enum
 from firedrake import (Function, TestFunction, TestFunctions, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_b, ds_t, ds, VectorElement,
+                       ds_v, ds_b, ds_t, ds,
                        outer, sign, cross, CellNormal,
-                       curl, Constant, BrokenElement)
+                       curl, Constant)
 from gusto.form_manipulation_labelling import advection, advecting_velocity, subject
 
 
@@ -16,86 +16,14 @@ class IntegrateByParts(Enum):
     TWICE = 2
 
 
-def is_cg(V):
-    """
-    Function to check is a given space, V, is CG. Broken elements are
-    always discontinuous; for vector elements we check the names of
-    the sobolev spaces of the subelements and for all other elements
-    we just check the sobolev space name.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return False
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space().name == "H1"
-
-
-def is_dg(V):
-    """
-    Function to check is a given space, V, is DG. Broken elements are
-    always discontinuous; for vector elements we check the names of
-    the sobolev spaces of the subelements and for all other elements
-    we just check the sobolev space name.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return True
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "L2" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space().name == "L2"
-
-
 def surface_measures(V):
     """
-    Function returning the correct surface measures to use for the
-    given function space, V, based on its continuity and also on
-    whether the underlying mesh is extruded.
+    Function returning the correct surface measures to use for this mesh
     """
-    # CG spaces don't require surface terms
-    if is_cg(V):
-        return None
+    if V.extruded:
+        return (dS_v + dS_h)
     else:
-        # for extruded meshes we have to unpick things
-        if V.extruded:
-            dim = V.mesh().topological_dimension()
-            ele = V.ufl_element()
-
-            # Broken elements are discontinuous so need dS_v and dS_h
-            if is_dg(V):
-                return (dS_v + dS_h)
-
-            # Figure out which spaces we have
-            elif type(ele) == VectorElement:
-                spaces = [ele._sub_elements[i].sobolev_space().name
-                          for i in range(dim)]
-            else:
-                spaces = [ele.sobolev_space()[i].name for i in range(dim)]
-
-            # Based on the space names, these ones are discontinuous
-            # enough to require surface terms
-            discont = [i for i, name in enumerate(spaces) if name in ["L2", "HDiv"]]
-            # as the mesh is extruded, the dim-1 element of discont
-            # tells us about the vertical discontinuity
-            is_discontinuous_v = dim-1 in discont
-            # check now for horizontal discontinuity
-            is_discontinuous_h = any([i in discont for i in range(dim-1)])
-
-            # return surface measures
-            if is_discontinuous_h and is_discontinuous_v:
-                return (dS_v + dS_h)
-            elif is_discontinuous_h:
-                return dS_v
-            elif is_discontinuous_v:
-                return dS_h
-            else:
-                raise ValueError("Sorry, we have failed to figure out the surface measures for this space")
-        else:
-            # if we're here we're discontinuous in some way, but not
-            # on an extruded mesh so things are easy
-            return dS
+        return dS
 
 
 def setup_functions(state, V, idx):
@@ -111,7 +39,8 @@ def setup_functions(state, V, idx):
         test = TestFunction(V)
         q = X
         ubar = Function(state.spaces("HDiv"))
-    return X, test, q, ubar
+    dS_ = surface_measures(q.function_space())
+    return X, test, q, ubar, dS_
 
 
 def advection_form(state, V, idx=None, *,
@@ -129,23 +58,22 @@ def advection_form(state, V, idx=None, *,
               None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx)
-    dS = surface_measures(q.function_space())
+    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
     else:
         L = inner(outer(test, ubar), grad(q))*dx
 
-    if dS is not None and ibp != IntegrateByParts.NEVER:
+    if dS_ is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     if outflow is not None:
         if V.extruded:
@@ -168,23 +96,22 @@ def linear_continuity_form(state, V, idx=None, *, qbar=None):
 def continuity_form(state, V, idx=None, *,
                     ibp=IntegrateByParts.ONCE):
 
-    X, test, q, ubar = setup_functions(state, V, idx)
-    dS = surface_measures(q.function_space())
+    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
     else:
         L = inner(test, div(outer(q, ubar)))*dx
 
-    if dS is not None and ibp != IntegrateByParts.NEVER:
+    if ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
@@ -193,14 +120,13 @@ def continuity_form(state, V, idx=None, *,
 def advection_vector_manifold_form(state, V, idx=None, *,
                                    ibp=IntegrateByParts.ONCE, outflow=None):
 
-    X, test, q, ubar = setup_functions(state, V, idx)
-    dS = surface_measures(q.function_space())
+    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-    L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
-    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
+    L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
+    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
 
     form = advection_form(state, V, idx, ibp=ibp) + subject(advection(advecting_velocity(L, ubar)), X)
     return form
@@ -217,8 +143,7 @@ def vector_invariant_form(state, V, idx=None, *,
               take the value None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx)
-    dS = surface_measures(q.function_space())
+    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
@@ -237,7 +162,7 @@ def vector_invariant_form(state, V, idx=None, *,
         L = (
             inner(q, curl(cross(ubar, test)))*dx
             - inner(both(Upwind*q),
-                    both(cross(n, cross(ubar, test))))*dS
+                    both(cross(n, cross(ubar, test))))*dS_
         )
 
     else:
@@ -253,14 +178,14 @@ def vector_invariant_form(state, V, idx=None, *,
             L = (
                 -inner(perp(grad(inner(test, perp(ubar)))), q)*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS
+                        perp_u_upwind(q))*dS_
             )
         else:
             L = (
                 (-inner(test, div(perp(q))*perp(ubar)))*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS
-                + jump(inner(test, perp(ubar))*perp(q), n)*dS
+                        perp_u_upwind(q))*dS_
+                + jump(inner(test, perp(ubar))*perp(q), n)*dS_
             )
 
     L -= 0.5*div(test)*inner(q, ubar)*dx

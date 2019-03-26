@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        TestFunction, TrialFunction, FunctionSpace,
-                       TrialFunctions, action, as_ufl,
+                       TrialFunctions, action, as_ufl, VectorElement,
                        BrokenElement, Constant, dot, grad)
 from firedrake.utils import cached_property
 import ufl
@@ -14,10 +14,25 @@ from gusto.form_manipulation_labelling import (all_terms, has_labels, index,
                                                extract, Term,
                                                explicit, implicit)
 from gusto.recovery import Recoverer
-from gusto.transport_equation import is_cg
 
 
 __all__ = ["BackwardEuler", "ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+
+
+def is_cg(V):
+    """
+    Function to check is a given space, V, is CG. Broken elements are
+    always discontinuous; for vector elements we check the names of
+    the sobolev spaces of the subelements and for all other elements
+    we just check the sobolev space name.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space().name == "H1"
 
 
 def embedded_dg(original_apply):
@@ -104,6 +119,25 @@ class Advection(object, metaclass=ABCMeta):
         else:
             self.discretisation_option = None
             self.fs = fs
+
+        # now we have the function space we can drop any surface terms
+        # that are unnecessary due to the continuity of the function
+        # space:
+        if is_cg(self.fs):
+            integrals_to_drop = ["interior_facet",
+                                 "interior_facet_vert",
+                                 "interior_facet_horiz"]
+
+            def drop_interior_facet_integrals(t):
+                integrals = []
+                for itg in t.form.integrals():
+                    if itg.integral_type() not in integrals_to_drop:
+                        integrals.append(itg)
+                return Term(ufl.form.Form(integrals), t.labels)
+
+            self.residual = self.residual.label_map(
+                all_terms,
+                drop_interior_facet_integrals)
 
         # setup required functions
         self.q1 = Function(self.fs)
