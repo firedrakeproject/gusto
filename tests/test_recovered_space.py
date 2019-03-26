@@ -71,7 +71,7 @@ def setup_recovered_space(dirname):
     recovered_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
-                                      boundary_method="density")
+                                      boundary_method="scalar")
     tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
                                     options=recovered_opts)
 
