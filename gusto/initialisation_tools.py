@@ -5,8 +5,8 @@ as balanced initial conditions.
 
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
-    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
-    Function, Constant, assemble, \
+    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, ds, DirichletBC, \
+    Function, Constant, assemble, cross, CellNormal, grad, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
@@ -15,7 +15,7 @@ from gusto.configuration import logger
 from gusto.recovery import Recoverer
 
 
-__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
+__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance", "initial_vorticity"]
 
 
 def latlon_coords(mesh):
@@ -496,3 +496,39 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
                                      pi_boundary=pi_boundary,
                                      water_t=water_v0, solve_for_rho=True)
+
+def initial_vorticity(state, D0, u0, q0, f=None, ds_bndry=None, params=None):
+    """
+    Solve for initial vorticity given depth/density and velocity fields.
+    :arg state: :class:`State` object.
+    :arg D0, u0: initial depth/density and velocity fields
+    :arg f: Coriolis force. Defaults to None (no Coriolis force).
+    :arg ds_bndry: boundary integral (e.g. ds, ds_tb). Defaults to None (no boundary).
+    :arg params: solver parameters. Default to None.
+    """
+
+    if params is None:
+        solver_parameters = {'ksp_type':'preonly',
+                             'pc_type':'lu'}
+
+    # Set up trial, test functions
+    W0 = q0.function_space()
+    eta = TestFunction(W0)
+    q_ = TrialFunction(W0)
+
+    # Set up solver
+    if state.on_sphere:
+        perp = lambda u: cross(CellNormal(mesh), u)
+    else:
+        perp = lambda u: as_vector([-u[1], u[0]])
+    a = eta*q_*D0*dx
+    L = - inner(perp(grad(eta)), u0)*dx
+    if f is not None:
+        L += eta*f*dx
+    if ds_bndry is not None:
+        L += eta*inner(perp(n), un)*ds_bndry
+    q_p = LinearVariationalProblem(a, L, q0)
+    q_solver = LinearVariationalSolver(q_p, solver_parameters=solver_parameters)
+
+    # Solve
+    q_solver.solve()

@@ -1,13 +1,13 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import (Function, split, TrialFunction, TestFunction,
-                       FacetNormal, inner, dx, cross, div, jump, avg, dS_v,
+                       FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, grad,
                        DirichletBC, LinearVariationalProblem, LinearVariationalSolver,
-                       dot, dS, Constant, as_vector, SpatialCoordinate)
+                       lhs, rhs, sqrt, sign, dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
 
 
-__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing"]
+__all__ = ["CompressibleForcing", "IncompressibleForcing", "EadyForcing", "CompressibleEadyForcing", "ShallowWaterForcing", "HamiltonianShallowWaterForcing", "HamiltonianCompressibleForcing", "NoForcing"]
 
 
 class Forcing(object, metaclass=ABCMeta):
@@ -44,7 +44,7 @@ class Forcing(object, metaclass=ABCMeta):
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
-        self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
+        self.coriolis = (state.Omega is not None or hasattr(state.fields, "coriolis")) and not hasattr(state.fields, "q")
         self.sponge = state.mu is not None
         self.hydrostatic = state.hydrostatic
         self.topography = hasattr(state.fields, "topography")
@@ -82,7 +82,7 @@ class Forcing(object, metaclass=ABCMeta):
 
     def forcing_term(self):
         L = self.pressure_gradient_term()
-        if self.extruded:
+        if self.extruded and not self.state.hamiltonian:
             L += self.gravity_term()
         if self.coriolis:
             L += self.coriolis_term()
@@ -137,6 +137,9 @@ class Forcing(object, metaclass=ABCMeta):
         """
         self.scaling.assign(scaling)
         self.x0.assign(x_nl)
+        if scaling < 1e-14:
+            x_out.assign(x_in)
+            return None
         implicit = kwargs.get("implicit")
         if implicit is not None:
             self.impl.assign(int(implicit))
@@ -429,3 +432,185 @@ class ShallowWaterForcing(Forcing):
 
         L = g*div(self.test)*b*dx - g*inner(jump(self.test, n), un('+')*b('+') - un('-')*b('-'))*dS
         return L
+
+
+class HamiltonianForcing(Forcing, metaclass=ABCMeta):
+    """Base class for Hamiltonian energy conserving forcing"""
+    def __init__(self, state, upwind=True, euler_poincare=True):
+        # Antisymmetric upwinding for Hamiltonian setup
+        self.upwind = upwind
+
+        n = FacetNormal(state.mesh)
+        s = lambda u: 0.5*(sign(dot(u, n)) + 1)
+        self.uw = lambda u, v: (s(u)('+')*v('+') + s(u)('-')*v('-'))
+        if state.spaces("HDiv").extruded:
+            self.dS = dS_h + dS_v
+        else:
+            self.dS = dS
+
+        super().__init__(state=state, euler_poincare=euler_poincare,
+                         linear=False, extra_terms=None,
+                         moisture=None)
+        self._setup_aux_solvers(state)
+
+    @abstractmethod
+    def _setup_aux_solvers(self):
+        pass
+
+    def apply_aux_solvers(self):
+        self.Psolver.solve()
+
+    def mass_term(self):
+        dn = self.state.xn.split()[1]
+        d0 = self.x0.split()[1]
+        self.dbar = 0.5*(dn + d0)
+        # Use weighted test functions for upwinding
+        if self.upwind:
+            self.dweight = self.dbar
+        else:
+            self.dweight = 1
+        return inner(self.dweight*self.test, self.trial)*dx
+
+    def euler_poincare_term(self):
+        u0 = self.state.u_rec
+        return -div(self.dweight*self.test)*inner(self.state.h_project(u0), u0)*dx
+
+    def pressure_gradient_term(self):
+        if not self.upwind:
+            L = inner(div(self.dweight*self.test), self.state.P)*dx
+        else:
+            n = FacetNormal(self.state.mesh)
+            L = (-inner(self.dweight*self.test, grad(self.state.P))*dx
+                 +jump(self.state.P*self.test, n)*self.uw(self.state.u_rec, self.dbar)*self.dS)
+        return L
+
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+        implicit = kwargs.get("implicit")
+        if not implicit:
+            x_out.assign(x_in)
+            return None
+        self.x0.assign(x_nl)
+        self.apply_aux_solvers()
+        super(HamiltonianForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
+
+
+class HamiltonianCompressibleForcing(HamiltonianForcing):
+    """Class applying dry Euler forcing in a Hamiltonian
+    energy conserving way"""
+    def __init__(self, state, upwind=True, SUPG=True, tau=None,
+                 gauss_deg=None, euler_poincare=True):
+        self.SUPG = SUPG
+        if tau is not None:
+            self.tau = tau
+        else:
+            self.tau = state.SUPG[state.spaces("HDiv_v")]
+        if gauss_deg is not None:
+            self.gauss_deg = gauss_deg
+        else:
+            self.gauss_deg = 4
+        super().__init__(state, upwind, euler_poincare)
+
+    def _setup_aux_solvers(self, state):
+        un, rhon, thetan = state.xn.split()
+        u0, rho0, theta0 = self.x0.split()
+
+        rho_int = lambda s: (1 - s)*rhon + s*rho0
+        th_int = lambda s: (1 - s)*thetan + s*theta0
+        cp = self.state.parameters.cp
+        ex_pi = lambda r, t: thermodynamics.pi(state.parameters, r, t)
+        Hbyrho = lambda s: cp*th_int(s)*ex_pi(rho_int(s), th_int(s))
+        Hbytheta = lambda s: cp*rho_int(s)*ex_pi(rho_int(s), th_int(s))
+
+        # Hamiltonian variation in density
+        VDG = state.spaces("DG")
+        rho_ = TrialFunction(VDG)
+        phi = TestFunction(VDG)
+        K = inner(un, un)/3. + inner(un, u0)/3. + inner(u0, u0)/3.
+        dim = state.mesh.topological_dimension()
+        z = SpatialCoordinate(state.mesh)[dim-1]
+        g = state.parameters.g
+        Prhs = g*z + 0.5*K + gauss_quadrature(Hbyrho, self.gauss_deg)
+        Peqn = phi*(rho_ - Prhs)*dx
+        Pproblem = LinearVariationalProblem(lhs(Peqn), rhs(Peqn), state.P)
+        self.Psolver = LinearVariationalSolver(Pproblem, solver_parameters=
+                                               {"ksp_type":"preonly",
+                                                "pc_type":"lu"})
+
+        # Hamiltonian variation in potential temperature
+        Vt = state.spaces("HDiv_v")
+        theta_ = TrialFunction(Vt)
+        gamma = TestFunction(Vt)
+        Trhs = gauss_quadrature(Hbytheta, self.gauss_deg)
+        Teqn = gamma*(theta_ - Trhs)*dx
+        Tproblem = LinearVariationalProblem(lhs(Teqn), rhs(Teqn), state.T)
+        self.Tsolver = LinearVariationalSolver(Tproblem, solver_parameters=
+                                               {"ksp_type":"preonly",
+                                                "pc_type":"lu"})
+
+    def apply_aux_solvers(self):
+        super(HamiltonianCompressibleForcing, self).apply_aux_solvers()
+        self.Tsolver.solve()
+
+    def pressure_gradient_term(self):
+        L = super(HamiltonianCompressibleForcing, self).pressure_gradient_term()
+
+        # Add antisymmetric part corresponding to theta advection
+        n = FacetNormal(self.state.mesh)
+        thetan = self.state.xn.split()[2]
+        _, _, theta0 = split(self.x0)
+        thetabar = 0.5*(thetan + theta0)
+        if self.SUPG:
+            Ts = self.state.T + dot(dot(self.state.u_rec, self.tau), grad(self.state.T))
+            thetap = self.state.xp.split()[2]
+            theta_t = (thetap - thetan)/self.scaling
+            L += dot(dot(self.test, self.tau), grad(self.state.T))*theta_t*dx
+        else:
+            Ts = self.state.T
+        L += (inner(self.test, Ts*grad(thetabar))*dx
+              +jump(Ts*self.test, n)*self.uw(self.state.u_rec, thetabar)*dS_v
+              -jump(Ts*thetabar*self.test, n)*dS_v)
+        return L
+
+
+class HamiltonianShallowWaterForcing(HamiltonianForcing):
+    """Class applying shallow water forcing in a Hamiltonian
+    energy conserving way"""
+    def _setup_aux_solvers(self, state):
+        # Hamiltonian variation in density
+        VDG = state.spaces("DG")
+        D_ = TrialFunction(VDG)
+        phi = TestFunction(VDG)
+        un = state.xn.split()[0]
+        u0 = self.x0.split()[0]
+        K = inner(un, un)/3. + inner(un, u0)/3. + inner(u0, u0)/3.
+        g = state.parameters.g
+        Prhs = g*self.dbar + 0.5*K
+        if self.topography:
+            b = self.state.fields("topography")
+            Prhs += g*b
+        Peqn = inner(phi, D_ - Prhs)*dx
+        Pproblem = LinearVariationalProblem(lhs(Peqn), rhs(Peqn), state.P)
+        self.Psolver = LinearVariationalSolver(Pproblem, solver_parameters=
+                                               {"ksp_type":"preonly",
+                                                "pc_type":"lu"})
+
+    def coriolis_term(self):
+        f = self.state.fields("coriolis")
+        L = -f*inner(self.dbar*self.test, self.state.perp(self.state.u_rec))*dx
+        return L
+
+
+class NoForcing():
+    """Class to apply no forcing"""
+    def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
+        x_out.assign(x_in)
+
+
+def gauss_quadrature(function, deg):
+    """Compute Gauss quadrature to some degree for a function, assuming
+    integration domain [0, 1]."""
+    from numpy.polynomial.legendre import leggauss
+    f = leggauss(deg)[1][0]*function(leggauss(deg)[0][0]/2. + 0.5)
+    for i in range(1, deg):
+        f += leggauss(deg)[1][i]*function(leggauss(deg)[0][i]/2. + 0.5)
+    return 0.5*f

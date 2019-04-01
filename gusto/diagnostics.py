@@ -13,8 +13,8 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "SphericalComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
            "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
            "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
-           "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError",
-           "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
+           "CompressibleKineticEnergy", "CompressibleEnergy", "ExnerPi", "Sum", "Difference",
+           "SteadyStateError", "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
@@ -284,6 +284,15 @@ class RichardsonNumber(DiagnosticField):
 
 class Energy(DiagnosticField):
 
+    def setup(self, state):
+        if not self._initialised:
+            if state.hamiltonian:
+                space = state.spaces("DG_Energy", state.mesh, "DG",
+                                     3*(state.horizontal_degree+1))
+            else:
+                space = None
+            super(Energy, self).setup(state, space=space)
+
     def kinetic(self, u, factor=None):
         """
         Computes 0.5*dot(u, u) with an option to multiply rho
@@ -327,13 +336,22 @@ class ShallowWaterPotentialEnergy(Energy):
 class ShallowWaterPotentialEnstrophy(DiagnosticField):
 
     def __init__(self, base_field_name="PotentialVorticity"):
-        super().__init__()
+        super().__init__(required_fields=(base_field_name, ))
         self.base_field_name = base_field_name
 
     @property
     def name(self):
         base_name = "SWPotentialEnstrophy"
         return "_from_".join((base_name, self.base_field_name))
+
+    def setup(self, state):
+        if not self._initialised:
+            if state.hamiltonian:
+                space = state.spaces("DG_Enstrophy", state.mesh, "DG",
+                                     3*(state.horizontal_degree+1))
+            else:
+                space = None
+            super(ShallowWaterPotentialEnstrophy, self).setup(state, space=space)
 
     def compute(self, state):
         if self.base_field_name == "PotentialVorticity":
@@ -361,6 +379,24 @@ class CompressibleKineticEnergy(Energy):
         u = state.fields("u")
         rho = state.fields("rho")
         energy = self.kinetic(u, rho)
+        return self.field.interpolate(energy)
+
+
+class CompressibleEnergy(Energy):
+    name = "CompressibleEnergy"
+
+    def compute(self, state):
+        u = state.fields("u")
+        rho = state.fields("rho")
+        theta = state.fields("theta")
+        pi = thermodynamics.pi(state.parameters, rho, theta)
+        g = state.parameters.g
+        cv = state.parameters.cv
+        dim = state.mesh.topological_dimension()
+        z = SpatialCoordinate(state.mesh)[dim-1]
+
+        energy = self.kinetic(u, rho) + rho * g * z + cv * rho * theta * pi
+
         return self.field.interpolate(energy)
 
 
@@ -705,7 +741,14 @@ class Vorticity(DiagnosticField):
                 gradperp = lambda psi: cross(cell_normals, grad(psi))
                 L = (- inner(gradperp(gamma), u))*dx
             else:
-                raise NotImplementedError("The vorticity diagnostics have only been implemented for 2D spherical geometries.")
+                perp = lambda v: as_vector([-v[1], v[0]])
+                L = (- inner(perp(grad(gamma)), u))*dx
+                
+                n = FacetNormal(state.mesh)
+                if space.extruded:
+                    L += gamma*inner(perp(n), u)*(ds_t + ds_b)
+                else:
+                    L += gamma*inner(perp(n), u)*ds
 
             if vorticity_type != "relative":
                 f = state.fields("coriolis")
@@ -717,7 +760,10 @@ class Vorticity(DiagnosticField):
     def compute(self, state):
         """Computes the vorticity.
         """
-        self.solver.solve()
+        if 'q' in state.fieldlist:
+            self.field.assign(state.fields('q'))
+        else:
+            self.solver.solve()
         return self.field
 
 

@@ -202,6 +202,7 @@ class State(object):
                  family="RT",
                  Coriolis=None, sponge_function=None,
                  hydrostatic=None,
+                 hamiltonian=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -215,6 +216,7 @@ class State(object):
         self.Omega = Coriolis
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
+        self.hamiltonian = hamiltonian
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -275,6 +277,10 @@ class State(object):
             self.h_project = lambda u: u - self.k*inner(u, self.k)
         else:
             self.h_project = lambda u: u
+
+        # save SUPG parameter setup for Hamiltonian forcing
+        if self.hamiltonian:
+            self.SUPG = {}
 
         #  Constant to hold current time
         self.t = Constant(0.0)
@@ -517,10 +523,17 @@ class State(object):
             cell = mesh.ufl_cell().cellname()
             V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
-            V0 = self.spaces("HDiv", mesh, V1_elt)
-            V1 = self.spaces("DG", mesh, "DG", horizontal_degree)
+            if family[:2]=="RT":
+                V0 = self.spaces("CG", mesh, "CG", horizontal_degree+1)
+            else:
+                V0 = self.spaces("CG", mesh, "CG", horizontal_degree+2)
+            V1 = self.spaces("HDiv", mesh, V1_elt)
+            V2 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
-            self.W = MixedFunctionSpace((V0, V1))
+            if 'q' in self.fieldlist:
+                self.W = MixedFunctionSpace((V1, V2, V0))
+            else:
+                self.W =  MixedFunctionSpace((V1, V2))
 
     def _allocate_state(self):
         """
@@ -535,7 +548,12 @@ class State(object):
         self.xrhs = Function(W)
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
-
+        if self.hamiltonian:
+            self.u_rec = Function(W.split()[0])
+            self.F = Function(W.split()[0])
+            self.P = Function(W.split()[1])
+            if self.vertical_degree is not None:
+                self.T = Function(W.split()[2])
 
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates

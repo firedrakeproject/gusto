@@ -729,11 +729,13 @@ class ShallowWaterSolver(TimesteppingSolver):
         g = Constant(g_)
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        u_in, D_in = split(state.xrhs)[:2]
 
-        W = state.W
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        Vu = state.spaces("HDiv")
+        VD = state.spaces("DG")
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
 
         eqn = (
             inner(w, u) - beta*g*div(w)*D
@@ -746,11 +748,10 @@ class ShallowWaterSolver(TimesteppingSolver):
         Leqn = rhs(eqn)
 
         # Place to put result of u rho solver
-        self.uD = Function(W)
+        self.uD = Function(M)
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD)
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
@@ -763,3 +764,8 @@ class ShallowWaterSolver(TimesteppingSolver):
         """
 
         self.uD_solver.solve()
+
+        u1, D1 = self.uD.split()
+        u, D = self.state.dy.split()[:2]
+        u.assign(u1)
+        D.assign(D1)

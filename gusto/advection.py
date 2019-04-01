@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, LinearVariationalProblem,
-                       LinearVariationalSolver, Projector, Interpolator)
+                       LinearVariationalSolver, Projector, Interpolator,
+                       TrialFunction, TestFunction, inner, dx, lhs, rhs)
 from firedrake.utils import cached_property
 from gusto.configuration import logger, DEBUG
 from gusto.recovery import Recoverer
@@ -56,6 +57,11 @@ class Advection(object, metaclass=ABCMeta):
             self.equation = equation
             # get ubar from the equation class
             self.ubar = self.equation.ubar
+            # get dbar from the equation class for Hamiltonian setup
+            if state.hamiltonian:
+                self.dbar = self.equation.dbar
+                self._setup_u_rec_solver(state)
+                self._setup_flux_solver(state)
             self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
@@ -105,6 +111,39 @@ class Advection(object, metaclass=ABCMeta):
             if self.limiter is not None:
                 self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
+
+    def _setup_u_rec_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        self.u_rec = Function(Vu)
+        un, dn = state.xn.split()[:2]
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        u_rec_eqn = inner(v, self.dbar*u_ - Frhs)*dx
+        u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn), self.u_rec)
+        self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
+                                                    solver_parameters=
+                                                    {"ksp_type":"preonly",
+                                                     "pc_type":"lu"})
+
+
+    def _setup_flux_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        un, dn = state.xn.split()[:2]
+        self.F = Function(Vu)
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        F_eqn = inner(v, u_ - Frhs)*dx
+        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
+        self.F_solver = LinearVariationalSolver(F_problem,
+                                                solver_parameters=
+                                                {"ksp_type":"preonly",
+                                                 "pc_type":"lu"})
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -159,7 +198,20 @@ class Advection(object, metaclass=ABCMeta):
     def update_ubar(self, xn, xnp1, alpha):
         un = xn.split()[0]
         unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
+        if self.state.hamiltonian:
+            if self.equation.get_flux:
+                self.F_solver.solve()
+                self.state.F.assign(self.F)
+                self.equation.Fbar.assign(self.F)
+            else:
+                dn = xn.split()[1]
+                dnp1 = xnp1.split()[1]
+                self.dbar.assign(dn + 0.5*(dnp1-dn))
+                self.u_rec_solver.solve()
+                self.ubar.assign(self.u_rec)
+                self.state.u_rec.assign(self.u_rec)
+        else:
+            self.ubar.assign(un + alpha*(unp1-un))
 
     @cached_property
     def solver(self):
@@ -325,8 +377,23 @@ class ThetaMethod(Advection):
     """
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
+    arg theta: off-centring parameter (theta=0 corresponds to explicit)
+    arg weight: Either name of prognostic variable z (for weights z_(n), z_(n+1)),
+    or 2-tuple containing weight for y_(n+1) and y_(n) respectively. Defaults to None.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
+    def __init__(self, state, field, equation, theta=0.5, weight=None, solver_parameters=None):
+        if weight is not None:
+            if weight in state.fieldlist:
+                self.weight_n = state.xn.split()[state.fieldlist.index(weight)]
+                self.weight_p = state.xp.split()[state.fieldlist.index(weight)]
+            elif len(weight)==2:
+                self.weight_n = weight[0]
+                self.weight_p = weight[1]
+            else:
+                raise ValueError("weight should be a prognostic variable or a 2-tuple")
+        else:
+            self.weight_n = 1
+            self.weight_p = 1
 
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
@@ -344,12 +411,12 @@ class ThetaMethod(Advection):
     def lhs(self):
         eqn = self.equation
         trial = eqn.trial
-        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
+        return eqn.mass_term(self.weight_p*trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
 
     @cached_property
     def rhs(self):
         eqn = self.equation
-        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
+        return eqn.mass_term(self.weight_n*self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)

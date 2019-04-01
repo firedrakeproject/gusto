@@ -63,6 +63,15 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for bc in bcs:
                 bc.apply(unp1)
 
+    def _update_q(self):
+        """
+        Update vorticity qn if it is used as a prognostic variable.
+        """
+        if 'q' in self.state.fieldlist:
+            qp = self.state.xp.split()[-1]
+            qnp1 = self.state.xnp1.split()[-1]
+            qnp1.assign(qp)
+
     def setup_timeloop(self, state, t, tmax, pickup):
         """
         Setup the timeloop by setting up diagnostics, dumping the fields and
@@ -100,6 +109,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         while t < tmax - 0.5*dt:
             logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
 
+            print("Time ", round(t, 4))
             t += dt
             state.t.assign(t)
 
@@ -109,6 +119,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 state.fields(name).project(evaluation(t))
 
             self.semi_implicit_step()
+            self._update_q()
 
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
