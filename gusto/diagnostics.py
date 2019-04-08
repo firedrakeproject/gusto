@@ -719,12 +719,16 @@ class Vorticity(DiagnosticField):
             vorticity_types = ["relative", "absolute", "potential"]
             if vorticity_type not in vorticity_types:
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
-            try:
-                space = state.spaces("CG")
-            except AttributeError:
-                dgspace = state.spaces("DG")
-                cg_degree = dgspace.ufl_element().degree() + 2
-                space = FunctionSpace(state.mesh, "CG", cg_degree)
+            if state.hamiltonian and vorticity_type == "absolute":
+                space = state.spaces("DG_Abs_vorticity", state.mesh, "DG",
+                                     3*(state.horizontal_degree+1))
+            else:
+                try:
+                    space = state.spaces("CG")
+                except AttributeError:
+                    dgspace = state.spaces("DG")
+                    cg_degree = dgspace.ufl_element().degree() + 2
+                    space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
             u = state.fields("u")
             gamma = TestFunction(space)
@@ -733,8 +737,10 @@ class Vorticity(DiagnosticField):
             if vorticity_type == "potential":
                 D = state.fields("D")
                 a = q*gamma*D*dx
+                self.potential = True
             else:
                 a = q*gamma*dx
+                self.potential = False
 
             if state.on_sphere:
                 cell_normals = CellNormal(state.mesh)
@@ -760,8 +766,12 @@ class Vorticity(DiagnosticField):
     def compute(self, state):
         """Computes the vorticity.
         """
-        if 'q' in state.fieldlist:
-            self.field.assign(state.fields('q'))
+        if "q" in state.fieldlist:
+            if self.potential:
+                # Assuming q is the potential vorticity
+                self.field.assign(state.fields("q"))
+            else:
+                self.field.project(state.fields("q")*state.fields("D"))
         else:
             self.solver.solve()
         return self.field

@@ -503,7 +503,7 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         if tau is not None:
             self.tau = tau
         else:
-            self.tau = state.SUPG[state.spaces("HDiv_v")]
+            self.tau = state.SUPG[state.spaces("HDiv_v")][0]
         if gauss_deg is not None:
             self.gauss_deg = gauss_deg
         else:

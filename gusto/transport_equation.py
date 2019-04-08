@@ -235,10 +235,7 @@ class AdvectionEquation(TransportEquation):
         self.vector_manifold = vector_manifold
         self.outflow = outflow
         self.flux_form = flux_form
-        if flux_form:
-            self.get_flux = True
-        else:
-            self.get_flux = False
+        self.get_flux = flux_form
         if outflow and ibp == IntegrateByParts.NEVER:
             raise ValueError("outflow is True and ibp is None are incompatible options")
 
@@ -253,7 +250,7 @@ class AdvectionEquation(TransportEquation):
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
         else:
             if self.flux_form:
-                L = -inner(grad(self.test), q*self.Fbar)*dx
+                L = inner(self.test, div(q*self.Fbar))*dx
             elif self.ibp == IntegrateByParts.ONCE:
                 L = -inner(div(outer(self.test, self.ubar)), q)*dx
             else:
@@ -418,9 +415,11 @@ class SUPGAdvection(AdvectionEquation):
                 tau = Constant(tau)
             else:
                 tau = as_vector(tau)
-        if self.state.hamiltonian:
-            self.state.SUPG[V] = tau
         dtest = dot(dot(self.ubar, tau), grad(self.test))
+        if self.state.hamiltonian:
+            self.state.SUPG[V] = (tau, supg_params.constant_tau)
+            if self.flux_form:
+                dtest = dot(dot(self.Fbar, tau), grad(self.test))
         self.test += dtest
 
     def advection_term(self, q):
@@ -469,8 +468,12 @@ class VectorInvariant(TransportEquation):
                     Dn = state.xn.split()[1]
                     Dp = state.xp.split()[1]
                     dt = state.timestepping.dt
-                    tau = state.SUPG[qn.function_space()]
-                    self.qbar = self.qbar - tau[0][0]*((qp*Dp - qn*Dn)/dt + div(self.Fbar*self.qbar))
+                    tau, const = state.SUPG[qn.function_space()]
+                    if const:
+                        nu = tau.values()[0]
+                    else:
+                        nu = tau[0][0]
+                    self.qbar = self.qbar - nu*((qp*Dp - qn*Dn)/dt + div(self.Fbar*self.qbar))
 
     def advection_term(self, q):
 
