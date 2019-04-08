@@ -123,10 +123,8 @@ class TransportEquation(object, metaclass=ABCMeta):
         self.ibp = ibp
 
         # set up functions required for forms
-        self.ubar = Function(state.spaces("HDiv"))
-        if self.state.hamiltonian:
-            self.dbar = Function(state.spaces("DG"))
-            self.Fbar = Function(state.spaces("HDiv"))
+        self.ubar = state.ubar
+        self.Fbar = state.F
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
@@ -460,7 +458,10 @@ class VectorInvariant(TransportEquation):
             self.qbar = 0.5*(qn + qp)
         if self.state.hamiltonian:
             if not vorticity:
-                self.test = self.test*self.dbar
+                dn = state.xn.split()[1]
+                dnp1 = state.xnp1.split()[1]
+                dbar = 0.5*(dn + dnp1)
+                self.test = self.test*dbar
                 self.get_flux = False
             else:
                 self.get_flux = True

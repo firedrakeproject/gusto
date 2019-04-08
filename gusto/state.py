@@ -548,9 +548,12 @@ class State(object):
         self.xrhs = Function(W)
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
+
+        self.ubar = Function(W.split()[0])
+        self.F = Function(W.split()[0])
+
         if self.hamiltonian:
             self.u_rec = Function(W.split()[0])
-            self.F = Function(W.split()[0])
             self.P = Function(W.split()[1])
             if self.vertical_degree is not None:
                 self.T = Function(W.split()[2])
