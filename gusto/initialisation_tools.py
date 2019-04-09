@@ -497,13 +497,12 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                      pi_boundary=pi_boundary,
                                      water_t=water_v0, solve_for_rho=True)
 
-def initial_vorticity(state, D0, u0, q0, f=None, ds_bndry=None, params=None):
+def initial_vorticity(state, D0, u0, q0, f=None, params=None):
     """
     Solve for initial vorticity given depth/density and velocity fields.
     :arg state: :class:`State` object.
     :arg D0, u0: initial depth/density and velocity fields
     :arg f: Coriolis force. Defaults to None (no Coriolis force).
-    :arg ds_bndry: boundary integral (e.g. ds, ds_tb). Defaults to None (no boundary).
     :arg params: solver parameters. Default to None.
     """
 
@@ -525,8 +524,9 @@ def initial_vorticity(state, D0, u0, q0, f=None, ds_bndry=None, params=None):
     L = - inner(perp(grad(eta)), u0)*dx
     if f is not None:
         L += eta*f*dx
-    if ds_bndry is not None:
-        L += eta*inner(perp(n), un)*ds_bndry
+    if u0.function_space().extruded:
+        n = FacetNormal(state.mesh)
+        L += eta*inner(perp(n), u0)*ds_tb
     q_p = LinearVariationalProblem(a, L, q0)
     q_solver = LinearVariationalSolver(q_p, solver_parameters=solver_parameters)
 

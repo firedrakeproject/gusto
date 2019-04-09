@@ -69,9 +69,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         Update vorticity qn if it is used as a prognostic variable.
         """
         if 'q' in self.state.fieldlist:
-            qp = self.state.xp.split()[-1]
+            qrhs = self.state.xrhs.split()[-1]
             qnp1 = self.state.xnp1.split()[-1]
-            qnp1.assign(qp)
+            qnp1.assign(qrhs)
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """
@@ -108,7 +108,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
+            logger.info("at start of timestep, t=%s, dt=%s" % (round(t, 7), dt))
 
             t += dt
             state.t.assign(t)

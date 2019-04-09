@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import (Function, split, TrialFunction, TestFunction,
-                       FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, grad,
+                       FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, grad, curl,
                        DirichletBC, LinearVariationalProblem, LinearVariationalSolver,
                        lhs, rhs, sqrt, sign, dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
@@ -24,13 +24,14 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None, vorticity=False):
         self.state = state
         if linear:
             self.euler_poincare = False
             logger.warning('Setting euler_poincare to False because you have set linear=True')
         else:
             self.euler_poincare = euler_poincare
+        self.vorticity = vorticity
 
         # set up functions
         self.Vu = state.spaces("HDiv")
@@ -41,6 +42,13 @@ class Forcing(object, metaclass=ABCMeta):
         # this is the function that contains the result of solving
         # <test, trial> = <test, F(x0)>, where F is the forcing term
         self.uF = Function(self.Vu)
+
+        # Vorticity functions
+        if vorticity:
+            Vvort = state.fields("q").function_space()
+            self.q_test = TestFunction(Vvort)
+            self.q_trial = TrialFunction(Vvort)
+            self.qF = Function(Vvort)
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
@@ -102,6 +110,13 @@ class Forcing(object, metaclass=ABCMeta):
             L += (2*self.impl-1)*self.hydrostatic_term()
         return L
 
+    def q_mass_term(self):
+        return inner(self.q_test, self.q_trial)*dx
+
+    # @abstractmethod
+    def q_forcing_term(self):
+        pass # depends on pressure gradient term
+
     def _build_forcing_solvers(self):
         a = self.mass_term()
         L = self.forcing_term()
@@ -123,6 +138,24 @@ class Forcing(object, metaclass=ABCMeta):
             solver_parameters=solver_parameters,
             options_prefix="UForcingSolver"
         )
+
+        if self.vorticity:
+            a = self.q_mass_term()
+            L = self.q_forcing_term()
+
+            q_forcing_problem = LinearVariationalProblem(
+                a, L, self.qF
+            )
+
+            solver_parameters = {}
+            if logger.isEnabledFor(DEBUG):
+                solver_parameters["ksp_monitor_true_residual"] = True
+            self.q_forcing_solver = LinearVariationalSolver(
+                q_forcing_problem,
+                solver_parameters=solver_parameters,
+                options_prefix="QForcingSolver"
+            )
+
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
         """
@@ -150,6 +183,12 @@ class Forcing(object, metaclass=ABCMeta):
         x_out.assign(x_in)
         uF += self.uF
 
+        if self.vorticity:
+            self.q_forcing_solver.solve()
+
+            qF = x_out.split()[-1]
+            qF += self.qF
+
 
 class CompressibleForcing(Forcing):
     """
@@ -158,7 +197,7 @@ class CompressibleForcing(Forcing):
 
     def pressure_gradient_term(self):
 
-        u0, rho0, theta0 = split(self.x0)
+        u0, rho0, theta0 = split(self.x0)[:3]
         cp = self.state.parameters.cp
         n = FacetNormal(self.state.mesh)
         Vtheta = self.state.spaces("HDiv_v")
@@ -198,7 +237,7 @@ class CompressibleForcing(Forcing):
         R_d = self.state.parameters.R_d
         R_v = self.state.parameters.R_v
 
-        u0, _, theta0 = split(self.x0)
+        u0, _, theta0 = split(self.x0)[:3]
         water_v = self.state.fields('water_v')
         water_c = self.state.fields('water_c')
 
@@ -215,7 +254,7 @@ class CompressibleForcing(Forcing):
         super(CompressibleForcing, self)._build_forcing_solvers()
         # build forcing for theta equation
         if self.moisture is not None:
-            _, _, theta0 = split(self.x0)
+            theta0 = split(self.x0)[2]
             Vt = self.state.spaces("HDiv_v")
             p = TrialFunction(Vt)
             q = TestFunction(Vt)
@@ -241,7 +280,7 @@ class CompressibleForcing(Forcing):
         super(CompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         if self.moisture is not None:
             self.theta_solver.solve()
-            _, _, theta_out = x_out.split()
+            theta_out = x_out.split()[2]
             theta_out += self.thetaF
 
 
@@ -251,12 +290,12 @@ class IncompressibleForcing(Forcing):
     """
 
     def pressure_gradient_term(self):
-        _, p0, _ = split(self.x0)
+        p0 = split(self.x0)[1]
         L = div(self.test)*p0*dx
         return L
 
     def gravity_term(self):
-        _, _, b0 = split(self.x0)
+        b0 = split(self.x0)[2]
         L = b0*inner(self.test, self.state.k)*dx
         return L
 
@@ -268,7 +307,7 @@ class IncompressibleForcing(Forcing):
         q = TestFunction(Vp)
         self.divu = Function(Vp)
 
-        u0, _, _ = split(self.x0)
+        u0 = split(self.x0)[0]
         a = p*q*dx
         L = q*div(u0)*dx
 
@@ -289,7 +328,7 @@ class IncompressibleForcing(Forcing):
 
         super(IncompressibleForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         if 'incompressible' in kwargs and kwargs['incompressible']:
-            _, p_out, _ = x_out.split()
+            p_out = x_out.split()[1]
             self.divergence_solver.solve()
             p_out.assign(self.divu)
 
@@ -321,7 +360,7 @@ class EadyForcing(IncompressibleForcing):
         F = TrialFunction(Vb)
         gamma = TestFunction(Vb)
         self.bF = Function(Vb)
-        u0, _, b0 = split(self.x0)
+        u0, _, b0 = split(self.x0)[:3]
 
         a = gamma*F*dx
         L = -self.scaling*gamma*(dbdy*inner(u0, as_vector([0., 1., 0.])))*dx
@@ -343,7 +382,7 @@ class EadyForcing(IncompressibleForcing):
 
         super(EadyForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
         self.b_forcing_solver.solve()  # places forcing in self.bF
-        _, _, b_out = x_out.split()
+        b_out = x_out.split()[2]
         b_out += self.bF
 
 
@@ -360,7 +399,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         Pi0 = self.state.parameters.Pi0
         cp = self.state.parameters.cp
 
-        _, rho0, theta0 = split(self.x0)
+        _, rho0, theta0 = split(self.x0)[:3]
         Pi = thermodynamics.pi(self.state.parameters, rho0, theta0)
         Pi_0 = Constant(Pi0)
 
@@ -376,7 +415,7 @@ class CompressibleEadyForcing(CompressibleForcing):
         F = TrialFunction(Vt)
         gamma = TestFunction(Vt)
         self.thetaF = Function(Vt)
-        u0, _, _ = split(self.x0)
+        u0 = split(self.x0)[0]
 
         a = gamma*F*dx
         L = -self.scaling*gamma*(dthetady*inner(u0, as_vector([0., 1., 0.])))*dx
@@ -398,7 +437,7 @@ class CompressibleEadyForcing(CompressibleForcing):
 
         Forcing.apply(self, scaling, x_in, x_nl, x_out, **kwargs)
         self.theta_forcing_solver.solve()  # places forcing in self.thetaF
-        _, _, theta_out = x_out.split()
+        theta_out = x_out.split()[2]
         theta_out += self.thetaF
 
 
@@ -407,14 +446,14 @@ class ShallowWaterForcing(Forcing):
     def coriolis_term(self):
 
         f = self.state.fields("coriolis")
-        u0, _ = split(self.x0)
+        u0 = split(self.x0)[0]
         L = -f*inner(self.test, self.state.perp(u0))*dx
         return L
 
     def pressure_gradient_term(self):
 
         g = self.state.parameters.g
-        u0, D0 = split(self.x0)
+        u0, D0 = split(self.x0)[:2]
         n = FacetNormal(self.state.mesh)
         un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
 
@@ -425,7 +464,7 @@ class ShallowWaterForcing(Forcing):
 
     def topography_term(self):
         g = self.state.parameters.g
-        u0, _ = split(self.x0)
+        u0 = split(self.x0)[0]
         b = self.state.fields("topography")
         n = FacetNormal(self.state.mesh)
         un = 0.5*(dot(u0, n) + abs(dot(u0, n)))
@@ -436,7 +475,7 @@ class ShallowWaterForcing(Forcing):
 
 class HamiltonianForcing(Forcing, metaclass=ABCMeta):
     """Base class for Hamiltonian energy conserving forcing"""
-    def __init__(self, state, upwind=True, euler_poincare=True):
+    def __init__(self, state, upwind=True, euler_poincare=True, vorticity=False):
         # Antisymmetric upwinding for Hamiltonian setup
         self.upwind = upwind
 
@@ -450,7 +489,7 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
 
         super().__init__(state=state, euler_poincare=euler_poincare,
                          linear=False, extra_terms=None,
-                         moisture=None)
+                         moisture=None, vorticity=vorticity)
         self._setup_aux_solvers(state)
 
     @abstractmethod
@@ -488,7 +527,7 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
         implicit = kwargs.get("implicit")
         if not implicit:
             x_out.assign(x_in)
-            return None
+            return
         self.x0.assign(x_nl)
         self.apply_aux_solvers()
         super(HamiltonianForcing, self).apply(scaling, x_in, x_nl, x_out, **kwargs)
@@ -498,7 +537,7 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
     """Class applying dry Euler forcing in a Hamiltonian
     energy conserving way"""
     def __init__(self, state, upwind=True, SUPG=True, tau=None,
-                 gauss_deg=None, euler_poincare=True):
+                 gauss_deg=None, euler_poincare=True, vorticity=False):
         self.SUPG = SUPG
         if tau is not None:
             self.tau = tau
@@ -508,11 +547,11 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
             self.gauss_deg = gauss_deg
         else:
             self.gauss_deg = 4
-        super().__init__(state, upwind, euler_poincare)
+        super().__init__(state, upwind, euler_poincare, vorticity)
 
     def _setup_aux_solvers(self, state):
-        un, rhon, thetan = state.xn.split()
-        u0, rho0, theta0 = self.x0.split()
+        un, rhon, thetan = state.xn.split()[:3]
+        u0, rho0, theta0 = self.x0.split()[:3]
 
         rho_int = lambda s: (1 - s)*rhon + s*rho0
         th_int = lambda s: (1 - s)*thetan + s*theta0
@@ -557,7 +596,7 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         # Add antisymmetric part corresponding to theta advection
         n = FacetNormal(self.state.mesh)
         thetan = self.state.xn.split()[2]
-        _, _, theta0 = split(self.x0)
+        theta0 = split(self.x0)[2]
         thetabar = 0.5*(thetan + theta0)
         if self.SUPG:
             Ts = self.state.T + dot(dot(self.state.u_rec, self.tau), grad(self.state.T))
@@ -571,6 +610,20 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
               -jump(Ts*thetabar*self.test, n)*dS_v)
         return L
 
+    def q_forcing_term(self):
+        thetan = self.state.xn.split()[2]
+        theta0 = split(self.x0)[2]
+        thetabar = 0.5*(thetan + theta0)
+        perp = self.state.perp
+        #n = FacetNormal(self.state.mesh)
+        cp = self.state.parameters.cp
+        pibar = thermodynamics.pi(self.state.parameters, self.dbar, thetabar)
+        #L = inner(self.state.T/self.dbar*grad(thetabar),
+        #          self.state.perp(grad(self.q_test))*dx
+        L = inner(cp*pibar*grad(thetabar), perp(grad(self.q_test)))*dx
+        #L = (- cp*inner(thetabar, div(pibar*curl(self.q_test)))*dx
+        #     + cp*jump(curl(self.q_test)*thetabar, n)*avg(pibar)*dS_v)
+        return L
 
 class HamiltonianShallowWaterForcing(HamiltonianForcing):
     """Class applying shallow water forcing in a Hamiltonian

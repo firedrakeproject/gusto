@@ -4,7 +4,7 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
-from firedrake import (FiniteElement, TensorProductElement, HDiv,
+from firedrake import (FiniteElement, TensorProductElement, HDiv, HCurl,
                        FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
@@ -487,9 +487,10 @@ class State(object):
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
         Build:
-        velocity space self.V2,
-        pressure space self.V3,
-        temperature space self.Vt,
+        optionally vorticity space V1
+        velocity space V2,
+        pressure space V3,
+        temperature space Vt,
         mixed function space self.W = (V2,V3,Vt)
         """
 
@@ -511,25 +512,38 @@ class State(object):
             V2v_elt = HDiv(V2t_elt)
             V2_elt = V2h_elt + V2v_elt
 
-            V0 = self.spaces("HDiv", mesh, V2_elt)
-            V1 = self.spaces("DG", mesh, V3_elt)
-            V2 = self.spaces("HDiv_v", mesh, V2t_elt)
+            V2 = self.spaces("HDiv", mesh, V2_elt)
+            V3 = self.spaces("DG", mesh, V3_elt)
+            Vt = self.spaces("HDiv_v", mesh, V2t_elt)
 
             self.Vv = self.spaces("Vv", mesh, V2v_elt)
 
-            self.W = MixedFunctionSpace((V0, V1, V2))
+            # Optional vorticity space
+            S0 = FiniteElement("CG", cell, horizontal_degree+1)
+            if cell == 'interval':
+                V1 = self.spaces("CG", mesh, "CG", horizontal_degree+1)
+            else:
+                V1h_elt = HCurl(TensorProductElement(S0, T1))
+                V1v_elt = HCurl (TensorProductElement(S1, T0))
+                V1_elt = V1h_elt + V1v_elt
+                V1 = self.spaces("HCurl", mesh, V1_elt)
+            if 'q' in self.fieldlist:
+                self.W = MixedFunctionSpace((V2, V3, Vt, V1))
+            else:
+                self.W = MixedFunctionSpace((V2, V3, Vt))
 
         else:
             cell = mesh.ufl_cell().cellname()
             V1_elt = FiniteElement(family, cell, horizontal_degree+1)
 
+            V1 = self.spaces("HDiv", mesh, V1_elt)
+            V2 = self.spaces("DG", mesh, "DG", horizontal_degree)
+
+            # Optional vorticity space
             if family[:2]=="RT":
                 V0 = self.spaces("CG", mesh, "CG", horizontal_degree+1)
             else:
                 V0 = self.spaces("CG", mesh, "CG", horizontal_degree+2)
-            V1 = self.spaces("HDiv", mesh, V1_elt)
-            V2 = self.spaces("DG", mesh, "DG", horizontal_degree)
-
             if 'q' in self.fieldlist:
                 self.W = MixedFunctionSpace((V1, V2, V0))
             else:

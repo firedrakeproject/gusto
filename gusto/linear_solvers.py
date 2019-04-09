@@ -357,7 +357,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         Vtrace = FunctionSpace(state.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
-        u_in, rho_in, theta_in = split(state.xrhs)
+        u_in, rho_in, theta_in = split(state.xrhs)[:3]
 
         # Build the function space for "broken" u, rho, and pressure trace
         M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
@@ -549,7 +549,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
-        u, rho, theta = self.state.dy.split()
+        u, rho, theta = self.state.dy.split()[:3]
         u.assign(u1)
         rho.assign(rho1)
 

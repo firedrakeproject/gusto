@@ -30,7 +30,8 @@ Lx, Ly = 5000, 4330.
 mesh = PeriodicRectangleMesh(res, res, Lx, Ly)
 
 timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
-output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq)
+output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
+                          log_level='INFO')
 diagnostics = Diagnostics('D')
 diagnostic_fields = [ShallowWaterKineticEnergy(),
                      ShallowWaterPotentialEnergy(),
@@ -39,8 +40,6 @@ diagnostic_fields = [ShallowWaterKineticEnergy(),
                      PotentialVorticity(),
                      AbsoluteVorticity(),
                      ShallowWaterPotentialEnstrophy()]
-if not vorticity:
-    diagnostic_fields.append(PotentialVorticity())
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
