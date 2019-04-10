@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
-from gusto.advection import Update_ubar
+from gusto.advection import Update_ubar, Reconstruct_q
 from firedrake import DirichletBC
 
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
@@ -45,6 +45,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             self.prescribed_fields = []
 
+        if state.reconstruct_q:
+            self.reconstruct_q = Reconstruct_q(state)
+
     @abstractproperty
     def passive_advection(self):
         """list of fields that are passively advected (and possibly diffused)"""
@@ -72,6 +75,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             qrhs = self.state.xrhs.split()[-1]
             qnp1 = self.state.xnp1.split()[-1]
             qnp1.assign(qrhs)
+        if self.state.reconstruct_q:
+            self.reconstruct_q.apply(self.state.xnp1)
+            
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """

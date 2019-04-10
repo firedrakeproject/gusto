@@ -43,6 +43,7 @@ diagnostic_fields = [CourantNumber(),
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
               hamiltonian=True,
+              reconstruct_q=True,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -96,7 +97,8 @@ if vorticity:
     rhoeqn = AdvectionEquation(state, rho0.function_space(),
                                ibp=IntegrateByParts.NEVER,
                                equation_form="continuity", flux_form=True)
-    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = AdvectionEquation(state, Vt, ibp=IntegrateByParts.NEVER,
+                                 equation_form="advective")
 
     if vorticity_SUPG == True:
         # set up vorticity SUPG parameter
@@ -137,7 +139,8 @@ linear_solver = HybridizedCompressibleSolver(state)
 
 # Set up forcing
 if vorticity:
-    compressible_forcing = HamiltonianCompressibleForcing(state, gauss_deg=gauss_deg,
+    compressible_forcing = HamiltonianCompressibleForcing(state, upwind=False, SUPG=False,
+                                                          gauss_deg=gauss_deg,
                                                           euler_poincare=False,
                                                           vorticity=True)
 else:

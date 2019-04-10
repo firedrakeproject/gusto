@@ -1,7 +1,8 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, LinearVariationalProblem,
                        LinearVariationalSolver, Projector, Interpolator,
-                       TrialFunction, TestFunction, inner, dx, lhs, rhs)
+                       TrialFunction, TestFunction, inner, dx, lhs, rhs,
+                       grad, DirichletBC)
 from firedrake.utils import cached_property
 from gusto.configuration import logger, DEBUG
 from gusto.recovery import Recoverer
@@ -364,8 +365,14 @@ class ThetaMethod(Advection):
 
 
 class Update_ubar(object):
-    """Class to update advecting velocity ubar. Contains solvers for
-       various versions of ubar and related fluxes"""
+    """
+    Class to update advecting velocity ubar. Contains solvers for
+    various versions of ubar and related fluxes
+    arg state: :class:`.State` object
+    arg active_advection: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to advect, and the :class:`~.Advection`
+        to use
+    """
     def __init__(self, state, active_advection):
         self.state = state
 
@@ -428,3 +435,88 @@ class Update_ubar(object):
             self.state.u_rec.assign(self.u_rec)
         else:
             self.state.ubar.assign(un + alpha*(unp1-un))
+
+
+class Reconstruct_q(object):
+    """
+    Class to reconstruct vorticity q given velocity field u. Used
+    when vorticity and velocity are advected independently, to avoid
+    decoupling of the two fields.
+    :arg state: :class:`.State` object.
+    """
+    def __init__(self, state):
+        self.state = state
+        self.x0 = Function(state.W)
+        self.q = self.x0.split()[-1]
+        self.Vq = state.spaces("Vq")
+        if self.Vq.extruded:
+            # If extruded, we need to get Zprime, the vorticity along the boundary
+            self.Z = Function(self.Vq)
+            self.Zring = Function(self.Vq)
+            self.Zprime = Function(self.Vq)
+            self._setup_reconstruction_solvers_extruded()
+        else:
+            self._setup_reconstruction_solver()
+
+    def _setup_reconstruction_solver(self):
+        gamma = TestFunction(self.Vq)
+        q = TrialFunction(self.Vq)
+        un, Dn = self.xn.split()[:2]
+
+        q_recon_eqn = gamma*q*Dn*dx + inner(self.state.perp(grad(gamma)), un)*dx
+        if hasattr(self.state.fields, "coriolis"):
+            f = self.state.fields("coriolis")
+            q_recon_eqn -= gamma*f*dx
+
+        q_recon_problem = LinearVariationalProblem(lhs(q_recon_eqn), rhs(q_recon_eqn),
+                                                   self.q)
+        self.q_recon_solver = LinearVariationalSolver(q_recon_problem,
+                                                      solver_parameters=lu_params)
+
+    def _setup_reconstruction_solvers_extruded(self):
+        un, Dn = self.x0.split()[:2]
+
+        lu_params = {"ksp_type":"preonly",
+                     "pc_type":"lu"}
+        bcs = [DirichletBC(self.Vq, 0., "bottom"),
+               DirichletBC(self.Vq, 0., "top")]
+
+        self.qD_to_Z_Projector = Projector(self.q*Dn, self.Z, solver_parameters=lu_params)
+        self.Z_to_Zring_Projector =  Projector(self.Z, self.Zring, bcs=bcs,
+                                               solver_parameters=lu_params)
+        gamma = TestFunction(self.Vq)
+        Z = TrialFunction(self.Vq)
+        u_Zringeqn = gamma*Z*dx + inner(self.state.perp(grad(gamma)), un)*dx
+        if hasattr(self.state.fields, "coriolis"):
+            f = self.state.fields("coriolis")
+            u_Zringeqn -= gamma*f*dx
+
+        u_Zringproblem = LinearVariationalProblem(lhs(u_Zringeqn), rhs(u_Zringeqn),
+                                                  self.Zring, bcs=bcs)
+        self.u_Zring_solver = LinearVariationalSolver(u_Zringproblem,
+                                                      solver_parameters=lu_params)
+        q_recon_eqn = gamma*(Dn*Z - self.Z)*dx
+        q_recon_problem = LinearVariationalProblem(lhs(q_recon_eqn), rhs(q_recon_eqn),
+                                                   self.q)
+        self.q_recon_solver = LinearVariationalSolver(q_recon_problem,
+                                                      solver_parameters=lu_params)
+
+    def apply(self, x_in):
+        self.x0.assign(x_in)
+        if self.Vq.extruded:
+            # get Zprime from q
+            self.qD_to_Z_Projector.project()
+            self.Z_to_Zring_Projector.project()
+            self.Zprime.assign(self.Z - self.Zring)
+            # get Zring from u
+            self.u_Zring_solver.solve()
+            # Z = Zprime + Zring
+            self.Z.assign(self.Zprime + self.Zring)
+        self.q_recon_solver.solve()
+
+        q_recon = x_in.split()[-1]
+        q_recon.assign(self.q)
+
+
+
+

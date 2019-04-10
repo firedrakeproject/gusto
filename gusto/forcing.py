@@ -45,10 +45,10 @@ class Forcing(object, metaclass=ABCMeta):
 
         # Vorticity functions
         if vorticity:
-            Vvort = state.fields("q").function_space()
-            self.q_test = TestFunction(Vvort)
-            self.q_trial = TrialFunction(Vvort)
-            self.qF = Function(Vvort)
+            Vq = state.fields("q").function_space()
+            self.q_test = TestFunction(Vq)
+            self.q_trial = TrialFunction(Vq)
+            self.qF = Function(Vq)
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
@@ -539,10 +539,11 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
     def __init__(self, state, upwind=True, SUPG=True, tau=None,
                  gauss_deg=None, euler_poincare=True, vorticity=False):
         self.SUPG = SUPG
-        if tau is not None:
-            self.tau = tau
-        else:
-            self.tau = state.SUPG[state.spaces("HDiv_v")][0]
+        if SUPG:
+            if tau is not None:
+                self.tau = tau
+            else:
+                self.tau = state.SUPG[state.spaces("HDiv_v")][0]
         if gauss_deg is not None:
             self.gauss_deg = gauss_deg
         else:
@@ -603,10 +604,13 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
             thetap = self.state.xp.split()[2]
             theta_t = (thetap - thetan)/self.scaling
             L += dot(dot(self.test, self.tau), grad(self.state.T))*theta_t*dx
-        else:
+        elif self.upwind:
             Ts = self.state.T
-        L += (inner(self.test, Ts*grad(thetabar))*dx
-              +jump(Ts*self.test, n)*self.uw(self.state.u_rec, thetabar)*dS_v
+        else:
+            Ts = self.state.T/self.dbar
+        L += inner(self.test, Ts*grad(thetabar))*dx
+        if self.upwind: # Assumes IBP twice
+             (jump(Ts*self.test, n)*self.uw(self.state.u_rec, thetabar)*dS_v
               -jump(Ts*thetabar*self.test, n)*dS_v)
         return L
 
@@ -614,15 +618,16 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         thetan = self.state.xn.split()[2]
         theta0 = split(self.x0)[2]
         thetabar = 0.5*(thetan + theta0)
+        L = inner(self.state.T/self.dbar*grad(thetabar), curl(self.q_test))*dx
+        '''
         perp = self.state.perp
-        #n = FacetNormal(self.state.mesh)
+        n = FacetNormal(self.state.mesh)
         cp = self.state.parameters.cp
         pibar = thermodynamics.pi(self.state.parameters, self.dbar, thetabar)
-        #L = inner(self.state.T/self.dbar*grad(thetabar),
-        #          self.state.perp(grad(self.q_test))*dx
-        L = inner(cp*pibar*grad(thetabar), perp(grad(self.q_test)))*dx
-        #L = (- cp*inner(thetabar, div(pibar*curl(self.q_test)))*dx
-        #     + cp*jump(curl(self.q_test)*thetabar, n)*avg(pibar)*dS_v)
+        L = inner(cp*pibar*grad(thetabar), curl(self.q_test))*dx
+        L = (- cp*inner(thetabar, div(pibar*curl(self.q_test)))*dx
+             + cp*jump(curl(self.q_test)*thetabar, n)*avg(pibar)*dS_v)
+        '''
         return L
 
 class HamiltonianShallowWaterForcing(HamiltonianForcing):

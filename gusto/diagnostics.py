@@ -724,9 +724,14 @@ class Vorticity(DiagnosticField):
                                      3*(state.horizontal_degree+1))
             else:
                 try:
-                    space = state.spaces("CG")
+                    space = state.spaces("Vq")
                 except AttributeError:
-                    space = state.spaces("HCurl")
+                    try:
+                        space = state.spaces("CG")
+                    except AttributeError:
+                        dgspace = state.spaces("DG")
+                        cg_degree = dgspace.ufl_element().degree() + 2
+                        space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
             u = state.fields("u")
             gamma = TestFunction(space)

@@ -190,6 +190,10 @@ class State(object):
     "BDFM": The BDFM family
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
+    :arg hydrostatic: boolean on whether to use hydrostatic setup.
+    :arg hamiltonian: boolean on whether to use Hamiltonian setup.
+    :arg reconstruct_q: boolean on reconstructing vorticity from velocity,
+    if vorticity advection is used.
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
@@ -203,6 +207,7 @@ class State(object):
                  Coriolis=None, sponge_function=None,
                  hydrostatic=None,
                  hamiltonian=None,
+                 reconstruct_q=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -217,6 +222,7 @@ class State(object):
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
         self.hamiltonian = hamiltonian
+        self.reconstruct_q = reconstruct_q
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -293,6 +299,11 @@ class State(object):
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+        logger.info("Equation frameworks that take non-default values:")
+        framework_dict = {"hydrostatic": hydrostatic, "hamiltonian": hamiltonian,
+                          "reconstruct_q": reconstruct_q}
+        logger.info(", ".join("%s: %s" % item for item in framework_dict.items()
+                              if item[1] is not None))
 
     def setup_diagnostics(self):
         """
@@ -521,12 +532,12 @@ class State(object):
             # Optional vorticity space
             S0 = FiniteElement("CG", cell, horizontal_degree+1)
             if cell == 'interval':
-                V1 = self.spaces("CG", mesh, "CG", horizontal_degree+1)
+                V1 = self.spaces("Vq", mesh, "CG", horizontal_degree+1)
             else:
                 V1h_elt = HCurl(TensorProductElement(S0, T1))
                 V1v_elt = HCurl (TensorProductElement(S1, T0))
                 V1_elt = V1h_elt + V1v_elt
-                V1 = self.spaces("HCurl", mesh, V1_elt)
+                V1 = self.spaces("Vq", mesh, V1_elt)
             if 'q' in self.fieldlist:
                 self.W = MixedFunctionSpace((V2, V3, Vt, V1))
             else:
@@ -541,9 +552,9 @@ class State(object):
 
             # Optional vorticity space
             if family[:2]=="RT":
-                V0 = self.spaces("CG", mesh, "CG", horizontal_degree+1)
+                V0 = self.spaces("Vq", mesh, "CG", horizontal_degree+1)
             else:
-                V0 = self.spaces("CG", mesh, "CG", horizontal_degree+2)
+                V0 = self.spaces("Vq", mesh, "CG", horizontal_degree+2)
             if 'q' in self.fieldlist:
                 self.W = MixedFunctionSpace((V1, V2, V0))
             else:
