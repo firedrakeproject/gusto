@@ -378,9 +378,8 @@ class Update_ubar(object):
         F_eqn = inner(v, u_ - Frhs)*dx
         F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
         self.F_solver = LinearVariationalSolver(F_problem,
-                                                solver_parameters=
-                                                {"ksp_type":"preonly",
-                                                 "pc_type":"lu"})
+                                                solver_parameters={"ksp_type": "preonly",
+                                                                   "pc_type": "lu"})
 
     def _setup_u_rec_solver(self, state):
         # u recovery from flux
@@ -395,9 +394,8 @@ class Update_ubar(object):
         u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn),
                                                  self.u_rec)
         self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
-                                                    solver_parameters=
-                                                    {"ksp_type":"preonly",
-                                                     "pc_type":"lu"})
+                                                    solver_parameters={"ksp_type": "preonly",
+                                                                       "pc_type": "lu"})
 
     def apply(self, xn, xnp1, alpha):
             un = xn.split()[0]

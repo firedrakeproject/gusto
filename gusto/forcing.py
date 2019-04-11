@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (Function, split, TrialFunction, TestFunction,
                        FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, grad,
                        DirichletBC, LinearVariationalProblem, LinearVariationalSolver, replace,
-                       lhs, rhs, sqrt, sign, dot, dS, Constant, as_vector, SpatialCoordinate)
+                       lhs, rhs, sign, dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
 
@@ -465,9 +465,9 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
             phi = TestFunction(VDG)
             Peqn = inner(phi, D_ - self.Hvar(self.x0)[0])*dx
             Pproblem = LinearVariationalProblem(lhs(Peqn), rhs(Peqn), self.state.P)
-            self.Psolver = LinearVariationalSolver(Pproblem, solver_parameters=
-                                                   {"ksp_type":"preonly",
-                                                    "pc_type":"lu"})
+            self.Psolver = LinearVariationalSolver(Pproblem,
+                                                   solver_parameters={"ksp_type": "preonly",
+                                                                      "pc_type": "lu"})
 
     def apply_aux_solvers(self):
         if self.upwind_d:
@@ -513,13 +513,11 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
     def __init__(self, state, upwind_d=True, upwind_th=True, SUPG=True, tau=None,
                  gauss_deg=None, euler_poincare=True):
         if upwind_d != upwind_th:
-            raise NotImplementedError("non-equal theta, rho upwinding not yet"\
-                                       "implemented. Idea: use a no weight approach "\
-                                       "for theta, with F/rho instead of u_rec.")
+            raise NotImplementedError("non-equal theta, rho upwinding not yet implemented. Idea: use a "
+                                      "no weight approach for theta, with F/rho instead of u_rec.")
         if any((not upwind_d, not upwind_th)) and euler_poincare:
-            raise NotImplementedError("Hamiltonian velocity advection without weighted"\
-                                      "test functions not yet implemented; Euler-Poin"\
-                                      "care type split requires consistent test"\
+            raise NotImplementedError("Hamiltonian velocity advection without weighted test functions not "
+                                      "yet implemented; Euler-Poin care type split requires consistent test "
                                       "function weights, i.e. need upwinded forcing.")
         # Load SUPG parameter if SUPG is used for temperature advection
         self.SUPG = SUPG
@@ -563,9 +561,9 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
             gamma = TestFunction(Vt)
             Teqn = gamma*(theta_ - self.Hvar(self.x0)[1])*dx
             Tproblem = LinearVariationalProblem(lhs(Teqn), rhs(Teqn), self.state.T)
-            self.Tsolver = LinearVariationalSolver(Tproblem, solver_parameters=
-                                                   {"ksp_type":"preonly",
-                                                    "pc_type":"lu"})
+            self.Tsolver = LinearVariationalSolver(Tproblem,
+                                                   solver_parameters={"ksp_type": "preonly",
+                                                                      "pc_type": "lu"})
 
     def apply_aux_solvers(self):
         super(HamiltonianCompressibleForcing, self).apply_aux_solvers()

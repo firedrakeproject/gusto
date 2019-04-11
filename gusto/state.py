@@ -560,6 +560,7 @@ class State(object):
             if self.vertical_degree is not None:
                 self.T = Function(W.split()[2])
 
+
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
     mesh_dg_fs = VectorFunctionSpace(mesh, "DG", 1)

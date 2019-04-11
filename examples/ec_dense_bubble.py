@@ -1,8 +1,6 @@
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, as_vector, sqrt, cos, conditional, \
-    pi, FunctionSpace, Constant, Function
-import sys
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, \
+    SpatialCoordinate, sqrt, cos, conditional, pi, Function
 
 upwind_rho = True
 
@@ -13,7 +11,7 @@ tmax = 900
 maxk = 12
 gauss_deg = 8
 dumpfreq = 36
-h_rho_pert=True
+h_rho_pert = True
 
 fieldlist = ['u', 'rho', 'theta']
 
@@ -22,8 +20,8 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics('rho', "CompressibleEnergy")
 
 upw = '' if upwind_rho else 'no'
-dirname = ("EC_DB_{0}upwindrho_res{1}_dt{2}_maxk{3}_gaussdeg"\
-          "{4}".format(upw, res, dt, maxk, gauss_deg))
+dirname = ("EC_DB_{0}upwindrho_res{1}_dt{2}_maxk{3}_gaussdeg"
+           "{4}".format(upw, res, dt, maxk, gauss_deg))
 
 nlayers, columns = res[0], res[1]
 m = PeriodicIntervalMesh(columns, L)

@@ -4,7 +4,7 @@ from firedrake import (PeriodicUnitSquareMesh, pi, PeriodicIntervalMesh,
                        ExtrudedMesh, as_vector, sin, SpatialCoordinate,
                        Constant, FunctionSpace, Function, sqrt, conditional, cos)
 from netCDF4 import Dataset
-import pytest
+
 
 def setup_SWE_test(dirname):
 
@@ -163,7 +163,7 @@ def run_energy_test(dirname, test_case):
     if test_case == "SWE":
         stepper, tmax = setup_SWE_test(dirname)
     elif test_case == "Euler":
-        stepper, tmax = setup_Euler_test(dirname)    
+        stepper, tmax = setup_Euler_test(dirname)
     stepper.run(t=0, tmax=tmax)
 
 
@@ -181,4 +181,3 @@ def test_energy_conservation(tmpdir):
 
     assert max([abs((En_err_SWE["total"][i] - En_err_SWE["total"][0])/En_err_SWE["total"][i]) for i in range(len(En_err_SWE["total"]))]) < 5.e-13
     assert max([abs((En_err_Euler["total"][i] - En_err_Euler["total"][0])/En_err_Euler["total"][i]) for i in range(len(En_err_Euler["total"]))]) < 1.e-7
-

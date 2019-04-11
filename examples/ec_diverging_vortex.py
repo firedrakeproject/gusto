@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import PeriodicRectangleMesh, PeriodicUnitSquareMesh, \
     SpatialCoordinate, Function, grad, as_vector, sin, pi, FunctionSpace, \
-    Constant, CellVolume, exp
+    Constant, exp
 
 # simulation setup
 square_test = True
@@ -21,13 +21,13 @@ if square_test:
 else:
     res = 256
     dt = 1/24./60./2.
-    tmax =  10
+    tmax = 10
     maxk = 6
     dumpfreq = 30
     fname = 'div_vort'
 
-    g = 9.81*(24.*3600.)**2./1000. # in km/days^2
-    theta = 25./360.*2.*pi # latitude
+    g = 9.81*(24.*3600.)**2./1000.  # in km/days^2
+    theta = 25./360.*2.*pi  # latitude
     f = 2.*sin(theta)*2.*pi  # in 1/days
     H = 10.
     Lx, Ly = 5000, 4330.
@@ -40,7 +40,7 @@ fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(g=g, H=H)
 
 upw = '' if upwind_D else 'no'
-dirname = ("EC_{0}_{1}upwindD_res{2}_dt{3}_maxk"\
+dirname = ("EC_{0}_{1}upwindD_res{2}_dt{3}_maxk"
            "{4}".format(fname, upw, res, round(dt, 4), maxk))
 timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
@@ -88,7 +88,7 @@ else:
 
     e1 = exp(-1./2.*(xp1**2. + yp1**2.))
     e2 = exp(-1./2.*(xp2**2. + yp2**2.))
-    psiexpr =  - DeltaH*(e1 + e2 - 4.*pi*sx*sy/Lx/Ly)*g/f
+    psiexpr = - DeltaH*(e1 + e2 - 4.*pi*sx*sy/Lx/Ly)*g/f
 
     # Psi should live in stream function space
     Vpsi = FunctionSpace(mesh, "CG", 3)

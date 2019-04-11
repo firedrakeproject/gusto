@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from firedrake import (Function, TestFunction, TrialFunction, FacetNormal,
+from firedrake import (TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
                        ds_v, ds_t, ds_b, VectorElement, as_ufl,
                        outer, sign, cross, CellNormal, Constant,
@@ -246,7 +246,7 @@ class AdvectionEquation(TransportEquation):
         self.flux_form = flux_form
         if flux_form:
             self.Fbar = state.F
-            ibp=IntegrateByParts.NEVER
+            ibp = IntegrateByParts.NEVER
         if outflow and ibp == IntegrateByParts.NEVER:
             raise ValueError("outflow is True and ibp is None are incompatible options")
 

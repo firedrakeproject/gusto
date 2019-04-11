@@ -1,8 +1,6 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, as_vector, sqrt, sin, exp, pi, \
-    FunctionSpace, Constant, Function
-import sys
+    SpatialCoordinate, sin, exp, pi, Function
 
 # set up sk nonlinear parameters and mesh
 res = [20, 150]
@@ -11,7 +9,7 @@ tmax = 3600.
 maxk = 12
 gauss_deg = 8
 dumpfreq = 10
-h_rho_pert=True
+h_rho_pert = True
 
 # set up input that doesn't change with ref level or dt
 fieldlist = ['u', 'rho', 'theta']
