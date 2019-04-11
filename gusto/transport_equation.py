@@ -125,12 +125,12 @@ class TransportEquation(object, metaclass=ABCMeta):
         self.flux_form = flux_form
 
         # set up functions required for forms
-        self.ubar = Function(state.spaces("HDiv"))
+        self.ubar = state.ubar
         if self.state.hamiltonian:
-            self.dbar = Function(state.spaces("DG"))
-            self.upbar = Function(state.spaces("HDiv"))
+            self.upbar = self.state.upbar
         else:
             self.upbar = self.ubar
+        self.Fbar = state.F
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
@@ -445,7 +445,10 @@ class VectorInvariant(TransportEquation):
             raise NotImplementedError("ibp=twice is not implemented for 3d problems")
 
         if self.state.hamiltonian:
-            self.test = self.test*self.dbar
+            dn = state.xn.split()[1]
+            dnp1 = state.xnp1.split()[1]
+            dbar = 0.5*(dn + dnp1)
+            self.test = self.test*dbar
 
     def advection_term(self, q):
 

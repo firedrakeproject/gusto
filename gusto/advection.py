@@ -7,7 +7,7 @@ from gusto.configuration import logger, DEBUG
 from gusto.recovery import Recoverer
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "Update_ubar"]
 
 
 def embedded_dg(original_apply):
@@ -55,14 +55,6 @@ class Advection(object, metaclass=ABCMeta):
             self.state = state
             self.field = field
             self.equation = equation
-            # get ubar from the equation class
-            self.ubar = self.equation.ubar
-            # get dbar from the equation class for Hamiltonian setup
-            if state.hamiltonian:
-                self.upbar = self.equation.upbar
-                self.dbar = self.equation.dbar
-                self._setup_u_rec_solver(state)
-                self._setup_flux_solver(state)
             self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
@@ -112,38 +104,6 @@ class Advection(object, metaclass=ABCMeta):
             if self.limiter is not None:
                 self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
-
-    def _setup_flux_solver(self, state):
-        # u recovery from flux
-        Vu = state.spaces("HDiv")
-        u_ = TrialFunction(Vu)
-        v = TestFunction(Vu)
-        un, dn = state.xn.split()[:2]
-        self.F = Function(Vu)
-        unp1, dnp1 = state.xnp1.split()[:2]
-        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
-        F_eqn = inner(v, u_ - Frhs)*dx
-        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
-        self.F_solver = LinearVariationalSolver(F_problem,
-                                                solver_parameters=
-                                                {"ksp_type":"preonly",
-                                                 "pc_type":"lu"})
-
-    def _setup_u_rec_solver(self, state):
-        # u recovery from flux
-        Vu = state.spaces("HDiv")
-        u_ = TrialFunction(Vu)
-        v = TestFunction(Vu)
-        self.u_rec = Function(Vu)
-        un, dn = state.xn.split()[:2]
-        unp1, dnp1 = state.xnp1.split()[:2]
-        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
-        u_rec_eqn = inner(v, self.dbar*u_ - Frhs)*dx
-        u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn), self.u_rec)
-        self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
-                                                    solver_parameters=
-                                                    {"ksp_type":"preonly",
-                                                     "pc_type":"lu"})
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -195,24 +155,6 @@ class Advection(object, metaclass=ABCMeta):
     def rhs(self):
         return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
 
-    def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        if self.state.hamiltonian:
-            dn = xn.split()[1]
-            dnp1 = xnp1.split()[1]
-            self.dbar.assign(dn + 0.5*(dnp1-dn))
-            if self.equation.flux_form:
-                self.F_solver.solve()
-                self.state.F.assign(self.F)
-            else:
-                self.u_rec_solver.solve()
-                self.ubar.assign(self.u_rec)
-                self.state.u_rec.assign(self.u_rec)
-            self.upbar.assign(un + alpha*(unp1-un))
-        else:
-            self.ubar.assign(un + alpha*(unp1-un))
-
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
@@ -241,9 +183,6 @@ class NoAdvection(Advection):
         pass
 
     def rhs(self):
-        pass
-
-    def update_ubar(self, xn, xnp1, alpha):
         pass
 
     def apply(self, x_in, x_out):
@@ -407,3 +346,70 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
+
+
+class Update_ubar(object):
+    """Class to update advecting velocity ubar. Contains solvers for
+       various versions of ubar and related fluxes"""
+    def __init__(self, state, active_advection):
+        self.state = state
+
+        # Figure out which solvers to use
+        flux_forms = []
+        for _, advection in active_advection:
+            flux_forms.append(advection.equation.flux_form)
+        self.get_flux = any(flux_forms)
+        if self.get_flux:
+            self._setup_flux_solver(state)
+        self.get_u_rec = False
+        if state.hamiltonian:
+            self._setup_u_rec_solver(state)
+            self.get_u_rec = True
+
+    def _setup_flux_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        un, dn = state.xn.split()[:2]
+        self.F = Function(Vu)
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        F_eqn = inner(v, u_ - Frhs)*dx
+        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
+        self.F_solver = LinearVariationalSolver(F_problem,
+                                                solver_parameters=
+                                                {"ksp_type":"preonly",
+                                                 "pc_type":"lu"})
+
+    def _setup_u_rec_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        self.u_rec = Function(Vu)
+        un, dn = state.xn.split()[:2]
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        u_rec_eqn = inner(v, 0.5*(dn + dnp1)*u_ - Frhs)*dx
+        u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn),
+                                                 self.u_rec)
+        self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
+                                                    solver_parameters=
+                                                    {"ksp_type":"preonly",
+                                                     "pc_type":"lu"})
+
+    def apply(self, xn, xnp1, alpha):
+            un = xn.split()[0]
+            unp1 = xnp1.split()[0]
+            if self.get_flux:
+                self.F_solver.solve()
+                self.state.F.assign(self.F)
+            if self.get_u_rec:
+                self.u_rec_solver.solve()
+                self.state.ubar.assign(self.u_rec)
+                self.state.u_rec.assign(self.u_rec)
+            if self.state.hamiltonian:
+                self.state.upbar.assign(un + alpha*(unp1-un))
+            else:
+                self.state.ubar.assign(un + alpha*(unp1-un))
