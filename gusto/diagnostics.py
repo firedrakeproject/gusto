@@ -714,27 +714,34 @@ class Vorticity(DiagnosticField):
                 space = state.spaces("CG")
             except AttributeError:
                 dgspace = state.spaces("DG")
-                cg_degree = dgspace.ufl_element().degree() + 2
+                if dgspace.extruded:
+                    cg_degree = dgspace.ufl_element().degree()[0] + 2
+                else:
+                    cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
-            u = state.fields("u")
+            un, dn = state.xn.split()[:2]
             gamma = TestFunction(space)
             q = TrialFunction(space)
 
             if vorticity_type == "potential":
-                D = state.fields("D")
-                a = q*gamma*D*dx
+                a = q*gamma*dn*dx
             else:
                 a = q*gamma*dx
 
             if state.on_sphere:
                 cell_normals = CellNormal(state.mesh)
                 gradperp = lambda psi: cross(cell_normals, grad(psi))
-                L = (- inner(gradperp(gamma), u))*dx
+                L = (- inner(gradperp(gamma), un))*dx
             else:
-                raise NotImplementedError("The vorticity diagnostics have only been implemented for 2D spherical geometries.")
+                perp = lambda v: as_vector([-v[1], v[0]])
+                L = (- inner(perp(grad(gamma)), un))*dx
 
-            if vorticity_type != "relative":
+                if space.extruded:
+                    n = FacetNormal(state.mesh)
+                    L += gamma*inner(perp(n), un)*(ds_t + ds_b)
+
+            if vorticity_type != "relative" and hasattr(state.fields, "coriolis"):
                 f = state.fields("coriolis")
                 L += gamma*f*dx
 

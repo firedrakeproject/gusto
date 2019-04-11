@@ -59,8 +59,10 @@ class Advection(object, metaclass=ABCMeta):
             self.ubar = self.equation.ubar
             # get dbar from the equation class for Hamiltonian setup
             if state.hamiltonian:
+                self.upbar = self.equation.upbar
                 self.dbar = self.equation.dbar
                 self._setup_u_rec_solver(state)
+                self._setup_flux_solver(state)
             self.dt = self.state.timestepping.dt
 
             # get default solver options if none passed in
@@ -110,6 +112,22 @@ class Advection(object, metaclass=ABCMeta):
             if self.limiter is not None:
                 self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
+
+    def _setup_flux_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        un, dn = state.xn.split()[:2]
+        self.F = Function(Vu)
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        F_eqn = inner(v, u_ - Frhs)*dx
+        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
+        self.F_solver = LinearVariationalSolver(F_problem,
+                                                solver_parameters=
+                                                {"ksp_type":"preonly",
+                                                 "pc_type":"lu"})
 
     def _setup_u_rec_solver(self, state):
         # u recovery from flux
@@ -184,9 +202,14 @@ class Advection(object, metaclass=ABCMeta):
             dn = xn.split()[1]
             dnp1 = xnp1.split()[1]
             self.dbar.assign(dn + 0.5*(dnp1-dn))
-            self.u_rec_solver.solve()
-            self.ubar.assign(self.u_rec)
-            self.state.u_rec.assign(self.u_rec)
+            if self.equation.flux_form:
+                self.F_solver.solve()
+                self.state.F.assign(self.F)
+            else:
+                self.u_rec_solver.solve()
+                self.ubar.assign(self.u_rec)
+                self.state.u_rec.assign(self.u_rec)
+            self.upbar.assign(un + alpha*(unp1-un))
         else:
             self.ubar.assign(un + alpha*(unp1-un))
 

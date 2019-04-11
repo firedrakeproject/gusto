@@ -190,6 +190,8 @@ class State(object):
     "BDFM": The BDFM family
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
+    :arg hydrostatic: boolean on whether to use hydrostatic setup.
+    :arg hamiltonian: boolean on whether to use Hamiltonian setup.
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
@@ -278,9 +280,10 @@ class State(object):
         else:
             self.h_project = lambda u: u
 
-        # save SUPG parameter for Hamiltonian forcing
+        # save advection forms and SUPG parameter for Hamiltonian forcing
         if self.hamiltonian:
             self.tau = 0
+            self.L_forms = {}
 
         #  Constant to hold current time
         self.t = Constant(0.0)
@@ -293,6 +296,10 @@ class State(object):
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+        logger.info("Equation frameworks that take non-default values:")
+        framework_dict = {"hydrostatic": hydrostatic, "hamiltonian": hamiltonian}
+        logger.info(", ".join("%s: %s" % item for item in framework_dict.items()
+                              if item[1] is not None))
 
     def setup_diagnostics(self):
         """
@@ -541,6 +548,8 @@ class State(object):
         self.xrhs = Function(W)
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
+
+        self.F = Function(W.split()[0])
         if self.hamiltonian:
             self.u_rec = Function(W.split()[0])
             self.P = Function(W.split()[1])

@@ -98,7 +98,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
+            logger.info("at start of timestep, t=%s, dt=%s" % (round(t, 7), dt))
 
             t += dt
             state.t.assign(t)

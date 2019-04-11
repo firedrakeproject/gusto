@@ -117,19 +117,31 @@ class TransportEquation(object, metaclass=ABCMeta):
                         linear solver.
     """
 
-    def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE, solver_params=None):
+    def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE, solver_params=None,
+                 flux_form=False):
         self.state = state
         self.V = V
         self.ibp = ibp
+        self.flux_form = flux_form
 
         # set up functions required for forms
         self.ubar = Function(state.spaces("HDiv"))
         if self.state.hamiltonian:
             self.dbar = Function(state.spaces("DG"))
+            self.upbar = Function(state.spaces("HDiv"))
+        else:
+            self.upbar = self.ubar
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
         self.dS = surface_measures(V)
+
+        # In Hamiltonian case save form for forcing
+        if self.state.hamiltonian:
+            qn = state.xn.split()[V.index]
+            qnp1 = state.xnp1.split()[V.index]
+            self.state.L_forms[self.V] = (self.test, self.ubar,
+                                          self.advection_term(0.5*(qn + qnp1)))
 
         if solver_params:
             self.solver_parameters = solver_params
@@ -223,21 +235,33 @@ class AdvectionEquation(TransportEquation):
                   of domain.
     """
     def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE, equation_form="advective",
-                 vector_manifold=False, solver_params=None, outflow=False):
-        super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params)
+                 vector_manifold=False, solver_params=None, outflow=False,
+                 flux_form=False):
         if equation_form == "advective" or equation_form == "continuity":
             self.continuity = (equation_form == "continuity")
         else:
             raise ValueError("equation_form must be either 'advective' or 'continuity'")
         self.vector_manifold = vector_manifold
         self.outflow = outflow
+        self.flux_form = flux_form
+        if flux_form:
+            self.Fbar = state.F
+            ibp=IntegrateByParts.NEVER
         if outflow and ibp == IntegrateByParts.NEVER:
             raise ValueError("outflow is True and ibp is None are incompatible options")
+
+        n = FacetNormal(state.mesh)
+        s = lambda u: 0.5*(sign(dot(u, n)) + 1)
+        self.uw = lambda u, v: (s(u)('+')*v('+') + s(u)('-')*v('-'))
+        super().__init__(state=state, V=V, ibp=ibp, solver_params=solver_params,
+                         flux_form=flux_form)
 
     def advection_term(self, q):
 
         if self.continuity:
-            if self.ibp == IntegrateByParts.ONCE:
+            if self.flux_form:
+                L = inner(self.test, div(self.Fbar))*dx
+            elif self.ibp == IntegrateByParts.ONCE:
                 L = -inner(grad(self.test), outer(q, self.ubar))*dx
             else:
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
@@ -249,16 +273,10 @@ class AdvectionEquation(TransportEquation):
 
         if self.dS is not None and self.ibp != IntegrateByParts.NEVER:
             n = FacetNormal(self.state.mesh)
-            un = 0.5*(dot(self.ubar, n) + abs(dot(self.ubar, n)))
-
-            L += dot(jump(self.test), (un('+')*q('+')
-                                       - un('-')*q('-')))*self.dS
+            L += dot(jump(outer(self.test, self.ubar), n), self.uw(self.upbar, q))*self.dS
 
             if self.ibp == IntegrateByParts.TWICE:
-                L -= (inner(self.test('+'),
-                            dot(self.ubar('+'), n('+'))*q('+'))
-                      + inner(self.test('-'),
-                              dot(self.ubar('-'), n('-'))*q('-')))*self.dS
+                L -= jump(outer(outer(self.test, self.ubar), q), n)*self.dS
 
         if self.outflow:
             n = FacetNormal(self.state.mesh)
@@ -403,7 +421,7 @@ class SUPGAdvection(AdvectionEquation):
                 ) for j in range(dim)])
             )
         self.state.tau = tau
-        dtest = dot(dot(self.ubar, tau), grad(self.test))
+        dtest = dot(dot(self.upbar, tau), grad(self.test))
         self.test += dtest
 
 
@@ -432,7 +450,7 @@ class VectorInvariant(TransportEquation):
     def advection_term(self, q):
 
         n = FacetNormal(self.state.mesh)
-        Upwind = 0.5*(sign(dot(self.ubar, n))+1)
+        Upwind = 0.5*(sign(dot(self.upbar, n))+1)
 
         if self.state.mesh.topological_dimension() == 3:
             # <w,curl(u) cross ubar + grad( u.ubar)>
