@@ -7,38 +7,38 @@ from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 __all__ = ["ThetaLimiter", "NoLimiter"]
 
 _copy_into_Q1DG_loop = """
-theta_hat[0][0] = theta[0][0];
-theta_hat[1][0] = theta[1][0];
-theta_hat[2][0] = theta[3][0];
-theta_hat[3][0] = theta[4][0];
+theta_hat[0] = theta[0];
+theta_hat[1] = theta[1];
+theta_hat[2] = theta[3];
+theta_hat[3] = theta[4];
 """
 _copy_from_Q1DG_loop = """
-theta[0][0] = theta_hat[0][0];
-theta[1][0] = theta_hat[1][0];
-theta[3][0] = theta_hat[2][0];
-theta[4][0] = theta_hat[3][0];
+theta[0] = theta_hat[0];
+theta[1] = theta_hat[1];
+theta[3] = theta_hat[2];
+theta[4] = theta_hat[3];
 """
 
 _check_midpoint_values_loop = """
-if (theta[2][0] > fmax(theta[0][0], theta[1][0]))
-    theta[2][0] = 0.5 * (theta[0][0] + theta[1][0]);
-else if (theta[2][0] < fmin(theta[0][0], theta[1][0]))
-    theta[2][0] = 0.5 * (theta[0][0] + theta[1][0]);
-if (theta[5][0] > fmax(theta[3][0], theta[4][0]))
-    theta[5][0] = 0.5 * (theta[3][0] + theta[4][0]);
-else if (theta[5][0] < fmin(theta[3][0], theta[4][0]))
-    theta[5][0] = 0.5 * (theta[3][0] + theta[4][0]);
+if (theta[2] > fmax(theta[0], theta[1]))
+    theta[2] = 0.5 * (theta[0] + theta[1]);
+else if (theta[2] < fmin(theta[0], theta[1]))
+    theta[2] = 0.5 * (theta[0] + theta[1]);
+if (theta[5] > fmax(theta[3], theta[4]))
+    theta[5] = 0.5 * (theta[3] + theta[4]);
+else if (theta[5] < fmin(theta[3], theta[4]))
+    theta[5] = 0.5 * (theta[3] + theta[4]);
 """
 
 _weight_kernel = """
-for (int i=0; i<weight.dofs; ++i) {
-    weight[i][0] += 1.0;
-    }"""
+for (int i=0; i<weight.dofs; ++i)
+    weight[i] += 1.0;
+"""
 
 _average_kernel = """
-for (int i=0; i<vrec.dofs; ++i) {
-        vrec[i][0] += v_b[i][0]/weight[i][0];
-        }"""
+for (int i=0; i<vrec.dofs; ++i)
+    vrec[i] += v_b[i]/weight[i];
+"""
 
 
 class ThetaLimiter(object):
