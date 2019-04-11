@@ -294,17 +294,17 @@ class Coalescence(Physics):
         coalesce_rate = Function(Vt)
 
         # adjust coalesce rate using min_value so negative cloud concentration doesn't occur
-        self.lim_coalesce_rate = Interpolator(conditional(self.rain < 0.0, # if rain is negative do only accretion
+        self.lim_coalesce_rate = Interpolator(conditional(self.rain < 0.0,  # if rain is negative do only accretion
                                                           conditional(accr_rate < 0.0,
                                                                       0.0,
                                                                       min_value(accr_rate, self.water_c / dt)),
-                                                                      # don't turn rain back into cloud
-                                                                      conditional(accr_rate + accu_rate < 0.0,
-                                                                                  0.0,
-                                                                                  # if accretion rate is negative do only accumulation
-                                                                                  conditional(accr_rate < 0.0,
-                                                                                              min_value(accu_rate, self.water_c / dt),
-                                                                                              min_value(accr_rate + accu_rate, self.water_c / dt)))),
+                                                          # don't turn rain back into cloud
+                                                          conditional(accr_rate + accu_rate < 0.0,
+                                                                      0.0,
+                                                                      # if accretion rate is negative do only accumulation
+                                                                      conditional(accr_rate < 0.0,
+                                                                                  min_value(accu_rate, self.water_c / dt),
+                                                                                  min_value(accr_rate + accu_rate, self.water_c / dt)))),
                                               coalesce_rate)
 
         # tell the prognostic fields what to update to
