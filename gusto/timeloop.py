@@ -75,8 +75,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             qrhs = self.state.xrhs.split()[-1]
             qnp1 = self.state.xnp1.split()[-1]
             qnp1.assign(qrhs)
-        if self.state.reconstruct_q:
-            self.reconstruct_q.apply(self.state.xnp1)
+            if self.state.reconstruct_q:
+                self.reconstruct_q.apply(self.state.xnp1)
             
 
     def setup_timeloop(self, state, t, tmax, pickup):

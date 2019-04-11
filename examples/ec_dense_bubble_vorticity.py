@@ -97,7 +97,8 @@ if vorticity:
     rhoeqn = AdvectionEquation(state, rho0.function_space(),
                                ibp=IntegrateByParts.NEVER,
                                equation_form="continuity", flux_form=True)
-    thetaeqn = AdvectionEquation(state, Vt, ibp=IntegrateByParts.NEVER,
+    #thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = AdvectionEquation(state, Vt, ibp=IntegrateByParts.TWICE,
                                  equation_form="advective")
 
     if vorticity_SUPG == True:

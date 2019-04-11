@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import (Function, split, TrialFunction, TestFunction,
                        FacetNormal, inner, dx, cross, div, jump, avg, dS_v, dS_h, grad, curl,
-                       DirichletBC, LinearVariationalProblem, LinearVariationalSolver,
+                       DirichletBC, LinearVariationalProblem, LinearVariationalSolver, replace,
                        lhs, rhs, sqrt, sign, dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
@@ -599,35 +599,27 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         thetan = self.state.xn.split()[2]
         theta0 = split(self.x0)[2]
         thetabar = 0.5*(thetan + theta0)
+        
         if self.SUPG:
             Ts = self.state.T + dot(dot(self.state.u_rec, self.tau), grad(self.state.T))
-            thetap = self.state.xp.split()[2]
-            theta_t = (thetap - thetan)/self.scaling
-            L += dot(dot(self.test, self.tau), grad(self.state.T))*theta_t*dx
         elif self.upwind:
             Ts = self.state.T
         else:
             Ts = self.state.T/self.dbar
-        L += inner(self.test, Ts*grad(thetabar))*dx
-        if self.upwind: # Assumes IBP twice
-             (jump(Ts*self.test, n)*self.uw(self.state.u_rec, thetabar)*dS_v
-              -jump(Ts*thetabar*self.test, n)*dS_v)
+        L_th = (inner(self.test, Ts*grad(thetabar))*dx
+                +jump(Ts*self.test, n)*self.uw(self.state.u_rec, thetabar)*dS_v
+                -jump(Ts*thetabar*self.test, n)*dS_v)
+        if self.SUPG:
+            thetap = self.state.xp.split()[2]
+            theta_t = (thetap - thetan)/self.scaling
+            L_th += dot(dot(self.test, self.tau), grad(self.state.T))*theta_t*dx
+        if self.vorticity:
+            self.Lq = L_th
+        L += L_th
         return L
 
     def q_forcing_term(self):
-        thetan = self.state.xn.split()[2]
-        theta0 = split(self.x0)[2]
-        thetabar = 0.5*(thetan + theta0)
-        L = inner(self.state.T/self.dbar*grad(thetabar), curl(self.q_test))*dx
-        '''
-        perp = self.state.perp
-        n = FacetNormal(self.state.mesh)
-        cp = self.state.parameters.cp
-        pibar = thermodynamics.pi(self.state.parameters, self.dbar, thetabar)
-        L = inner(cp*pibar*grad(thetabar), curl(self.q_test))*dx
-        L = (- cp*inner(thetabar, div(pibar*curl(self.q_test)))*dx
-             + cp*jump(curl(self.q_test)*thetabar, n)*avg(pibar)*dS_v)
-        '''
+        L = replace(self.Lq, {self.test: curl(self.q_test)})
         return L
 
 class HamiltonianShallowWaterForcing(HamiltonianForcing):
