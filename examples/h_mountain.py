@@ -5,15 +5,15 @@ from firedrake import (FunctionSpace, as_vector, VectorFunctionSpace,
 import sys
 
 dt = 5.0
+hybridization = False
 if '--running-tests' in sys.argv:
     tmax = dt
+    hybridization = True
 else:
     tmax = 15000.
 
 if '--hybridization' in sys.argv:
     hybridization = True
-else:
-    hybridization = False
 
 res = 10
 nlayers = res*20  # horizontal layers
