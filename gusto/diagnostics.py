@@ -730,19 +730,18 @@ class Vorticity(DiagnosticField):
                         space = state.spaces("CG")
                     except AttributeError:
                         dgspace = state.spaces("DG")
-                        cg_degree = dgspace.ufl_element().degree() + 2
+                        if dgspace.extruded:
+                            cg_degree = dgspace.ufl_element().degree()[0] + 2
+                        else:
+                            cg_degree = dgspace.ufl_element().degree() + 2
                         space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
-            u = state.fields("u")
+            un, dn = state.xn.split()[:2]
             gamma = TestFunction(space)
             q = TrialFunction(space)
 
             if vorticity_type == "potential":
-                if space.extruded:
-                    d = state.fields("rho")
-                else:
-                    d = state.fields("D")
-                a = q*gamma*d*dx
+                a = q*gamma*dn*dx
                 self.potential = True
             else:
                 a = q*gamma*dx
@@ -751,17 +750,12 @@ class Vorticity(DiagnosticField):
             if state.on_sphere:
                 cell_normals = CellNormal(state.mesh)
                 gradperp = lambda psi: cross(cell_normals, grad(psi))
-                L = (- inner(gradperp(gamma), u))*dx
+                L = (- inner(gradperp(gamma), un))*dx
             else:
-                perp = lambda v: as_vector([-v[1], v[0]])
-                L = (- inner(perp(grad(gamma)), u))*dx
-                
-                n = FacetNormal(state.mesh)
+                L = (- inner(state.perp(grad(gamma)), un))*dx
                 if space.extruded:
-                    L += gamma*inner(perp(n), u)*(ds_t + ds_b)
-                else:
-                    L += gamma*inner(perp(n), u)*ds
-
+                    n = FacetNormal(state.mesh)
+                    L += gamma*inner(state.perp(n), un)*(ds_t + ds_b)
             if vorticity_type != "relative" and hasattr(state.fields, "coriolis"):
                 f = state.fields("coriolis")
                 L += gamma*f*dx

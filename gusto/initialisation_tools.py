@@ -5,7 +5,7 @@ as balanced initial conditions.
 
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
-    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, ds, DirichletBC, \
+    FacetNormal, inner, div, dx, ds_b, ds_t, ds_tb, DirichletBC, \
     Function, Constant, assemble, cross, CellNormal, grad, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
@@ -497,6 +497,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
                                      pi_boundary=pi_boundary,
                                      water_t=water_v0, solve_for_rho=True)
 
+
 def initial_vorticity(state, D0, u0, q0, f=None, params=None):
     """
     Solve for initial vorticity given depth/density and velocity fields.
@@ -507,8 +508,8 @@ def initial_vorticity(state, D0, u0, q0, f=None, params=None):
     """
 
     if params is None:
-        solver_parameters = {'ksp_type':'preonly',
-                             'pc_type':'lu'}
+        solver_parameters = {'ksp_type': 'preonly',
+                             'pc_type': 'lu'}
 
     # Set up trial, test functions
     W0 = q0.function_space()
@@ -517,7 +518,7 @@ def initial_vorticity(state, D0, u0, q0, f=None, params=None):
 
     # Set up solver
     if state.on_sphere:
-        perp = lambda u: cross(CellNormal(mesh), u)
+        perp = lambda u: cross(CellNormal(state.mesh), u)
     else:
         perp = lambda u: as_vector([-u[1], u[0]])
     a = eta*q_*D0*dx

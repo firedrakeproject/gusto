@@ -1,8 +1,8 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, as_vector, sqrt, cos, conditional, \
-    pi, FunctionSpace, Constant, Function, CellVolume, inner
-import sys
+    SpatialCoordinate, sqrt, cos, conditional, Function, \
+    pi, Constant, CellVolume, inner
+# import sys
 
 # set up dense bubble parameters and mesh
 res = [64, 320]
@@ -11,7 +11,7 @@ tmax = 900
 maxk = 12
 gauss_deg = 8
 dumpfreq = 36
-h_rho_pert=True
+h_rho_pert = True
 vorticity = True
 vorticity_SUPG = False
 
@@ -31,7 +31,7 @@ nlayers, columns = res[0], res[1]
 m = PeriodicIntervalMesh(columns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
+timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           dumplist=dumplist,
                           perturbation_fields=['theta', 'rho'],
@@ -97,11 +97,11 @@ if vorticity:
     rhoeqn = AdvectionEquation(state, rho0.function_space(),
                                ibp=IntegrateByParts.NEVER,
                                equation_form="continuity", flux_form=True)
-    #thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+    # thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
     thetaeqn = AdvectionEquation(state, Vt, ibp=IntegrateByParts.TWICE,
                                  equation_form="advective")
 
-    if vorticity_SUPG == True:
+    if vorticity_SUPG:
         # set up vorticity SUPG parameter
         cons, vol, eps = Constant(0.1), CellVolume(mesh), 1.0e-10
         Fmag = (inner(rho0*u0, rho0*u0) + eps)**0.5
@@ -115,7 +115,6 @@ if vorticity:
     else:
         qeqn = AdvectionEquation(state, q0.function_space(),
                                  ibp=IntegrateByParts.NEVER, flux_form=True)
-
 
     advected_fields = []
     # flux formulation has Dp in q-eqn, qp in u-eqn, so order matters
@@ -140,7 +139,7 @@ linear_solver = HybridizedCompressibleSolver(state)
 
 # Set up forcing
 if vorticity:
-    compressible_forcing = HamiltonianCompressibleForcing(state, upwind=False, SUPG=False,
+    compressible_forcing = HamiltonianCompressibleForcing(state, upwind_d=False, SUPG=False,
                                                           gauss_deg=gauss_deg,
                                                           euler_poincare=False,
                                                           vorticity=True)

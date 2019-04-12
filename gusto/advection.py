@@ -326,7 +326,7 @@ class ThetaMethod(Advection):
             if weight in state.fieldlist:
                 self.weight_n = state.xn.split()[state.fieldlist.index(weight)]
                 self.weight_p = state.xp.split()[state.fieldlist.index(weight)]
-            elif len(weight)==2:
+            elif len(weight) == 2:
                 self.weight_n = weight[0]
                 self.weight_p = weight[1]
             else:
@@ -365,47 +365,26 @@ class ThetaMethod(Advection):
 
 
 class Update_ubar(object):
-    """
-    Class to update advecting velocity ubar. Contains solvers for
-    various versions of ubar and related fluxes
-    arg state: :class:`.State` object
-    arg active_advection: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the :class:`~.Advection`
-        to use
-    """
-    def __init__(self, state, active_advection):
+    """Class to update advecting velocity ubar. Contains solvers for
+       various versions of ubar and related fluxes"""
+    def __init__(self, state, active_advection=None):
         self.state = state
 
         # Figure out which solvers to use
-        flux_forms = []
-        for _, advection in active_advection:
-            try:
-                flux_forms.append(advection.equation.get_flux == True)
-            except AttributeError:
-                flux_forms.append(False)
-        self.get_flux = any(flux_forms)
-        if self.get_flux:
-            self._setup_flux_solver(state)
-        self.get_u_rec = False
-        if state.hamiltonian and not self.get_flux:
-            self._setup_u_rec_solver(state)
-            self.get_u_rec = True
-
-    def _setup_u_rec_solver(self, state):
-        # u recovery from flux
-        Vu = state.spaces("HDiv")
-        u_ = TrialFunction(Vu)
-        v = TestFunction(Vu)
-        self.u_rec = Function(Vu)
-        un, dn = state.xn.split()[:2]
-        unp1, dnp1 = state.xnp1.split()[:2]
-        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
-        u_rec_eqn = inner(v, 0.5*(dn + dnp1)*u_ - Frhs)*dx
-        u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn), self.u_rec)
-        self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
-                                                    solver_parameters=
-                                                    {"ksp_type":"preonly",
-                                                     "pc_type":"lu"})
+        if active_advection is not None:
+            flux_forms = []
+            for _, advection in active_advection:
+                flux_forms.append(advection.equation.flux_form)
+            self.get_flux = any(flux_forms)
+            if self.get_flux:
+                self._setup_flux_solver(state)
+            self.get_u_rec = False
+            if state.hamiltonian:
+                self._setup_u_rec_solver(state)
+                self.get_u_rec = True
+        else:
+            self.get_flux = False
+            self.get_u_rec = False
 
     def _setup_flux_solver(self, state):
         # u recovery from flux
@@ -419,22 +398,39 @@ class Update_ubar(object):
         F_eqn = inner(v, u_ - Frhs)*dx
         F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
         self.F_solver = LinearVariationalSolver(F_problem,
-                                                solver_parameters=
-                                                {"ksp_type":"preonly",
-                                                 "pc_type":"lu"})
+                                                solver_parameters={"ksp_type": "preonly",
+                                                                   "pc_type": "lu"})
+
+    def _setup_u_rec_solver(self, state):
+        # u recovery from flux
+        Vu = state.spaces("HDiv")
+        u_ = TrialFunction(Vu)
+        v = TestFunction(Vu)
+        self.u_rec = Function(Vu)
+        un, dn = state.xn.split()[:2]
+        unp1, dnp1 = state.xnp1.split()[:2]
+        Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
+        u_rec_eqn = inner(v, 0.5*(dn + dnp1)*u_ - Frhs)*dx
+        u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn),
+                                                 self.u_rec)
+        self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
+                                                    solver_parameters={"ksp_type": "preonly",
+                                                                       "pc_type": "lu"})
 
     def apply(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        if self.get_flux:
-            self.F_solver.solve()
-            self.state.F.assign(self.F)
-        if self.get_u_rec:
-            self.u_rec_solver.solve()
-            self.state.ubar.assign(self.u_rec)
-            self.state.u_rec.assign(self.u_rec)
-        else:
-            self.state.ubar.assign(un + alpha*(unp1-un))
+            un = xn.split()[0]
+            unp1 = xnp1.split()[0]
+            if self.get_flux:
+                self.F_solver.solve()
+                self.state.F.assign(self.F)
+            if self.get_u_rec:
+                self.u_rec_solver.solve()
+                self.state.ubar.assign(self.u_rec)
+                self.state.u_rec.assign(self.u_rec)
+            if self.state.hamiltonian:
+                self.state.upbar.assign(un + alpha*(unp1-un))
+            else:
+                self.state.ubar.assign(un + alpha*(unp1-un))
 
 
 class Reconstruct_q(object):
@@ -449,6 +445,10 @@ class Reconstruct_q(object):
         self.x0 = Function(state.W)
         self.q = self.x0.split()[-1]
         self.Vq = state.spaces("Vq")
+
+        self.lu_params = {"ksp_type": "preonly",
+                          "pc_type": "lu"}
+
         if self.Vq.extruded:
             # If extruded, we need to get Zprime, the vorticity along the boundary
             self.Z = Function(self.Vq)
@@ -461,7 +461,7 @@ class Reconstruct_q(object):
     def _setup_reconstruction_solver(self):
         gamma = TestFunction(self.Vq)
         q = TrialFunction(self.Vq)
-        un, Dn = self.xn.split()[:2]
+        un, Dn = self.x0.split()[:2]
 
         q_recon_eqn = gamma*q*Dn*dx + inner(self.state.perp(grad(gamma)), un)*dx
         if hasattr(self.state.fields, "coriolis"):
@@ -471,19 +471,17 @@ class Reconstruct_q(object):
         q_recon_problem = LinearVariationalProblem(lhs(q_recon_eqn), rhs(q_recon_eqn),
                                                    self.q)
         self.q_recon_solver = LinearVariationalSolver(q_recon_problem,
-                                                      solver_parameters=lu_params)
+                                                      solver_parameters=self.lu_params)
 
     def _setup_reconstruction_solvers_extruded(self):
         un, Dn = self.x0.split()[:2]
 
-        lu_params = {"ksp_type":"preonly",
-                     "pc_type":"lu"}
         bcs = [DirichletBC(self.Vq, 0., "bottom"),
                DirichletBC(self.Vq, 0., "top")]
 
-        self.qD_to_Z_Projector = Projector(self.q*Dn, self.Z, solver_parameters=lu_params)
-        self.Z_to_Zring_Projector =  Projector(self.Z, self.Zring, bcs=bcs,
-                                               solver_parameters=lu_params)
+        self.qD_to_Z_Projector = Projector(self.q*Dn, self.Z, solver_parameters=self.lu_params)
+        self.Z_to_Zring_Projector = Projector(self.Z, self.Zring, bcs=bcs,
+                                              solver_parameters=self.lu_params)
         gamma = TestFunction(self.Vq)
         Z = TrialFunction(self.Vq)
         u_Zringeqn = gamma*Z*dx + inner(self.state.perp(grad(gamma)), un)*dx
@@ -494,12 +492,12 @@ class Reconstruct_q(object):
         u_Zringproblem = LinearVariationalProblem(lhs(u_Zringeqn), rhs(u_Zringeqn),
                                                   self.Zring, bcs=bcs)
         self.u_Zring_solver = LinearVariationalSolver(u_Zringproblem,
-                                                      solver_parameters=lu_params)
+                                                      solver_parameters=self.lu_params)
         q_recon_eqn = gamma*(Dn*Z - self.Z)*dx
         q_recon_problem = LinearVariationalProblem(lhs(q_recon_eqn), rhs(q_recon_eqn),
                                                    self.q)
         self.q_recon_solver = LinearVariationalSolver(q_recon_problem,
-                                                      solver_parameters=lu_params)
+                                                      solver_parameters=self.lu_params)
 
     def apply(self, x_in):
         self.x0.assign(x_in)
@@ -516,7 +514,3 @@ class Reconstruct_q(object):
 
         q_recon = x_in.split()[-1]
         q_recon.assign(self.q)
-
-
-
-

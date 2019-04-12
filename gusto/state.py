@@ -284,11 +284,14 @@ class State(object):
         else:
             self.h_project = lambda u: u
 
-        # save SUPG parameter setup for Hamiltonian forcing
         if self.hamiltonian:
+            # save advection forms and SUPG parameters for Hamiltonian forcing
             self.SUPG = {}
+            self.L_forms = {}
+            # set forcing split to implicit for Hamiltonian forcing
+            self.timestepping.alpha = 1.
 
-        #  Constant to hold current time
+        # Constant to hold current time
         self.t = Constant(0.0)
 
         # setup logger
@@ -535,7 +538,7 @@ class State(object):
                 V1 = self.spaces("Vq", mesh, "CG", horizontal_degree+1)
             else:
                 V1h_elt = HCurl(TensorProductElement(S0, T1))
-                V1v_elt = HCurl (TensorProductElement(S1, T0))
+                V1v_elt = HCurl(TensorProductElement(S1, T0))
                 V1_elt = V1h_elt + V1v_elt
                 V1 = self.spaces("Vq", mesh, V1_elt)
             if 'q' in self.fieldlist:
@@ -551,14 +554,14 @@ class State(object):
             V2 = self.spaces("DG", mesh, "DG", horizontal_degree)
 
             # Optional vorticity space
-            if family[:2]=="RT":
+            if family[:2] == "RT":
                 V0 = self.spaces("Vq", mesh, "CG", horizontal_degree+1)
             else:
                 V0 = self.spaces("Vq", mesh, "CG", horizontal_degree+2)
             if 'q' in self.fieldlist:
                 self.W = MixedFunctionSpace((V1, V2, V0))
             else:
-                self.W =  MixedFunctionSpace((V1, V2))
+                self.W = MixedFunctionSpace((V1, V2))
 
     def _allocate_state(self):
         """
@@ -574,7 +577,9 @@ class State(object):
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
 
+        # advecting, upwinding velocities and flux
         self.ubar = Function(W.split()[0])
+        self.upbar = Function(W.split()[0])
         self.F = Function(W.split()[0])
 
         if self.hamiltonian:
@@ -582,6 +587,7 @@ class State(object):
             self.P = Function(W.split()[1])
             if self.vertical_degree is not None:
                 self.T = Function(W.split()[2])
+
 
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates

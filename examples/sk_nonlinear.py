@@ -16,6 +16,11 @@ if '--hybridization' in sys.argv:
 else:
     hybridization = False
 
+if '--hamiltonian' in sys.argv:
+    hamiltonian = True
+else:
+    hamiltonian = None
+
 nlayers = 10  # horizontal layers
 columns = 150  # number of columns
 L = 3.0e5
@@ -35,6 +40,8 @@ timestepping = TimesteppingParameters(dt=dt)
 dirname = 'sk_nonlinear'
 if hybridization:
     dirname += '_hybridization'
+if hamiltonian:
+    dirname += '_hamiltonian'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
@@ -48,10 +55,11 @@ diagnostics = Diagnostics(*fieldlist)
 g = parameters.g
 Tsurf = 300.
 
-diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbation"), RichardsonNumber("theta", g/Tsurf), Gradient("theta")]
+diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbation"), RichardsonNumber("theta", g/Tsurf), Gradient("theta"), CompressibleEnergy()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
+              hamiltonian=hamiltonian,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -107,14 +115,19 @@ state.set_reference_profiles([('rho', rho_b),
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
-if supg:
+if supg or hamiltonian:
     thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
 else:
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+if hamiltonian:
+    advected_fields.append(("rho", ThetaMethod(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", ThetaMethod(state, theta0, thetaeqn)))
+else:
+    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybridization:
@@ -123,7 +136,10 @@ else:
     linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+if hamiltonian:
+    compressible_forcing = HamiltonianCompressibleForcing(state)
+else:
+    compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

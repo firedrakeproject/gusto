@@ -1,8 +1,8 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
+from gusto.advection import Update_ubar, Reconstruct_q
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
-from gusto.advection import Update_ubar, Reconstruct_q
 from firedrake import DirichletBC
 
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
@@ -44,6 +44,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.prescribed_fields = prescribed_fields
         else:
             self.prescribed_fields = []
+        self.update_ubar = Update_ubar(state)
 
         if state.reconstruct_q:
             self.reconstruct_q = Reconstruct_q(state)
@@ -77,7 +78,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             qnp1.assign(qrhs)
             if self.state.reconstruct_q:
                 self.reconstruct_q.apply(self.state.xnp1)
-            
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """
@@ -127,10 +127,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.semi_implicit_step()
             self._update_q()
 
+            # first compute ubar from state.xn and state.xnp1
+            self.update_ubar.apply(state.xn, state.xnp1, state.timestepping.alpha)
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
@@ -194,7 +194,6 @@ class CrankNicolson(BaseTimestepper):
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
         self.update_ubar = Update_ubar(state, self.active_advection)
-
         state.xb.assign(state.xn)
 
     @property
