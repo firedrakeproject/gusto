@@ -280,12 +280,14 @@ class State(object):
         else:
             self.h_project = lambda u: u
 
-        # save advection forms and SUPG parameter for Hamiltonian forcing
         if self.hamiltonian:
+            # save advection forms and SUPG parameter for Hamiltonian forcing
             self.tau = 0
             self.L_forms = {}
+            # set forcing split to implicit for Hamiltonian forcing
+            self.timestepping.alpha = 1.
 
-        #  Constant to hold current time
+        # Constant to hold current time
         self.t = Constant(0.0)
 
         # setup logger

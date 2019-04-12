@@ -2,9 +2,17 @@ from gusto import *
 from firedrake import PeriodicRectangleMesh, PeriodicUnitSquareMesh, \
     SpatialCoordinate, Function, grad, as_vector, sin, pi, FunctionSpace, \
     Constant, exp
+import sys
 
-# simulation setup
-square_test = True
+dt = 1/24./60./2.
+if '--running-tests' in sys.argv:
+    tmax = 5*dt
+    res = 32
+    square_test = False
+else:
+    tmax = 10.
+    res = 256
+    square_test = False
 upwind_D = True
 
 # set up parameters and mesh
@@ -19,9 +27,6 @@ if square_test:
     f, g, H = 5., 5., 1.
     mesh = PeriodicUnitSquareMesh(res, res)
 else:
-    res = 256
-    dt = 1/24./60./2.
-    tmax = 10
     maxk = 6
     dumpfreq = 30
     fname = 'div_vort'
@@ -42,7 +47,7 @@ parameters = ShallowWaterParameters(g=g, H=H)
 upw = '' if upwind_D else 'no'
 dirname = ("EC_{0}_{1}upwindD_res{2}_dt{3}_maxk"
            "{4}".format(fname, upw, res, round(dt, 4), maxk))
-timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
+timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           log_level='INFO')
 diagnostics = Diagnostics('D')

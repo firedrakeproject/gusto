@@ -1,18 +1,22 @@
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant, \
     SpatialCoordinate, sqrt, cos, conditional, pi, Function
+import sys
 
-upwind_rho = True
-
-# set up dense bubble parameters and mesh
-res = [64, 320]
 dt = 0.5
-tmax = 900
+if '--running-tests' in sys.argv:
+    tmax = 5.
+    res = [16, 40]
+else:
+    tmax = 900.
+    res = [64, 320]
+
+# Set up parameters and mesh
 maxk = 12
 gauss_deg = 8
 dumpfreq = 36
 h_rho_pert = True
-
+upwind_rho = True
 fieldlist = ['u', 'rho', 'theta']
 
 H, L = 6400., 32000.
@@ -27,7 +31,7 @@ nlayers, columns = res[0], res[1]
 m = PeriodicIntervalMesh(columns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
+timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],

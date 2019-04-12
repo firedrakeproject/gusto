@@ -351,20 +351,24 @@ class ThetaMethod(Advection):
 class Update_ubar(object):
     """Class to update advecting velocity ubar. Contains solvers for
        various versions of ubar and related fluxes"""
-    def __init__(self, state, active_advection):
+    def __init__(self, state, active_advection=None):
         self.state = state
 
         # Figure out which solvers to use
-        flux_forms = []
-        for _, advection in active_advection:
-            flux_forms.append(advection.equation.flux_form)
-        self.get_flux = any(flux_forms)
-        if self.get_flux:
-            self._setup_flux_solver(state)
-        self.get_u_rec = False
-        if state.hamiltonian:
-            self._setup_u_rec_solver(state)
-            self.get_u_rec = True
+        if active_advection is not None:
+            flux_forms = []
+            for _, advection in active_advection:
+                flux_forms.append(advection.equation.flux_form)
+            self.get_flux = any(flux_forms)
+            if self.get_flux:
+                self._setup_flux_solver(state)
+            self.get_u_rec = False
+            if state.hamiltonian:
+                self._setup_u_rec_solver(state)
+                self.get_u_rec = True
+        else:
+            self.get_flux = False
+            self.get_u_rec = False
 
     def _setup_flux_solver(self, state):
         # u recovery from flux

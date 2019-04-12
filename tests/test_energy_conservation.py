@@ -17,7 +17,7 @@ def setup_SWE_test(dirname):
     mesh = PeriodicUnitSquareMesh(res, res)
 
     fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
+    timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
     output = OutputParameters(dirname=dirname+"/energy_SWE", dumpfreq=1)
     parameters = ShallowWaterParameters(g=g, H=H)
     diagnostic_fields = [ShallowWaterKineticEnergy(),
@@ -88,7 +88,7 @@ def setup_Euler_test(dirname):
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    timestepping = TimesteppingParameters(dt=dt, alpha=1., maxk=maxk)
+    timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
     output = OutputParameters(dirname=dirname+"/energy_Euler", dumpfreq=1,
                               dumplist=['u'], perturbation_fields=['theta', 'rho'])
     diagnostic_fields = [CompressibleEnergy()]

@@ -44,6 +44,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.prescribed_fields = prescribed_fields
         else:
             self.prescribed_fields = []
+        self.update_ubar = Update_ubar(state)
 
     @abstractproperty
     def passive_advection(self):
@@ -111,10 +112,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.semi_implicit_step()
 
+            # first compute ubar from state.xn and state.xnp1
+            self.update_ubar.apply(state.xn, state.xnp1, state.timestepping.alpha)
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
                 # advects a field from xn and puts result in xnp1
                 advection.apply(field, field)
 
