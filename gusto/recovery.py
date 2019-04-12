@@ -7,7 +7,7 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        dx, Interpolator, quadrilateral, BrokenElement, interval,
                        TensorProductElement, FiniteElement)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, INC, RW, WRITE
+from firedrake.parloops import par_loop, READ, INC, WRITE
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
@@ -243,7 +243,7 @@ class Boundary_Recoverer(object):
 
         self.interpolator.interpolate()
         par_loop(self.bottom_kernel, dx,
-                 args={"DG1": (self.v_out, RW),
+                 args={"DG1": (self.v_out, WRITE),
                        "CG1": (self.v1, READ),
                        "DG0": (self.v0, READ),
                        "COORDS": (self.coords, READ),
@@ -251,7 +251,7 @@ class Boundary_Recoverer(object):
                  iterate=ON_BOTTOM)
 
         par_loop(self.top_kernel, dx,
-                 args={"DG1": (self.v_out, RW),
+                 args={"DG1": (self.v_out, WRITE),
                        "CG1": (self.v1, READ),
                        "DG0": (self.v0, READ),
                        "COORDS": (self.coords, READ),

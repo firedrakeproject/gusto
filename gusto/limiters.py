@@ -1,7 +1,7 @@
 from __future__ import absolute_import, print_function, division
 from gusto.configuration import logger
 from firedrake import dx, BrokenElement, Function, FunctionSpace
-from firedrake.parloops import par_loop, READ, RW, INC
+from firedrake.parloops import par_loop, READ, RW, WRITE, INC
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 __all__ = ["ThetaLimiter", "NoLimiter"]
@@ -86,7 +86,7 @@ class ThetaLimiter(object):
         """
         par_loop(_copy_into_Q1DG_loop, dx,
                  {"theta": (field, READ),
-                  "theta_hat": (self.theta_hat, RW)})
+                  "theta_hat": (self.theta_hat, WRITE)})
 
     def copy_vertex_values_back(self, field):
         """
@@ -94,7 +94,7 @@ class ThetaLimiter(object):
         the original temperature space.
         """
         par_loop(_copy_from_Q1DG_loop, dx,
-                 {"theta": (field, RW),
+                 {"theta": (field, WRITE),
                   "theta_hat": (self.theta_hat, READ)})
 
     def check_midpoint_values(self, field):
