@@ -478,15 +478,18 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
         d0 = self.x0.split()[1]
         self.dbar = 0.5*(dn + d0)
         # Use weighted test functions when upwinding is applied
-        if self.upwind_d:
+        if not self.state.no_u_rec:
             self.dweight = self.dbar
         else:
             self.dweight = Constant(1.)
         return inner(self.dweight*self.test, self.trial)*dx
 
     def euler_poincare_term(self):
-        u0 = self.state.u_rec
-        return -div(self.dweight*self.test)*inner(self.state.h_project(u0), u0)*dx
+        if self.state.no_u_rec:
+            u0 = self.state.Fbar/self.dbar
+        else:
+            u0 = self.state.u_rec
+        return -div(self.dweight*self.test)*inner(self.state.h_project(u0), self.state.ubar)*dx
 
     def pressure_gradient_term(self):
         # Forcing terms are derived from advection forms
@@ -512,13 +515,7 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
     energy conserving way"""
     def __init__(self, state, upwind_d=True, upwind_th=True, SUPG=True, tau=None,
                  gauss_deg=None, euler_poincare=True):
-        if upwind_d != upwind_th:
-            raise NotImplementedError("non-equal theta, rho upwinding not yet implemented. Idea: use a "
-                                      "no weight approach for theta, with F/rho instead of u_rec.")
-        if any((not upwind_d, not upwind_th)) and euler_poincare:
-            raise NotImplementedError("Hamiltonian velocity advection without weighted test functions not "
-                                      "yet implemented; Euler-Poin care type split requires consistent test "
-                                      "function weights, i.e. need upwinded forcing.")
+
         # Load SUPG parameter if SUPG is used for temperature advection
         self.SUPG = SUPG
         if tau is not None:
@@ -574,11 +571,6 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
         L = super(HamiltonianCompressibleForcing, self).pressure_gradient_term()
 
         # Add antisymmetric part corresponding to theta advection
-        if self.upwind_th:
-            # In upwinded case dbar cancels with test function weight
-            Trho = self.state.T
-        else:
-            Trho = self.state.T/self.dbar
         if self.SUPG:
             # Add antisymmetric part corresponding to upwinded test function of dth/dt
             thetan = self.state.xn.split()[2]
@@ -589,9 +581,9 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
             un = self.state.xn.split()[0]
             u0 = self.x0.split()[0]
             ubar = 0.5*(un + u0)
-            Ts = Trho + dot(dot(ubar, self.tau), grad(Trho))
+            Ts = self.state.T + dot(dot(ubar, self.tau), grad(self.state.T))
         else:
-            Ts = Trho
+            Ts = self.state.T
 
         test_ad, ubar_ad, L_ad = self.state.L_forms[self.state.spaces("HDiv_v")]
         L += replace(L_ad, {ubar_ad: self.test, test_ad: Ts})
@@ -615,10 +607,10 @@ class HamiltonianShallowWaterForcing(HamiltonianForcing):
 
     def coriolis_term(self):
         f = self.state.fields("coriolis")
-        if self.upwind_d:
+        if self.upwind_d and not self.state.no_u_rec:
             L = -f*inner(self.dbar*self.test, self.state.perp(self.state.u_rec))*dx
         else:
-            L = -f*inner(self.test, self.state.perp(self.state.F)/self.dbar)*dx
+            L = -f*inner(self.test, self.state.perp(self.state.Fbar)/self.dbar)*dx
         return L
 
 

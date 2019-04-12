@@ -191,7 +191,9 @@ class State(object):
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
     :arg hydrostatic: boolean on whether to use hydrostatic setup.
-    :arg hamiltonian: boolean on whether to use Hamiltonian setup.
+    :arg hamiltonian: boolean on whether to use Hamiltonian setup. Can
+    also be set to string 'no_u_rec' for Hamiltonian setup where
+    advecting velocity should not be computed as flux recovered velocity.
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
@@ -238,6 +240,19 @@ class State(object):
         else:
             self.diagnostic_fields = []
 
+        # Hamiltonian setup
+        if self.hamiltonian == "no_u_rec":
+            self.hamiltonian = True
+            self.no_u_rec = True
+        else:
+            self.no_u_rec = False
+        if self.hamiltonian:
+            # save advection forms and SUPG parameter for Hamiltonian forcing
+            self.tau = 0
+            self.L_forms = {}
+            # set forcing split to implicit for Hamiltonian forcing
+            self.timestepping.alpha = 1.
+
         # The mesh
         self.mesh = mesh
 
@@ -279,13 +294,6 @@ class State(object):
             self.h_project = lambda u: u - self.k*inner(u, self.k)
         else:
             self.h_project = lambda u: u
-
-        if self.hamiltonian:
-            # save advection forms and SUPG parameter for Hamiltonian forcing
-            self.tau = 0
-            self.L_forms = {}
-            # set forcing split to implicit for Hamiltonian forcing
-            self.timestepping.alpha = 1.
 
         # Constant to hold current time
         self.t = Constant(0.0)
@@ -557,7 +565,10 @@ class State(object):
         self.F = Function(W.split()[0])
 
         if self.hamiltonian:
-            self.u_rec = Function(W.split()[0])
+            if self.no_u_rec:
+                self.Fbar = Function(W.split()[0])
+            else:
+                self.u_rec = Function(W.split()[0])
             self.P = Function(W.split()[1])
             if self.vertical_degree is not None:
                 self.T = Function(W.split()[2])

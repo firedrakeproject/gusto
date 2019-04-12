@@ -126,22 +126,27 @@ class TransportEquation(object, metaclass=ABCMeta):
 
         # set up functions required for forms
         self.ubar = state.ubar
-        if self.state.hamiltonian:
+        self.Fbar = state.F
+        if state.hamiltonian:
             self.upbar = self.state.upbar
+            if state.no_u_rec:
+                dn = state.xn.split()[1]
+                dnp1 = state.xnp1.split()[1]
+                dbar = 0.5*(dn + dnp1)
+                self.ubar = state.Fbar/dbar
         else:
             self.upbar = self.ubar
-        self.Fbar = state.F
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
         self.dS = surface_measures(V)
 
         # In Hamiltonian case save form for forcing
-        if self.state.hamiltonian:
+        if state.hamiltonian:
             qn = state.xn.split()[V.index]
             qnp1 = state.xnp1.split()[V.index]
-            self.state.L_forms[self.V] = (self.test, self.ubar,
-                                          self.advection_term(0.5*(qn + qnp1)))
+            ubar = state.Fbar if state.no_u_rec else self.ubar
+            self.state.L_forms[self.V] = (self.test, ubar, self.advection_term(0.5*(qn + qnp1)))
 
         if solver_params:
             self.solver_parameters = solver_params
@@ -444,11 +449,12 @@ class VectorInvariant(TransportEquation):
         if state.mesh.topological_dimension() == 3 and ibp == IntegrateByParts.TWICE:
             raise NotImplementedError("ibp=twice is not implemented for 3d problems")
 
-        if self.state.hamiltonian:
-            dn = state.xn.split()[1]
-            dnp1 = state.xnp1.split()[1]
-            dbar = 0.5*(dn + dnp1)
-            self.test = self.test*dbar
+        if state.hamiltonian:
+            if not state.no_u_rec:
+                dn = state.xn.split()[1]
+                dnp1 = state.xnp1.split()[1]
+                dbar = 0.5*(dn + dnp1)
+                self.test = self.test*dbar
 
     def advection_term(self, q):
 
@@ -515,7 +521,7 @@ class EulerPoincare(VectorInvariant):
         L = super().advection_term(q)
         if self.state.hamiltonian:
             if not hasattr(q, "number"):
-                L -= 2*div(self.test)*inner(self.state.h_project(self.ubar), self.ubar)*dx
+                L -= 2*div(self.test)*inner(self.state.h_project(self.ubar), self.state.ubar)*dx
         else:
             L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L

@@ -5,8 +5,9 @@ import sys
 
 dt = 0.5
 if '--running-tests' in sys.argv:
-    tmax = 5.
-    res = [16, 40]
+    tmax = 300.
+    dt = 3.
+    res = [16, 32]
 else:
     tmax = 900.
     res = [64, 320]
@@ -16,7 +17,9 @@ maxk = 12
 gauss_deg = 8
 dumpfreq = 36
 h_rho_pert = True
+hamiltonian = True
 upwind_rho = True
+
 fieldlist = ['u', 'rho', 'theta']
 
 H, L = 6400., 32000.
@@ -24,8 +27,9 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics('rho', "CompressibleEnergy")
 
 upw = '' if upwind_rho else 'no'
-dirname = ("EC_DB_{0}upwindrho_res{1}_dt{2}_maxk{3}_gaussdeg"
-           "{4}".format(upw, res, dt, maxk, gauss_deg))
+ham = '' if hamiltonian else 'non'
+dirname = ("EC_DB_{0}upwindrho_{1}hamiltonian_res{2}_dt{3}_maxk{4}_gaussdeg"
+           "{5}".format(upw, ham, res, dt, maxk, gauss_deg))
 
 nlayers, columns = res[0], res[1]
 m = PeriodicIntervalMesh(columns, L)
@@ -40,9 +44,12 @@ diagnostic_fields = [CourantNumber(),
                      CompressibleEnergy(),
                      PotentialVorticity()]
 
+if hamiltonian and upwind_rho:
+    hamiltonian = "no_u_rec"
+
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              hamiltonian=True,
+              hamiltonian=hamiltonian,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -89,30 +96,33 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 advected_fields = []
+ueqn = EulerPoincare(state, Vu)
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 if upwind_rho:
-    ueqn = EulerPoincare(state, Vu)
-    e_p = True
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("rho", ThetaMethod(state, rho0, rhoeqn)))
 else:
-    ueqn = VectorInvariant(state, Vu)
-    e_p = False
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity",
                                flux_form=True)
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
     advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
 
-thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+SUPG = True
+if SUPG:
+    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+else:
+    thetaeqn = AdvectionEquation(state, Vt, equation_form="advective",
+                                 ibp=IntegrateByParts.TWICE)
 advected_fields.append(("theta", ThetaMethod(state, theta0, thetaeqn)))
 
 linear_solver = HybridizedCompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = HamiltonianCompressibleForcing(state,
-                                                      upwind_d=upwind_rho,
-                                                      gauss_deg=gauss_deg,
-                                                      euler_poincare=e_p)
+if hamiltonian:
+    compressible_forcing = HamiltonianCompressibleForcing(state, SUPG=SUPG,
+                                                          upwind_d=upwind_rho,
+                                                          gauss_deg=gauss_deg)
+else:
+    compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields,

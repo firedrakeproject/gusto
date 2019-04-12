@@ -59,9 +59,14 @@ diagnostic_fields = [ShallowWaterKineticEnergy(),
                      AbsoluteVorticity(),
                      ShallowWaterPotentialEnstrophy()]
 
+if upwind_D:
+    hamiltonian = True
+else:
+    hamiltonian = 'no_u_rec'
+
 state = State(mesh, horizontal_degree=1,
               family="BDM",
-              hamiltonian=True,
+              hamiltonian=hamiltonian,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -113,22 +118,20 @@ f = state.fields("coriolis", V)
 f.interpolate(fexpr)
 
 advected_fields = []
-ueqn = VectorInvariant(state, u0.function_space())
+ueqn = EulerPoincare(state, u0.function_space())
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 if upwind_D:
-    Deqn = AdvectionEquation(state, D0.function_space(),
-                             equation_form="continuity")
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields.append(("D", ThetaMethod(state, D0, Deqn)))
 else:
-    Deqn = AdvectionEquation(state, D0.function_space(),
-                             equation_form="continuity", flux_form=True)
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity",
+                             flux_form=True)
     advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-sw_forcing = HamiltonianShallowWaterForcing(state, upwind_d=upwind_D,
-                                            euler_poincare=False)
+sw_forcing = HamiltonianShallowWaterForcing(state, upwind_d=upwind_D)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver, sw_forcing)

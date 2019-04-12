@@ -358,14 +358,20 @@ class Update_ubar(object):
         if active_advection is not None:
             flux_forms = []
             for _, advection in active_advection:
-                flux_forms.append(advection.equation.flux_form)
+                try:
+                    flux_forms.append(advection.equation.flux_form)
+                except AttributeError:
+                    continue
             self.get_flux = any(flux_forms)
             if self.get_flux:
                 self._setup_flux_solver(state)
             self.get_u_rec = False
             if state.hamiltonian:
-                self._setup_u_rec_solver(state)
-                self.get_u_rec = True
+                if state.no_u_rec:
+                    self._setup_flux_solver(state)
+                else:
+                    self._setup_u_rec_solver(state)
+                    self.get_u_rec = True
         else:
             self.get_flux = False
             self.get_u_rec = False
@@ -412,6 +418,9 @@ class Update_ubar(object):
                 self.state.ubar.assign(self.u_rec)
                 self.state.u_rec.assign(self.u_rec)
             if self.state.hamiltonian:
-                self.state.upbar.assign(un + alpha*(unp1-un))
+                self.state.upbar.assign(0.5*(un + unp1))
+                if self.state.no_u_rec:
+                    self.state.ubar.assign(0.5*(un + unp1))
+                    self.state.Fbar.assign(self.F)
             else:
                 self.state.ubar.assign(un + alpha*(unp1-un))
