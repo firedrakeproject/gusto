@@ -138,7 +138,7 @@ class Boundary_Recoverer(object):
                 # assume that 3D mesh is extruded
                 if mesh._base_mesh.ufl_cell().cellname() != 'quadrilateral':
                     raise NotImplementedError('For 3D extruded meshes this recovery method requires a base mesh with quadrilateral elements')
-            else:
+            elif mesh.topological_dimension() != 1:
                 raise NotImplementedError('This boundary recovery is implemented only on certain classes of mesh.')
             if coords_to_adjust is None:
                 raise ValueError('Need coords_to_adjust field for dynamics boundary methods')
@@ -171,7 +171,6 @@ class Boundary_Recoverer(object):
 
             # STRATEGY
             # obtain a coordinate field for all the nodes
-            VuCG1 = VectorFunctionSpace(mesh, "CG", 1)
             VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
             self.act_coords = Function(VuDG1).project(x)  # actual coordinates
             self.eff_coords = Function(VuDG1).project(x)  # effective coordinates
@@ -231,7 +230,7 @@ class Boundary_Recoverer(object):
                            "ACT_COORDS": (self.act_coords, READ),
                            "EFF_COORDS": (self.eff_coords, RW)})
 
-            gaussian_elimination_kernel = """
+            self.gaussian_elimination_kernel = """
             int n = %d;
             /* do gaussian elimination to find constants in linear expansion */
             /* trying to solve A*a = f for a, where A is a matrix */
@@ -252,13 +251,14 @@ class Boundary_Recoverer(object):
             f[i] = DG1[i][0];
             A[i][0] = 1.0;
             A[i][1] = EFF_COORDS[i][0];
+            if (n == 4 || n == 8){
             A[i][2] = EFF_COORDS[i][1];
             A[i][3] = EFF_COORDS[i][0] * EFF_COORDS[i][1];
             if (n == 8){
             A[i][4] = EFF_COORDS[i][2];
             A[i][5] = EFF_COORDS[i][0] * EFF_COORDS[i][2];
             A[i][6] = EFF_COORDS[i][1] * EFF_COORDS[i][2];
-            A[i][7] = EFF_COORDS[i][0] * EFF_COORDS[i][1] * EFF_COORDS[i][2];}}
+            A[i][7] = EFF_COORDS[i][0] * EFF_COORDS[i][1] * EFF_COORDS[i][2];}}}
 
             /* do Gaussian elimination */
             for (i=0; i<%d-1; i++) {
@@ -300,7 +300,10 @@ class Boundary_Recoverer(object):
 
             /* extrapolate solution using new coordinates */
             for (i=0; i<%d; i++) {
-            if (n == 4){
+            if (n == 2){
+            DG1[i][0] = a[0] + a[1]*ACT_COORDS[i][0];
+            }
+            else if (n == 4){
             DG1[i][0] = a[0] + a[1]*ACT_COORDS[i][0] + a[2]*ACT_COORDS[i][1] + a[3]*ACT_COORDS[i][0]*ACT_COORDS[i][1];
             }
             else if (n == 8){
@@ -309,11 +312,6 @@ class Boundary_Recoverer(object):
             }
             /* do nothing if there are no exterior nodes */
             """ % ((self.v_DG1.function_space().finat_element.space_dimension(), )*15)
-
-            if VuCG1.mesh().topological_dimension() == 2 or VuCG1.mesh().topological_dimension() == 3:
-                self.boundary_kernel = gaussian_elimination_kernel
-            else:
-                raise NotImplementedError('This is only implemented for 2d and 3d at the moment.')
 
         elif self.method == 'physics':
             self.bottom_kernel = """
@@ -339,7 +337,7 @@ class Boundary_Recoverer(object):
                            "CG1": (self.v_CG1, READ)},
                      iterate=ON_TOP)
         else:
-            par_loop(self.boundary_kernel, dx,
+            par_loop(self.gaussian_elimination_kernel, dx,
                      args={"DG1": (self.v_DG1, RW),
                            "ACT_COORDS": (self.act_coords, READ),
                            "EFF_COORDS": (self.eff_coords, READ),
