@@ -550,10 +550,11 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
 
     # make DG1 field with 1 at all exterior coords
     all_ext_in_DG1 = Function(DG1)
+    bcs = [DirichletBC(DG1, Constant(1.0), "on_boundary", method="geometric")]
 
-    bcs = [DirichletBC(DG1, Constant(1.0), "top", method="geometric"),
-           DirichletBC(DG1, Constant(1.0), "bottom", method="geometric"),
-           DirichletBC(DG1, Constant(1.0), "on_boundary", method="geometric")]
+    if DG1.extruded:
+        bcs.append(DirichletBC(DG1, Constant(1.0), "top", method="geometric"))
+        bcs.append(DirichletBC(DG1, Constant(1.0), "bottom", method="geometric"))
 
     for bc in bcs:
         bc.apply(all_ext_in_DG1)
@@ -561,9 +562,11 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
     # make DG1 field with 1 at coords surrounding exterior coords of V0
     # first do it in CG2, as this should contain all DOFs of V0 and DG1
     all_ext_in_CG2 = Function(CG2)
-    bcs = [DirichletBC(CG2, Constant(1.0), "top", method="geometric"),
-           DirichletBC(CG2, Constant(1.0), "bottom", method="geometric"),
-           DirichletBC(CG2, Constant(1.0), "on_boundary", method="geometric")]
+    bcs = [DirichletBC(CG2, Constant(1.0), "on_boundary", method="geometric")]
+
+    if CG2.extruded:
+        bcs.append(DirichletBC(CG2, Constant(1.0), "top", method="geometric"))
+        bcs.append(DirichletBC(CG2, Constant(1.0), "bottom", method="geometric"))
 
     for bc in bcs:
         bc.apply(all_ext_in_CG2)
