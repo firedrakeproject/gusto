@@ -205,7 +205,7 @@ class Boundary_Recoverer(object):
                 /* loop through DOFs in cell and find which ones to adjust */
                 for (i=0; i<{nDOFs}; ++i)
                     if (round(EXT_V1[i]) == 1)
-                    max_dist = 0.0
+                    max_dist = 0.0;
                         /* find closest interior node */
                         min_dist = max_dist;
                         int index = -1;
@@ -223,6 +223,7 @@ class Boundary_Recoverer(object):
                         for (j=0; j<{dim}; ++j)
                             EFF_COORDS[i*{dim}+j] = 0.5 * (ACT_COORDS[i*{dim}+j] + ACT_COORDS[index*{dim}+j]);
 
+
             /* else do nothing */
             """.format(**shapes)
 
@@ -230,6 +231,9 @@ class Boundary_Recoverer(object):
                      args={"EXT_V1": (self.coords_to_adjust, READ),
                            "ACT_COORDS": (self.act_coords, READ),
                            "EFF_COORDS": (self.eff_coords, WRITE)})
+
+            for i, j in zip(self.act_coords.dat.data[:], self.eff_coords.dat.data[:]):
+                print('[%.2f %.2f] [%.2f %.2f]' % (i[0], i[1], j[0], j[1]))
 
             self.gaussian_elimination_kernel = """
             int n = {nDOFs};
