@@ -7,7 +7,7 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        TensorProductElement, FiniteElement, DirichletBC,
                        VectorElement)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, INC, RW
+from firedrake.parloops import par_loop, READ, INC, WRITE
 from gusto.transport_equation import is_dg
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
@@ -49,12 +49,14 @@ class Averager(object):
 
         # NOTE: Any bcs on the function self.v should just work.
         # Loop over node extent and dof extent
-        self._shapes = (self.V.finat_element.space_dimension(), np.prod(self.V.shape))
+        shapes = {"i": self.V.finat_element.space_dimension(),
+                  "j": np.prod(self.V.shape, dtype=int)}
+        # Averaging kernel
         self._average_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        vo[i][j] += v[i][j]/w[i][j];
-        }}""" % self._shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                vo[i*{j} + j] += v[i*{j} + j]/w[i*{j} + j];
+        """.format(**shapes)
 
     @cached_property
     def _weighting(self):
@@ -62,11 +64,13 @@ class Averager(object):
         Generates a weight function for computing a projection via averaging.
         """
         w = Function(self.V)
+        shapes = {"i": self.V.finat_element.space_dimension(),
+                  "j": np.prod(self.V.shape, dtype=int)}
         weight_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        w[i][j] += 1.0;
-        }}""" % self._shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                w[i*{j} + j] += 1.0;
+        """.format(**shapes)
 
         par_loop(weight_kernel, ufl.dx, {"w": (w, INC)})
         return w
@@ -315,30 +319,30 @@ class Boundary_Recoverer(object):
 
         elif self.method == 'physics':
             self.bottom_kernel = """
-            DG1[0][0] = CG1[1][0] - 2 * (CG1[1][0] - CG1[0][0]);
-            DG1[1][0] = CG1[1][0];
+            DG1[0] = CG1[1] - 2 * (CG1[1] - DG0[0]);
+            DG1[1] = CG1[1];
             """
 
             self.top_kernel = """
-            DG1[1][0] = CG1[0][0] - 2 * (CG1[0][0] - CG1[1][0]);
-            DG1[0][0] = CG1[0][0];
+            DG1[1] = CG1[0] - 2 * (CG1[0] - DG0[0]);
+            DG1[0] = CG1[0];
             """
 
     def apply(self):
         self.interpolator.interpolate()
         if self.method == 'physics':
             par_loop(self.bottom_kernel, dx,
-                     args={"DG1": (self.v_DG1, RW),
+                     args={"DG1": (self.v_DG1, WRITE),
                            "CG1": (self.v_CG1, READ)},
                      iterate=ON_BOTTOM)
 
             par_loop(self.top_kernel, dx,
-                     args={"DG1": (self.v_DG1, RW),
+                     args={"DG1": (self.v_DG1, WRITE),
                            "CG1": (self.v_CG1, READ)},
                      iterate=ON_TOP)
         else:
             par_loop(self.gaussian_elimination_kernel, dx,
-                     args={"DG1": (self.v_DG1, RW),
+                     args={"DG1": (self.v_DG1, WRITE),
                            "ACT_COORDS": (self.act_coords, READ),
                            "EFF_COORDS": (self.eff_coords, READ),
                            "EXT_V1": (self.coords_to_adjust, READ)})

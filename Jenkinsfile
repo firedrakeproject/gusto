@@ -31,16 +31,6 @@ python -m pip install -e .
                 }
             }
         }
-        stage('Lint') {
-            steps {
-                timestamps {
-                    sh '''
-. /home/firedrake/firedrake/bin/activate
-make lint
-'''
-                }
-            }
-        }
         stage('Test') {
             steps {
                 timestamps {
@@ -48,6 +38,16 @@ make lint
 . /home/firedrake/firedrake/bin/activate
 python $(which firedrake-clean)
 python -m pytest -n 12 -v tests
+'''
+                }
+            }
+        }
+        stage('Lint') {
+            steps {
+                timestamps {
+                    sh '''
+. /home/firedrake/firedrake/bin/activate
+make lint
 '''
                 }
             }
