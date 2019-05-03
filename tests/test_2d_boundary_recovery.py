@@ -12,7 +12,7 @@ from firedrake import (as_vector, IntervalMesh, SpatialCoordinate,
 def setup_2d_recovery(dirname):
 
     L = 100.
-    H = 10.
+    H = 20.
 
     deltax = L / 5.
     deltay = H / 5.
