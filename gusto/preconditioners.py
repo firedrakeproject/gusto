@@ -116,22 +116,23 @@ class VerticalHybridizationPC(PCBase):
         # NOTE: Since this snippet of code is used in a couple places in
         # in Gusto, might be worth creating a utility function that is
         # is importable and just called where needed.
-        shapes = (Vv.finat_element.space_dimension(),
-                  np.prod(Vv.shape))
+        shapes = {"i": Vv.finat_element.space_dimension(),
+                  "j": np.prod(Vv.shape, dtype=int)}
         weight_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        w[i][j] += 1.0;
-        }}""" % shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                w[i*{j} + j] += 1.0;
+        """.format(**shapes)
 
         self.weight = Function(Vv)
         par_loop(weight_kernel, dx, {"w": (self.weight, INC)})
-        self.average_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        vec_out[i][j] += vec_in[i][j]/w[i][j];
-        }}""" % shapes
 
+        # Averaging kernel
+        self.average_kernel = """
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                vec_out[i*{j} + j] += vec_in[i*{j} + j]/w[i*{j} + j];
+        """.format(**shapes)
         # Original mixed operator replaced with "broken" arguments
         arg_map = {test: TestFunction(V_d),
                    trial: TrialFunction(V_d)}

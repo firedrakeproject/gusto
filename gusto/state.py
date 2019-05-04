@@ -545,7 +545,7 @@ def get_latlon_mesh(mesh):
     par_loop("""
 for (int i=0; i<3; i++) {
     for (int j=0; j<3; j++) {
-        dg[i][j] = cg[i][j];
+        dg[i*3 + j] = cg[i*3 + j];
     }
 }
 """, dx, {'dg': (coords_dg, WRITE),
@@ -560,23 +560,23 @@ for (int i=0; i<3; i++) {
     kernel = op2.Kernel("""
 #define PI 3.141592653589793
 #define TWO_PI 6.283185307179586
-void splat_coords(double **coords) {
-    double diff0 = (coords[0][0] - coords[1][0]);
-    double diff1 = (coords[0][0] - coords[2][0]);
-    double diff2 = (coords[1][0] - coords[2][0]);
+void splat_coords(double *coords) {
+    double diff0 = (coords[0] - coords[3]);
+    double diff1 = (coords[0] - coords[6]);
+    double diff2 = (coords[3] - coords[6]);
 
     if (fabs(diff0) > PI || fabs(diff1) > PI || fabs(diff2) > PI) {
-        const int sign0 = coords[0][0] < 0 ? -1 : 1;
-        const int sign1 = coords[1][0] < 0 ? -1 : 1;
-        const int sign2 = coords[2][0] < 0 ? -1 : 1;
+        const int sign0 = coords[0] < 0 ? -1 : 1;
+        const int sign1 = coords[3] < 0 ? -1 : 1;
+        const int sign2 = coords[6] < 0 ? -1 : 1;
         if (sign0 < 0) {
-            coords[0][0] += TWO_PI;
+            coords[0] += TWO_PI;
         }
         if (sign1 < 0) {
-            coords[1][0] += TWO_PI;
+            coords[3] += TWO_PI;
         }
         if (sign2 < 0) {
-            coords[2][0] += TWO_PI;
+            coords[6] += TWO_PI;
         }
     }
 }
