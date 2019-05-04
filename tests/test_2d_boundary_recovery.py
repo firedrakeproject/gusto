@@ -9,6 +9,7 @@ from firedrake import (as_vector, IntervalMesh, SpatialCoordinate,
                        FiniteElement, HDiv, norm, BrokenElement)
 import numpy as np
 
+
 def setup_2d_recovery(dirname):
 
     L = 100.

@@ -10,7 +10,6 @@ from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, WRITE
 from gusto.transport_equation import is_dg
 from pyop2 import ON_TOP, ON_BOTTOM
-import loopy as lp
 import ufl
 import numpy as np
 
@@ -51,7 +50,7 @@ class Averager(object):
         # NOTE: Any bcs on the function self.v should just work.
         # Loop over node extent and dof extent
         self.shapes = {"nDOFs": self.V.finat_element.space_dimension(),
-                  "dim": np.prod(self.V.shape, dtype=int)}
+                       "dim": np.prod(self.V.shape, dtype=int)}
         # Averaging kernel
         average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
         average_instructions = ("""
@@ -79,7 +78,7 @@ class Averager(object):
                                """)
         _weight_kernel = (weight_domain, weight_instructions)
 
-        par_loop(_weight_kernel, ufl.dx, {"w": (w, INC)}, is_loopy_kernel=True)
+        par_loop(_weight_kernel, dx, {"w": (w, INC)}, is_loopy_kernel=True)
         return w
 
     def project(self):
@@ -89,9 +88,9 @@ class Averager(object):
 
         # Ensure that the function being populated is zeroed out
         self.v_out.dat.zero()
-        par_loop(self._average_kernel, ufl.dx, {"vo": (self.v_out, INC),
-                                                "w": (self._weighting, READ),
-                                                "v": (self.v, READ)},
+        par_loop(self._average_kernel, dx, {"vo": (self.v_out, INC),
+                                            "w": (self._weighting, READ),
+                                            "v": (self.v, READ)},
                  is_loopy_kernel=True)
         return self.v_out
 
@@ -203,232 +202,232 @@ class Boundary_Recoverer(object):
             NUM_EXT[0] = SUM_EXT
             """)
 
-            eff_coords_domain = ("{{[i, j, k, ii, jj, kk, ll, mm, iii, kkk]: "
-                                 "0 <= i < {nDOFs} and "
-                                 "0 <= j < {nDOFs} and 0 <= k < {dim} and "
-                                 "0 <= ii < {nDOFs} and 0 <= jj < {nDOFs} and "
-                                 "0 <= kk < {dim} and 0 <= ll < {dim} and "
-                                 "0 <= mm < {dim} and 0 <= iii < {nDOFs} and "
-                                 "0 <= kkk < {dim}}}").format(**shapes)
-            eff_coords_instructions = ("""
-            <float64> sum_V1_ext = 0
-            <int> index = 100
-            <float64> dist = 0.0
-            <float64> max_dist = 0.0
-            <float64> min_dist = 0.0
-            """
-            # only do adjustment in cells with at least one DOF to adjust
-            """
-            if NUM_EXT[0] > 0
-            """
-                # find the maximum distance between DOFs in this cell, to serve as starting point for finding min distances
-                """
-                for i
-                    for j
-                        dist = 0.0
-                        for k
-                            dist = dist + pow(ACT_COORDS[i,k] - ACT_COORDS[j,k], 2.0)
-                        end
-                        dist = pow(dist, 0.5) {{id=sqrt_max_dist, dep=*}}
-                        max_dist = fmax(dist, max_dist) {{id=max_dist, dep=sqrt_max_dist}}
-                    end
-                end
-                """
-                # loop through cells and find which ones to adjust
-                """
-                for ii
-                    if EXT_V1[ii] > 0.5
-                        """
-                        # find closest interior node
-                        """
-                        min_dist = max_dist
-                        index = 100
-                        for jj
-                            if EXT_V1[jj] < 0.5
-                                dist = 0.0
-                                for kk
-                                    dist = dist + pow(ACT_COORDS[ii,kk] - ACT_COORDS[jj,kk], 2)
+            coords_domain = ("{{[i, j, k, ii, jj, kk, ll, mm, iii, kkk]: "
+                             "0 <= i < {nDOFs} and "
+                             "0 <= j < {nDOFs} and 0 <= k < {dim} and "
+                             "0 <= ii < {nDOFs} and 0 <= jj < {nDOFs} and "
+                             "0 <= kk < {dim} and 0 <= ll < {dim} and "
+                             "0 <= mm < {dim} and 0 <= iii < {nDOFs} and "
+                             "0 <= kkk < {dim}}}").format(**shapes)
+            coords_insts = ("""
+                            <float64> sum_V1_ext = 0
+                            <int> index = 100
+                            <float64> dist = 0.0
+                            <float64> max_dist = 0.0
+                            <float64> min_dist = 0.0
+                            """
+                            # only do adjustment in cells with at least one DOF to adjust
+                            """
+                            if NUM_EXT[0] > 0
+                            """
+                            # find the maximum distance between DOFs in this cell, to serve as starting point for finding min distances
+                            """
+                                for i
+                                    for j
+                                        dist = 0.0
+                                        for k
+                                            dist = dist + pow(ACT_COORDS[i,k] - ACT_COORDS[j,k], 2.0)
+                                        end
+                                        dist = pow(dist, 0.5) {{id=sqrt_max_dist, dep=*}}
+                                        max_dist = fmax(dist, max_dist) {{id=max_dist, dep=sqrt_max_dist}}
+                                    end
                                 end
-                                dist = pow(dist, 0.5)
-                                if dist <= min_dist
-                                    index = jj
+                            """
+                            # loop through cells and find which ones to adjust
+                            """
+                                for ii
+                                    if EXT_V1[ii] > 0.5
+                            """
+                            # find closest interior node
+                            """
+                                        min_dist = max_dist
+                                        index = 100
+                                        for jj
+                                            if EXT_V1[jj] < 0.5
+                                                dist = 0.0
+                                                for kk
+                                                    dist = dist + pow(ACT_COORDS[ii,kk] - ACT_COORDS[jj,kk], 2)
+                                                end
+                                                dist = pow(dist, 0.5)
+                                                if dist <= min_dist
+                                                    index = jj
+                                                end
+                                                min_dist = fmin(min_dist, dist)
+                                                for ll
+                                                    EFF_COORDS[ii,ll] = 0.5 * (ACT_COORDS[ii,ll] + ACT_COORDS[index,ll])
+                                                end
+                                            end
+                                        end
+                                    else
+                            """
+                            # for DOFs that aren't exterior, use the original coordinates
+                            """
+                                        for mm
+                                            EFF_COORDS[ii, mm] = ACT_COORDS[ii, mm]
+                                        end
+                                    end
                                 end
-                                min_dist = fmin(min_dist, dist)
-                                for ll
-                                    EFF_COORDS[ii,ll] = 0.5 * (ACT_COORDS[ii,ll] + ACT_COORDS[index,ll])
+                            else
+                            """
+                            # for interior elements, just use the original coordinates
+                            """
+                                for iii
+                                    for kkk
+                                        EFF_COORDS[iii, kkk] = ACT_COORDS[iii, kkk]
+                                    end
                                 end
                             end
-                        end
-                    else
-                    """
-                    # for DOFs that aren't exterior, use the original coordinates
-                    """
-                        for mm
-                            EFF_COORDS[ii, mm] = ACT_COORDS[ii, mm]
-                        end
-                    end
-                end
-            else
-                """
-                # for interior elements, just use the original coordinates
-                """
-                for iii
-                    for kkk
-                        EFF_COORDS[iii, kkk] = ACT_COORDS[iii, kkk]
-                    end
-                end
-            end
-            """).format(**shapes)
+                            """).format(**shapes)
 
-            gaussian_elimination_domain = ("{{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii, iiiii]: "
-                                            "0 <= i < {nDOFs} and 0 <= ii_loop < {nDOFs} and "
-                                            "ii_loop + 1 <= jj_loop < {nDOFs} and ii_loop <= kk < {nDOFs} and "
-                                            "ii_loop + 1 <= ll_loop < {nDOFs} and ii_loop <= mm < {nDOFs} + 1 and "
-                                            "0 <= iii_loop < {nDOFs} and {nDOFs} - iii_loop <= kkk_loop < {nDOFs} + 1 and "
-                                            "0 <= iiii < {nDOFs} and 0 <= iiiii < {nDOFs}}}").format(**shapes)
-            gaussian_elimination_instructions = ("""
-            <int> ii = 0
-            <int> jj = 0
-            <int> ll = 0
-            <int> iii = 0
-            <int> jjj = 0
-            <int> i_max = 0
-            <float64> A_max = 0.0
-            <float64> temp_f = 0.0
-            <float64> temp_A = 0.0
-            <float64> c = 0.0
-            <float64> f[{nDOFs}] = 0.0
-            <float64> a[{nDOFs}] = 0.0
-            <float64> A[{nDOFs},{nDOFs}] = 0.0
-            """
-            # We are aiming to find the vector a that solves A*a = f, for matrix A and vector f.
-            # This is done by performing row operations (swapping and scaling) to obtain A in upper diagonal form.
-            # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
-            # For these loops we must manually iterate the index.
-            """
-            if NUM_EXT[0] > 0.0
-                """
-                # only do Gaussian elimination for elements with effective coordinates
-                """
-                for i
-                    """
-                    # fill f with the original field values and A with the effective coordinate values
-                    """
-                    f[i] = DG1_OLD[i]
-                    A[i,0] = 1.0
-                    A[i,1] = EFF_COORDS[i,0]
-                    if {nDOFs} > 3
-                        A[i,2] = EFF_COORDS[i,1]
-                        A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
-                        if {nDOFs} > 7
-                            A[i,4] = EFF_COORDS[i,2]
-                            A[i,5] = EFF_COORDS[i,0]*EFF_COORDS[i,2]
-                            A[i,6] = EFF_COORDS[i,1]*EFF_COORDS[i,2]
-                            A[i,7] = EFF_COORDS[i,0]*EFF_COORDS[i,1]*EFF_COORDS[i,2]
-                        end
-                    end
-                end
-                """
-                # now loop through rows/columns of A
-                """
-                for ii_loop
-                    A_max = fabs(A[ii,ii])
-                    i_max = ii
-                    """
-                    # loop to find the largest value in the ith column
-                    # set i_max as the index of the row with this largest value.
-                    """
-                    jj = ii + 1
-                    for jj_loop
-                        if fabs(A[jj,ii]) > A_max
-                            i_max = jj
-                        end
-                        A_max = fmax(A_max, fabs(A[jj,ii]))
-                        jj = jj + 1
-                    end
-                    """
-                    # if the max value in the ith column isn't in the ith row, we must swap the rows
-                    """
-                    if i_max != ii
-                        """
-                        # swap the elements of f
-                        """
-                        temp_f = f[ii]  {{id=set_temp_f, dep=*}}
-                        f[ii] = f[i_max]  {{id=set_f_imax, dep=set_temp_f}}
-                        f[i_max] = temp_f  {{id=set_f_ii, dep=set_f_imax}}
-                        """
-                        # swap the elements of A
-                        # N.B. kk runs from ii to (nDOFs-1) as elements below diagonal should be 0
-                        """
-                        for kk
-                            temp_A = A[ii,kk]  {{id=set_temp_A, dep=*}}
-                            A[ii, kk] = A[i_max, kk]  {{id=set_A_ii, dep=set_temp_A}}
-                            A[i_max, kk] = temp_A  {{id=set_A_imax, dep=set_A_ii}}
-                        end
-                    end
-                    """
-                    # scale the rows below the ith row
-                    """
-                    ll = ii + 1
-                    for ll_loop
-                        if ll > ii
+            elimin_domain = ("{{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii, iiiii]: "
+                             "0 <= i < {nDOFs} and 0 <= ii_loop < {nDOFs} and "
+                             "ii_loop + 1 <= jj_loop < {nDOFs} and ii_loop <= kk < {nDOFs} and "
+                             "ii_loop + 1 <= ll_loop < {nDOFs} and ii_loop <= mm < {nDOFs} + 1 and "
+                             "0 <= iii_loop < {nDOFs} and {nDOFs} - iii_loop <= kkk_loop < {nDOFs} + 1 and "
+                             "0 <= iiii < {nDOFs} and 0 <= iiiii < {nDOFs}}}").format(**shapes)
+            elimin_insts = ("""
+                            <int> ii = 0
+                            <int> jj = 0
+                            <int> ll = 0
+                            <int> iii = 0
+                            <int> jjj = 0
+                            <int> i_max = 0
+                            <float64> A_max = 0.0
+                            <float64> temp_f = 0.0
+                            <float64> temp_A = 0.0
+                            <float64> c = 0.0
+                            <float64> f[{nDOFs}] = 0.0
+                            <float64> a[{nDOFs}] = 0.0
+                            <float64> A[{nDOFs},{nDOFs}] = 0.0
+                            """
+                            # We are aiming to find the vector a that solves A*a = f, for matrix A and vector f.
+                            # This is done by performing row operations (swapping and scaling) to obtain A in upper diagonal form.
+                            # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
+                            # For these loops we must manually iterate the index.
+                            """
+                            if NUM_EXT[0] > 0.0
+                            """
+                            # only do Gaussian elimination for elements with effective coordinates
+                            """
+                                for i
+                            """
+                            # fill f with the original field values and A with the effective coordinate values
+                            """
+                                    f[i] = DG1_OLD[i]
+                                    A[i,0] = 1.0
+                                    A[i,1] = EFF_COORDS[i,0]
+                                    if {nDOFs} > 3
+                                        A[i,2] = EFF_COORDS[i,1]
+                                        A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
+                                        if {nDOFs} > 7
+                                            A[i,4] = EFF_COORDS[i,2]
+                                            A[i,5] = EFF_COORDS[i,0]*EFF_COORDS[i,2]
+                                            A[i,6] = EFF_COORDS[i,1]*EFF_COORDS[i,2]
+                                            A[i,7] = EFF_COORDS[i,0]*EFF_COORDS[i,1]*EFF_COORDS[i,2]
+                                        end
+                                    end
+                                end
+                            """
+                            # now loop through rows/columns of A
+                            """
+                                for ii_loop
+                                    A_max = fabs(A[ii,ii])
+                                    i_max = ii
+                            """
+                            # loop to find the largest value in the ith column
+                            # set i_max as the index of the row with this largest value.
+                            """
+                                    jj = ii + 1
+                                    for jj_loop
+                                        if fabs(A[jj,ii]) > A_max
+                                            i_max = jj
+                                        end
+                                        A_max = fmax(A_max, fabs(A[jj,ii]))
+                                        jj = jj + 1
+                                    end
+                            """
+                            # if the max value in the ith column isn't in the ith row, we must swap the rows
+                            """
+                                    if i_max != ii
+                            """
+                            # swap the elements of f
+                            """
+                                        temp_f = f[ii]  {{id=set_temp_f, dep=*}}
+                                        f[ii] = f[i_max]  {{id=set_f_imax, dep=set_temp_f}}
+                                        f[i_max] = temp_f  {{id=set_f_ii, dep=set_f_imax}}
+                            """
+                            # swap the elements of A
+                            # N.B. kk runs from ii to (nDOFs-1) as elements below diagonal should be 0
+                            """
+                                        for kk
+                                            temp_A = A[ii,kk]  {{id=set_temp_A, dep=*}}
+                                            A[ii, kk] = A[i_max, kk]  {{id=set_A_ii, dep=set_temp_A}}
+                                            A[i_max, kk] = temp_A  {{id=set_A_imax, dep=set_A_ii}}
+                                        end
+                                    end
+                            """
+                            # scale the rows below the ith row
+                            """
+                                    ll = ii + 1
+                                    for ll_loop
+                                        if ll > ii
                             """
                             # find scaling factor
                             """
-                            c = - A[ll,ii] / A[ii,ii]
+                                            c = - A[ll,ii] / A[ii,ii]
                             """
                             # N.B. mm runs from ii to (nDOFs-1) as elements below diagonal should be 0
                             """
-                            for mm
-                                A[ll, mm] = A[ll, mm] + c * A[ii,mm]
+                                            for mm
+                                                A[ll, mm] = A[ll, mm] + c * A[ii,mm]
+                                            end
+                                            f[ll] = f[ll] + c * f[ii]
+                                        end
+                                        ll = ll + 1
+                                    end
+                                    ii = ii + 1
+                                end
+                            """
+                            # do back substitution of upper diagonal A to obtain a
+                            """
+                                iii = 0
+                                for iii_loop
+                            """
+                            # jjj starts at the bottom row and works upwards
+                            """
+                                    jjj = {nDOFs} - iii - 1  {{id=assign_jjj, dep=*}}
+                                    a[jjj] = f[jjj]   {{id=set_a, dep=assign_jjj}}
+                                    for kkk_loop
+                                        a[jjj] = a[jjj] - A[jjj,kkk_loop] * a[kkk_loop]
+                                    end
+                                    a[jjj] = a[jjj] / A[jjj,jjj]
+                                    iii = iii + 1
+                                end
+                            """
+                            # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
+                            """
+                                for iiii
+                                    if {nDOFs} == 2
+                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
+                                    elif {nDOFs} == 4
+                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
+                                    elif {nDOFs} == 8
+                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,2] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,2] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,2] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,2]
+                                    end
+                                end
+                            """
+                            # if element is not external, just use old field values.
+                            """
+                            else
+                                for iiiii
+                                    DG1[iiiii] = DG1_OLD[iiiii]
+                                end
                             end
-                            f[ll] = f[ll] + c * f[ii]
-                        end
-                        ll = ll + 1
-                    end
-                    ii = ii + 1
-                end
-                """
-                # do back substitution of upper diagonal A to obtain a
-                """
-                iii = 0
-                for iii_loop
-                    """
-                    # jjj starts at the bottom row and works upwards
-                    """
-                    jjj = {nDOFs} - iii - 1  {{id=assign_jjj, dep=*}}
-                    a[jjj] = f[jjj]   {{id=set_a, dep=assign_jjj}}
-                    for kkk_loop
-                        a[jjj] = a[jjj] - A[jjj,kkk_loop] * a[kkk_loop]
-                    end
-                    a[jjj] = a[jjj] / A[jjj,jjj]
-                    iii = iii + 1
-                end
-                """
-                # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
-                """
-                for iiii
-                    if {nDOFs} == 2
-                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
-                    elif {nDOFs} == 4
-                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
-                    elif {nDOFs} == 8
-                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,2] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,2] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,2] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,2]
-                    end
-                end
-            """
-            # if element is not external, just use old field values.
-            """
-            else
-                for iiiii
-                    DG1[iiiii] = DG1_OLD[iiiii]
-                end
-            end
-            """).format(**shapes)
+                            """).format(**shapes)
 
             _num_ext_kernel = (num_ext_domain, num_ext_instructions)
-            _eff_coords_kernel = (eff_coords_domain, eff_coords_instructions)
-            self._gaussian_elimination_kernel = (gaussian_elimination_domain, gaussian_elimination_instructions)
+            _eff_coords_kernel = (coords_domain, coords_insts)
+            self._gaussian_elimination_kernel = (elimin_domain, elimin_insts)
 
             # find number of external DOFs per cell
             par_loop(_num_ext_kernel, dx,
