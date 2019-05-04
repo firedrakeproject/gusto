@@ -50,14 +50,18 @@ class Averager(object):
 
         # NOTE: Any bcs on the function self.v should just work.
         # Loop over node extent and dof extent
-        shapes = {"i": self.V.finat_element.space_dimension(),
-                  "j": np.prod(self.V.shape, dtype=int)}
+        self.shapes = {"nDOFs": self.V.finat_element.space_dimension(),
+                  "dim": np.prod(self.V.shape, dtype=int)}
         # Averaging kernel
-        self._average_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                vo[i*{j} + j] += v[i*{j} + j]/w[i*{j} + j];
-        """.format(**shapes)
+        average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
+        average_instructions = ("""
+                                for i
+                                    for j
+                                        vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
+                                    end
+                                end
+                                """)
+        self._average_kernel = (average_domain, average_instructions)
 
     @cached_property
     def _weighting(self):
@@ -65,15 +69,17 @@ class Averager(object):
         Generates a weight function for computing a projection via averaging.
         """
         w = Function(self.V)
-        shapes = {"i": self.V.finat_element.space_dimension(),
-                  "j": np.prod(self.V.shape, dtype=int)}
-        weight_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                w[i*{j} + j] += 1.0;
-        """.format(**shapes)
+        weight_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
+        weight_instructions = ("""
+                               for i
+                                   for j
+                                      w[i,j] = w[i,j] + 1.0
+                                   end
+                               end
+                               """)
+        _weight_kernel = (weight_domain, weight_instructions)
 
-        par_loop(weight_kernel, ufl.dx, {"w": (w, INC)})
+        par_loop(_weight_kernel, ufl.dx, {"w": (w, INC)}, is_loopy_kernel=True)
         return w
 
     def project(self):
@@ -85,7 +91,8 @@ class Averager(object):
         self.v_out.dat.zero()
         par_loop(self._average_kernel, ufl.dx, {"vo": (self.v_out, INC),
                                                 "w": (self._weighting, READ),
-                                                "v": (self.v, READ)})
+                                                "v": (self.v, READ)},
+                 is_loopy_kernel=True)
         return self.v_out
 
 
@@ -596,27 +603,6 @@ class Recoverer(object):
                 self.boundary_recoverer.apply()
                 self.averager.project()
         return self.v_out
-
-
-def find_number_of_exterior_DOFs_per_cell(field, output):
-    """
-    Finds the number of DOFs on the domain exterior
-    per cell and stores it in a DG0 field.
-
-    :arg field: the input field, containing a 1 at each
-                exterior DOF and a 0 at each interior DOF.
-    :arg output: a DG0 field to be output to.
-    """
-
-    shapes = field.function_space().finat_element.space_dimension()
-    kernel = """
-    for (int i=0; i<%d; ++i) {
-    DG0[0][0] += ext[0][i];}
-    """ % shapes
-
-    par_loop(kernel, dx,
-             args={"DG0": (output, RW),
-                   "ext": (field, READ)})
 
 
 def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
