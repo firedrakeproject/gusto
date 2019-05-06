@@ -5,15 +5,12 @@ from firedrake import (FunctionSpace, as_vector, VectorFunctionSpace,
 import sys
 
 dt = 5.0
-hybridization = False
+
 if '--running-tests' in sys.argv:
     tmax = dt
-    hybridization = True
 else:
     tmax = 15000.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
 
 res = 10
 nlayers = res*20  # horizontal layers
@@ -54,9 +51,6 @@ mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, alpha=0.51)
-
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=30,
@@ -157,34 +151,25 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-if hybridization:
-    params = {'mat_type': 'matfree',
-              'ksp_type': 'preonly',
-              'pc_type': 'python',
-              'pc_python_type': 'firedrake.SCPC',
-              # Velocity mass operator is singular in the hydrostatic case.
-              # So for reconstruction, we eliminate rho into u
-              'pc_sc_eliminate_fields': '1, 0',
-              'condensed_field': {'ksp_type': 'fgmres',
-                                  'ksp_rtol': 1.0e-8,
-                                  'ksp_atol': 1.0e-8,
-                                  'ksp_max_it': 100,
-                                  'pc_type': 'gamg',
-                                  'pc_gamg_sym_graph': True,
-                                  'mg_levels': {'ksp_type': 'gmres',
-                                                'ksp_max_it': 5,
-                                                'pc_type': 'bjacobi',
-                                                'sub_pc_type': 'ilu'}}}
-    linear_solver = HybridizedCompressibleSolver(state, solver_parameters=params,
-                                                 overwrite_solver_parameters=True)
-else:
-    # LU parameters
-    params = {'pc_type': 'lu',
-              'ksp_type': 'preonly',
-              'pc_factor_mat_solver_type': 'mumps',
-              'mat_type': 'aij'}
-    linear_solver = CompressibleSolver(state, solver_parameters=params,
-                                       overwrite_solver_parameters=True)
+params = {'mat_type': 'matfree',
+          'ksp_type': 'preonly',
+          'pc_type': 'python',
+          'pc_python_type': 'firedrake.SCPC',
+          # Velocity mass operator is singular in the hydrostatic case.
+          # So for reconstruction, we eliminate rho into u
+          'pc_sc_eliminate_fields': '1, 0',
+          'condensed_field': {'ksp_type': 'fgmres',
+                              'ksp_rtol': 1.0e-8,
+                              'ksp_atol': 1.0e-8,
+                              'ksp_max_it': 100,
+                              'pc_type': 'gamg',
+                              'pc_gamg_sym_graph': True,
+                              'mg_levels': {'ksp_type': 'gmres',
+                                            'ksp_max_it': 5,
+                                            'pc_type': 'bjacobi',
+                                            'sub_pc_type': 'ilu'}}}
+linear_solver = CompressibleSolver(state, solver_parameters=params,
+                                   overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
