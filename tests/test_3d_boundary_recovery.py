@@ -96,7 +96,7 @@ def run_3d_recovery(dirname):
     return (rho_diff, theta_diff, v_diff, rho_Vt_diff)
 
 
-def test_3d_boundary_limiter(tmpdir):
+def test_3d_boundary_recovery(tmpdir):
 
     dirname = str(tmpdir)
     rho_diff, theta_diff, v_diff, rho_Vt_diff = run_3d_recovery(dirname)

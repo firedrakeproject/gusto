@@ -93,7 +93,7 @@ def run_2d_recovery(dirname):
     return (rho_diff, theta_diff, v_diff, rho_Vt_diff)
 
 
-def test_2d_boundary_limiter(tmpdir):
+def test_2d_boundary_recovery(tmpdir):
 
     dirname = str(tmpdir)
     rho_diff, theta_diff, v_diff, rho_Vt_diff = run_2d_recovery(dirname)
