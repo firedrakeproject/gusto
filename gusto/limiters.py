@@ -1,5 +1,4 @@
 from __future__ import absolute_import, print_function, division
-from gusto.configuration import logger
 from firedrake import dx, BrokenElement, Function, FunctionSpace
 from firedrake.parloops import par_loop, READ, WRITE, INC
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
@@ -24,19 +23,26 @@ class ThetaLimiter(object):
         """
 
         self.Vt = FunctionSpace(space.mesh(), BrokenElement(space.ufl_element()))
-        # check this is the right space, only currently working for 2D extruded mesh
-        if self.Vt.extruded and self.Vt.mesh().topological_dimension() in (2, 3):
-            # check that horizontal degree is 1 and vertical degree is 2
-            if self.Vt.ufl_element().degree()[0] != 1 or \
-               self.Vt.ufl_element().degree()[1] != 2:
-                raise ValueError('This is not the right limiter for this space.')
+        # check this is the right space, currently working for 2D and 3D extruded meshes
+        # check that horizontal degree is 1 and vertical degree is 2
+        if self.Vt.ufl_element().degree()[0] != 1 or \
+           self.Vt.ufl_element().degree()[1] != 2:
+            raise ValueError('This is not the right limiter for this space.')
+
+        if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
             # check that continuity of the spaces is correct
             # this will fail if the space does not use broken elements
             if self.Vt.ufl_element()._element.sobolev_space()[0].name != 'L2' or \
                self.Vt.ufl_element()._element.sobolev_space()[1].name != 'H1':
                 raise ValueError('This is not the right limiter for this space.')
+        elif self.Vt.extruded and self.Vt.mesh().topological_dimension() == 3:
+            # check that continuity of the spaces is correct
+            # this will fail if the space does not use broken elements
+            if self.Vt.ufl_element()._element.sobolev_space()[0].name != 'L2' or \
+               self.Vt.ufl_element()._element.sobolev_space()[2].name != 'H1':
+                raise ValueError('This is not the right limiter for this space.')
         else:
-            logger.warning('This limiter may not work for the space you are using.')
+            raise ValueError('This is not the right limiter for this space.')
 
         self.DG1 = FunctionSpace(self.Vt.mesh(), 'DG', 1)  # space with only vertex DOFs
         self.vertex_limiter = VertexBasedLimiter(self.DG1)
