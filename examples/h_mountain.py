@@ -9,13 +9,14 @@ hybridization = False
 if '--running-tests' in sys.argv:
     tmax = dt
     hybridization = True
+    res = 1
 else:
     tmax = 15000.
 
 if '--hybridization' in sys.argv:
     hybridization = True
+    res = 10
 
-res = 10
 nlayers = res*20  # horizontal layers
 columns = res*12  # number of columns
 L = 240000.
