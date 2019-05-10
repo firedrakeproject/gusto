@@ -6,7 +6,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, Boundary_Method
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",

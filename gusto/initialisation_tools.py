@@ -12,7 +12,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
 from gusto.configuration import logger
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, Boundary_Method
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
@@ -321,8 +321,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
-        boundary_method = 'physics'
+    if state.vertical_degree == 0:
+        boundary_method = Boundary_Method.physics
     else:
         boundary_method = None
     rho_h = Function(Vr)
@@ -432,8 +432,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension == 2:
-        method = 'physics'
+    if state.vertical_degree == 0:
+        method = Boundary_Method.physics
     else:
         method = None
     rho_h = Function(Vr)
