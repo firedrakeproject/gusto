@@ -463,7 +463,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)+ds_tbp
+            + dl*dot(u, n)*ds_tbp
         )
 
         # contribution of the sponge term
