@@ -4,7 +4,7 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
-from firedrake import (FiniteElement, TensorProductElement, HDiv,
+from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
                        FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
@@ -245,6 +245,13 @@ class State(object):
         if self.output.dumplist is None:
             self.output.dumplist = fieldlist
         self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
+
+        # set up bcs
+        V = self.fields('u').function_space()
+        self.bcs = []
+        if V.extruded:
+            self.bcs.append(DirichletBC(V, 0.0, "bottom"))
+            self.bcs.append(DirichletBC(V, 0.0, "top"))
 
         self.dumpfile = None
 

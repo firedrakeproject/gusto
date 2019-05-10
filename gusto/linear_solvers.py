@@ -1,6 +1,6 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
+                       TestFunction, TrialFunction, lhs, rhs, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace)
@@ -199,8 +199,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
-               DirichletBC(M.sub(0), 0.0, "top")]
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
@@ -520,8 +519,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = [DirichletBC(Vu, Constant(0.0), "bottom"),
-                    DirichletBC(Vu, Constant(0.0), "top")]
+        self.bcs = self.state.bcs
 
     @timed_function("Gusto:LinearSolve")
     def solve(self):
@@ -645,8 +643,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
-               DirichletBC(M.sub(0), 0.0, "top")]
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)

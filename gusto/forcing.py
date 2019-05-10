@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from firedrake import (Function, split, TrialFunction, TestFunction,
                        FacetNormal, inner, dx, cross, div, jump, avg, dS_v,
-                       DirichletBC, LinearVariationalProblem, LinearVariationalSolver,
+                       LinearVariationalProblem, LinearVariationalSolver,
                        dot, dS, Constant, as_vector, SpatialCoordinate)
 from gusto.configuration import logger, DEBUG
 from gusto import thermodynamics
@@ -105,11 +105,7 @@ class Forcing(object, metaclass=ABCMeta):
     def _build_forcing_solvers(self):
         a = self.mass_term()
         L = self.forcing_term()
-        if self.Vu.extruded:
-            bcs = [DirichletBC(self.Vu, 0.0, "bottom"),
-                   DirichletBC(self.Vu, 0.0, "top")]
-        else:
-            bcs = None
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         u_forcing_problem = LinearVariationalProblem(
             a, L, self.uF, bcs=bcs
