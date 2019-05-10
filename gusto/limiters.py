@@ -119,7 +119,7 @@ class ThetaLimiter(object):
         """
         Copies the vertex values back from the DG1 space to
         the original temperature space, and checks that the
-        midpoint values are within than the minimum and maximum
+        midpoint values are within the minimum and maximum
         at the adjacent vertices.
 
         If outside of the minimum and maximum, correct the values
