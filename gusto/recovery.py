@@ -12,8 +12,9 @@ from gusto.transport_equation import is_dg
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
+from enum import Enum
 
-__all__ = ["Averager", "Boundary_Recoverer", "Recoverer"]
+__all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
 
 
 class Averager(object):
@@ -95,6 +96,17 @@ class Averager(object):
         return self.v_out
 
 
+class Boundary_Method(Enum):
+    """
+    An Enum object storing the two types of boundary method:
+    dynamics -- which corrects a field recovered into CG1.
+    physics -- which corrects a field recovered into the temperature space.
+    """
+
+    dynamics = 0
+    physics = 1
+
+
 class Boundary_Recoverer(object):
     """
     An object that performs a `recovery` process at the domain
@@ -115,14 +127,13 @@ class Boundary_Recoverer(object):
              is performed. Should be in CG1. This is correct
              on the interior of the domain.
     :arg v_DG1: the function to be output. Should be in DG1.
-    :arg method: string giving the method used for the recovery.
-             Valid options are 'dynamics' and 'physics'.
+    :arg method: a Boundary_Method Enum object.
     :arg coords_to_adjust: a DG1 field containing 1 at locations of
                            coords that must be adjusted to give they
                            effective coords.
     """
 
-    def __init__(self, v_CG1, v_DG1, method='physics', coords_to_adjust=None):
+    def __init__(self, v_CG1, v_DG1, method=Boundary_Method.physics, coords_to_adjust=None):
 
         self.v_DG1 = v_DG1
         self.v_CG1 = v_CG1
@@ -138,7 +149,7 @@ class Boundary_Recoverer(object):
         self.num_ext = Function(VDG0)
 
         # check function spaces of functions
-        if self.method == 'dynamics':
+        if self.method == Boundary_Method.dynamics:
             if v_CG1.function_space() != VCG1:
                 raise NotImplementedError("This boundary recovery method requires v1 to be in CG1.")
             if v_DG1.function_space() != VDG1:
@@ -157,7 +168,7 @@ class Boundary_Recoverer(object):
             if coords_to_adjust is None:
                 raise ValueError('Need coords_to_adjust field for dynamics boundary methods')
 
-        elif self.method == 'physics':
+        elif self.method == Boundary_Method.physics:
             # check that mesh is valid -- must be an extruded mesh
             if not VDG0.extruded:
                 raise NotImplementedError('The physics boundary method only works on extruded meshes')
@@ -175,13 +186,13 @@ class Boundary_Recoverer(object):
             if v_DG1.function_space() != Vtheta_broken:
                 raise ValueError("This boundary recovery method requires v_DG1 to be in the broken DG0xCG1 TensorProductSpace.")
         else:
-            raise ValueError("Specified boundary_method % not valid" % self.method)
+            raise ValueError("Boundary method should be a Boundary Method Enum object.")
 
         VuDG1 = VectorFunctionSpace(VDG0.mesh(), "DG", 1)
         x = SpatialCoordinate(VDG0.mesh())
         self.interpolator = Interpolator(self.v_CG1, self.v_DG1)
 
-        if self.method == 'dynamics':
+        if self.method == Boundary_Method.dynamics:
 
             # STRATEGY
             # obtain a coordinate field for all the nodes
@@ -443,7 +454,7 @@ class Boundary_Recoverer(object):
                       "EXT_V1": (self.coords_to_adjust, READ)},
                      is_loopy_kernel=True)
 
-        elif self.method == 'physics':
+        elif self.method == Boundary_Method.physics:
             top_bottom_domain = ("{[i]: 0 <= i < 1}")
             bottom_instructions = ("""
                                    DG1[0] = 2 * CG1[0] - CG1[1]
@@ -459,7 +470,7 @@ class Boundary_Recoverer(object):
 
     def apply(self):
         self.interpolator.interpolate()
-        if self.method == 'physics':
+        if self.method == Boundary_Method.physics:
             par_loop(self._bottom_kernel, dx,
                      args={"DG1": (self.v_DG1, WRITE),
                            "CG1": (self.v_CG1, READ)},
@@ -496,8 +507,7 @@ class Recoverer(object):
     :arg v_out: :class:`.Function` to put the result in. (e.g. a CG1 function)
     :arg VDG: optional :class:`.FunctionSpace`. If not None, v_in is interpolated
          to this space first before recovery happens.
-    :arg boundary_method: a string defining which type of method needs to be
-         used at the boundaries. Valid options are 'density', 'velocity' or 'physics'.
+    :arg boundary_method: an Enum object, .
     """
 
     def __init__(self, v_in, v_out, VDG=None, boundary_method=None):
@@ -522,17 +532,17 @@ class Recoverer(object):
 
         # check boundary method options are valid
         if boundary_method is not None:
-            if boundary_method != 'scalar' and boundary_method != 'vector' and boundary_method != 'physics':
-                raise ValueError("Specified boundary_method %s not valid" % boundary_method)
+            if boundary_method != Boundary_Method.dynamics and boundary_method != Boundary_Method.physics:
+                raise ValueError("Boundary method must be a Boundary_Method Enum object.")
             if VDG is None:
                 raise ValueError("If boundary_method is specified, VDG also needs specifying.")
 
             # now specify things that we'll need if we are doing boundary recovery
-            if boundary_method == 'physics':
+            if boundary_method == Boundary_Method.physics:
                 # check dimensions
                 if self.V.value_size != 1:
                     raise ValueError('This method only works for scalar functions.')
-                self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v, method='physics')
+                self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v, method=Boundary_Method.physics)
             else:
 
                 mesh = self.V.mesh()
@@ -540,22 +550,14 @@ class Recoverer(object):
                 VDG1 = FunctionSpace(mesh, "DG", 1)
                 VCG1 = FunctionSpace(mesh, "CG", 1)
 
-                if boundary_method == 'scalar':
-                    # check dimensions
-                    if self.V.value_size != 1:
-                        raise ValueError('This method only works for scalar functions.')
-
+                if self.V.value_size == 1:
                     VCG2 = FunctionSpace(mesh, "CG", 2)
                     coords_to_adjust = find_coords_to_adjust(V0_brok, VDG1, VCG1, VCG2)
 
                     self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v,
                                                                  coords_to_adjust=coords_to_adjust,
-                                                                 method='dynamics')
-                elif boundary_method == 'vector':
-                    # check dimensions
-                    if self.V.value_size != 2 and self.V.value_size != 3:
-                        raise NotImplementedError('This method only works for 2D or 3D vector functions.')
-
+                                                                 method=Boundary_Method.dynamics)
+                else:
                     VuCG1 = VectorFunctionSpace(mesh, "CG", 1)
                     VuCG2 = VectorFunctionSpace(mesh, "CG", 2)
                     VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
@@ -574,7 +576,7 @@ class Recoverer(object):
                         coords_to_adjust_list.append(Function(VDG1).project(coords_to_adjust[i]))
                         self.project_to_scalars_CG.append(Projector(self.v_out[i], v_out_scalars[i]))
                         self.boundary_recoverers.append(Boundary_Recoverer(v_out_scalars[i], v_scalars[i],
-                                                                           method='dynamics',
+                                                                           method=Boundary_Method.dynamics,
                                                                            coords_to_adjust=coords_to_adjust_list[i]))
                         # need an extra averager that works on the scalar fields rather than the vector one
                         self.extra_averagers.append(Averager(v_scalars[i], v_out_scalars[i]))
@@ -592,13 +594,13 @@ class Recoverer(object):
             self.interpolator.interpolate()
         self.averager.project()
         if self.boundary_method is not None:
-            if self.boundary_method == 'vector':
+            if self.V.value_size > 1:
                 for i in range(self.V.value_size):
                     self.project_to_scalars_CG[i].project()
                     self.boundary_recoverers[i].apply()
                     self.extra_averagers[i].project()
                 self.project_to_vector.project()
-            elif self.boundary_method == 'scalar' or self.boundary_method == 'physics':
+            else:
                 self.boundary_recoverer.apply()
                 self.averager.project()
         return self.v_out
@@ -633,7 +635,7 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
 
     # STRATEGY
     # We need to pass the boundary recoverer a field denoting the location
-    # of nodes on the boundary, which their coordinates adjusting to new effective
+    # of nodes on the boundary, which denotes the coordinates to adjust to be new effective
     # coords. This field will be 1 for these coords and 0 otherwise.
     # How do we do this?
     # 1. Obtain a DG1 field which is 1 at all exterior DOFs by applying Dirichlet

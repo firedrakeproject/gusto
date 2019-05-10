@@ -69,10 +69,10 @@ def setup_2d_recovery(dirname):
     rho_Vt = Function(Vt)
 
     # make the recoverers and do the recovery
-    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=VDG1, boundary_method='scalar')
-    theta_recoverer = Recoverer(theta_Vt, theta_CG1, VDG=VDG1, boundary_method='scalar')
-    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=VuDG1, boundary_method='vector')
-    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, VDG=Vt_brok, boundary_method='physics')
+    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=VDG1, boundary_method=Boundary_Method.dynamics)
+    theta_recoverer = Recoverer(theta_Vt, theta_CG1, VDG=VDG1, boundary_method=Boundary_Method.dynamics)
+    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=VuDG1, boundary_method=Boundary_Method.dynamics)
+    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, VDG=Vt_brok, boundary_method=Boundary_Method.physics)
 
     rho_recoverer.project()
     theta_recoverer.project()
