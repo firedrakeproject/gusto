@@ -29,13 +29,15 @@ class ThetaLimiter(object):
            self.Vt.ufl_element().degree()[1] != 2:
             raise ValueError('This is not the right limiter for this space.')
 
-        if self.Vt.extruded and self.Vt.mesh().topological_dimension() == 2:
+        if not self.Vt.extruded:
+            raise ValueError('This is not the right limiter for this space.')
+        if self.Vt.mesh().topological_dimension() == 2:
             # check that continuity of the spaces is correct
             # this will fail if the space does not use broken elements
             if self.Vt.ufl_element()._element.sobolev_space()[0].name != 'L2' or \
                self.Vt.ufl_element()._element.sobolev_space()[1].name != 'H1':
                 raise ValueError('This is not the right limiter for this space.')
-        elif self.Vt.extruded and self.Vt.mesh().topological_dimension() == 3:
+        elif self.Vt.mesh().topological_dimension() == 3:
             # check that continuity of the spaces is correct
             # this will fail if the space does not use broken elements
             if self.Vt.ufl_element()._element.sobolev_space()[0].name != 'L2' or \
