@@ -10,18 +10,7 @@ examples_dir = join(cwd, "..", "..", "examples")
 
 
 # Examples which use the compressible solvers
-compressible_examples = ["compressible_eady.py",
-                         "dense_bubble.py",
-                         "dry_bf_bubble.py",
-                         "h_mountain.py",
-                         "moist_bf_bubble.py",
-                         "nh_mountain.py",
-                         "rising_bubble.py",
-                         "sk_hydrostatic.py",
-                         "sk_linear_advection.py",
-                         "sk_nonlinear.py",
-                         "tracer.py",
-                         "unsaturated_bubble.py"]
+compressible_examples = ["h_mountain.py"]
 
 
 @pytest.fixture(params=[ex for glb in [glob.glob("%s/%s" % (examples_dir, exmp))
