@@ -8,11 +8,12 @@ dt = 5.0
 
 if '--running-tests' in sys.argv:
     tmax = dt
+    res = 1
 else:
     tmax = 15000.
+    res = 10
 
 
-res = 10
 nlayers = res*20  # horizontal layers
 columns = res*12  # number of columns
 L = 240000.
