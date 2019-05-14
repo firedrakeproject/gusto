@@ -452,17 +452,17 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             - beta_cp*div(thetabar_w*w)*pi*dxp
             # trace terms appearing after integrating momentum equation
             + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp+ds_vp)
+            + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
-            + beta*phi*dot(u, n)*rhobar_avg*(ds_tb+ds_v)
+            + beta*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*(ds_tbp+ds_vp)
+            + dl*dot(u, n)*(ds_tbp + ds_vp)
         )
 
         # contribution of the sponge term

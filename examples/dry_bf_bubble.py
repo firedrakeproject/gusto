@@ -69,7 +69,7 @@ state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields,
-              u_bc_ids=[1,2])
+              u_bc_ids=[1, 2])
 
 # Initial conditions
 u0 = state.fields("u")

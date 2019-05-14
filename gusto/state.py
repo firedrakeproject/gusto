@@ -260,7 +260,7 @@ class State(object):
             self.bcs.append(DirichletBC(V, 0.0, "bottom"))
             self.bcs.append(DirichletBC(V, 0.0, "top"))
         for id in self.u_bc_ids:
-            self.bcs.append(DichletBC(V, 0.0, id))
+            self.bcs.append(DirichletBC(V, 0.0, id))
 
         self.dumpfile = None
 
