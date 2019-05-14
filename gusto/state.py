@@ -197,7 +197,8 @@ class State(object):
     :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
     :arg u_bc_ids: a list containing the ids of boundaries for velocity
-                   to be 0 at, to be applied as boundary conditions.
+                   to be 0 at, to be applied as boundary conditions. For
+                   extruded meshes, top and bottom are added automatically.
     """
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
