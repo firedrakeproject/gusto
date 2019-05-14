@@ -196,8 +196,8 @@ class State(object):
     :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
-    :arg u_bc_ids: a list containing the ids of boundaries for velocity
-                   to be 0 at, to be applied as boundary conditions. For
+    :arg u_bc_ids: a list containing the ids of boundaries with no normal
+                   component of velocity. These ids are passed to `DirichletBC`s. For
                    extruded meshes, top and bottom are added automatically.
     """
 
