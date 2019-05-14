@@ -196,6 +196,8 @@ class State(object):
     :arg diagnostics: class containing diagnostic methods
     :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
+    :arg u_bc_ids: a list containing the ids of boundaries for velocity
+                   to be 0 at, to be applied as boundary conditions.
     """
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
@@ -207,7 +209,8 @@ class State(object):
                  parameters=None,
                  diagnostics=None,
                  fieldlist=None,
-                 diagnostic_fields=None):
+                 diagnostic_fields=None,
+                 u_bc_ids=None):
 
         self.family = family
         self.vertical_degree = vertical_degree
@@ -233,6 +236,10 @@ class State(object):
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
+        if u_bc_ids is not None:
+            self.u_bc_ids = u_bc_ids
+        else:
+            self.u_bc_ids = []
 
         # The mesh
         self.mesh = mesh
@@ -252,6 +259,8 @@ class State(object):
         if V.extruded:
             self.bcs.append(DirichletBC(V, 0.0, "bottom"))
             self.bcs.append(DirichletBC(V, 0.0, "top"))
+        for id in self.u_bc_ids:
+            self.bcs.append(DichletBC(V, 0.0, id))
 
         self.dumpfile = None
 

@@ -68,7 +68,8 @@ state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               parameters=params,
               diagnostics=diagnostics,
               fieldlist=fieldlist,
-              diagnostic_fields=diagnostic_fields)
+              diagnostic_fields=diagnostic_fields,
+              u_bc_ids=[1,2])
 
 # Initial conditions
 u0 = state.fields("u")
@@ -80,11 +81,6 @@ Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
 x, z = SpatialCoordinate(mesh)
-
-# set bcs
-state.bcs.append(DirichletBC(Vu, 0.0, 1))
-state.bcs.append(DirichletBC(Vu, 0.0, 2))
-
 
 # Define constant theta_e and water_t
 Tsurf = 300.0
