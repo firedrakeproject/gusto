@@ -2,9 +2,9 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import (TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_t, ds_b, VectorElement, as_ufl, as_vector,
+                       ds_v, ds_t, ds_b, VectorElement, as_ufl,
                        outer, sign, cross, CellNormal, Constant,
-                       curl, BrokenElement, FunctionSpace, Form)
+                       curl, BrokenElement, FunctionSpace)
 from gusto.configuration import logger, DEBUG, SUPGOptions
 
 
@@ -115,6 +115,7 @@ class TransportEquation(object, metaclass=ABCMeta):
               None, "once" or "twice". Defaults to "once".
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
+    :arg flux form: use flux form of transport
     """
 
     def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE, solver_params=None,
@@ -126,22 +127,26 @@ class TransportEquation(object, metaclass=ABCMeta):
 
         # set up functions required for forms
         self.ubar = state.ubar
-        if self.state.hamiltonian:
+        if state.hamiltonian:
             self.upbar = self.state.upbar
+            if state.hamiltonian_options.no_u_rec:
+                dn = state.xn.split()[1]
+                dnp1 = state.xnp1.split()[1]
+                dbar = 0.5*(dn + dnp1)
+                self.ubar = state.F/dbar
         else:
             self.upbar = self.ubar
-        self.Fbar = state.F
         self.test = TestFunction(V)
         self.trial = TrialFunction(V)
 
         self.dS = surface_measures(V)
 
         # In Hamiltonian case save form for forcing
-        if self.state.hamiltonian:
+        if state.hamiltonian:
             qn = state.xn.split()[V.index]
             qnp1 = state.xnp1.split()[V.index]
-            self.state.L_forms[self.V] = (self.test, self.ubar,
-                                          self.advection_term(0.5*(qn + qnp1)))
+            ubar = state.F if state.hamiltonian_options.no_u_rec else self.ubar
+            self.state.L_forms[self.V] = (self.test, ubar, self.advection_term(0.5*(qn + qnp1)))
 
         if solver_params:
             self.solver_parameters = solver_params
@@ -233,7 +238,6 @@ class AdvectionEquation(TransportEquation):
                         linear solver.
     :arg outflow: Boolean specifying whether advected quantity can be advected out
                   of domain.
-    :arg flux_form: Boolean specifying whether to use flux form of advection.
     """
     def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE, equation_form="advective",
                  vector_manifold=False, solver_params=None, outflow=False,
@@ -268,7 +272,7 @@ class AdvectionEquation(TransportEquation):
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
         else:
             if self.flux_form:
-                L = inner(self.test, div(q*self.Fbar))*dx
+                L = -inner(grad(self.test), q*self.Fbar)*dx
             elif self.ibp == IntegrateByParts.ONCE:
                 L = -inner(div(outer(self.test, self.ubar)), q)*dx
             else:
@@ -371,9 +375,8 @@ class SUPGAdvection(AdvectionEquation):
                         linear solver.
     :arg outflow: Boolean specifying whether advected quantity can be advected out
                   of domain.
-    :arg flux_form: Boolean specifying whether to use flux form of advection.
     """
-    def __init__(self, state, V, ibp=IntegrateByParts.TWICE, equation_form="advective", supg_params=None, solver_params=None, outflow=False, flux_form=False):
+    def __init__(self, state, V, ibp=IntegrateByParts.TWICE, equation_form="advective", supg_params=None, solver_params=None, outflow=False):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -385,7 +388,7 @@ class SUPGAdvection(AdvectionEquation):
         super().__init__(state=state, V=V, ibp=ibp,
                          equation_form=equation_form,
                          solver_params=solver_params,
-                         outflow=outflow, flux_form=flux_form)
+                         outflow=outflow)
 
         if is_dg(V):
             raise ValueError("You are trying to apply SUPG on a discontinuous space")
@@ -419,30 +422,14 @@ class SUPGAdvection(AdvectionEquation):
                             else 0. for i in range(dim)]
                 else:
                     raise ValueError("I don't know what to do with space %s" % space)
-            tau = tuple([
+            tau = Constant(tuple([
                 tuple(
                     [vals[j] if i == j else 0. for i, v in enumerate(vals)]
                 ) for j in range(dim)])
-            if supg_params.constant_tau:
-                tau = Constant(tau)
-            else:
-                tau = as_vector(tau)
+            )
+        self.state.tau = tau
         dtest = dot(dot(self.upbar, tau), grad(self.test))
-        if self.state.hamiltonian:
-            self.state.SUPG[V] = (tau, supg_params.constant_tau)
-            if self.flux_form:
-                dtest = dot(dot(self.Fbar, tau), grad(self.test))
         self.test += dtest
-
-    def advection_term(self, q):
-        """Adjust dx for special cases"""
-        L = super(SUPGAdvection, self).advection_term(q)
-        if self.flux_form:
-            metadata = {'quadrature_degree': 6,
-                        'representation': 'quadrature'}
-            L_int_dS = list(L.integrals()[1:])
-            L = Form([L.integrals()[0].reconstruct(metadata=metadata)] + L_int_dS)
-        return L
 
 
 class VectorInvariant(TransportEquation):
@@ -455,38 +442,33 @@ class VectorInvariant(TransportEquation):
               take the value None, "once" or "twice". Defaults to "once".
     :arg solver_params: (optional) dictionary of solver parameters to pass to the
                         linear solver.
-    :arg vorticity: use vorticity form of transport. Defaults to "False"
+    :arg vorticity: (optional) use vorticity field in velocity advection.
     """
     def __init__(self, state, V, *, ibp=IntegrateByParts.ONCE,
                  solver_params=None, vorticity=False):
+
+        if state.mesh.topological_dimension() == 3 and ibp == IntegrateByParts.TWICE:
+            raise NotImplementedError("ibp=twice is not implemented for 3d problems")
+
         self.vorticity = vorticity
         if vorticity:
-            qn = state.xn.split()[-1]
-            qp = state.xp.split()[-1]
-            self.qbar = 0.5*(qn + qp)
+            ibp=IntegrateByParts.NEVER
+            self.Fbar = state.F
+            self.qbar = state.qbar
+            if state.mesh.topological_dimension() == 3:
+                raise NotImplementedError("vorticity setup is not implemented for 3d problems")
         if state.hamiltonian:
-            if not vorticity:
+            self.th_m = Constant(1.)
+
+        super().__init__(state=state, V=V, ibp=ibp,
+                         solver_params=solver_params)
+
+        if state.hamiltonian:
+            if not state.hamiltonian_options.no_u_rec and not vorticity:
                 dn = state.xn.split()[1]
                 dnp1 = state.xnp1.split()[1]
                 dbar = 0.5*(dn + dnp1)
                 self.test = self.test*dbar
-            else:
-                self.flux_form = True
-                if qn.function_space() in state.SUPG:
-                    Dn = state.xn.split()[1]
-                    Dp = state.xp.split()[1]
-                    dt = state.timestepping.dt
-                    tau, const = state.SUPG[qn.function_space()]
-                    if const:
-                        nu = tau.values()[0]
-                    else:
-                        nu = tau[0][0]
-                    self.qbar = self.qbar - nu*((qp*Dp - qn*Dn)/dt + div(self.Fbar*self.qbar))
-        super().__init__(state=state, V=V, ibp=ibp,
-                         solver_params=solver_params)
-
-        if state.mesh.topological_dimension() == 3 and ibp == IntegrateByParts.TWICE:
-            raise NotImplementedError("ibp=twice is not implemented for 3d problems")
 
     def advection_term(self, q):
 
@@ -508,6 +490,7 @@ class VectorInvariant(TransportEquation):
             )
 
         else:
+
             perp = self.state.perp
             if self.state.on_sphere:
                 outward_normals = CellNormal(self.state.mesh)
@@ -523,7 +506,7 @@ class VectorInvariant(TransportEquation):
                     - inner(jump(inner(self.test, perp(self.ubar)), n),
                             perp_u_upwind(q))*self.dS
                 )
-            elif self.ibp == IntegrateByParts.TWICE:
+            else:
                 L = (
                     (-inner(self.test, div(perp(q))*perp(self.ubar)))*dx
                     - inner(jump(inner(self.test, perp(self.ubar)), n),
@@ -553,8 +536,11 @@ class EulerPoincare(VectorInvariant):
     def advection_term(self, q):
         L = super().advection_term(q)
         if self.state.hamiltonian:
+            # For theta method, add EP term to rhs only
             if not hasattr(q, "number"):
-                L -= 2*div(self.test)*inner(self.state.h_project(self.ubar), self.ubar)*dx
+                L -= self.th_m*div(self.test)*inner(self.state.h_project(self.ubar), self.state.ubar)*dx
+            else:
+                self.th_m.assign(2.)
         else:
             L -= 0.5*div(self.test)*inner(q, self.ubar)*dx
         return L

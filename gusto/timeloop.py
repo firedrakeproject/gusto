@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
-from gusto.advection import Update_ubar, Reconstruct_q
+from gusto.advection import Update_advection, Reconstruct_q
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
 from firedrake import DirichletBC
@@ -44,10 +44,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.prescribed_fields = prescribed_fields
         else:
             self.prescribed_fields = []
-        self.update_ubar = Update_ubar(state)
-
-        if state.reconstruct_q:
-            self.reconstruct_q = Reconstruct_q(state)
+        self.update_advection = Update_advection(state)
+        self.reconstruct_q = state.timestepping.reconstruct_q
+        if self.reconstruct_q:
+            self.q_reconstructor = Reconstruct_q(state)
 
     @abstractproperty
     def passive_advection(self):
@@ -70,14 +70,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
     def _update_q(self):
         """
-        Update vorticity qn if it is used as a prognostic variable.
+        Update vorticity time step qnp1 if it is used as a prognostic variable.
         """
         if 'q' in self.state.fieldlist:
             qrhs = self.state.xrhs.split()[-1]
             qnp1 = self.state.xnp1.split()[-1]
-            qnp1.assign(qrhs)
-            if self.state.reconstruct_q:
-                self.reconstruct_q.apply(self.state.xnp1)
+            qnp1 += qrhs
+            if self.reconstruct_q:
+                self.q_reconstructor.apply(self.state.xnp1)
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """
@@ -125,10 +125,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 state.fields(name).project(evaluation(t))
 
             self.semi_implicit_step()
-            self._update_q()
 
-            # first compute ubar from state.xn and state.xnp1
-            self.update_ubar.apply(state.xn, state.xnp1, state.timestepping.alpha)
+            # first compute advection time averages from state.xn and state.xnp1
+            self.update_advection.apply(state.xn, state.xnp1, state.timestepping.alpha, passive=True)
             for name, advection in self.passive_advection:
                 field = getattr(state.fields, name)
                 # advects a field from xn and puts result in xnp1
@@ -152,7 +151,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if state.output.checkpoint:
             state.chkpt.close()
 
-        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
+        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (round(t, 7), tmax))
 
 
 class CrankNicolson(BaseTimestepper):
@@ -193,7 +192,7 @@ class CrankNicolson(BaseTimestepper):
 
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
-        self.update_ubar = Update_ubar(state, self.active_advection)
+        self.update_advection = Update_advection(state, self.active_advection)
         state.xb.assign(state.xn)
 
     @property
@@ -215,11 +214,10 @@ class CrankNicolson(BaseTimestepper):
                                state.xstar, implicit=False)
 
         for k in range(state.timestepping.maxk):
-
             with timed_stage("Advection"):
-                # first compute ubar from state.xn and state.xnp1
-                self.update_ubar.apply(state.xn, state.xnp1, alpha)
                 for name, advection in self.active_advection:
+                    # first compute advection time averages from state.xn and state.xnp1
+                    self.update_advection.apply(state.xn, state.xnp1, alpha)
                     # advects a field from xstar and puts result in xp
                     advection.apply(self.xstar_fields[name], self.xp_fields[name])
 
@@ -238,6 +236,7 @@ class CrankNicolson(BaseTimestepper):
                     self.linear_solver.solve()  # solves linear system and places result in state.dy
 
                 state.xnp1 += state.dy
+                self._update_q()
 
             self._apply_bcs()
 

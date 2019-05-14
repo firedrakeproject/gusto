@@ -22,6 +22,9 @@ class Forcing(object, metaclass=ABCMeta):
     terms (namely the Euler Poincare term) should not be added.
     :arg extra_terms: extra terms to add to the u component of the forcing
     term - these will be multiplied by the appropriate test function.
+    :arg vorticity: if True then forcing will also be applied for vorticity
+    equation (requires vorticity field "q" in .State object); only implemented
+    for Hamiltonian forcing.
     """
 
     def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None, vorticity=False):
@@ -52,7 +55,7 @@ class Forcing(object, metaclass=ABCMeta):
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
-        self.coriolis = (state.Omega is not None or hasattr(state.fields, "coriolis")) and not hasattr(state.fields, "q")
+        self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
         self.sponge = state.mu is not None
         self.hydrostatic = state.hydrostatic
         self.topography = hasattr(state.fields, "topography")
@@ -113,7 +116,6 @@ class Forcing(object, metaclass=ABCMeta):
     def q_mass_term(self):
         return inner(self.q_test, self.q_trial)*dx
 
-    # @abstractmethod
     def q_forcing_term(self):
         pass  # depends on pressure gradient term
 
@@ -184,7 +186,6 @@ class Forcing(object, metaclass=ABCMeta):
 
         if self.vorticity:
             self.q_forcing_solver.solve()
-
             qF = x_out.split()[-1]
             qF += self.qF
 
@@ -253,6 +254,7 @@ class CompressibleForcing(Forcing):
         super(CompressibleForcing, self)._build_forcing_solvers()
         # build forcing for theta equation
         if self.moisture is not None:
+            theta0 = split(self.x0)[2]
             Vt = self.state.spaces("HDiv_v")
             p = TrialFunction(Vt)
             q = TestFunction(Vt)
@@ -473,9 +475,12 @@ class ShallowWaterForcing(Forcing):
 
 class HamiltonianForcing(Forcing, metaclass=ABCMeta):
     """Base class for Hamiltonian energy conserving forcing"""
-    def __init__(self, state, upwind_d=True, euler_poincare=True):
+    def __init__(self, state, upwind_d=True, euler_poincare=True, vorticity=False):
         # Antisymmetric upwinding for Hamiltonian setup
         self.upwind_d = upwind_d
+        # Vorticity forcing only works without u-recovery operator
+        if vorticity and not state.hamiltonian_options.no_u_rec:
+            raise NotImplementedError("Combination u_rec with vorticity not yet implemented")
 
         n = FacetNormal(state.mesh)
         s = lambda u: 0.5*(sign(dot(u, n)) + 1)
@@ -484,10 +489,7 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
             self.dS = dS_h + dS_v
         else:
             self.dS = dS
-
-        super().__init__(state=state, euler_poincare=euler_poincare,
-                         linear=False, extra_terms=None,
-                         moisture=None)
+        super().__init__(state=state, euler_poincare=euler_poincare, vorticity=vorticity)
         self._setup_aux_solvers()
 
     @abstractmethod
@@ -516,15 +518,18 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
         d0 = self.x0.split()[1]
         self.dbar = 0.5*(dn + d0)
         # Use weighted test functions when upwinding is applied
-        if self.upwind_d:
+        if self.upwind_d and not self.state.hamiltonian_options.no_u_rec:
             self.dweight = self.dbar
         else:
             self.dweight = Constant(1.)
         return inner(self.dweight*self.test, self.trial)*dx
 
     def euler_poincare_term(self):
-        u0 = self.state.u_rec
-        return -div(self.dweight*self.test)*inner(self.state.h_project(u0), u0)*dx
+        if self.state.hamiltonian_options.no_u_rec:
+            u0 = self.state.F/self.dbar
+        else:
+            u0 = self.state.u_rec
+        return -div(self.dweight*self.test)*inner(self.state.h_project(u0), self.state.ubar)*dx
 
     def pressure_gradient_term(self):
         # Forcing terms are derived from advection forms
@@ -533,6 +538,10 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
             L = replace(L_ad, {ubar_ad: self.test, test_ad: self.state.P})
         else:
             L = replace(L_ad, {self.state.F: self.test, test_ad: self.Hvar(self.x0)[0]})
+        return L
+
+    def q_forcing_term(self):
+        L = inner(curl(self.q_test), self.uF)*dx # do non-uF form for SUPG
         return L
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
@@ -550,29 +559,29 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
     energy conserving way"""
     def __init__(self, state, upwind_d=True, upwind_th=True, SUPG=True, tau=None,
                  gauss_deg=None, euler_poincare=True, vorticity=False):
-        if upwind_d != upwind_th:
-            raise NotImplementedError("non-equal theta, rho upwinding not yet implemented. Idea: use a "
-                                      "no weight approach for theta, with F/rho instead of u_rec.")
-        if any((not upwind_d, not upwind_th)) and euler_poincare:
-            raise NotImplementedError("Hamiltonian velocity advection without weighted test functions not "
-                                      "yet implemented; Euler-Poin care type split requires consistent test "
-                                      "function weights, i.e. need upwinded forcing.")
+
         # Load SUPG parameter if SUPG is used for temperature advection
         self.SUPG = SUPG
         if tau is not None:
             self.tau = tau
         else:
-            self.tau = state.SUPG[state.spaces("HDiv_v")][0]
+            self.tau = state.tau
         if gauss_deg is not None:
             self.gauss_deg = gauss_deg
         else:
             self.gauss_deg = 4
         self.upwind_th = upwind_th
-        super().__init__(state, upwind_d, euler_poincare)
+
+        # Vorticity forcing together with SUPG not yet implemented
+        if vorticity and SUPG:
+            raise NotImplementedError("vorticity formulation together with temperature"
+                                      "SUPG not yet implemented")
+
+        super().__init__(state, upwind_d, euler_poincare, vorticity)
 
     def Hvar(self, x0):
-        un, rhon, thetan = self.state.xn.split()
-        u0, rho0, theta0 = self.x0.split()
+        un, rhon, thetan = self.state.xn.split()[:3]
+        u0, rho0, theta0 = self.x0.split()[:3]
 
         rho_int = lambda s: (1 - s)*rhon + s*rho0
         th_int = lambda s: (1 - s)*thetan + s*theta0
@@ -610,40 +619,25 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
 
     def pressure_gradient_term(self):
         L = super(HamiltonianCompressibleForcing, self).pressure_gradient_term()
-
+        self.L_th = 0
         # Add antisymmetric part corresponding to theta advection
-        if self.upwind_th:
-            # In upwinded case dbar cancels with test function weight
-            Trho = self.state.T
-        else:
-            Trho = self.state.T/self.dbar
-        if self.SUPG:
-            # Use upwinded form of variation in theta
-            un = self.state.xn.split()[0]
-            u0 = self.x0.split()[0]
-            ubar = 0.5*(un + u0)
-            Ts = Trho + dot(dot(ubar, self.tau), grad(Trho))
-        else:
-            Ts = Trho
-
-        test_ad, ubar_ad, L_ad = self.state.L_forms[self.state.spaces("HDiv_v")]
-        self.L_th = replace(L_ad, {ubar_ad: self.test, test_ad: Ts})
-
         if self.SUPG:
             # Add antisymmetric part corresponding to upwinded test function of dth/dt
             thetan = self.state.xn.split()[2]
             thetap = self.state.xp.split()[2]
             theta_t = (thetap - thetan)/self.scaling
             self.L_th += dot(dot(self.test, self.tau), grad(self.state.T))*theta_t*dx
-
-        L += self.L_th
-        return L
-
-    def q_forcing_term(self):
-        if not self.upwind_d:
-            L = replace(self.L_th, {self.test: curl(self.q_test)})
+            # Use upwinded form of variation in theta
+            un = self.state.xn.split()[0]
+            u0 = self.x0.split()[0]
+            ubar = 0.5*(un + u0)
+            Ts = self.state.T + dot(dot(ubar, self.tau), grad(self.state.T))
         else:
-            raise NotImplementedError("q forcing from upwinded rho not yet implemented")
+            Ts = self.state.T
+
+        test_ad, ubar_ad, L_ad = self.state.L_forms[self.state.spaces("HDiv_v")]
+        self.L_th += replace(L_ad, {ubar_ad: self.test, test_ad: Ts})
+        L += self.L_th
         return L
 
 
@@ -663,7 +657,7 @@ class HamiltonianShallowWaterForcing(HamiltonianForcing):
 
     def coriolis_term(self):
         f = self.state.fields("coriolis")
-        if self.upwind_d:
+        if self.upwind_d and not self.state.no_u_rec:
             L = -f*inner(self.dbar*self.test, self.state.perp(self.state.u_rec))*dx
         else:
             L = -f*inner(self.test, self.state.perp(self.state.F)/self.dbar)*dx

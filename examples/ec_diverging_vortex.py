@@ -12,9 +12,10 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 10.
     res = 256
-    square_test = False
+    square_test = True
+hamiltonian = True
+upwind_D = False
 vorticity = True
-vorticity_SUPG = False
 
 # set up parameters and mesh
 if square_test:
@@ -43,15 +44,14 @@ else:
 fieldlist = ['u', 'D']
 if vorticity:
     fieldlist.append('q')
-
 # Set up objects for state
 parameters = ShallowWaterParameters(g=g, H=H)
 
-nq = '' if vorticity else 'no'
-nqSUPG = '' if vorticity_SUPG else 'no'
-dirname = ("EC_{0}_{1}q_{2}qSUPG_res{3}_dt{4}_maxk"
-           "{5}".format(fname, nq, nqSUPG, res, round(dt, 4), maxk))
-
+upw = '' if upwind_D else 'no'
+vort = '_vorticity' if vorticity else ''
+ham = '_hamiltonian' if hamiltonian else ''
+dirname = ("EC_{0}{1}{2}_{3}upwindD_res{4}_dt{5}_maxk"
+           "{6}".format(fname, ham, vort, upw, res, round(dt, 4), maxk))
 timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           log_level='INFO')
@@ -64,10 +64,12 @@ diagnostic_fields = [ShallowWaterKineticEnergy(),
                      AbsoluteVorticity(),
                      ShallowWaterPotentialEnstrophy()]
 
+if vorticity and hamiltonian:
+    hamiltonian = 'no_u_rec'
+
 state = State(mesh, horizontal_degree=1,
               family="BDM",
-              hamiltonian=True,
-              reconstruct_q=True,
+              hamiltonian=hamiltonian,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -101,18 +103,13 @@ else:
     e2 = exp(-1./2.*(xp2**2. + yp2**2.))
     psiexpr = - DeltaH*(e1 + e2 - 4.*pi*sx*sy/Lx/Ly)*g/f
 
-    # Psi should live in vorticity/stream function space
-    if 'q' in fieldlist:
-        q0 = state.fields('q')
-        Vq = q0.function_space()
-    else:
-        Vq = FunctionSpace(mesh, "CG", 3)
-    psi = Function(Vq).interpolate(psiexpr)
+    # Psi should live in stream function space
+    Vpsi = FunctionSpace(mesh, "CG", 3)
+    psi = Function(Vpsi).interpolate(psiexpr)
     D0.project(f*psi/g)
     D0 += H
     psi_grad = Function(u0.function_space()).project(grad(psi))
     u0.project(as_vector([-psi_grad[1], psi_grad[0]]))
-
 
 state.initialise([('u', u0),
                   ('D', D0)])
@@ -123,55 +120,48 @@ V = FunctionSpace(mesh, "CG", 1)
 f = state.fields("coriolis", V)
 f.interpolate(fexpr)
 
+advected_fields = []
+if upwind_D:
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
+    advected_fields.append(("D", ThetaMethod(state, D0, Deqn)))
+else:
+    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity",
+                             flux_form=True)
+    advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
+
+# Euler Poincare split only if advection, forcing weights are equal
+if upwind_D != vorticity:
+    euler_poincare = True
+    U_transport = EulerPoincare
+else:
+    euler_poincare = False
+    U_transport = VectorInvariant
+
 if vorticity:
     # initial q solver
-    initial_vorticity(state, D0, u0, q0, f)
+    q0 = state.fields('q')
+    initial_vorticity(state, D0, u0, q0)
 
-    Deqn = AdvectionEquation(state, D0.function_space(),
-                             ibp=IntegrateByParts.NEVER,
-                             equation_form="continuity", flux_form=True)
-    upwind_D = False
-
-    if vorticity_SUPG:
-        # set up vorticity SUPG parameter
-        cons, vol, eps = Constant(0.1), CellVolume(mesh), 1.0e-10
-        Fmag = (inner(D0*u0, D0*u0) + eps)**0.5
-        q_SUPG = SUPGOptions()
-        q_SUPG.default = (cons/Fmag)*vol**0.5
-        q_SUPG.constant_tau = False
-
-        qeqn = SUPGAdvection(state, q0.function_space(),
-                             ibp=IntegrateByParts.NEVER,
-                             supg_params=q_SUPG, flux_form=True)
-    else:
-        qeqn = AdvectionEquation(state, q0.function_space(),
-                                 ibp=IntegrateByParts.NEVER, flux_form=True)
-
-    advected_fields = []
     # flux formulation has Dp in q-eqn, qp in u-eqn, so order matters
-    advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
+    qeqn = AdvectionEquation(state, q0.function_space(),
+                             ibp=IntegrateByParts.NEVER, flux_form=True)
     advected_fields.append(("q", ThetaMethod(state, q0, qeqn, weight='D')))
 
-    # Advected fields building q equation sets up q SUPG, which is needed
-    # in ueqn.
-    ueqn = VectorInvariant(state, u0.function_space(), vorticity=True)
+    ueqn = U_transport(state, u0.function_space(), vorticity=True)
     advected_fields.append(("u", ForwardEuler(state, u0, ueqn)))
-    upwind = False
 else:
-    ueqn = VectorInvariant(state, u0.function_space())
-    Deqn = AdvectionEquation(state, D0.function_space(),
-                             equation_form="continuity")
-    upwind_D = True
-
-    advected_fields = []
+    ueqn = U_transport(state, u0.function_space())
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", ThetaMethod(state, D0, Deqn)))
 
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-sw_forcing = HamiltonianShallowWaterForcing(state, upwind_d=upwind_D,
-                                            euler_poincare=False)
+if hamiltonian != False:
+    sw_forcing = HamiltonianShallowWaterForcing(state, upwind_d=upwind_D,
+                                                euler_poincare=euler_poincare,
+                                                vorticity=vorticity)
+else:
+    sw_forcing = ShallowWaterForcing(state, euler_poincare=euler_poincare)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver, sw_forcing)

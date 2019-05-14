@@ -336,22 +336,13 @@ class ShallowWaterPotentialEnergy(Energy):
 class ShallowWaterPotentialEnstrophy(DiagnosticField):
 
     def __init__(self, base_field_name="PotentialVorticity"):
-        super().__init__(required_fields=(base_field_name, ))
+        super().__init__()
         self.base_field_name = base_field_name
 
     @property
     def name(self):
         base_name = "SWPotentialEnstrophy"
         return "_from_".join((base_name, self.base_field_name))
-
-    def setup(self, state):
-        if not self._initialised:
-            if state.hamiltonian:
-                space = state.spaces("DG_Enstrophy", state.mesh, "DG",
-                                     3*(state.horizontal_degree+1))
-            else:
-                space = None
-            super(ShallowWaterPotentialEnstrophy, self).setup(state, space=space)
 
     def compute(self, state):
         if self.base_field_name == "PotentialVorticity":
@@ -719,22 +710,18 @@ class Vorticity(DiagnosticField):
             vorticity_types = ["relative", "absolute", "potential"]
             if vorticity_type not in vorticity_types:
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
-            if state.hamiltonian and vorticity_type == "absolute":
-                space = state.spaces("DG_Abs_vorticity", state.mesh, "DG",
-                                     3*(state.horizontal_degree+1))
-            else:
-                try:
-                    space = state.spaces("Vq")
-                except AttributeError:
-                    try:
-                        space = state.spaces("CG")
-                    except AttributeError:
-                        dgspace = state.spaces("DG")
-                        if dgspace.extruded:
-                            cg_degree = dgspace.ufl_element().degree()[0] + 2
-                        else:
-                            cg_degree = dgspace.ufl_element().degree() + 2
-                        space = FunctionSpace(state.mesh, "CG", cg_degree)
+            try:
+                space = state.spaces("CG")
+            except AttributeError:
+                if 'q' in state.fieldlist:
+                    space = state.fields('q').function_space()
+                else:
+                    dgspace = state.spaces("DG")
+                    if dgspace.extruded:
+                        cg_degree = dgspace.ufl_element().degree()[0] + 2
+                    else:
+                        cg_degree = dgspace.ufl_element().degree() + 2
+                    space = FunctionSpace(state.mesh, "CG", cg_degree)
             super().setup(state, space=space)
             un, dn = state.xn.split()[:2]
             gamma = TestFunction(space)
@@ -747,15 +734,20 @@ class Vorticity(DiagnosticField):
                 a = q*gamma*dx
                 self.potential = False
 
-            if state.on_sphere:
-                cell_normals = CellNormal(state.mesh)
-                gradperp = lambda psi: cross(cell_normals, grad(psi))
-                L = (- inner(gradperp(gamma), un))*dx
+            if state.mesh.topological_dimension() == 3:
+                raise NotImplementedError("3d vorticity diagnostic not yet implemented")
             else:
-                L = (- inner(state.perp(grad(gamma)), un))*dx
-                if space.extruded:
-                    n = FacetNormal(state.mesh)
-                    L += gamma*inner(state.perp(n), un)*(ds_t + ds_b)
+                if state.on_sphere:
+                    cell_normals = CellNormal(state.mesh)
+                    gradperp = lambda psi: cross(cell_normals, grad(psi))
+                    L = (- inner(gradperp(gamma), un))*dx
+                else:
+                    L = (- inner(state.perp(grad(gamma)), un))*dx
+
+                    if space.extruded:
+                        n = FacetNormal(state.mesh)
+                        L += gamma*inner(state.perp(n), un)*(ds_t + ds_b)
+
             if vorticity_type != "relative" and hasattr(state.fields, "coriolis"):
                 f = state.fields("coriolis")
                 L += gamma*f*dx

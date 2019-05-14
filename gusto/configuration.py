@@ -7,7 +7,7 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions"]
+__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "HamiltonianOptions"]
 
 logger = logging.getLogger("gusto")
 
@@ -46,7 +46,7 @@ class TimesteppingParameters(Configuration):
     alpha = 0.5
     maxk = 4
     maxi = 1
-
+    reconstruct_q = False
 
 class OutputParameters(Configuration):
 
@@ -164,5 +164,10 @@ class SUPGOptions(AdvectionOptions):
 
     name = "supg"
     tau = None
-    constant_tau = True
     default = 1/sqrt(15)
+
+
+class HamiltonianOptions(Configuration):
+
+    no_u_rec = False
+    no_projections = False

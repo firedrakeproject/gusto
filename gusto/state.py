@@ -191,9 +191,8 @@ class State(object):
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
     :arg hydrostatic: boolean on whether to use hydrostatic setup.
-    :arg hamiltonian: boolean on whether to use Hamiltonian setup.
-    :arg reconstruct_q: boolean on reconstructing vorticity from velocity,
-    if vorticity advection is used.
+    :arg hamiltonian: (optional) :class: HamiltonianOptions specifying
+    Hamiltonian setup.
     :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
@@ -207,7 +206,6 @@ class State(object):
                  Coriolis=None, sponge_function=None,
                  hydrostatic=None,
                  hamiltonian=None,
-                 reconstruct_q=None,
                  timestepping=None,
                  output=None,
                  parameters=None,
@@ -222,7 +220,6 @@ class State(object):
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
         self.hamiltonian = hamiltonian
-        self.reconstruct_q = reconstruct_q
         self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -241,6 +238,16 @@ class State(object):
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
+
+        if hamiltonian is not None and hamiltonian is not False:
+            self.hamiltonian = True
+            self.hamiltonian_options = hamiltonian
+
+            # save advection forms and SUPG parameter for Hamiltonian forcing
+            self.tau = 0
+            self.L_forms = {}
+            # set forcing split to implicit for Hamiltonian forcing
+            self.timestepping.alpha = 1.
 
         # The mesh
         self.mesh = mesh
@@ -284,13 +291,6 @@ class State(object):
         else:
             self.h_project = lambda u: u
 
-        if self.hamiltonian:
-            # save advection forms and SUPG parameters for Hamiltonian forcing
-            self.SUPG = {}
-            self.L_forms = {}
-            # set forcing split to implicit for Hamiltonian forcing
-            self.timestepping.alpha = 1.
-
         # Constant to hold current time
         self.t = Constant(0.0)
 
@@ -303,8 +303,9 @@ class State(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
         logger.info("Equation frameworks that take non-default values:")
-        framework_dict = {"hydrostatic": hydrostatic, "hamiltonian": hamiltonian,
-                          "reconstruct_q": reconstruct_q}
+        framework_dict = {"hydrostatic": hydrostatic}
+        if self.hamiltonian:
+            framework_dict["hamiltonian"] = hamiltonian.__dict__
         logger.info(", ".join("%s: %s" % item for item in framework_dict.items()
                               if item[1] is not None))
 
@@ -501,10 +502,9 @@ class State(object):
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
         """
         Build:
-        optionally vorticity space V1
-        velocity space V2,
-        pressure space V3,
-        temperature space Vt,
+        velocity space self.V2,
+        pressure space self.V3,
+        temperature space self.Vt,
         mixed function space self.W = (V2,V3,Vt)
         """
 
@@ -545,7 +545,6 @@ class State(object):
                 self.W = MixedFunctionSpace((V2, V3, Vt, V1))
             else:
                 self.W = MixedFunctionSpace((V2, V3, Vt))
-
         else:
             cell = mesh.ufl_cell().cellname()
             V1_elt = FiniteElement(family, cell, horizontal_degree+1)
@@ -577,13 +576,16 @@ class State(object):
         self.xb = Function(W)  # store the old state for diagnostics
         self.dy = Function(W)
 
-        # advecting, upwinding velocities and flux
+        # advecting, upwinding velocities; flux and velocity-advection vorticity
         self.ubar = Function(W.split()[0])
         self.upbar = Function(W.split()[0])
         self.F = Function(W.split()[0])
+        if 'q' in self.fieldlist:
+            self.qbar = Function(W.split()[-1])
 
         if self.hamiltonian:
-            self.u_rec = Function(W.split()[0])
+            if not self.hamiltonian_options.no_u_rec:
+                self.u_rec = Function(W.split()[0])
             self.P = Function(W.split()[1])
             if self.vertical_degree is not None:
                 self.T = Function(W.split()[2])

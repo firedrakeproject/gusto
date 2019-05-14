@@ -1,14 +1,15 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, LinearVariationalProblem,
+from firedrake import (Function, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, Projector, Interpolator,
                        TrialFunction, TestFunction, inner, dx, lhs, rhs,
-                       grad, DirichletBC)
+                       DirichletBC, grad)
 from firedrake.utils import cached_property
 from gusto.configuration import logger, DEBUG
 from gusto.recovery import Recoverer
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "Update_ubar"]
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod",
+           "Update_advection", "Reconstruct_q"]
 
 
 def embedded_dg(original_apply):
@@ -317,7 +318,6 @@ class ThetaMethod(Advection):
     """
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
-    arg theta: off-centring parameter (theta=0 corresponds to explicit)
     arg weight: Either name of prognostic variable z (for weights z_(n), z_(n+1)),
     or 2-tuple containing weight for y_(n+1) and y_(n) respectively. Defaults to None.
     """
@@ -332,8 +332,8 @@ class ThetaMethod(Advection):
             else:
                 raise ValueError("weight should be a prognostic variable or a 2-tuple")
         else:
-            self.weight_n = 1
-            self.weight_p = 1
+            self.weight_n = Constant(1.)
+            self.weight_p = Constant(1.)
 
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
@@ -364,73 +364,118 @@ class ThetaMethod(Advection):
         x_out.assign(self.dq)
 
 
-class Update_ubar(object):
-    """Class to update advecting velocity ubar. Contains solvers for
-       various versions of ubar and related fluxes"""
+class Update_advection(object):
+    """
+    Class to update fields related to advection, such as ubar, flux and vorticity
+    time averages. Contains solvers for flux and flux-recovered velocity."""
     def __init__(self, state, active_advection=None):
         self.state = state
+        self.vorticity = 'q' in state.fieldlist
+
+        self.Vu = state.spaces("HDiv")
+        if self.Vu.extruded:
+            self.bcs = [DirichletBC(self.Vu, 0.0, "bottom"),
+                        DirichletBC(self.Vu, 0.0, "top")]
+        else:
+            self.bcs = None
 
         # Figure out which solvers to use
         if active_advection is not None:
-            flux_forms = []
+            flux_forms = [self.vorticity]
             for _, advection in active_advection:
-                flux_forms.append(advection.equation.flux_form)
+                try:
+                    flux_forms.append(advection.equation.flux_form)
+                except AttributeError:
+                    continue
             self.get_flux = any(flux_forms)
             if self.get_flux:
                 self._setup_flux_solver(state)
             self.get_u_rec = False
             if state.hamiltonian:
-                self._setup_u_rec_solver(state)
-                self.get_u_rec = True
+                if state.hamiltonian_options.no_u_rec:
+                    self._setup_flux_solver(state)
+                    self.get_flux = True
+                else:
+                    self._setup_u_rec_solver(state)
+                    self.get_u_rec = True
         else:
             self.get_flux = False
             self.get_u_rec = False
 
+        # Use counter to avoid using solvers more than once per iteration
+        self.update_count = 0
+        if active_advection is not None:
+            self.total_updates = len(active_advection)
+        else:
+            self.nr_of_updates = 1
+        self.flux_updated = False
+        self.u_rec_updated = False
+
     def _setup_flux_solver(self, state):
         # u recovery from flux
-        Vu = state.spaces("HDiv")
-        u_ = TrialFunction(Vu)
-        v = TestFunction(Vu)
+        u_ = TrialFunction(self.Vu)
+        v = TestFunction(self.Vu)
         un, dn = state.xn.split()[:2]
-        self.F = Function(Vu)
+        self.F = Function(self.Vu)
         unp1, dnp1 = state.xnp1.split()[:2]
         Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
         F_eqn = inner(v, u_ - Frhs)*dx
-        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F)
+        F_problem = LinearVariationalProblem(lhs(F_eqn), rhs(F_eqn), self.F, bcs=self.bcs)
         self.F_solver = LinearVariationalSolver(F_problem,
                                                 solver_parameters={"ksp_type": "preonly",
                                                                    "pc_type": "lu"})
 
     def _setup_u_rec_solver(self, state):
         # u recovery from flux
-        Vu = state.spaces("HDiv")
-        u_ = TrialFunction(Vu)
-        v = TestFunction(Vu)
-        self.u_rec = Function(Vu)
+        u_ = TrialFunction(self.Vu)
+        v = TestFunction(self.Vu)
+        self.u_rec = Function(self.Vu)
         un, dn = state.xn.split()[:2]
         unp1, dnp1 = state.xnp1.split()[:2]
         Frhs = unp1*dnp1/3. + un*dnp1/6. + unp1*dn/6. + un*dn/3.
         u_rec_eqn = inner(v, 0.5*(dn + dnp1)*u_ - Frhs)*dx
         u_rec_problem = LinearVariationalProblem(lhs(u_rec_eqn), rhs(u_rec_eqn),
-                                                 self.u_rec)
+                                                 self.u_rec, bcs=self.bcs)
         self.u_rec_solver = LinearVariationalSolver(u_rec_problem,
                                                     solver_parameters={"ksp_type": "preonly",
                                                                        "pc_type": "lu"})
 
-    def apply(self, xn, xnp1, alpha):
-            un = xn.split()[0]
-            unp1 = xnp1.split()[0]
-            if self.get_flux:
+    def apply(self, xn, xnp1, alpha, passive=False):
+        un = xn.split()[0]
+        unp1 = xnp1.split()[0]
+        if passive:
+            if self.state.hamiltonian:
+                if not self.state.hamiltonian_options.no_u_rec:
+                    self.state.u_rec.assign(0.5*(un + unp1))
+            else:
+                self.state.ubar.assign(un + alpha*(unp1-un))
+        else:
+            if self.get_flux and not self.flux_updated:
                 self.F_solver.solve()
                 self.state.F.assign(self.F)
-            if self.get_u_rec:
+                self.flux_updated = True
+            if self.get_u_rec and not self.u_rec_updated:
                 self.u_rec_solver.solve()
                 self.state.ubar.assign(self.u_rec)
                 self.state.u_rec.assign(self.u_rec)
+                self.u_rec_updated = True
             if self.state.hamiltonian:
-                self.state.upbar.assign(un + alpha*(unp1-un))
+                self.state.upbar.assign(0.5*(un + unp1))
+                if self.state.hamiltonian_options.no_u_rec:
+                    self.state.ubar.assign(0.5*(un + unp1))
             else:
                 self.state.ubar.assign(un + alpha*(unp1-un))
+            if self.vorticity:
+                qn = xn.split()[-1]
+                qnp1 = xnp1.split()[-1]
+                self.state.qbar.assign(0.5*(qn + qnp1))
+
+            self.update_count += 1
+            # At the end of active advection loop, reset counter and solver flags
+            if self.update_count == self.total_updates:
+                self.update_count = 0
+                self.flux_updated = False
+                self.u_rec_updated = False
 
 
 class Reconstruct_q(object):
