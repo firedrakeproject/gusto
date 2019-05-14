@@ -7,7 +7,7 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        dx, Interpolator, quadrilateral, BrokenElement, interval,
                        TensorProductElement, FiniteElement)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, INC, RW
+from firedrake.parloops import par_loop, READ, INC, WRITE
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
@@ -48,12 +48,14 @@ class Averager(object):
 
         # NOTE: Any bcs on the function self.v should just work.
         # Loop over node extent and dof extent
-        self._shapes = (self.V.finat_element.space_dimension(), np.prod(self.V.shape))
+        shapes = {"i": self.V.finat_element.space_dimension(),
+                  "j": np.prod(self.V.shape, dtype=int)}
+        # Averaging kernel
         self._average_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        vo[i][j] += v[i][j]/w[i][j];
-        }}""" % self._shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                vo[i*{j} + j] += v[i*{j} + j]/w[i*{j} + j];
+        """.format(**shapes)
 
     @cached_property
     def _weighting(self):
@@ -61,11 +63,13 @@ class Averager(object):
         Generates a weight function for computing a projection via averaging.
         """
         w = Function(self.V)
+        shapes = {"i": self.V.finat_element.space_dimension(),
+                  "j": np.prod(self.V.shape, dtype=int)}
         weight_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        w[i][j] += 1.0;
-        }}""" % self._shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                w[i*{j} + j] += 1.0;
+        """.format(**shapes)
 
         par_loop(weight_kernel, ufl.dx, {"w": (w, INC)})
         return w
@@ -163,83 +167,83 @@ class Boundary_Recoverer(object):
             max_coord = Function(VDG0).interpolate(Constant(np.max(self.coords.dat.data[:, 0])))
 
             right_kernel = """
-            if (fmax(COORDS[0][0], fmax(COORDS[1][0], COORDS[2][0])) == MAX[0][0])
-            RIGHT[0][0] = 1.0;
+            if (fmax(COORDS[0], fmax(COORDS[2], COORDS[2*2])) == MAX[0])
+                RIGHT[0] = 1.0;
             """
             par_loop(right_kernel, dx,
                      args={"COORDS": (self.coords, READ),
                            "MAX": (max_coord, READ),
-                           "RIGHT": (self.right, RW)})
+                           "RIGHT": (self.right, WRITE)})
 
             self.bottom_kernel = """
-            if (RIGHT[0][0] == 1.0)
+            if (RIGHT[0] == 1.0)
             {
-            float x = COORDS[2][0] - COORDS[0][0];
-            float y = COORDS[1][1] - COORDS[0][1];
-            float a = CG1[3][0];
-            float b = CG1[1][0];
-            float c = DG0[0][0];
-            DG1[1][0] = a;
-            DG1[3][0] = b;
-            DG1[2][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-            DG1[0][0] = 4.0 * c - b - a - DG1[2][0];
+            float x = COORDS[2*2] - COORDS[0];
+            float y = COORDS[2*1 + 1] - COORDS[1];
+            float a = CG1[3];
+            float b = CG1[1];
+            float c = DG0[0];
+            DG1[1] = a;
+            DG1[3] = b;
+            DG1[2] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[0] = 4.0 * c - b - a - DG1[2];
             }
             else
             {
-            float x = COORDS[1][0] - COORDS[3][0];
-            float y = COORDS[3][1] - COORDS[2][1];
-            float a = CG1[1][0];
-            float b = CG1[3][0];
-            float c = DG0[0][0];
-            DG1[3][0] = a;
-            DG1[1][0] = b;
-            DG1[0][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-            DG1[2][0] = 4.0 * c - b - a - DG1[0][0];
+            float x = COORDS[1*2 + 0] - COORDS[3*2 + 0];
+            float y = COORDS[3*2 + 1] - COORDS[2*2 + 1];
+            float a = CG1[1];
+            float b = CG1[3];
+            float c = DG0[0];
+            DG1[3] = a;
+            DG1[1] = b;
+            DG1[0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[2] = 4.0 * c - b - a - DG1[0];
             }
             """
 
             self.top_kernel = """
-            if (RIGHT[0][0] == 1.0)
+            if (RIGHT[0] == 1.0)
             {
-            float x = COORDS[2][0] - COORDS[0][0];
-            float y = COORDS[1][1] - COORDS[0][1];
-            float a = CG1[2][0];
-            float b = CG1[0][0];
-            float c = DG0[0][0];
-            DG1[2][0] = a;
-            DG1[0][0] = b;
-            DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-            DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
+            float x = COORDS[2*2 + 0] - COORDS[0*2 + 0];
+            float y = COORDS[1*2 + 1] - COORDS[0*2 + 1];
+            float a = CG1[2];
+            float b = CG1[0];
+            float c = DG0[0];
+            DG1[2] = a;
+            DG1[0] = b;
+            DG1[3] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[1] = 4.0 * c - b - a - DG1[3];
             }
             else
             {
-            float x = COORDS[0][0] - COORDS[2][0];
-            float y = COORDS[3][1] - COORDS[2][1];
-            float a = CG1[2][0];
-            float b = CG1[0][0];
-            float c = DG0[0][0];
-            DG1[0][0] = a;
-            DG1[2][0] = b;
-            DG1[3][0] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
-            DG1[1][0] = 4.0 * c - b - a - DG1[3][0];
+            float x = COORDS[0*2 + 0] - COORDS[2*2 + 0];
+            float y = COORDS[3*2 + 1] - COORDS[2*2 + 1];
+            float a = CG1[2];
+            float b = CG1[0];
+            float c = DG0[0];
+            DG1[0] = a;
+            DG1[2] = b;
+            DG1[3] = (1.0 / (pow(x, 2.0) + 4.0 * pow(y, 2.0))) * (-3.0 * a * pow(y, 2.0) - b * pow(x, 2.0) - b * pow(y, 2.0) + 2.0 * c * pow(x, 2.0) + 8.0 * c * pow(y, 2.0));
+            DG1[1] = 4.0 * c - b - a - DG1[3];
             }
             """
         elif self.method == 'physics':
             self.bottom_kernel = """
-            DG1[0][0] = CG1[1][0] - 2 * (CG1[1][0] - DG0[0][0]);
-            DG1[1][0] = CG1[1][0];
+            DG1[0] = CG1[1] - 2 * (CG1[1] - DG0[0]);
+            DG1[1] = CG1[1];
             """
 
             self.top_kernel = """
-            DG1[1][0] = CG1[0][0] - 2 * (CG1[0][0] - DG0[0][0]);
-            DG1[0][0] = CG1[0][0];
+            DG1[1] = CG1[0] - 2 * (CG1[0] - DG0[0]);
+            DG1[0] = CG1[0];
             """
 
     def apply(self):
 
         self.interpolator.interpolate()
         par_loop(self.bottom_kernel, dx,
-                 args={"DG1": (self.v_out, RW),
+                 args={"DG1": (self.v_out, WRITE),
                        "CG1": (self.v1, READ),
                        "DG0": (self.v0, READ),
                        "COORDS": (self.coords, READ),
@@ -247,7 +251,7 @@ class Boundary_Recoverer(object):
                  iterate=ON_BOTTOM)
 
         par_loop(self.top_kernel, dx,
-                 args={"DG1": (self.v_out, RW),
+                 args={"DG1": (self.v_out, WRITE),
                        "CG1": (self.v1, READ),
                        "DG0": (self.v0, READ),
                        "COORDS": (self.coords, READ),

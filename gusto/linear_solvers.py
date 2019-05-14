@@ -495,23 +495,23 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
-        shapes = (Vu.finat_element.space_dimension(), np.prod(Vu.shape))
-
+        shapes = {"i": Vu.finat_element.space_dimension(),
+                  "j": np.prod(Vu.shape, dtype=int)}
         weight_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        w[i][j] += 1.0;
-        }}""" % shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                w[i*{j} + j] += 1.0;
+        """.format(**shapes)
 
         self._weight = Function(Vu)
         par_loop(weight_kernel, dx, {"w": (self._weight, INC)})
 
         # Averaging kernel
         self._average_kernel = """
-        for (int i=0; i<%d; ++i) {
-        for (int j=0; j<%d; ++j) {
-        vec_out[i][j] += vec_in[i][j]/w[i][j];
-        }}""" % shapes
+        for (int i=0; i<{i}; ++i)
+            for (int j=0; j<{j}; ++j)
+                vec_out[i*{j} + j] += vec_in[i*{j} + j]/w[i*{j} + j];
+        """.format(**shapes)
 
         # HDiv-conforming velocity
         self.u_hdiv = Function(Vu)

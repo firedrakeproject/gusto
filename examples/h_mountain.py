@@ -5,15 +5,15 @@ from firedrake import (FunctionSpace, as_vector, VectorFunctionSpace,
 import sys
 
 dt = 5.0
+hybridization = False
 if '--running-tests' in sys.argv:
     tmax = dt
+    hybridization = True
 else:
     tmax = 15000.
 
 if '--hybridization' in sys.argv:
     hybridization = True
-else:
-    hybridization = False
 
 res = 10
 nlayers = res*20  # horizontal layers
@@ -115,9 +115,9 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
 def minimum(f):
     fmin = op2.Global(1, [1000], dtype=float)
     op2.par_loop(op2.Kernel("""
-        void minify(double *a, double *b) {
-        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-        }
+static void minify(double *a, double *b) {
+    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+}
         """, "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
     return fmin.data[0]
 

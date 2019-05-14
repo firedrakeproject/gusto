@@ -291,14 +291,21 @@ class Coalescence(Physics):
         if accumulation:
             accu_rate = k_2 * self.water_c * self.rain ** b
 
-        # make appropriate coalescence rate by combining two processes
-        dot_r = accr_rate + accu_rate
-
         # make coalescence rate function, that needs to be the same for all updates in one time step
         coalesce_rate = Function(Vt)
 
-        # adjust coalesce rate so negative concentration doesn't occur
-        self.lim_coalesce_rate = Interpolator(min_value(dot_r, self.water_c / dt),
+        # adjust coalesce rate using min_value so negative cloud concentration doesn't occur
+        self.lim_coalesce_rate = Interpolator(conditional(self.rain < 0.0,  # if rain is negative do only accretion
+                                                          conditional(accr_rate < 0.0,
+                                                                      0.0,
+                                                                      min_value(accr_rate, self.water_c / dt)),
+                                                          # don't turn rain back into cloud
+                                                          conditional(accr_rate + accu_rate < 0.0,
+                                                                      0.0,
+                                                                      # if accretion rate is negative do only accumulation
+                                                                      conditional(accr_rate < 0.0,
+                                                                                  min_value(accu_rate, self.water_c / dt),
+                                                                                  min_value(accr_rate + accu_rate, self.water_c / dt)))),
                                               coalesce_rate)
 
         # tell the prognostic fields what to update to
@@ -387,8 +394,10 @@ class Evaporation(Physics):
 
         # adjust evap rate so negative rain doesn't occur
         self.lim_evap_rate = Interpolator(conditional(dot_r_evap < 0,
-                                                      Constant(0.0),
-                                                      min_value(dot_r_evap, self.rain / dt)),
+                                                      0.0,
+                                                      conditional(self.rain < 0.0,
+                                                                  0.0,
+                                                                  min_value(dot_r_evap, self.rain / dt))),
                                           evap_rate)
 
         # tell the prognostic fields what to update to
