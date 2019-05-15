@@ -412,7 +412,7 @@ class Update_advection(object):
         self.u_rec_updated = False
 
     def _setup_flux_solver(self, state):
-        # u recovery from flux
+        # flux from u, d
         u_ = TrialFunction(self.Vu)
         v = TestFunction(self.Vu)
         un, dn = state.xn.split()[:2]

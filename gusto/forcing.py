@@ -117,7 +117,11 @@ class Forcing(object, metaclass=ABCMeta):
         return inner(self.q_test, self.q_trial)*dx
 
     def q_forcing_term(self):
-        pass  # depends on pressure gradient term
+        # Don't use self.uF since it has bcs applied to it,
+        # while vorticity equation is set without bcs
+        # L = inner(curl(self.q_test), self.uF)*dx
+        L = replace(self.forcing_term(), {self.test: curl(self.q_test)})
+        return L
 
     def _build_forcing_solvers(self):
         a = self.mass_term()
@@ -538,10 +542,6 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
             L = replace(L_ad, {ubar_ad: self.test, test_ad: self.state.P})
         else:
             L = replace(L_ad, {self.state.F: self.test, test_ad: self.Hvar(self.x0)[0]})
-        return L
-
-    def q_forcing_term(self):
-        L = inner(curl(self.q_test), self.uF)*dx # do non-uF form for SUPG
         return L
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):

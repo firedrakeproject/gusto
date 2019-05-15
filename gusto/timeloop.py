@@ -68,16 +68,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for bc in bcs:
                 bc.apply(unp1)
 
-    def _update_q(self):
+    def _update_q(self, reconstruct_q=False):
         """
         Update vorticity time step qnp1 if it is used as a prognostic variable.
+        Optionally reconstruct q using u.
         """
         if 'q' in self.state.fieldlist:
-            qrhs = self.state.xrhs.split()[-1]
-            qnp1 = self.state.xnp1.split()[-1]
-            qnp1 += qrhs
-            if self.reconstruct_q:
+            if not reconstruct_q:
+                qrhs = self.state.xrhs.split()[-1]
+                qnp1 = self.state.xnp1.split()[-1]
+                qnp1 += qrhs
+            else:
                 self.q_reconstructor.apply(self.state.xnp1)
+
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """
@@ -236,9 +239,10 @@ class CrankNicolson(BaseTimestepper):
                     self.linear_solver.solve()  # solves linear system and places result in state.dy
 
                 state.xnp1 += state.dy
-                self._update_q()
+            self._update_q()
 
             self._apply_bcs()
+        self._update_q(self.reconstruct_q)
 
 
 class AdvectionDiffusion(BaseTimestepper):

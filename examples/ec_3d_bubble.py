@@ -45,8 +45,9 @@ diagnostics = Diagnostics('rho', "CompressibleEnergy")
 upw = '' if upwind_rho else 'no'
 ham = '' if hamiltonian else 'non'
 vort = '' if not vorticity else '_vorticity'
-dirname = ("EC_3DB{0}_{1}upwindrho_{2}hamiltonian_DG_deg{3}_res{4}_dt{5}"
-           "_maxk{6}_gaussdeg{7}".format(vort, upw, ham, DG_deg,
+rec_q = '' if not reconstruct_q or not vorticity else '_recon_q'
+dirname = ("EC_3DB{0}{1}_{2}upwindrho_{3}hamiltonian_DG_deg{4}_res{5}_dt{6}"
+           "_maxk{7}_gaussdeg{8}".format(vort, rec_q, upw, ham, DG_deg,
                                          res, dt, maxk, gauss_deg))
 
 if falling_bubble:
@@ -179,7 +180,7 @@ else:
     ueqn = U_transport(state, u0.function_space())
     advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 
-SUPG = True
+SUPG = False
 if SUPG:
     thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
 else:
@@ -197,7 +198,8 @@ if hamiltonian:
                                                           euler_poincare=e_p,
                                                           vorticity=vorticity)
 else:
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=e_p,
+                                               vorticity=vorticity)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields,
