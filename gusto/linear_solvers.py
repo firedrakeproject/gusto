@@ -1,6 +1,6 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, DirichletBC, FacetNormal,
+                       TestFunction, TrialFunction, lhs, rhs, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace)
@@ -199,8 +199,7 @@ class CompressibleSolver(TimesteppingSolver):
         self.urho = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
-               DirichletBC(M.sub(0), 0.0, "top")]
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         # Solver for u, rho
         urho_problem = LinearVariationalProblem(
@@ -453,17 +452,17 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             - beta_cp*div(thetabar_w*w)*pi*dxp
             # trace terms appearing after integrating momentum equation
             + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_cp*dot(thetabar_w*w, n)*l0*ds_tbp
+            + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
             + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
-            + beta*phi*dot(u, n)*rhobar_avg*ds_tb
+            + beta*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*ds_tbp
+            + dl*dot(u, n)*(ds_tbp + ds_vp)
         )
 
         # contribution of the sponge term
@@ -520,8 +519,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = [DirichletBC(Vu, Constant(0.0), "bottom"),
-                    DirichletBC(Vu, Constant(0.0), "top")]
+        self.bcs = self.state.bcs
 
     @timed_function("Gusto:LinearSolve")
     def solve(self):
@@ -645,8 +643,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = [DirichletBC(M.sub(0), 0.0, "bottom"),
-               DirichletBC(M.sub(0), 0.0, "top")]
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
