@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
-from firedrake import DirichletBC
 
 __all__ = ["CrankNicolson", "AdvectionDiffusion"]
 
@@ -55,13 +54,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
         unp1 = self.state.xnp1.split()[0]
 
-        if unp1.function_space().extruded:
-            M = unp1.function_space()
-            bcs = [DirichletBC(M, 0.0, "bottom"),
-                   DirichletBC(M, 0.0, "top")]
+        bcs = self.state.bcs
 
-            for bc in bcs:
-                bc.apply(unp1)
+        for bc in bcs:
+            bc.apply(unp1)
 
     def setup_timeloop(self, state, t, tmax, pickup):
         """

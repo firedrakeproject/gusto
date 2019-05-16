@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
@@ -30,7 +30,7 @@ L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
-m = PeriodicIntervalMesh(ncolumns, L)
+m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
@@ -64,7 +64,8 @@ state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               parameters=params,
               diagnostics=diagnostics,
               fieldlist=fieldlist,
-              diagnostic_fields=diagnostic_fields)
+              diagnostic_fields=diagnostic_fields,
+              u_bc_ids=[1, 2])
 
 # Initial conditions
 u0 = state.fields("u")
