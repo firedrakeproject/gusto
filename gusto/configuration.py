@@ -48,6 +48,7 @@ class TimesteppingParameters(Configuration):
     maxi = 1
     reconstruct_q = False
 
+
 class OutputParameters(Configuration):
 
     """

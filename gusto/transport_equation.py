@@ -283,7 +283,7 @@ class AdvectionEquation(TransportEquation):
             L += dot(jump(outer(self.test, self.ubar), n), self.uw(self.upbar, q))*self.dS
 
             if self.ibp == IntegrateByParts.TWICE:
-                L -= jump(outer(outer(self.test, self.ubar), q), n)*self.dS
+                L -= jump(outer(self.test, self.ubar)*q, n)*self.dS
 
         if self.outflow:
             n = FacetNormal(self.state.mesh)
@@ -452,7 +452,7 @@ class VectorInvariant(TransportEquation):
 
         self.vorticity = vorticity
         if vorticity:
-            ibp=IntegrateByParts.NEVER
+            ibp = IntegrateByParts.NEVER
             self.Fbar = state.F
             self.qbar = state.qbar
             if state.mesh.topological_dimension() == 3:

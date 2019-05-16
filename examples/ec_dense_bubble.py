@@ -39,6 +39,8 @@ nlayers, columns = res[0], res[1]
 m = PeriodicIntervalMesh(columns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
+if hamiltonian:
+    hamiltonian = HamiltonianOptions(no_u_rec=(not upwind_rho or vorticity))
 timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           dumplist=['u', 'q'],
@@ -47,9 +49,6 @@ output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
 diagnostic_fields = [CourantNumber(),
                      CompressibleEnergy(),
                      PotentialVorticity()]
-
-if hamiltonian and (not upwind_rho or vorticity):
-    hamiltonian = "no_u_rec"
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",

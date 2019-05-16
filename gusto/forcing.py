@@ -258,7 +258,6 @@ class CompressibleForcing(Forcing):
         super(CompressibleForcing, self)._build_forcing_solvers()
         # build forcing for theta equation
         if self.moisture is not None:
-            theta0 = split(self.x0)[2]
             Vt = self.state.spaces("HDiv_v")
             p = TrialFunction(Vt)
             q = TestFunction(Vt)

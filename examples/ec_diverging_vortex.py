@@ -53,6 +53,8 @@ ham = '_hamiltonian' if hamiltonian else ''
 dirname = ("EC_{0}{1}{2}_{3}upwindD_res{4}_dt{5}_maxk"
            "{6}".format(fname, ham, vort, upw, res, round(dt, 4), maxk))
 timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
+if hamiltonian:
+    hamiltonian = HamiltonianOptions(no_u_rec=vorticity)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
                           log_level='INFO')
 diagnostics = Diagnostics('D')
@@ -63,9 +65,6 @@ diagnostic_fields = [ShallowWaterKineticEnergy(),
                      PotentialVorticity(),
                      AbsoluteVorticity(),
                      ShallowWaterPotentialEnstrophy()]
-
-if vorticity and hamiltonian:
-    hamiltonian = 'no_u_rec'
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
@@ -156,7 +155,7 @@ else:
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-if hamiltonian != False:
+if hamiltonian:
     sw_forcing = HamiltonianShallowWaterForcing(state, upwind_d=upwind_D,
                                                 euler_poincare=euler_poincare,
                                                 vorticity=vorticity)

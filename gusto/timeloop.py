@@ -81,7 +81,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             else:
                 self.q_reconstructor.apply(self.state.xnp1)
 
-
     def setup_timeloop(self, state, t, tmax, pickup):
         """
         Setup the timeloop by setting up diagnostics, dumping the fields and

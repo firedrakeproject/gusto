@@ -109,7 +109,7 @@ if falling_bubble:
     xc, yc, zc = 0.5*L, 0.5*L, 3000.
     xr, yr, zr = 4000., 4000., 2000.
     if not test_2d:
-        r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-yc)/yr)**2 +  ((x[2]-zc)/zr)**2)
+        r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-yc)/yr)**2 + ((x[2]-zc)/zr)**2)
     else:
         r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
     Tdash = 7.5
@@ -128,7 +128,7 @@ else:
 
 if h_rho_pert:
     if not falling_bubble:
-    # find perturbed rho
+        # find perturbed rho
         gamma = TestFunction(Vr)
         rho_trial = TrialFunction(Vr)
         lhs = gamma * rho_trial * dx
