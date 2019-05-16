@@ -2,7 +2,8 @@ from gusto import *
 from firedrake import PeriodicSquareMesh, PeriodicIntervalMesh, \
     ExtrudedMesh, Constant, SpatialCoordinate, sqrt, cos, \
     conditional, pi, Function, TestFunction, TrialFunction, \
-    LinearVariationalProblem, LinearVariationalSolver, dx
+    LinearVariationalProblem, LinearVariationalSolver, dx, \
+    CellVolume, inner
 import sys
 
 # Choose falling or rising bubble
@@ -31,6 +32,7 @@ h_rho_pert = True
 hamiltonian = True
 upwind_rho = False
 vorticity = True
+vorticity_SUPG = True
 reconstruct_q = False
 
 test_2d = True
@@ -170,8 +172,19 @@ if vorticity:
     initial_vorticity(state, rho0, u0, q0)
 
     # flux formulation has Dp in q-eqn, qp in u-eqn, so order matters
-    qeqn = AdvectionEquation(state, q0.function_space(),
-                             ibp=IntegrateByParts.NEVER, flux_form=True)
+    if vorticity_SUPG:
+        # set up vorticity SUPG parameter
+        cons, vol, eps = Constant(0.1), CellVolume(mesh), 1.0e-10
+        Fmag = (inner(rho0*u0, rho0*u0) + eps)**0.5
+        q_SUPG = SUPGOptions(constant_tau=False)
+        q_SUPG.default = (cons/Fmag)*vol**0.5
+
+        qeqn = SUPGAdvection(state, q0.function_space(),
+                             ibp=IntegrateByParts.NEVER,
+                             supg_params=q_SUPG, flux_form=True)
+    else:
+        qeqn = AdvectionEquation(state, q0.function_space(),
+                                 ibp=IntegrateByParts.NEVER, flux_form=True)
     advected_fields.append(("q", ThetaMethod(state, q0, qeqn, weight='rho')))
 
     ueqn = U_transport(state, u0.function_space(), vorticity=True)

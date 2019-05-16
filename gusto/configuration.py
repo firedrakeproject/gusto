@@ -7,7 +7,7 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "HamiltonianOptions"]
+__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "HamiltonianOptions"]
 
 logger = logging.getLogger("gusto")
 
@@ -165,6 +165,7 @@ class SUPGOptions(AdvectionOptions):
 
     name = "supg"
     tau = None
+    constant_tau = True
     default = 1/sqrt(15)
 
 

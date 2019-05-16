@@ -503,7 +503,8 @@ def initial_vorticity(state, D0, u0, q0, f=None, params=None):
     Solve for initial vorticity given depth/density and velocity fields.
     :arg state: :class:`State` object.
     :arg D0, u0: initial depth/density and velocity fields
-    :arg f: Coriolis force. Defaults to None (no Coriolis force).
+    :arg f: Coriolis force. Defaults to None (if None, Coriolis field in state
+    is used if it is specified).
     :arg params: solver parameters. Default to None.
     """
 
@@ -523,7 +524,10 @@ def initial_vorticity(state, D0, u0, q0, f=None, params=None):
         perp = lambda u: as_vector([-u[1], u[0]])
     a = eta*q_*D0*dx
     L = - inner(perp(grad(eta)), u0)*dx
-    if f is not None:
+
+    if f is not None or hasattr(state.fields, "coriolis"):
+        if f is None:
+            f = state.fields("coriolis")
         L += eta*f*dx
     if u0.function_space().extruded:
         n = FacetNormal(state.mesh)

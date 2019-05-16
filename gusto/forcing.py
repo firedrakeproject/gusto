@@ -55,7 +55,7 @@ class Forcing(object, metaclass=ABCMeta):
 
         # find out which terms we need
         self.extruded = self.Vu.extruded
-        self.coriolis = state.Omega is not None or hasattr(state.fields, "coriolis")
+        self.coriolis = (state.Omega is not None or hasattr(state.fields, "coriolis")) and not hasattr(state.fields, "q")
         self.sponge = state.mu is not None
         self.hydrostatic = state.hydrostatic
         self.topography = hasattr(state.fields, "topography")
@@ -556,20 +556,18 @@ class HamiltonianForcing(Forcing, metaclass=ABCMeta):
 class HamiltonianCompressibleForcing(HamiltonianForcing):
     """Class applying dry Euler forcing in a Hamiltonian
     energy conserving way"""
-    def __init__(self, state, upwind_d=True, upwind_th=True, SUPG=True, tau=None,
-                 gauss_deg=None, euler_poincare=True, vorticity=False):
+    def __init__(self, state, upwind_d=True, SUPG=True, gauss_deg=None,
+                 euler_poincare=True, vorticity=False):
 
         # Load SUPG parameter if SUPG is used for temperature advection
         self.SUPG = SUPG
-        if tau is not None:
-            self.tau = tau
-        else:
-            self.tau = state.tau
+        if SUPG:
+            self.tau = state.SUPG[state.spaces("HDiv_v")][0]
+
         if gauss_deg is not None:
             self.gauss_deg = gauss_deg
         else:
             self.gauss_deg = 4
-        self.upwind_th = upwind_th
 
         # Vorticity forcing together with SUPG not yet implemented
         if vorticity and SUPG:
@@ -600,21 +598,19 @@ class HamiltonianCompressibleForcing(HamiltonianForcing):
 
     def _setup_aux_solvers(self):
         super(HamiltonianCompressibleForcing, self)._setup_aux_solvers()
-        if self.upwind_th:
-            # Hamiltonian variation in potential temperature
-            Vt = self.state.spaces("HDiv_v")
-            theta_ = TrialFunction(Vt)
-            gamma = TestFunction(Vt)
-            Teqn = gamma*(theta_ - self.Hvar(self.x0)[1])*dx
-            Tproblem = LinearVariationalProblem(lhs(Teqn), rhs(Teqn), self.state.T)
-            self.Tsolver = LinearVariationalSolver(Tproblem,
-                                                   solver_parameters={"ksp_type": "preonly",
-                                                                      "pc_type": "lu"})
+        # Hamiltonian variation in potential temperature
+        Vt = self.state.spaces("HDiv_v")
+        theta_ = TrialFunction(Vt)
+        gamma = TestFunction(Vt)
+        Teqn = gamma*(theta_ - self.Hvar(self.x0)[1])*dx
+        Tproblem = LinearVariationalProblem(lhs(Teqn), rhs(Teqn), self.state.T)
+        self.Tsolver = LinearVariationalSolver(Tproblem,
+                                               solver_parameters={"ksp_type": "preonly",
+                                                                  "pc_type": "lu"})
 
     def apply_aux_solvers(self):
         super(HamiltonianCompressibleForcing, self).apply_aux_solvers()
-        if self.upwind_th:
-            self.Tsolver.solve()
+        self.Tsolver.solve()
 
     def pressure_gradient_term(self):
         L = super(HamiltonianCompressibleForcing, self).pressure_gradient_term()

@@ -366,11 +366,10 @@ class ThetaMethod(Advection):
 
 class Update_advection(object):
     """
-    Class to update fields related to advection, such as ubar, flux and vorticity
+    Class to update fields related to advection, such as ubar and flux
     time averages. Contains solvers for flux and flux-recovered velocity."""
     def __init__(self, state, active_advection=None):
         self.state = state
-        self.vorticity = 'q' in state.fieldlist
 
         self.Vu = state.spaces("HDiv")
         if self.Vu.extruded:
@@ -381,7 +380,7 @@ class Update_advection(object):
 
         # Figure out which solvers to use
         if active_advection is not None:
-            flux_forms = [self.vorticity]
+            flux_forms = ['q' in state.fieldlist]
             for _, advection in active_advection:
                 try:
                     flux_forms.append(advection.equation.flux_form)
@@ -465,10 +464,6 @@ class Update_advection(object):
                     self.state.ubar.assign(0.5*(un + unp1))
             else:
                 self.state.ubar.assign(un + alpha*(unp1-un))
-            if self.vorticity:
-                qn = xn.split()[-1]
-                qnp1 = xnp1.split()[-1]
-                self.state.qbar.assign(0.5*(qn + qnp1))
 
             self.update_count += 1
             # At the end of active advection loop, reset counter and solver flags

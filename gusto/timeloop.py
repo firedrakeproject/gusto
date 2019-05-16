@@ -116,7 +116,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         dt = state.timestepping.dt
 
         while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (round(t, 7), dt))
+            logger.info("at start of timestep, t=%s, dt=%s" % (round(t, 7), round(dt, 7)))
 
             t += dt
             state.t.assign(t)
@@ -241,7 +241,9 @@ class CrankNicolson(BaseTimestepper):
             self._update_q()
 
             self._apply_bcs()
-        self._update_q(self.reconstruct_q)
+
+        if self.reconstruct_q:
+            self._update_q(reconstruct_q=True)
 
 
 class AdvectionDiffusion(BaseTimestepper):

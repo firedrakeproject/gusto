@@ -336,13 +336,22 @@ class ShallowWaterPotentialEnergy(Energy):
 class ShallowWaterPotentialEnstrophy(DiagnosticField):
 
     def __init__(self, base_field_name="PotentialVorticity"):
-        super().__init__()
+        super().__init__(required_fields=(base_field_name, ))
         self.base_field_name = base_field_name
 
     @property
     def name(self):
         base_name = "SWPotentialEnstrophy"
         return "_from_".join((base_name, self.base_field_name))
+
+    def setup(self, state):
+        if not self._initialised:
+            if state.hamiltonian:
+                space = state.spaces("DG_Enstrophy", state.mesh, "DG",
+                                     3*(state.horizontal_degree+1))
+            else:
+                space = None
+            super(ShallowWaterPotentialEnstrophy, self).setup(state, space=space)
 
     def compute(self, state):
         if self.base_field_name == "PotentialVorticity":

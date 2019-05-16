@@ -243,8 +243,7 @@ class State(object):
             self.hamiltonian = True
             self.hamiltonian_options = hamiltonian
 
-            # save advection forms and SUPG parameter for Hamiltonian forcing
-            self.tau = 0
+            # save advection forms for Hamiltonian forcing
             self.L_forms = {}
             # set forcing split to implicit for Hamiltonian forcing
             self.timestepping.alpha = 1.
@@ -290,6 +289,9 @@ class State(object):
             self.h_project = lambda u: u - self.k*inner(u, self.k)
         else:
             self.h_project = lambda u: u
+
+        # dictionary to hold SUPG parameters
+        self.SUPG = {}
 
         # Constant to hold current time
         self.t = Constant(0.0)

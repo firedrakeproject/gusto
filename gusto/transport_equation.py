@@ -2,9 +2,9 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import (TestFunction, TrialFunction, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_t, ds_b, VectorElement, as_ufl,
+                       ds_v, ds_t, ds_b, VectorElement, as_ufl, as_vector,
                        outer, sign, cross, CellNormal, Constant,
-                       curl, BrokenElement, FunctionSpace)
+                       curl, BrokenElement, FunctionSpace, Form)
 from gusto.configuration import logger, DEBUG, SUPGOptions
 
 
@@ -272,7 +272,10 @@ class AdvectionEquation(TransportEquation):
                 L = inner(self.test, div(outer(q, self.ubar)))*dx
         else:
             if self.flux_form:
-                L = -inner(grad(self.test), q*self.Fbar)*dx
+                if self.ibp == IntegrateByParts.ONCE:
+                    L = -inner(grad(self.test), q*self.Fbar)*dx
+                else:
+                    L = inner(self.test, div(q*self.Fbar))*dx
             elif self.ibp == IntegrateByParts.ONCE:
                 L = -inner(div(outer(self.test, self.ubar)), q)*dx
             else:
@@ -375,8 +378,9 @@ class SUPGAdvection(AdvectionEquation):
                         linear solver.
     :arg outflow: Boolean specifying whether advected quantity can be advected out
                   of domain.
+    :arg flux_form: Boolean specifying whether to use flux form of advection.
     """
-    def __init__(self, state, V, ibp=IntegrateByParts.TWICE, equation_form="advective", supg_params=None, solver_params=None, outflow=False):
+    def __init__(self, state, V, ibp=IntegrateByParts.TWICE, equation_form="advective", supg_params=None, solver_params=None, outflow=False, flux_form=False):
 
         if not solver_params:
             # SUPG method leads to asymmetric matrix (since the test function
@@ -388,7 +392,7 @@ class SUPGAdvection(AdvectionEquation):
         super().__init__(state=state, V=V, ibp=ibp,
                          equation_form=equation_form,
                          solver_params=solver_params,
-                         outflow=outflow)
+                         outflow=outflow, flux_form=flux_form)
 
         if is_dg(V):
             raise ValueError("You are trying to apply SUPG on a discontinuous space")
@@ -422,14 +426,30 @@ class SUPGAdvection(AdvectionEquation):
                             else 0. for i in range(dim)]
                 else:
                     raise ValueError("I don't know what to do with space %s" % space)
-            tau = Constant(tuple([
+            tau = tuple([
                 tuple(
                     [vals[j] if i == j else 0. for i, v in enumerate(vals)]
                 ) for j in range(dim)])
-            )
-        self.state.tau = tau
-        dtest = dot(dot(self.upbar, tau), grad(self.test))
+            if supg_params.constant_tau:
+                tau = Constant(tau)
+            else:
+                tau = as_vector(tau)
+        self.state.SUPG[V] = (tau, supg_params.constant_tau)
+        if self.flux_form:
+            dtest = dot(dot(self.Fbar, tau), grad(self.test))
+        else:
+            dtest = dot(dot(self.upbar, tau), grad(self.test))
         self.test += dtest
+
+    def advection_term(self, q):
+        """Adjust dx for special cases"""
+        L = super(SUPGAdvection, self).advection_term(q)
+        if self.flux_form:
+            metadata = {'quadrature_degree': 6,
+                        'representation': 'quadrature'}
+            L_int_dS = list(L.integrals()[1:])
+            L = Form([L.integrals()[0].reconstruct(metadata=metadata)] + L_int_dS)
+        return L
 
 
 class VectorInvariant(TransportEquation):
@@ -452,11 +472,24 @@ class VectorInvariant(TransportEquation):
 
         self.vorticity = vorticity
         if vorticity:
-            ibp = IntegrateByParts.NEVER
-            self.Fbar = state.F
-            self.qbar = state.qbar
             if state.mesh.topological_dimension() == 3:
                 raise NotImplementedError("vorticity setup is not implemented for 3d problems")
+            ibp = IntegrateByParts.NEVER
+            self.Fbar = state.F
+            qn = state.xn.split()[-1]
+            qp = state.xp.split()[-1]
+            self.qbar = 0.5*(qn + qp)
+            if qn.function_space() in state.SUPG:
+                Dn = state.xn.split()[1]
+                Dp = state.xp.split()[1]
+                dt = state.timestepping.dt
+                tau, const = state.SUPG[qn.function_space()]
+                if const:
+                    nu = tau.values()[0]
+                else:
+                    nu = tau[0][0]
+                self.qbar = self.qbar - nu*((qp*Dp - qn*Dn)/dt + div(self.Fbar*self.qbar))
+
         if state.hamiltonian:
             self.th_m = Constant(1.)
 

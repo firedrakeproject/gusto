@@ -1,21 +1,23 @@
 from gusto import *
 from firedrake import PeriodicRectangleMesh, PeriodicUnitSquareMesh, \
     SpatialCoordinate, Function, grad, as_vector, sin, pi, FunctionSpace, \
-    Constant, exp
+    Constant, exp, CellVolume, inner
 import sys
 
 dt = 1/24./60./2.
 if '--running-tests' in sys.argv:
     tmax = 5*dt
-    res = 32
+    res = 24
     square_test = False
 else:
     tmax = 10.
     res = 256
-    square_test = True
+    square_test = False
 hamiltonian = True
 upwind_D = False
 vorticity = True
+vorticity_SUPG = True
+reconstruct_q = True
 
 # set up parameters and mesh
 if square_test:
@@ -49,10 +51,14 @@ parameters = ShallowWaterParameters(g=g, H=H)
 
 upw = '' if upwind_D else 'no'
 vort = '_vorticity' if vorticity else ''
+qSUPG = '_q_SUPG' if vorticity_SUPG else ''
+rec_q = '_recon_q' if reconstruct_q else ''
 ham = '_hamiltonian' if hamiltonian else ''
-dirname = ("EC_{0}{1}{2}_{3}upwindD_res{4}_dt{5}_maxk"
-           "{6}".format(fname, ham, vort, upw, res, round(dt, 4), maxk))
-timestepping = TimesteppingParameters(dt=dt, maxk=maxk)
+dirname = ("EC_{0}{1}{2}{3}{4}_{5}upwindD_res{6}_dt{7}_maxk"
+           "{8}".format(fname, ham, vort, qSUPG, rec_q, upw,
+                        res, round(dt, 4), maxk))
+timestepping = TimesteppingParameters(dt=dt, maxk=maxk,
+                                      reconstruct_q=reconstruct_q)
 if hamiltonian:
     hamiltonian = HamiltonianOptions(no_u_rec=vorticity)
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq,
@@ -142,8 +148,19 @@ if vorticity:
     initial_vorticity(state, D0, u0, q0)
 
     # flux formulation has Dp in q-eqn, qp in u-eqn, so order matters
-    qeqn = AdvectionEquation(state, q0.function_space(),
-                             ibp=IntegrateByParts.NEVER, flux_form=True)
+    if vorticity_SUPG:
+        # set up vorticity SUPG parameter
+        cons, vol, eps = Constant(0.1), CellVolume(mesh), 1.0e-10
+        Fmag = (inner(D0*u0, D0*u0) + eps)**0.5
+        q_SUPG = SUPGOptions(constant_tau=False)
+        q_SUPG.default = (cons/Fmag)*vol**0.5
+
+        qeqn = SUPGAdvection(state, q0.function_space(),
+                             ibp=IntegrateByParts.NEVER,
+                             supg_params=q_SUPG, flux_form=True)
+    else:
+        qeqn = AdvectionEquation(state, q0.function_space(),
+                                 ibp=IntegrateByParts.NEVER, flux_form=True)
     advected_fields.append(("q", ThetaMethod(state, q0, qeqn, weight='D')))
 
     ueqn = U_transport(state, u0.function_space(), vorticity=True)
