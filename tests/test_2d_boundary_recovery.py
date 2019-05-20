@@ -12,8 +12,8 @@ import numpy as np
 
 def setup_2d_recovery(dirname):
 
-    L = 100.
-    H = 20.
+    L = 5.
+    H = 5.
 
     deltax = L / 5.
     deltay = H / 5.

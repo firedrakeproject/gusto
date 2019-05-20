@@ -5,10 +5,9 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        VectorFunctionSpace, SpatialCoordinate, as_vector,
                        dx, Interpolator, BrokenElement, interval, Constant,
                        TensorProductElement, FiniteElement, DirichletBC,
-                       VectorElement)
+                       VectorElement, conditional, max_value)
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, WRITE
-from gusto.transport_equation import is_dg
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
@@ -546,22 +545,20 @@ class Recoverer(object):
             else:
 
                 mesh = self.V.mesh()
-                V0_brok = FunctionSpace(mesh, BrokenElement(self.v_in.ufl_element()))
+                # this ensures we get the pure function space, not an indexed function space
+                V0 = FunctionSpace(mesh, self.v_in.function_space().ufl_element())
                 VDG1 = FunctionSpace(mesh, "DG", 1)
                 VCG1 = FunctionSpace(mesh, "CG", 1)
 
                 if self.V.value_size == 1:
-                    VCG2 = FunctionSpace(mesh, "CG", 2)
-                    coords_to_adjust = find_coords_to_adjust(V0_brok, VDG1, VCG1, VCG2)
+                    coords_to_adjust = find_coords_to_adjust(V0, VDG1)
 
                     self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v,
                                                                  coords_to_adjust=coords_to_adjust,
                                                                  method=Boundary_Method.dynamics)
                 else:
-                    VuCG1 = VectorFunctionSpace(mesh, "CG", 1)
-                    VuCG2 = VectorFunctionSpace(mesh, "CG", 2)
                     VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
-                    coords_to_adjust = find_coords_to_adjust(V0_brok, VuDG1, VuCG1, VuCG2)
+                    coords_to_adjust = find_coords_to_adjust(V0, VuDG1)
 
                     # now, break the problem down into components
                     v_scalars = []
@@ -606,7 +603,7 @@ class Recoverer(object):
         return self.v_out
 
 
-def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
+def find_coords_to_adjust(V0, DG1):
     """
     This function finds the coordinates that need to be adjusted
     for the recovery at the boundary. These are assigned by a 1,
@@ -614,24 +611,19 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
     This field is returned as a DG1 field.
     Fields can be scalar or vector.
 
-    :arg V0_brok: the broken space of the original field (before recovery).
+    :arg V0: the space of the original field (before recovery).
     :arg DG1: a DG1 space, in which the boundary recovery will happen.
-    :arg CG1: a CG1 space, in which the recovered field lies.
-    :arg CG2: a CG2 space.
     """
 
     # check that spaces are correct
     mesh = DG1.mesh()
-    # check V0_brok is fully discontinuous
-    if not is_dg(V0_brok):
-        raise ValueError('Need V0_brok to be a fully discontinuous space.')
-    # check DG1, CG1 and CG2 fields are correct
-    for space, family, degree in zip((DG1, CG1, CG2), ("DG", "CG", "CG"), (1, 1, 2)):
-        if type(space.ufl_element()) == VectorElement:
-            if space != VectorFunctionSpace(mesh, family, degree):
-                raise ValueError('The function space entered as vector %s%s is not vector %s%s.' % (family, degree, family, degree))
-        elif space != FunctionSpace(mesh, family, degree):
-            raise ValueError('The function space entered as %s%s is not %s%s.' % (family, degree, family, degree))
+    scalar_DG1 = FunctionSpace(mesh, "DG", 1)
+    # check DG1 field is correct
+    if type(DG1.ufl_element()) == VectorElement:
+        if DG1 != VectorFunctionSpace(mesh, "DG", 1):
+            raise ValueError('The function space entered as vector DG1 is not vector DG1.')
+    elif DG1 != FunctionSpace(mesh, "DG", 1):
+        raise ValueError('The function space entered as DG1 is not DG1.')
 
     # STRATEGY
     # We need to pass the boundary recoverer a field denoting the location
@@ -643,18 +635,8 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
     # 2. Obtain a field in DG1 that is 1 at exterior DOFs neighbouring the exterior
     #    values of V0 (i.e. the original space). For V0=DG0 there will be no exterior
     #    values, but could be if velocity is in RT or if there is a temperature space.
-    #    This requires a couple of steps:
-    #    a) Obtain a CG2 field with all the correct exterior values. CG2 is chosen because
-    #       all DOFs in V0 should have a DOF at the same position in CG2.
-    #    b) Project this down into V0,  which should give a good approximation to
-    #       having an exterior field in V0, although values will not be 1 necessarily.
-    #       Projection is required because interpolation is not supported for fields
-    #       whose values aren't pointwise evaluations (i.e. velocity spaces).
-    #    c) Interpolate these values into DG1, so this field is correctly represented
-    #       at the same points as the exterior field.
-    #    d) Because of the projection step, values will not necessarily be 1.
-    #       Values that should be 1 *should* be over 1/2 (found by trial and error!),
-    #       and we correct each point individually so that they become 1 or 0.
+    #    This is done by applying topological boundary conditions to a field in V0,
+    #    before interpolating these into DG1.
     # 3. Obtain a field that is 1 at corners in 2D or along edges in 3D.
     #    We do this by using that corners in 2D and edges in 3D are intersections
     #    of edges/faces respectively. In 2D, this means that if a field which is 1 on a
@@ -677,33 +659,26 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
         bc.apply(all_ext_in_DG1)
 
     # make DG1 field with 1 at coords surrounding exterior coords of V0
-    # first do it in CG2, as this should contain all DOFs of V0 and DG1
-    all_ext_in_CG2 = Function(CG2)
-    bcs = [DirichletBC(CG2, Constant(1.0), "on_boundary", method="geometric")]
+    # first do topological BCs to get V0 function which is 1 at DOFs on edges
+    all_ext_in_V0 = Function(V0)
+    bcs = [DirichletBC(V0, Constant(1.0), "on_boundary", method="topological")]
 
-    if CG2.extruded:
-        bcs.append(DirichletBC(CG2, Constant(1.0), "top", method="geometric"))
-        bcs.append(DirichletBC(CG2, Constant(1.0), "bottom", method="geometric"))
+    if V0.extruded:
+        bcs.append(DirichletBC(V0, Constant(1.0), "top", method="topological"))
+        bcs.append(DirichletBC(V0, Constant(1.0), "bottom", method="topological"))
 
     for bc in bcs:
-        bc.apply(all_ext_in_CG2)
+        bc.apply(all_ext_in_V0)
 
-    approx_ext_in_V0 = Function(V0_brok).project(all_ext_in_CG2)
-    approx_V0_ext_in_DG1 = Function(DG1).interpolate(approx_ext_in_V0)
-
-    # now do horrible hack to get back to 1s and 0s
-    for (i, point) in enumerate(approx_V0_ext_in_DG1.dat.data[:]):
-        if type(DG1.ufl_element()) == VectorElement:
-            for (j, p) in enumerate(point):
-                if p > 0.5:
-                    approx_V0_ext_in_DG1.dat.data[i][j] = 1
-                else:
-                    approx_V0_ext_in_DG1.dat.data[i][j] = 0
-        else:
-            if point > 0.5:
-                approx_V0_ext_in_DG1.dat.data[i] = 1
-            else:
-                approx_V0_ext_in_DG1.dat.data[i] = 0
+    if DG1.value_size > 1:
+        # for vector valued functions, DOFs aren't pointwise evaluation. We break into components and use a conditional interpolation to get values of 1
+        V0_ext_in_DG1_components = []
+        for i in range(DG1.value_size):
+            V0_ext_in_DG1_components.append(Function(scalar_DG1).interpolate(conditional(abs(all_ext_in_V0[i]) > 0.0, 1.0, 0.0)))
+        V0_ext_in_DG1 = Function(DG1).project(as_vector(V0_ext_in_DG1_components))
+    else:
+        # for scalar functions (where DOFs are pointwise evaluation) we can simply interpolate to get these values
+        V0_ext_in_DG1 = Function(DG1).interpolate(all_ext_in_V0)
 
     corners_in_DG1 = Function(DG1)
     if DG1.mesh().topological_dimension() == 2:
@@ -775,18 +750,14 @@ def find_coords_to_adjust(V0_brok, DG1, CG1, CG2):
 
         corners_in_DG1.assign(DG1_vert_x + DG1_vert_y + DG1_hori - all_ext_in_DG1)
 
-    coords_to_correct = Function(DG1).assign(corners_in_DG1 + all_ext_in_DG1 - approx_V0_ext_in_DG1)
-    for (i, point) in enumerate(coords_to_correct.dat.data[:]):
-        if type(DG1.ufl_element()) == VectorElement:
-            for (j, p) in enumerate(point):
-                if p > 0.5:
-                    coords_to_correct.dat.data[i][j] = 1
-                else:
-                    coords_to_correct.dat.data[i][j] = 0
-        else:
-            if point > 0.5:
-                coords_to_correct.dat.data[i] = 1
-            else:
-                coords_to_correct.dat.data[i] = 0
+    # we now combine the different functions. We use max_value to avoid getting 2s or 3s at corners/edges
+    # we do this component-wise because max_value only works component-wise
+    if DG1.value_size > 1:
+        coords_to_correct_components = []
+        for i in range(DG1.value_size):
+            coords_to_correct_components.append(Function(scalar_DG1).interpolate(max_value(corners_in_DG1[i], all_ext_in_DG1[i] - V0_ext_in_DG1[i])))
+        coords_to_correct = Function(DG1).project(as_vector(coords_to_correct_components))
+    else:
+        coords_to_correct = Function(DG1).interpolate(max_value(corners_in_DG1, all_ext_in_DG1 - V0_ext_in_DG1))
 
     return coords_to_correct
