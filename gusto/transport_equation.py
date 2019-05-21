@@ -39,8 +39,7 @@ def setup_functions(state, V, idx):
         test = TestFunction(V)
         q = X
         ubar = Function(state.spaces("HDiv"))
-    dS_ = surface_measures(q.function_space())
-    return X, test, q, ubar, dS_
+    return X, test, q, ubar
 
 
 def advection_form(state, V, idx=None, *,
@@ -58,22 +57,22 @@ def advection_form(state, V, idx=None, *,
               None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
     else:
         L = inner(outer(test, ubar), grad(q))*dx
 
-    if dS_ is not None and ibp != IntegrateByParts.NEVER:
+    if dS is not None and ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
     if outflow is not None:
         if V.extruded:
@@ -96,7 +95,7 @@ def linear_continuity_form(state, V, idx=None, *, qbar=None):
 def continuity_form(state, V, idx=None, *,
                     ibp=IntegrateByParts.ONCE):
 
-    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
@@ -107,11 +106,11 @@ def continuity_form(state, V, idx=None, *,
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
 
     form = subject(advection(advecting_velocity(L, ubar)), X)
     return form
@@ -120,13 +119,13 @@ def continuity_form(state, V, idx=None, *,
 def advection_vector_manifold_form(state, V, idx=None, *,
                                    ibp=IntegrateByParts.ONCE, outflow=None):
 
-    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-    L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
-    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
+    L = un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
+    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
 
     form = advection_form(state, V, idx, ibp=ibp) + subject(advection(advecting_velocity(L, ubar)), X)
     return form
@@ -143,7 +142,7 @@ def vector_invariant_form(state, V, idx=None, *,
               take the value None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar, dS_ = setup_functions(state, V, idx)
+    X, test, q, ubar = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
@@ -162,7 +161,7 @@ def vector_invariant_form(state, V, idx=None, *,
         L = (
             inner(q, curl(cross(ubar, test)))*dx
             - inner(both(Upwind*q),
-                    both(cross(n, cross(ubar, test))))*dS_
+                    both(cross(n, cross(ubar, test))))*dS
         )
 
     else:
@@ -178,14 +177,14 @@ def vector_invariant_form(state, V, idx=None, *,
             L = (
                 -inner(perp(grad(inner(test, perp(ubar)))), q)*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS_
+                        perp_u_upwind(q))*dS
             )
         else:
             L = (
                 (-inner(test, div(perp(q))*perp(ubar)))*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS_
-                + jump(inner(test, perp(ubar))*perp(q), n)*dS_
+                        perp_u_upwind(q))*dS
+                + jump(inner(test, perp(ubar))*perp(q), n)*dS
             )
 
     L -= 0.5*div(test)*inner(q, ubar)*dx
