@@ -4,9 +4,10 @@ from firedrake import (TestFunction, TrialFunction, Function,
                        FacetNormal, LinearVariationalProblem,
                        LinearVariationalSolver, action, Interpolator,
                        Projector)
+from gusto.recovery import Recoverer
 
 
-__all__ = ["InteriorPenalty"]
+__all__ = ["InteriorPenalty", "RecoveredDiffusion"]
 
 
 class Diffusion(object, metaclass=ABCMeta):
@@ -105,4 +106,4 @@ class RecoveredDiffusion(Diffusion):
         self.xdg_interpolator.interpolate()
         self.diffusion.apply(self.x_dg, self.x_dg)
         self.project_back.project()
-        x_out.assign(self.x_projected)
+        x_out.assign(self.x_in)
