@@ -2,7 +2,8 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (TestFunction, TrialFunction, Function,
                        inner, outer, grad, avg, dx, dS_h, dS_v,
                        FacetNormal, LinearVariationalProblem,
-                       LinearVariationalSolver, action)
+                       LinearVariationalSolver, action, Interpolator,
+                       Projector)
 
 
 __all__ = ["InteriorPenalty"]
