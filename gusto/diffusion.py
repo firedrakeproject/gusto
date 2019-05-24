@@ -103,14 +103,14 @@ class RecoveredDiffusion(Diffusion):
         if self.vector:
             self.x_dg_list = [Function(DG1) for i in range(dim)]
             self.xdg_interpolator_list = [Interpolator(self.x_in[i] + x_rec[i] - x_brok[i], self.x_dg_list[i]) for i in range(dim)]
-            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in)
+            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in, bcs=project_back_bcs)
         else:
             self.x_dg = Function(recovered_options.embedding_space)
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.x_dg)
-            self.project_back = Projector(self.x_dg, self.x_in)
+            self.project_back = Projector(self.x_dg, self.x_in, bcs=project_back_bcs)
 
         self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=recovered_options.embedding_space, boundary_method=recovered_options.boundary_method)
-        self.x_brok_projector = Projector(x_rec, x_brok, bcs=project_back_bcs)
+        self.x_brok_projector = Projector(x_rec, x_brok)
 
     def apply(self, x_in, x_out):
         self.x_in.assign(x_in)
