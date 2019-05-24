@@ -84,7 +84,7 @@ class RecoveredDiffusion(Diffusion):
     :arg recovered_options: a RecoveredOptions object.
     """
 
-    def __init__(self, state, diffusion_scheme, V0, recovered_options, vector=False):
+    def __init__(self, state, diffusion_scheme, V0, recovered_options, vector=False, project_back_bcs=None):
         super(RecoveredDiffusion, self).__init__(state)
 
         DG1 = FunctionSpace(state.mesh, "DG", 1)
@@ -110,7 +110,7 @@ class RecoveredDiffusion(Diffusion):
             self.project_back = Projector(self.x_dg, self.x_in)
 
         self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=recovered_options.embedding_space, boundary_method=recovered_options.boundary_method)
-        self.x_brok_projector = Projector(x_rec, x_brok)
+        self.x_brok_projector = Projector(x_rec, x_brok, bcs=project_back_bcs)
 
     def apply(self, x_in, x_out):
         self.x_in.assign(x_in)
