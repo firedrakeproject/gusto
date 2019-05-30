@@ -24,6 +24,7 @@ pipeline {
             steps {
                 timestamps {
                     sh '''
+sudo -u firedrake /bin/bash << Here
 . /home/firedrake/firedrake/bin/activate
 python -m pip install -r requirements.txt
 python -m pip install -e .
