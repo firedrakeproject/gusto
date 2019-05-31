@@ -31,6 +31,7 @@ cd /home/firedrake
 chmod a+rwx /home/firedrake/firedrake/lib/python*/site-packages
 chmod a+rwx /home/firedrake/firedrake/lib/python*/site-packages/easy-install.pth
 chmod a+rwx /home/firedrake/firedrake/bin
+install -d /home/firedrake/firedrake/.cache
 chmod -R a+rwx /home/firedrake/firedrake/.cache
 firedrake-status
 Here
