@@ -10,9 +10,7 @@ examples_dir = join(cwd, "..", "..", "examples")
 example_files = glob.glob("%s/*.py" % examples_dir)
 
 
-@pytest.fixture(params=[pytest.param(f, marks=pytest.mark.xfail(reason="unreliable"))
-                        if f.endswith("mountain_hydrostatic.py")
-                        else f for f in example_files],
+@pytest.fixture(params=glob.glob("%s/*.py" % examples_dir),
                 ids=lambda x: basename(x))
 def example_file(request):
     return abspath(request.param)
