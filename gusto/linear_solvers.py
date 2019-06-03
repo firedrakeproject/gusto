@@ -133,7 +133,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.quadrature_degree = (5, 5)
 
         if logger.isEnabledFor(DEBUG):
-            # Set outer solver to GMRES and turn on KSP monitor for the outer system
+            # Set outer solver to FGMRES and turn on KSP monitor for the outer system
             self.solver_parameters["ksp_type"] = "fgmres"
             self.solver_parameters["mat_type"] = "aij"
             self.solver_parameters["pmat_type"] = "matfree"
