@@ -167,7 +167,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                                          'sub_pc_type': 'ilu'}}
 
     PiSolver = LinearVariationalSolver(PiProblem,
-                                       solver_parameters=params)
+                                       solver_parameters=params,
+                                       options_prefix="pisolver")
 
     PiSolver.solve()
     v, Pi = w.split()
@@ -188,7 +189,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         )
         F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
+        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params,
+                                               options_prefix="rhosolver")
         rhosolver.solve()
         v, rho_ = w1.split()
         rho0.assign(rho_)
