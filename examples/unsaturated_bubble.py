@@ -16,11 +16,6 @@ if '--recovered' in sys.argv:
 else:
     recovered = False
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
-
 if '--diffusion' in sys.argv:
     diffusion = True
 else:
@@ -34,6 +29,7 @@ else:
     deltax = 20. if recovered else 40.
     tmax = 600.
 
+
 L = 3600.
 h = 2400.
 nlayers = int(h/deltax)
@@ -46,8 +42,6 @@ degree = 0 if recovered else 1
 dirname = 'unsaturated_bubble'
 if recovered:
     dirname += '_recovered'
-if hybridization:
-    dirname += '_hybridization'
 if diffusion:
     dirname += '_diffusion'
 
@@ -240,10 +234,8 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
                    ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
-else:
-    linear_solver = CompressibleSolver(state, moisture=moisture)
+# Set up linear solver
+linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
