@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
@@ -15,10 +15,6 @@ else:
     deltax = 100.
     tmax = 1000.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 if '--recovered' in sys.argv:
     recovered = True
 else:
@@ -28,12 +24,13 @@ if '--limit' in sys.argv:
 else:
     limit = False
 
+
 # make mesh
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
-m = PeriodicIntervalMesh(ncolumns, L)
+m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
@@ -44,8 +41,7 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'dry_bf_bubble'
-if hybridization:
-    dirname += '_hybridization'
+
 if recovered:
     dirname += '_recovered'
 if limit:
@@ -68,7 +64,8 @@ state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               parameters=params,
               diagnostics=diagnostics,
               fieldlist=fieldlist,
-              diagnostic_fields=diagnostic_fields)
+              diagnostic_fields=diagnostic_fields,
+              u_bc_ids=[1, 2])
 
 # Initial conditions
 u0 = state.fields("u")
@@ -165,10 +162,7 @@ else:
     advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver = CompressibleSolver(state)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 if recovered:

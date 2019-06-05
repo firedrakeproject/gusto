@@ -5,7 +5,7 @@ import sys
 import time
 from gusto.configuration import logger, set_log_handler
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
-from firedrake import (FiniteElement, TensorProductElement, HDiv,
+from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
                        FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
@@ -219,13 +219,17 @@ class State(object):
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg diagnostic_fields: list of diagnostic field classes
+    :arg u_bc_ids: a list containing the ids of boundaries with no normal
+                   component of velocity. These ids are passed to `DirichletBC`s. For
+                   extruded meshes, top and bottom are added automatically.
     """
 
     def __init__(self, mesh, dt,
                  output=None,
                  parameters=None,
                  diagnostics=None,
-                 diagnostic_fields=None):
+                 diagnostic_fields=None,
+                 u_bc_ids=None):
 
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
@@ -243,6 +247,10 @@ class State(object):
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
+        if u_bc_ids is not None:
+            self.u_bc_ids = u_bc_ids
+        else:
+            self.u_bc_ids = []
 
         # The mesh
         self.mesh = mesh
@@ -253,6 +261,15 @@ class State(object):
             dumplist = output.dumplist
         self.fields = StateFields(*dumplist)
         self.spaces = SpaceCreator()
+
+        # set up bcs
+        V = mesh.coordinates.function_space()
+        self.bcs = []
+        if V.extruded:
+            self.bcs.append(DirichletBC(V, 0.0, "bottom"))
+            self.bcs.append(DirichletBC(V, 0.0, "top"))
+        for id in self.u_bc_ids:
+            self.bcs.append(DirichletBC(V, 0.0, id))
 
         self.dumpfile = None
 

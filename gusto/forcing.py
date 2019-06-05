@@ -62,11 +62,7 @@ class Forcing(object):
             replace_labelled(self.x0.split(), subject))
 
         Vu = W.split()[0]
-        if Vu.extruded:
-            bcs = [DirichletBC(Vu, 0.0, "bottom"),
-                   DirichletBC(Vu, 0.0, "top")]
-        else:
-            bcs = None
+        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
 
         explicit_forcing_problem = LinearVariationalProblem(
             a_explicit.form, L_explicit.form, self.xF, bcs=bcs

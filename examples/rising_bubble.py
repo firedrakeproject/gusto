@@ -9,10 +9,6 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 700.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 L = 1000.
 H = 1000.
@@ -26,8 +22,6 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'rb'
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=10,
@@ -100,10 +94,7 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver = CompressibleSolver(state)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

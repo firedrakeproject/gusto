@@ -160,18 +160,15 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                   'pc_type': 'python',
                   'mat_type': 'matfree',
                   'pc_python_type': 'gusto.VerticalHybridizationPC',
-                  'vert_hybridization': {'ksp_type': 'gmres',
-                                         'pc_type': 'gamg',
-                                         'pc_gamg_sym_graph': True,
-                                         'ksp_rtol': 1e-8,
-                                         'ksp_atol': 1e-8,
-                                         'mg_levels': {'ksp_type': 'richardson',
-                                                       'ksp_max_it': 5,
-                                                       'pc_type': 'bjacobi',
-                                                       'sub_pc_type': 'ilu'}}}
+                  # Vertical trace system is only coupled vertically in columns
+                  # block ILU is a direct solver!
+                  'vert_hybridization': {'ksp_type': 'preonly',
+                                         'pc_type': 'bjacobi',
+                                         'sub_pc_type': 'ilu'}}
 
     PiSolver = LinearVariationalSolver(PiProblem,
-                                       solver_parameters=params)
+                                       solver_parameters=params,
+                                       options_prefix="pisolver")
 
     PiSolver.solve()
     v, Pi = w.split()
@@ -192,7 +189,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         )
         F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
+        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params,
+                                               options_prefix="rhosolver")
         rhosolver.solve()
         v, rho_ = w1.split()
         rho0.assign(rho_)

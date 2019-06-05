@@ -10,10 +10,6 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 9000.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 nlayers = 70  # horizontal layers
 columns = 180  # number of columns
@@ -53,9 +49,6 @@ mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=18,
@@ -104,8 +97,21 @@ theta_b = Function(Vt).interpolate(thetab)
 # Calculate hydrostatic Pi
 Pi = Function(Vr)
 rho_b = Function(Vr)
+
+piparams = {'ksp_type': 'gmres',
+            'ksp_monitor_true_residual': None,
+            'pc_type': 'python',
+            'mat_type': 'matfree',
+            'pc_python_type': 'gusto.VerticalHybridizationPC',
+            # Vertical trace system is only coupled vertically in columns
+            # block ILU is a direct solver!
+            'vert_hybridization': {'ksp_type': 'preonly',
+                                   'pc_type': 'bjacobi',
+                                   'sub_pc_type': 'ilu'}}
+
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=0.5)
+                                 top=True, pi_boundary=0.5,
+                                 params=piparams)
 
 
 def minimum(f):
@@ -120,13 +126,14 @@ static void minify(double *a, double *b) {
 
 p0 = minimum(Pi)
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True)
+                                 top=True, params=piparams)
 p1 = minimum(Pi)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
 compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=pi_top, solve_for_rho=True)
+                                 top=True, pi_boundary=pi_top, solve_for_rho=True,
+                                 params=piparams)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
@@ -154,10 +161,7 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver = CompressibleSolver(state)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)

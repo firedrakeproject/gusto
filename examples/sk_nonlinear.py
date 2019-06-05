@@ -11,10 +11,6 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 3600.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 nlayers = 10  # horizontal layers
 columns = 150  # number of columns
@@ -30,8 +26,6 @@ points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 
 dirname = 'sk_nonlinear'
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,

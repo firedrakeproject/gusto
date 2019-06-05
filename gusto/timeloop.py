@@ -7,6 +7,7 @@ from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 from firedrake import DirichletBC, Function
 
+
 __all__ = ["Timestepper", "PrescribedAdvectionTimestepper", "CrankNicolson"]
 
 
@@ -76,13 +77,10 @@ class Timestepper(object, metaclass=ABCMeta):
         """
         unp1 = self.xnp1("u")
 
-        if unp1.function_space().extruded:
-            M = unp1.function_space()
-            bcs = [DirichletBC(M, 0.0, "bottom"),
-                   DirichletBC(M, 0.0, "top")]
+        bcs = self.state.bcs
 
-            for bc in bcs:
-                bc.apply(unp1)
+        for bc in bcs:
+            bc.apply(unp1)
 
     def setup_schemes(self, schemes):
         """
