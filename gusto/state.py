@@ -93,9 +93,15 @@ class PointDataOutput(object):
                     var = group.createVariable("points", points.dtype,
                                                ("points", "geometric_dimension"))
                     var[:] = points
-                    group.createVariable(field_name,
-                                         field_creator(field_name).dat.dtype,
-                                         ("time", "points"))
+                    # Gradients need an extra dimension e.g. in 2D there are two values
+                    if "_gradient" in field_name:
+                        group.createVariable(field_name,
+                                            field_creator(field_name).dat.dtype,
+                                            ("time", "points","geometric_dimension"))
+                    else:
+                        group.createVariable(field_name,
+                                            field_creator(field_name).dat.dtype,
+                                            ("time", "points"))
 
     def dump(self, field_creator, t):
         """Evaluate and dump field data at points.
