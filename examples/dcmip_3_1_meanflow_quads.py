@@ -141,7 +141,7 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
-linear_solver = HybridizedCompressibleSolver(state)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
