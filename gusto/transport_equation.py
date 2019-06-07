@@ -39,7 +39,8 @@ def setup_functions(state, V, idx):
         test = TestFunction(V)
         q = X
         ubar = Function(state.spaces("HDiv"))
-    return X, test, q, ubar
+    dS_ = surface_measures(q.function_space())
+    return X, test, q, ubar, dS_
 
 
 def advection_form(state, V, idx=None, *,
@@ -57,7 +58,7 @@ def advection_form(state, V, idx=None, *,
               None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx)
+    X, test, q, ubar, dS = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
@@ -86,7 +87,7 @@ def advection_form(state, V, idx=None, *,
 
 def linear_continuity_form(state, V, idx=None, *, qbar=None):
 
-    X, test, _, ubar = setup_functions(state, V, idx)
+    X, test, _, ubar, dS = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(Constant(qbar)*test*div(ubar)*dx, ubar)), X)
     return form
@@ -95,7 +96,7 @@ def linear_continuity_form(state, V, idx=None, *, qbar=None):
 def continuity_form(state, V, idx=None, *,
                     ibp=IntegrateByParts.ONCE):
 
-    X, test, q, ubar = setup_functions(state, V, idx)
+    X, test, q, ubar, dS = setup_functions(state, V, idx)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
@@ -119,7 +120,7 @@ def continuity_form(state, V, idx=None, *,
 def advection_vector_manifold_form(state, V, idx=None, *,
                                    ibp=IntegrateByParts.ONCE, outflow=None):
 
-    X, test, q, ubar = setup_functions(state, V, idx)
+    X, test, q, ubar, dS = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
@@ -142,7 +143,7 @@ def vector_invariant_form(state, V, idx=None, *,
               take the value None, "once" or "twice". Defaults to "once".
     """
 
-    X, test, q, ubar = setup_functions(state, V, idx)
+    X, test, q, ubar, dS = setup_functions(state, V, idx)
 
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
@@ -194,7 +195,7 @@ def vector_invariant_form(state, V, idx=None, *,
 
 def kinetic_energy_form(state, V, idx=None):
 
-    X, test, q, ubar = setup_functions(state, V, idx)
+    X, test, q, ubar, dS = setup_functions(state, V, idx)
 
     form = subject(advection(advecting_velocity(0.5*div(test)*inner(q, ubar)*dx, ubar)), X)
     return form
