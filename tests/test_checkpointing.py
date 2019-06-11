@@ -24,7 +24,7 @@ def setup_sk(dirname):
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO, \
-                                  point_data=[('rho', points)])
+                                  point_data=[('rho', points), ('u', points)])
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 

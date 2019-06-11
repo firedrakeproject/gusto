@@ -93,11 +93,18 @@ class PointDataOutput(object):
                     var = group.createVariable("points", points.dtype,
                                                ("points", "geometric_dimension"))
                     var[:] = points
+
                     # Gradients need an extra dimension e.g. in 2D there are two values
                     if "_gradient" in field_name:
                         group.createVariable(field_name,
                                             field_creator(field_name).dat.dtype,
                                             ("time", "points","geometric_dimension"))
+                    # Likewise the velocity needs an extra dimension
+                    elif field_name == "u":
+                        group.createVariable(field_name,
+                                            field_creator(field_name).dat.dtype,
+                                            ("time", "points","geometric_dimension"))
+                    # Assume other cases return a single value
                     else:
                         group.createVariable(field_name,
                                             field_creator(field_name).dat.dtype,
