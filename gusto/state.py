@@ -95,24 +95,23 @@ class PointDataOutput(object):
                     var[:] = points
 
                     # Velocity or gradients of scalar fields. u is handled as a special case as its rank is zero.
-                    rank=field_creator(field_name).function_space().rank
+                    rank = field_creator(field_name).function_space().rank
                     if field_name == "u" or rank == 1:
                         group.createVariable(field_name,
-                                        field_creator(field_name).dat.dtype,
-                                            ("time", "points","geometric_dimension"))
+                                             field_creator(field_name).dat.dtype,
+                                             ("time", "points", "geometric_dimension"))
                     # Scalar fields
                     elif rank == 0:
                         group.createVariable(field_name,
-                                        field_creator(field_name).dat.dtype,
-                                        ("time", "points"))
+                                             field_creator(field_name).dat.dtype,
+                                             ("time", "points"))
                     # Velocity gradient
                     elif rank == 2:
                         group.createVariable(field_name,
-                                        field_creator(field_name).dat.dtype,
-                                        ("time", "points", "geometric_dimension", "geometric_dimension"))
+                                             field_creator(field_name).dat.dtype,
+                                             ("time", "points", "geometric_dimension", "geometric_dimension"))
                     else:
                         raise NotImplementedError("Point writing not enabled for fields with rank ", rank)
-                        
 
     def dump(self, field_creator, t):
         """Evaluate and dump field data at points.

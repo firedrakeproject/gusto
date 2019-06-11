@@ -4,6 +4,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
 import numpy as np
 import itertools
 
+
 def setup_sk(dirname):
     nlayers = 10  # horizontal layers
     columns = 30  # number of columns
@@ -20,11 +21,11 @@ def setup_sk(dirname):
     points_x = [0.0, L*(13.0/30), L/2.0, L]
     points_z = [0.0, H/2.0, H]
     points = np.array([p for p in itertools.product(points_x, points_z)])
-    
+
     fieldlist = ['u', 'rho', 'theta']
     timestepping = TimesteppingParameters(dt=dt)
-    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO, \
-                                  point_data=[('rho', points), ('u', points)])
+    output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO,
+                              point_data=[('rho', points), ('u', points)])
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
