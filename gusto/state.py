@@ -63,7 +63,7 @@ class PointDataOutput(object):
         :arg field_points: Iterable of pairs (field_name, evaluation_points).
         :arg description: Description of the simulation.
         :arg field_creator: The field creator (only used to determine
-            datatype of fields and the rank).
+            datatype and shape of fields).
         :kwarg create: If False, assume that filename already exists
         """
         # Overwrite on creation.
@@ -94,24 +94,15 @@ class PointDataOutput(object):
                                                ("points", "geometric_dimension"))
                     var[:] = points
 
-                    # Velocity or gradients of scalar fields. u is handled as a special case as its rank is zero.
-                    rank = field_creator(field_name).function_space().rank
-                    if field_name == "u" or rank == 1:
-                        group.createVariable(field_name,
-                                             field_creator(field_name).dat.dtype,
-                                             ("time", "points", "geometric_dimension"))
-                    # Scalar fields
-                    elif rank == 0:
-                        group.createVariable(field_name,
-                                             field_creator(field_name).dat.dtype,
-                                             ("time", "points"))
-                    # Velocity gradient
-                    elif rank == 2:
-                        group.createVariable(field_name,
-                                             field_creator(field_name).dat.dtype,
-                                             ("time", "points", "geometric_dimension", "geometric_dimension"))
-                    else:
-                        raise NotImplementedError("Point writing not enabled for fields with rank ", rank)
+                    # Get the UFL shape of the field
+                    field_shape = field_creator(field_name).ufl_shape
+                    # Number of geometric dimension occurences should be the same as the length of the UFL shape
+                    field_len = len(field_shape)
+                    field_count = field_shape.count(dim)
+                    assert field_len == field_count, "Geometric dimension occurrences do not match UFL shape"
+                    # Create the variable with the required shape
+                    dimensions = ("time", "points") + field_count*("geometric_dimension",)
+                    group.createVariable(field_name, field_creator(field_name).dat.dtype, dimensions)
 
     def dump(self, field_creator, t):
         """Evaluate and dump field data at points.
