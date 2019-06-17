@@ -15,10 +15,6 @@ else:
     tmax = 30*day
     tdump = 2*hour
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 ##############################################################################
 # set up mesh
@@ -57,8 +53,6 @@ timestepping = TimesteppingParameters(dt=dt)
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
 dirname = 'compressible_eady'
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tdump/dt),
@@ -217,29 +211,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 ##############################################################################
 # Set up linear solver for the timestepping scheme
 ##############################################################################
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver_params = {'pc_type': 'fieldsplit',
-                            'pc_fieldsplit_type': 'schur',
-                            'ksp_type': 'gmres',
-                            'ksp_max_it': 100,
-                            'ksp_gmres_restart': 50,
-                            'pc_fieldsplit_schur_fact_type': 'FULL',
-                            'pc_fieldsplit_schur_precondition': 'selfp',
-                            'fieldsplit_0': {'ksp_type': 'preonly',
-                                             'pc_type': 'bjacobi',
-                                             'sub_pc_type': 'ilu'},
-                            'fieldsplit_1': {'ksp_type': 'preonly',
-                                             'pc_type': 'gamg',
-                                             'pc_gamg_sym_graph': True,
-                                             'mg_levels': {'ksp_type': 'chebyshev',
-                                                           'ksp_chebyshev_esteig': True,
-                                                           'ksp_max_it': 5,
-                                                           'pc_type': 'bjacobi',
-                                                           'sub_pc_type': 'ilu'}}}
-    linear_solver = CompressibleSolver(state, solver_parameters=linear_solver_params,
-                                       overwrite_solver_parameters=True)
+linear_solver = CompressibleSolver(state)
 
 ##############################################################################
 # Set up forcing
