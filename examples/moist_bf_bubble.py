@@ -126,7 +126,7 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-physics_boundary_method = 'physics' if recovered else None
+physics_boundary_method = Boundary_Method.physics if recovered else None
 
 # find perturbed water_v
 w_v = Function(Vt)
@@ -182,11 +182,11 @@ if recovered:
     u_opts = RecoveredOptions(embedding_space=Vu_DG1,
                               recovered_space=Vu_CG1,
                               broken_space=Vu,
-                              boundary_method='velocity')
+                              boundary_method=Boundary_Method.dynamics)
     rho_opts = RecoveredOptions(embedding_space=VDG1,
                                 recovered_space=VCG1,
                                 broken_space=Vr,
-                                boundary_method='density')
+                                boundary_method=Boundary_Method.dynamics)
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)

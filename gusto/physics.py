@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from gusto.transport_equation import EmbeddedDGAdvection
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, Boundary_Method
 from gusto.advection import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.limiters import ThetaLimiter, NoLimiter
@@ -69,7 +69,7 @@ class Condensation(Physics):
         # make rho variables
         # we recover rho into theta space
         if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
-            boundary_method = 'physics'
+            boundary_method = Boundary_Method.physics
         else:
             boundary_method = None
         Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
@@ -346,7 +346,7 @@ class Evaporation(Physics):
         # make rho variables
         # we recover rho into theta space
         if state.vertical_degree == 0 and state.mesh.geometric_dimension == 2:
-            boundary_method = 'physics'
+            boundary_method = Boundary_Method.physics
         else:
             boundary_method = None
         Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
