@@ -705,7 +705,7 @@ class Vorticity(DiagnosticField):
                 gradperp = lambda psi: cross(cell_normals, grad(psi))
                 L = (- inner(gradperp(gamma), u))*dx
             else:
-                raise NotImplementedError("The vorticity diagnostics have only been implemented for 2D spherical geometries.")
+                L = (- inner(state.perp(grad(gamma)), u))*dx
 
             if vorticity_type != "relative":
                 f = state.fields("coriolis")
