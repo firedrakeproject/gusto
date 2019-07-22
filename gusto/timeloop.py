@@ -43,6 +43,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             self.prescribed_fields = []
 
+        self.t_hdivnorm = {}
+
     @abstractproperty
     def passive_advection(self):
         """list of fields that are passively advected (and possibly diffused)"""
@@ -80,7 +82,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
         pass
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, tmax, pickup=False, compute_hdiv_norms=False):
         """
         This is the timeloop. After completing the semi implicit step
         any passively advected fields are updated, implicit diffusion and
@@ -127,6 +129,11 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             with timed_stage("Dump output"):
                 state.dump(t)
+
+            if compute_hdiv_norms:
+                with timed_stage("Compute HDiv velocity norm"):
+                    hdiv_norm = state.compute_hdiv_velocity_norm(t)
+                    self.t_hdivnorm[t] = hdiv_norm
 
         if state.output.checkpoint:
             state.chkpt.close()

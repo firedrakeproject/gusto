@@ -9,7 +9,8 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        dx, op2, par_loop, READ, WRITE, DumbCheckpoint,
-                       FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector)
+                       FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector,
+                       norm)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -472,6 +473,14 @@ class State(object):
             # dump fields on latlon mesh
             if len(output.dumplist_latlon) > 0:
                 self.dumpfile_ll.write(*self.to_dump_latlon)
+
+    def compute_hdiv_velocity_norm(self, t):
+        # compute hdiv errors at the same frequency of output writing
+        output = self.output
+        if next(self.dumpcount) % output.dumpfreq == 0:
+            u = self.fields('u')
+            hdiv_norm = norm(u, norm_type='hdiv')
+            return hdiv_norm
 
     def initialise(self, initial_conditions):
         """
