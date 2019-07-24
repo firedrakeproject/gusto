@@ -87,10 +87,12 @@ def setup_saturated(dirname):
 
         u_opts = RecoveredOptions(embedding_space=Vu_DG1,
                                   recovered_space=Vu_CG1,
-                                  broken_space=Vu)
+                                  broken_space=Vu,
+                                  boundary_method=Boundary_Method.dynamics)
         rho_opts = RecoveredOptions(embedding_space=VDG1,
                                     recovered_space=VCG1,
-                                    broken_space=Vr)
+                                    broken_space=Vr,
+                                    boundary_method=Boundary_Method.dynamics)
         theta_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=Vt_brok)
