@@ -700,12 +700,7 @@ class Vorticity(DiagnosticField):
             else:
                 a = q*gamma*dx
 
-            if state.on_sphere:
-                cell_normals = CellNormal(state.mesh)
-                gradperp = lambda psi: cross(cell_normals, grad(psi))
-                L = (- inner(gradperp(gamma), u))*dx
-            else:
-                L = (- inner(state.perp(grad(gamma)), u))*dx
+            L = (- inner(state.perp(grad(gamma)), u))*dx
 
             if vorticity_type != "relative":
                 f = state.fields("coriolis")
