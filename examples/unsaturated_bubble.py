@@ -16,11 +16,6 @@ if '--recovered' in sys.argv:
 else:
     recovered = False
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
-
 if '--diffusion' in sys.argv:
     diffusion = True
 else:
@@ -34,6 +29,7 @@ else:
     deltax = 20. if recovered else 40.
     tmax = 600.
 
+
 L = 3600.
 h = 2400.
 nlayers = int(h/deltax)
@@ -46,8 +42,6 @@ degree = 0 if recovered else 1
 dirname = 'unsaturated_bubble'
 if recovered:
     dirname += '_recovered'
-if hybridization:
-    dirname += '_hybridization'
 if diffusion:
     dirname += '_diffusion'
 
@@ -96,15 +90,16 @@ if recovered:
     u_opts = RecoveredOptions(embedding_space=Vu_DG1,
                               recovered_space=Vu_CG1,
                               broken_space=Vu,
-                              boundary_method='velocity')
+                              boundary_method=Boundary_Method.dynamics)
     rho_opts = RecoveredOptions(embedding_space=VDG1,
                                 recovered_space=VCG1,
                                 broken_space=Vr,
-                                boundary_method='density')
+                                boundary_method=Boundary_Method.dynamics)
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
-                                  broken_space=Vt_brok)
-    physics_boundary_method = 'physics'
+                                  broken_space=Vt_brok,
+                                  boundary_method=Boundary_Method.dynamics)
+    physics_boundary_method = Boundary_Method.physics
 
 # Define constant theta_e and water_t
 Tsurf = 283.0
@@ -240,10 +235,8 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
                    ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
-else:
-    linear_solver = CompressibleSolver(state, moisture=moisture)
+# Set up linear solver
+linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)

@@ -12,7 +12,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
 from gusto import thermodynamics
 from gusto.configuration import logger
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, Boundary_Method
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
@@ -160,18 +160,15 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                   'pc_type': 'python',
                   'mat_type': 'matfree',
                   'pc_python_type': 'gusto.VerticalHybridizationPC',
-                  'vert_hybridization': {'ksp_type': 'gmres',
-                                         'pc_type': 'gamg',
-                                         'pc_gamg_sym_graph': True,
-                                         'ksp_rtol': 1e-8,
-                                         'ksp_atol': 1e-8,
-                                         'mg_levels': {'ksp_type': 'richardson',
-                                                       'ksp_max_it': 5,
-                                                       'pc_type': 'bjacobi',
-                                                       'sub_pc_type': 'ilu'}}}
+                  # Vertical trace system is only coupled vertically in columns
+                  # block ILU is a direct solver!
+                  'vert_hybridization': {'ksp_type': 'preonly',
+                                         'pc_type': 'bjacobi',
+                                         'sub_pc_type': 'ilu'}}
 
     PiSolver = LinearVariationalSolver(PiProblem,
-                                       solver_parameters=params)
+                                       solver_parameters=params,
+                                       options_prefix="pisolver")
 
     PiSolver.solve()
     v, Pi = w.split()
@@ -192,7 +189,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         )
         F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
-        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params)
+        rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params,
+                                               options_prefix="rhosolver")
         rhosolver.solve()
         v, rho_ = w1.split()
         rho0.assign(rho_)
@@ -321,8 +319,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension() == 2:
-        boundary_method = 'physics'
+    if state.vertical_degree == 0:
+        boundary_method = Boundary_Method.physics
     else:
         boundary_method = None
     rho_h = Function(Vr)
@@ -432,8 +430,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
 
-    if state.vertical_degree == 0 and state.mesh.geometric_dimension == 2:
-        method = 'physics'
+    if state.vertical_degree == 0:
+        method = Boundary_Method.physics
     else:
         method = None
     rho_h = Function(Vr)

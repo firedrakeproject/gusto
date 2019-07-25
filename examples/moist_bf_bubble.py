@@ -7,10 +7,6 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 import sys
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 if '--recovered' in sys.argv:
     recovered = True
 else:
@@ -32,6 +28,7 @@ else:
     deltax = 100. if recovered else 200
     tmax = 1000.
 
+
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
@@ -45,8 +42,7 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'moist_bf'
-if hybridization:
-    dirname += '_hybridization'
+
 if recovered:
     dirname += '_recovered'
 if limit:
@@ -130,7 +126,7 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-physics_boundary_method = 'physics' if recovered else None
+physics_boundary_method = Boundary_Method.physics if recovered else None
 
 # find perturbed water_v
 w_v = Function(Vt)
@@ -186,11 +182,11 @@ if recovered:
     u_opts = RecoveredOptions(embedding_space=Vu_DG1,
                               recovered_space=Vu_CG1,
                               broken_space=Vu,
-                              boundary_method='velocity')
+                              boundary_method=Boundary_Method.dynamics)
     rho_opts = RecoveredOptions(embedding_space=VDG1,
                                 recovered_space=VCG1,
                                 broken_space=Vr,
-                                boundary_method='density')
+                                boundary_method=Boundary_Method.dynamics)
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)
@@ -213,10 +209,7 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter))]
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
-else:
-    linear_solver = CompressibleSolver(state, moisture=moisture)
+linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)

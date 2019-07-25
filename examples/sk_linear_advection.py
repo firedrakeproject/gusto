@@ -10,10 +10,6 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 3600.
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 
 nlayers = 50  # horizontal layers
 columns = 50  # number of columns
@@ -28,8 +24,6 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 
 dirname = 'sk_linear'
-if hybridization:
-    dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
                           dumplist=['u'],
@@ -98,10 +92,7 @@ advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
 advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state)
-else:
-    linear_solver = CompressibleSolver(state)
+linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, linear=True)

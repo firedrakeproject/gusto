@@ -6,7 +6,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto import thermodynamics
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, Boundary_Method
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
@@ -473,7 +473,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
         if not self._initialised:
             space = state.fields("theta").function_space()
             broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
-            boundary_method = 'physics' if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
+            boundary_method = Boundary_Method.physics if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
