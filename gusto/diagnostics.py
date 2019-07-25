@@ -1,5 +1,5 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, TrialFunction, CellNormal, Constant, cross, grad, inner, \
+    TestFunction, TrialFunction, Constant, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, \
     TensorFunctionSpace, SpatialCoordinate, VectorFunctionSpace, as_vector
@@ -701,7 +701,6 @@ class Vorticity(DiagnosticField):
                 a = q*gamma*dx
 
             L = (- inner(state.perp(grad(gamma)), u))*dx
-
             if vorticity_type != "relative":
                 f = state.fields("coriolis")
                 L += gamma*f*dx
