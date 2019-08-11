@@ -50,6 +50,7 @@ class InteriorPenalty(Diffusion):
         super(InteriorPenalty, self).__init__(state)
 
         dt = state.timestepping.dt
+        bcs = self.bcs
         gamma = TestFunction(V)
         phi = TrialFunction(V)
         self.phi1 = Function(V)
@@ -84,12 +85,13 @@ class RecoveredDiffusion(Diffusion):
     :arg recovered_options: a RecoveredOptions object.
     """
 
-    def __init__(self, state, diffusion_scheme, V0, recovered_options, vector=False, project_back_bcs=None):
+    def __init__(self, state, diffusion_scheme, V0, recovered_options, vector=False):
         super(RecoveredDiffusion, self).__init__(state)
 
         DG1 = FunctionSpace(state.mesh, "DG", 1)
 
         self.diffusion = diffusion_scheme
+        bcs = self.diffusion.bcs
         self.vector = vector
         dim = recovered_options.recovered_space.value_size
 
@@ -103,7 +105,7 @@ class RecoveredDiffusion(Diffusion):
         if self.vector:
             self.x_dg_list = [Function(DG1) for i in range(dim)]
             self.xdg_interpolator_list = [Interpolator(self.x_in[i] + x_rec[i] - x_brok[i], self.x_dg_list[i]) for i in range(dim)]
-            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in, bcs=project_back_bcs)
+            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in, bcs=bcs)
         else:
             self.x_dg = Function(recovered_options.embedding_space)
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.x_dg)
