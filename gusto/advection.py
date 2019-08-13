@@ -92,6 +92,9 @@ class Advection(object, metaclass=ABCMeta):
             self.Projector = Projector(self.xdg_out, self.x_projected,
                                        solver_parameters=parameters)
 
+        if options.name == "embedded_dg" and self.limiter is not None:
+            self.x_recoverer = Recoverer(self.xdg_out, self.x_projected)
+
         if options.name == "recovered":
             # set up the necessary functions
             self.x_in = Function(field.function_space())
@@ -138,7 +141,10 @@ class Advection(object, metaclass=ABCMeta):
         :arg discretisation_option: string specifying which option to use.
         """
         if discretisation_option == "embedded_dg":
-            self.Projector.project()
+            if self.limiter is not None:
+                self.x_recoverer.project()
+            else:
+                self.Projector.project()
 
         elif discretisation_option == "recovered":
             if self.limiter is not None:

@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, division
 from firedrake import dx, BrokenElement, Function, FunctionSpace
 from firedrake.parloops import par_loop, READ, WRITE, INC
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
@@ -14,10 +13,9 @@ class ThetaLimiter(object):
     the central nodes to prevent new maxima or minima forming.
     """
 
-    def __init__(self, space):
+    def __init__(self, space, scheme='old'):
         """
         Initialise limiter
-
         :param space: the space in which theta lies.
         It should be the DG1xCG2 space.
         """
@@ -78,25 +76,65 @@ class ThetaLimiter(object):
                                 end
                                 """)
 
-        copy_from_DG1_instrs = ("""
-                                <float64> max_value = 0.0
-                                <float64> min_value = 0.0
-
-                                for i
-                                    for j
-                                        theta[i*3+j] = theta_hat[i*2+j]
+        if scheme == 'old':
+            copy_from_DG1_instrs = ("""
+                                    <float64> max_value = 0.0
+                                    <float64> min_value = 0.0
+                                    for i
+                                        for j
+                                            theta[i*3+j] = theta_hat[i*2+j]
+                                        end
+                                        max_value = fmax(theta_hat[i*2], theta_hat[i*2+1])
+                                        min_value = fmin(theta_hat[i*2], theta_hat[i*2+1])
+                                        if theta_old[i*3+2] > max_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        elif theta_old[i*3+2] < min_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        else
+                                            theta[i*3+2] = theta_old[i*3+2]
+                                        end
                                     end
-                                    max_value = fmax(theta_hat[i*2], theta_hat[i*2+1])
-                                    min_value = fmin(theta_hat[i*2], theta_hat[i*2+1])
-                                    if theta_old[i*3+2] > max_value
-                                        theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
-                                    elif theta_old[i*3+2] < min_value
-                                        theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
-                                    else
-                                        theta[i*3+2] = theta_old[i*3+2]
+                                    """)
+        elif scheme == 'new':
+            copy_from_DG1_instrs = ("""
+                                    <float64> max_value = 0.0
+                                    <float64> min_value = 0.0
+                                    for i
+                                        for j
+                                            theta[i*3+j] = theta_hat[i*2+j]
+                                        end
+                                        max_value = fmax(theta_hat[i*2], theta_hat[i*2+1])
+                                        min_value = fmin(theta_hat[i*2], theta_hat[i*2+1])
+                                        if theta_old[i*3+2] > max_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        elif theta_old[i*3+2] < min_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        else
+                                            theta[i*3+2] = theta_old[i*3+2]
+                                        end
                                     end
-                                end
-                                """)
+                                    """)
+        elif scheme == 'none':
+            copy_from_DG1_instrs = ("""
+                                    <float64> max_value = 0.0
+                                    <float64> min_value = 0.0
+                                    for i
+                                        for j
+                                            theta[i*3+j] = theta_hat[i*2+j]
+                                        end
+                                        max_value = fmax(theta_hat[i*2], theta_hat[i*2+1])
+                                        min_value = fmin(theta_hat[i*2], theta_hat[i*2+1])
+                                        if theta_old[i*3+2] > max_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        elif theta_old[i*3+2] < min_value
+                                            theta[i*3+2] = 0.5 * (theta_hat[i*2] + theta_hat[i*2+1])
+                                        else
+                                            theta[i*3+2] = theta_old[i*3+2]
+                                        end
+                                    end
+                                    """)
+        else:
+            raise ValueError('ThetaLimiter scheme %s not recognised.' % scheme)
 
         self._average_kernel = (averager_domain, average_instructions)
         _weight_kernel = (averager_domain, weight_instructions)
@@ -121,7 +159,6 @@ class ThetaLimiter(object):
         the original temperature space, and checks that the
         midpoint values are within the minimum and maximum
         at the adjacent vertices.
-
         If outside of the minimum and maximum, correct the values
         to be the average.
         """
@@ -154,7 +191,7 @@ class ThetaLimiter(object):
         self.copy_vertex_values(field)
         self.vertex_limiter.apply(self.theta_hat)
         self.copy_vertex_values_back(field)
-        self.remap_to_embedded_space(field)
+        #self.remap_to_embedded_space(field)
 
 
 class NoLimiter(object):
