@@ -50,7 +50,7 @@ class InteriorPenalty(Diffusion):
         super(InteriorPenalty, self).__init__(state)
 
         dt = state.timestepping.dt
-        bcs = self.bcs
+        self.bcs = bcs
         gamma = TestFunction(V)
         phi = TrialFunction(V)
         self.phi1 = Function(V)
@@ -81,22 +81,30 @@ class RecoveredDiffusion(Diffusion):
     A diffusion strategy for the lowest order spaces, allowing us to recover to a
     higher order space, where diffusion will be performed.
 
-    :arg diffusion_scheme: an existing Diffusion class. For a vector field this could be a list.
+    :arg state: the state object.
+    :arg diffusion_scheme: an existing Diffusion class. For a vector field this should
+                           be a list so that different boundary conditions can be applied
+                           to different components of the field.
+    :arg V0: the original function space of the field to be diffused.
     :arg recovered_options: a RecoveredOptions object.
+    :arg projection_bcs: boundary conditions to be applied when projecting back to V0.
     """
 
-    def __init__(self, state, diffusion_scheme, V0, recovered_options, vector=False):
+    def __init__(self, state, diffusion_scheme, V0, recovered_options, projection_bcs=None):
         super(RecoveredDiffusion, self).__init__(state)
 
         DG1 = FunctionSpace(state.mesh, "DG", 1)
 
         self.diffusion = diffusion_scheme
-        bcs = self.diffusion.bcs
-        self.vector = vector
         dim = recovered_options.recovered_space.value_size
 
-        if self.vector and len(self.diffusion) != dim:
-            raise ValueError('If you want to use a vector method, you must supply a list of diffusion schemes.')
+        # check if we have a vector or a scalar
+        if isinstance(self.diffusion, list):
+            self.vector = True
+            if len(self.diffusion) != dim:
+                raise ValueError('If you want to diffuse a vector field, you must supply a list of diffusion schemes. One scheme for each component of the vector field.')
+        else:
+            self.vector = False
 
         self.x_in = Function(V0)
         x_rec = Function(recovered_options.recovered_space)
@@ -105,11 +113,11 @@ class RecoveredDiffusion(Diffusion):
         if self.vector:
             self.x_dg_list = [Function(DG1) for i in range(dim)]
             self.xdg_interpolator_list = [Interpolator(self.x_in[i] + x_rec[i] - x_brok[i], self.x_dg_list[i]) for i in range(dim)]
-            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in, bcs=bcs)
+            self.project_back = Projector(as_vector(self.x_dg_list), self.x_in, bcs=projection_bcs)
         else:
             self.x_dg = Function(recovered_options.embedding_space)
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.x_dg)
-            self.project_back = Projector(self.x_dg, self.x_in, bcs=project_back_bcs)
+            self.project_back = Projector(self.x_dg, self.x_in, bcs=projection_bcs)
 
         self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=recovered_options.embedding_space, boundary_method=recovered_options.boundary_method)
         self.x_brok_projector = Projector(x_rec, x_brok)
