@@ -8,6 +8,7 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        VectorElement, conditional, max_value)
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, WRITE
+from gusto.configuration import logger
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
@@ -446,6 +447,7 @@ class Boundary_Recoverer(object):
                      is_loopy_kernel=True)
 
             # find effective coordinates
+            logger.warning('Finding effective coordinates for boundary recovery. This could give unexpected results for deformed meshes over very steep topography.')
             par_loop(_eff_coords_kernel, dx,
                      {"EFF_COORDS": (self.eff_coords, WRITE),
                       "ACT_COORDS": (self.act_coords, READ),
@@ -631,18 +633,34 @@ def find_coords_to_adjust(V0, DG1):
     # coords. This field will be 1 for these coords and 0 otherwise.
     # How do we do this?
     # 1. Obtain a DG1 field which is 1 at all exterior DOFs by applying Dirichlet
-    #    boundary conditions.
-    # 2. Obtain a field in DG1 that is 1 at exterior DOFs neighbouring the exterior
-    #    values of V0 (i.e. the original space). For V0=DG0 there will be no exterior
-    #    values, but could be if velocity is in RT or if there is a temperature space.
+    #    boundary conditions. i.e. for cells in the bottom right corner of a domain:
+    #    ------- 0 ------- 0 ------- 1
+    #            |         |         ||
+    #            |         |         ||
+    #            |         |         ||
+    #    ======= 1 ======= 1 ======= 1
+    # 2. Obtain a field in DG1 that is 1 at exterior DOFs adjacent to the exterior
+    #    DOFs of V0 (i.e. the original space). For V0=DG0 there will be no exterior
+    #    DOFs, but could be if velocity is in RT or if there is a temperature space.
     #    This is done by applying topological boundary conditions to a field in V0,
     #    before interpolating these into DG1.
+    #    For instance, marking V0 DOFs with x, for rho and theta spaces this would give
+    #    ------- 0 ------- 0 ------- 0          ---x--- 0 ---x--- 0 ---x--- 0
+    #            |         |         ||                 |         |         ||
+    #       x    |    x    |    x    ||                 |         |         ||
+    #            |         |         ||                 |         |         ||
+    #    ======= 0 ======= 0 ======= 0          ===x=== 1 ===x=== 1 ===x=== 1
     # 3. Obtain a field that is 1 at corners in 2D or along edges in 3D.
     #    We do this by using that corners in 2D and edges in 3D are intersections
     #    of edges/faces respectively. In 2D, this means that if a field which is 1 on a
     #    horizontal edge is summed with a field that is 1 on a vertical edge, the
     #    corner value will be 2. Subtracting the exterior DG1 field from step 1 leaves
     #    a field that is 1 in the corner. This is generalised to 3D.
+    #    ------- 0 ------- 0    ------- 0 ------- 1    ------- 0 ------- 1    ------- 0 ------- 0
+    #            |         ||           |         ||           |         ||            |         ||
+    #            |         ||  +        |         ||  -        |         ||  =         |         ||
+    #            |         ||           |         ||           |         ||            |         ||
+    #    ======= 1 ======= 1    ======= 0 ======= 1    ======= 1 ======= 1     ======= 0 ======= 1
     # 4. The field of coords to be adjusted is then found by the following formula:
     #                            f1 + f3 - f2
     #    where f1, f2 and f3 are the DG1 fields obtained from steps 1, 2 and 3.

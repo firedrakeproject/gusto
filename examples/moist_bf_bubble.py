@@ -7,10 +7,6 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 import sys
 
-if '--hybridization' in sys.argv:
-    hybridization = True
-else:
-    hybridization = False
 if '--recovered' in sys.argv:
     recovered = True
 else:
@@ -32,6 +28,7 @@ else:
     deltax = 100. if recovered else 200
     tmax = 1000.
 
+
 L = 10000.
 H = 10000.
 nlayers = int(H/deltax)
@@ -45,8 +42,7 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'moist_bf'
-if hybridization:
-    dirname += '_hybridization'
+
 if recovered:
     dirname += '_recovered'
 if limit:
@@ -213,10 +209,7 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter))]
 
 # Set up linear solver
-if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
-else:
-    linear_solver = CompressibleSolver(state, moisture=moisture)
+linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)

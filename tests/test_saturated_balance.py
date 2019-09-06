@@ -113,7 +113,7 @@ def setup_saturated(dirname):
     else:
         advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
 
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+    linear_solver = CompressibleSolver(state, moisture=moisture)
 
     # Set up forcing
     if recovered:
