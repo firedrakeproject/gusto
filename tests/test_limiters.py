@@ -1,16 +1,16 @@
 from os import path
 from gusto import *
-from firedrake import (as_vector, Constant, PeriodicIntervalMesh, pi,
+from firedrake import (as_vector, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, FunctionSpace, Function,
-                       conditional, sqrt, FiniteElement, TensorProductElement, BrokenElement)
+                       conditional, sqrt)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
-import pytest
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
 # If the limiter is working, the advection should have produced
 # no new maxima or minima. Advection is a solid body rotation.
+
 
 def setup_limiters(dirname):
 
@@ -32,13 +32,10 @@ def setup_limiters(dirname):
                   fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
 
-
     x, z = SpatialCoordinate(state.mesh)
 
-    Vu = state.spaces("HDiv")
     Vr = state.spaces("DG")
     Vt = state.spaces("HDiv_v")
-    VDG1 = FunctionSpace(state.mesh, "DG", 1)
     Vpsi = FunctionSpace(state.mesh, "CG", 2)
 
     u = state.fields("u", dump=True)
@@ -50,20 +47,20 @@ def setup_limiters(dirname):
     z_lower = 6 * Ld / 10
     z_upper = 8 * Ld / 10
     bubble_expr_1 = conditional(x > x_lower,
-                               conditional(x < x_upper,
-                                           conditional(z > z_lower,
-                                                       conditional(z < z_upper, 1.0, 0.0),
-                                                       0.0),
-                                           0.0),
-                               0.0)
+                                conditional(x < x_upper,
+                                            conditional(z > z_lower,
+                                                        conditional(z < z_upper, 1.0, 0.0),
+                                                        0.0),
+                                            0.0),
+                                0.0)
 
     bubble_expr_2 = conditional(x > z_lower,
-                               conditional(x < z_upper,
-                                           conditional(z > x_lower,
-                                                       conditional(z < x_upper, 1.0, 0.0),
-                                                       0.0),
-                                           0.0),
-                               0.0)
+                                conditional(x < z_upper,
+                                            conditional(z > x_lower,
+                                                        conditional(z < x_upper, 1.0, 0.0),
+                                                        0.0),
+                                            0.0),
+                                0.0)
 
     chemical.assign(1.0)
     moisture.assign(280.)
@@ -115,6 +112,7 @@ def setup_limiters(dirname):
     stepper = AdvectionDiffusion(state, advected_fields)
 
     return stepper, tmax
+
 
 def run_limiters(dirname):
 
