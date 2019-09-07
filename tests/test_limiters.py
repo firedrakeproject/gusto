@@ -14,12 +14,12 @@ from netCDF4 import Dataset
 
 def setup_limiters(dirname):
 
-    dt = 1.0
+    dt = 0.1
     Ld = 10.
-    tmax = 100
-    m = PeriodicIntervalMesh(10, Ld)
-    mesh = ExtrudedMesh(m, layers=10, layer_height=(Ld/10))
-    output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist=['chemical', 'moisture'])
+    tmax = 2
+    m = PeriodicIntervalMesh(20, Ld)
+    mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
+    output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist=['u', 'chemical', 'moisture'])
     parameters = CompressibleParameters()
     timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     fieldlist = ['u', 'rho', 'theta', 'chemical', 'moisture']
@@ -88,7 +88,6 @@ def setup_limiters(dirname):
                            conditional(r < r_out,
                                        A * r ** 2 + B * r + C,
                                        A * r_out ** 2 + B * r_out + C))
-    psi_expr = omega * r ** 2 / 2
     psi = Function(Vpsi).interpolate(psi_expr)
 
     gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
