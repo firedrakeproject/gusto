@@ -211,7 +211,6 @@ class VerticalHybridizationPC(PCBase):
                                                     mat_type=mat_type)
 
         self._assemble_S()
-        self.S.force_evaluation()
         Smat = self.S.petscmat
 
         nullspace = self.ctx.appctx.get("vert_trace_nullspace", None)
