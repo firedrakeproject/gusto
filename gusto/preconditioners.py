@@ -300,7 +300,6 @@ class VerticalHybridizationPC(PCBase):
         """
 
         self._assemble_S()
-        self.S.force_evaluation()
 
     def apply(self, pc, x, y):
         """We solve the forward eliminated problem for the
