@@ -83,7 +83,8 @@ for delta, dt in res_dt.items():
 
     physics_boundary = Boundary_Method.physics if recovered else None
     rho_b_Vt = Function(Vt)
-    rho_b_recoverer = Recoverer(rho_b, rho_b_Vt, VDG=Vt_brok, boundary_method=physics_boundary).project()
+    rho_b_recoverer = Recoverer(rho_b, rho_b_Vt, VDG=Vt_brok, boundary_method=physics_boundary)
+    rho_b_recoverer.project()
     pie = Function(Vt).assign(thermodynamics.pi(parameters, rho_b_Vt, theta_b))
     T_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
     theta0.interpolate(theta_b + T_pert/pie)

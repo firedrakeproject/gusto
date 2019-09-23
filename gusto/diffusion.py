@@ -47,7 +47,7 @@ class InteriorPenalty(Diffusion):
     """
 
     def __init__(self, state, V, kappa, mu, bcs=None):
-        super(InteriorPenalty, self).__init__(state)
+        super().__init__(state)
 
         dt = state.timestepping.dt
         self.bcs = bcs
@@ -91,7 +91,7 @@ class RecoveredDiffusion(Diffusion):
     """
 
     def __init__(self, state, diffusion_scheme, V0, recovered_options, projection_bcs=None):
-        super(RecoveredDiffusion, self).__init__(state)
+        super().__init__(state)
 
         DG1 = FunctionSpace(state.mesh, "DG", 1)
 
