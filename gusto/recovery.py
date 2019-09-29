@@ -199,6 +199,7 @@ class Boundary_Recoverer(object):
             VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
             self.act_coords = Function(VuDG1).project(x)  # actual coordinates
             self.eff_coords = Function(VuDG1).project(x)  # effective coordinates
+            self.output = Function(VDG1)
 
             shapes = {"nDOFs": self.v_DG1.function_space().finat_element.space_dimension(),
                       "dim": np.prod(VuDG1.shape, dtype=int)}
@@ -290,12 +291,12 @@ class Boundary_Recoverer(object):
                             end
                             """).format(**shapes)
 
-            elimin_domain = ("{{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii, iiiii]: "
+            elimin_domain = ("{{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii]: "
                              "0 <= i < {nDOFs} and 0 <= ii_loop < {nDOFs} and "
-                             "ii_loop + 1 <= jj_loop < {nDOFs} and ii_loop <= kk < {nDOFs} and "
-                             "ii_loop + 1 <= ll_loop < {nDOFs} and ii_loop <= mm < {nDOFs} + 1 and "
-                             "0 <= iii_loop < {nDOFs} and {nDOFs} - iii_loop <= kkk_loop < {nDOFs} + 1 and "
-                             "0 <= iiii < {nDOFs} and 0 <= iiiii < {nDOFs}}}").format(**shapes)
+                             "0 <= jj_loop < {nDOFs} and 0 <= kk < {nDOFs} and "
+                             "0 <= ll_loop < {nDOFs} and 0 <= mm < {nDOFs} and "
+                             "0 <= iii_loop < {nDOFs} and 0 <= kkk_loop < {nDOFs} and "
+                             "0 <= iiii < {nDOFs}}}").format(**shapes)
             elimin_insts = ("""
                             <int> ii = 0
                             <int> jj = 0
@@ -327,15 +328,27 @@ class Boundary_Recoverer(object):
                                     f[i] = DG1_OLD[i]
                                     A[i,0] = 1.0
                                     A[i,1] = EFF_COORDS[i,0]
-                                    if {nDOFs} > 3
+                                    if {nDOFs} == 3
+                                        A[i,2] = EFF_COORDS[i,1]
+                                    elif {nDOFs} == 4
                                         A[i,2] = EFF_COORDS[i,1]
                                         A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
-                                        if {nDOFs} > 7
-                                            A[i,4] = EFF_COORDS[i,{dim}-1]
-                                            A[i,5] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
-                                            A[i,6] = EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
-                                            A[i,7] = EFF_COORDS[i,0]*EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
-                                        end
+                                    elif {nDOFs} == 6
+                            """
+                            # N.B we use {nDOFs} - 1 to access the z component in 3D cases
+                            # Otherwise loopy tries to search for this component in 2D cases, raising an error
+                            """
+                                        A[i,2] = EFF_COORDS[i,1]
+                                        A[i,3] = EFF_COORDS[i,{dim}-1]
+                                        A[i,4] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
+                                        A[i,5] = EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
+                                    elif {nDOFs} == 8
+                                        A[i,2] = EFF_COORDS[i,1]
+                                        A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
+                                        A[i,4] = EFF_COORDS[i,{dim}-1]
+                                        A[i,5] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
+                                        A[i,6] = EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
+                                        A[i,7] = EFF_COORDS[i,0]*EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
                                     end
                                 end
                             """
@@ -345,25 +358,27 @@ class Boundary_Recoverer(object):
                                     A_max = fabs(A[ii,ii])
                                     i_max = ii
                             """
-                            # loop to find the largest value in the ith column
+                            # loop to find the largest value in the ii-th column
                             # set i_max as the index of the row with this largest value.
                             """
                                     jj = ii + 1
                                     for jj_loop
-                                        if fabs(A[jj,ii]) > A_max
-                                            i_max = jj
+                                        if jj < {nDOFs}
+                                            if fabs(A[jj,ii]) > A_max
+                                                i_max = jj
+                                            end
+                                            A_max = fmax(A_max, fabs(A[jj,ii]))
                                         end
-                                        A_max = fmax(A_max, fabs(A[jj,ii]))
                                         jj = jj + 1
                                     end
                             """
-                            # if the max value in the ith column isn't in the ith row, we must swap the rows
+                            # if the max value in the ith column isn't in the ii-th row, we must swap the rows
                             """
                                     if i_max != ii
                             """
                             # swap the elements of f
                             """
-                                        temp_f = f[ii]  {{id=set_temp_f, dep=*}}
+                                        temp_f = f[ii]  {{id=set_temp_f}}
                                         f[ii] = f[i_max]  {{id=set_f_imax, dep=set_temp_f}}
                                         f[i_max] = temp_f  {{id=set_f_ii, dep=set_f_imax}}
                             """
@@ -371,9 +386,11 @@ class Boundary_Recoverer(object):
                             # N.B. kk runs from ii to (nDOFs-1) as elements below diagonal should be 0
                             """
                                         for kk
-                                            temp_A = A[ii,kk]  {{id=set_temp_A, dep=*}}
-                                            A[ii, kk] = A[i_max, kk]  {{id=set_A_ii, dep=set_temp_A}}
-                                            A[i_max, kk] = temp_A  {{id=set_A_imax, dep=set_A_ii}}
+                                            if kk > ii - 1
+                                                temp_A = A[ii,kk]  {{id=set_temp_A}}
+                                                A[ii, kk] = A[i_max, kk]  {{id=set_A_ii, dep=set_temp_A}}
+                                                A[i_max, kk] = temp_A  {{id=set_A_imax, dep=set_A_ii}}
+                                            end
                                         end
                                     end
                             """
@@ -382,17 +399,16 @@ class Boundary_Recoverer(object):
                                     ll = ii + 1
                                     for ll_loop
                                         if ll > ii
+                                            if ll < {nDOFs}
                             """
                             # find scaling factor
                             """
-                                            c = - A[ll,ii] / A[ii,ii]
-                            """
-                            # N.B. mm runs from ii to (nDOFs-1) as elements below diagonal should be 0
-                            """
-                                            for mm
-                                                A[ll, mm] = A[ll, mm] + c * A[ii,mm]
+                                                c = - A[ll,ii] / A[ii,ii]
+                                                for mm
+                                                    A[ll, mm] = A[ll, mm] + c * A[ii,mm]
+                                                end
+                                                f[ll] = f[ll] + c * f[ii]
                                             end
-                                            f[ll] = f[ll] + c * f[ii]
                                         end
                                         ll = ll + 1
                                     end
@@ -406,32 +422,41 @@ class Boundary_Recoverer(object):
                             """
                             # jjj starts at the bottom row and works upwards
                             """
-                                    jjj = {nDOFs} - iii - 1  {{id=assign_jjj, dep=*}}
+                                    jjj = {nDOFs} - iii - 1  {{id=assign_jjj}}
                                     a[jjj] = f[jjj]   {{id=set_a, dep=assign_jjj}}
                                     for kkk_loop
-                                        a[jjj] = a[jjj] - A[jjj,kkk_loop] * a[kkk_loop]
+                                        if kkk_loop > {nDOFs} - iii_loop - 1
+                                            a[jjj] = a[jjj] - A[jjj,kkk_loop] * a[kkk_loop]
+                                        end
                                     end
                                     a[jjj] = a[jjj] / A[jjj,jjj]
                                     iii = iii + 1
                                 end
+                            end
+                            """
+                            # Do final loop to assign output values
+                            """
+                            for iiii
                             """
                             # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
                             """
-                                for iiii
+                                if NUM_EXT[0] > 0.0
                                     if {nDOFs} == 2
                                         DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
+                                    elif {nDOFs} == 3
+                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1]
                                     elif {nDOFs} == 4
                                         DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
+                                    elif {nDOFs} == 6
+                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,{dim}-1] + a[4]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
                                     elif {nDOFs} == 8
                                         DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
                                     end
-                                end
                             """
                             # if element is not external, just use old field values.
                             """
-                            else
-                                for iiiii
-                                    DG1[iiiii] = DG1_OLD[iiiii]
+                                else
+                                    DG1[iiii] = DG1_OLD[iiii]
                                 end
                             end
                             """).format(**shapes)
@@ -582,7 +607,7 @@ class Recoverer(object):
 
                     # the boundary recoverer needs to be done on a scalar fields
                     # so need to extract component and restore it after the boundary recovery is done
-                    self.project_to_vector = Projector(as_vector(v_out_scalars), self.v_out)
+                    self.interpolate_to_vector = Interpolator(as_vector(v_out_scalars), self.v_out)
 
     def project(self):
         """
@@ -598,7 +623,7 @@ class Recoverer(object):
                     self.project_to_scalars_CG[i].project()
                     self.boundary_recoverers[i].apply()
                     self.extra_averagers[i].project()
-                self.project_to_vector.project()
+                self.interpolate_to_vector.interpolate()
             else:
                 self.boundary_recoverer.apply()
                 self.averager.project()
