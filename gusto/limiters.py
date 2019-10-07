@@ -127,18 +127,6 @@ class ThetaLimiter(object):
                   "theta_old": (self.theta_old, READ)},
                  is_loopy_kernel=True)
 
-    def remap_to_embedded_space(self, field):
-        """
-        Remap from DG space to embedded DG space.
-        """
-
-        self.result.assign(0.)
-        par_loop(self._average_kernel, dx, {"vo": (self.result, INC),
-                                            "v": (field, READ),
-                                            "w": (self.w, READ)},
-                 is_loopy_kernel=True)
-        field.assign(self.result)
-
     def apply(self, field):
         """
         The application of the limiter to the theta-space field.
