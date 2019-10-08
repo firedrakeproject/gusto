@@ -111,7 +111,7 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
             else:
-                self.x_out_projector = Projector(x_brok, self.x_projected)
+                self.x_out_projector = Projector(self.xdg_out, self.x_projected)
 
     def pre_apply(self, x_in, discretisation_option):
         """
