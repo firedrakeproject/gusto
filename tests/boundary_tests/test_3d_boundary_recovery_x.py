@@ -42,15 +42,20 @@ def setup_3d_recovery(dirname):
     theta_element = TensorProductElement(w_hori, w_vert)
     v_element = u_element + w_element
 
+    # DG1
+    DG1_hori = FiniteElement("DG", cell, 1, variant="equispaced")
+    DG1_vert = FiniteElement("DG", interval, 1, variant="equispaced")
+    DG1_elt = TensorProductElement(DG1_hori, DG1_vert)
+    VDG1 = FunctionSpace(mesh, DG1_elt)
+    VuDG1 = VectorFunctionSpace(mesh, DG1_elt)
+
     # spaces
     VDG0 = FunctionSpace(mesh, "DG", 0)
     VCG1 = FunctionSpace(mesh, "CG", 1)
-    VDG1 = FunctionSpace(mesh, "DG", 1)
     Vt = FunctionSpace(mesh, theta_element)
     Vt_brok = FunctionSpace(mesh, BrokenElement(theta_element))
     Vu = FunctionSpace(mesh, v_element)
     VuCG1 = VectorFunctionSpace(mesh, "CG", 1)
-    VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
 
     # set up initial conditions
     np.random.seed(0)

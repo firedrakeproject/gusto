@@ -144,7 +144,16 @@ class Boundary_Recoverer(object):
         mesh = v_CG1.function_space().mesh()
         VDG0 = FunctionSpace(mesh, "DG", 0)
         VCG1 = FunctionSpace(mesh, "CG", 1)
-        VDG1 = FunctionSpace(mesh, "DG", 1)
+
+        if VDG0.extruded:
+            cell = mesh._base_mesh.ufl_cell().cellname()
+            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+            DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        else:
+            cell = mesh.ufl_cell().cellname()
+            DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+        VDG1 = FunctionSpace(mesh, DG1_element)
 
         self.num_ext = Function(VDG0)
 
@@ -188,7 +197,7 @@ class Boundary_Recoverer(object):
         else:
             raise ValueError("Boundary method should be a Boundary Method Enum object.")
 
-        VuDG1 = VectorFunctionSpace(VDG0.mesh(), "DG", 1)
+        VuDG1 = VectorFunctionSpace(VDG0.mesh(), DG1_element)
         x = SpatialCoordinate(VDG0.mesh())
         self.interpolator = Interpolator(self.v_CG1, self.v_DG1)
 
@@ -196,7 +205,6 @@ class Boundary_Recoverer(object):
 
             # STRATEGY
             # obtain a coordinate field for all the nodes
-            VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
             self.act_coords = Function(VuDG1).project(x)  # actual coordinates
             self.eff_coords = Function(VuDG1).project(x)  # effective coordinates
             self.output = Function(VDG1)
@@ -574,8 +582,16 @@ class Recoverer(object):
                 mesh = self.V.mesh()
                 # this ensures we get the pure function space, not an indexed function space
                 V0 = FunctionSpace(mesh, self.v_in.function_space().ufl_element())
-                VDG1 = FunctionSpace(mesh, "DG", 1)
                 VCG1 = FunctionSpace(mesh, "CG", 1)
+                if V0.extruded:
+                    cell = mesh._base_mesh.ufl_cell().cellname()
+                    DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+                    DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+                    DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+                else:
+                    cell = mesh.ufl_cell().cellname()
+                    DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+                VDG1 = FunctionSpace(mesh, DG1_element)
 
                 if self.V.value_size == 1:
                     coords_to_adjust = find_coords_to_adjust(V0, VDG1)
@@ -584,7 +600,7 @@ class Recoverer(object):
                                                                  coords_to_adjust=coords_to_adjust,
                                                                  method=Boundary_Method.dynamics)
                 else:
-                    VuDG1 = VectorFunctionSpace(mesh, "DG", 1)
+                    VuDG1 = VectorFunctionSpace(mesh, DG1_element)
                     coords_to_adjust = find_coords_to_adjust(V0, VuDG1)
 
                     # now, break the problem down into components
@@ -644,12 +660,22 @@ def find_coords_to_adjust(V0, DG1):
 
     # check that spaces are correct
     mesh = DG1.mesh()
-    scalar_DG1 = FunctionSpace(mesh, "DG", 1)
+    if DG1.extruded:
+        cell = mesh._base_mesh.ufl_cell().cellname()
+        DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+        DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+        DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+    else:
+        cell = mesh.ufl_cell().cellname()
+        DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+    scalar_DG1 = FunctionSpace(mesh, DG1_element)
+    vector_DG1 = VectorFunctionSpace(mesh, DG1_element)
+
     # check DG1 field is correct
     if type(DG1.ufl_element()) == VectorElement:
-        if DG1 != VectorFunctionSpace(mesh, "DG", 1):
+        if DG1 != vector_DG1:
             raise ValueError('The function space entered as vector DG1 is not vector DG1.')
-    elif DG1 != FunctionSpace(mesh, "DG", 1):
+    elif DG1 != scalar_DG1:
         raise ValueError('The function space entered as DG1 is not DG1.')
 
     # STRATEGY
