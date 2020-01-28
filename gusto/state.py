@@ -519,7 +519,7 @@ class State(object):
             S2 = FiniteElement("DG", cell, horizontal_degree, variant="equispaced")
 
             # vertical base spaces
-            T0 = FiniteElement("CG", interval, vertical_degree+1)
+            T0 = FiniteElement("CG", interval, vertical_degree+1, variant="equispaced")
             T1 = FiniteElement("DG", interval, vertical_degree, variant="equispaced")
 
             # build spaces V2, V3, Vt
