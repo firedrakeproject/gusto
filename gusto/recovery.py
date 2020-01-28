@@ -184,7 +184,7 @@ class Boundary_Recoverer(object):
             # base spaces
             cell = mesh._base_mesh.ufl_cell().cellname()
             w_hori = FiniteElement("DG", cell, 0, variant="equispaced")
-            w_vert = FiniteElement("CG", interval, 1)
+            w_vert = FiniteElement("CG", interval, 1, variant="equispaced")
             # build element
             theta_element = TensorProductElement(w_hori, w_vert)
             # spaces
