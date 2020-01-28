@@ -29,12 +29,12 @@ def setup_3d_recovery(dirname):
 
     # horizontal base spaces
     cell = mesh._base_mesh.ufl_cell().cellname()
-    u_hori = FiniteElement("RTCF", cell, 1)
-    w_hori = FiniteElement("DG", cell, 0)
+    u_hori = FiniteElement("RTCF", cell, 1, variant="equispaced")
+    w_hori = FiniteElement("DG", cell, 0, variant="equispaced")
 
     # vertical base spaces
-    u_vert = FiniteElement("DG", interval, 0)
-    w_vert = FiniteElement("CG", interval, 1)
+    u_vert = FiniteElement("DG", interval, 0, variant="equispaced")
+    w_vert = FiniteElement("CG", interval, 1, variant="equispaced")
 
     # build elements
     u_element = HDiv(TensorProductElement(u_hori, u_vert))
