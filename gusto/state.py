@@ -571,24 +571,33 @@ class State(object):
 
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
-    mesh_dg_fs = VectorFunctionSpace(mesh, "DG", 1)
+    cell = mesh._base_mesh.ufl_cell().cellname()
+
+    DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+    DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+    DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+
+    mesh_dg_fs = VectorFunctionSpace(mesh, DG1_elt)
     coords_dg = Function(mesh_dg_fs)
     coords_latlon = Function(mesh_dg_fs)
+
+    shapes = {"nDOFs": mesh_dg_fs.finat_element.space_dimension()}
+
     par_loop("""
-for (int i=0; i<3; i++) {
-    for (int j=0; j<3; j++) {
+for (int i=0; i<{nDOFs}; i++) {{
+    for (int j=0; j<3; j++) {{
         dg[i*3 + j] = cg[i*3 + j];
-    }
-}
-""", dx, {'dg': (coords_dg, WRITE),
+    }}
+}}
+""".format(**shapes), dx, {'dg': (coords_dg, WRITE),
           'cg': (coords_orig, READ)})
 
+    radius = np.min(np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
     # lat-lon 'x' = atan2(y, x)
     coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
     # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
     coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    coords_latlon.dat.data[:, 2] = 0.0
-
+    coords_latlon.dat.data[:, 2] = np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2) - radius
     kernel = op2.Kernel("""
 #define PI 3.141592653589793
 #define TWO_PI 6.283185307179586
