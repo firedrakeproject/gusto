@@ -571,39 +571,19 @@ class State(object):
 
 def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
-    
-    if coords_orig.function_space().extruded:
-        cell = mesh._base_mesh.ufl_cell().cellname()
-        DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-        DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-        DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-    else:
-        cell = mesh.ufl_cell().cellname()
-        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+    coords_fs = coords_orig.function_space()
+    coords_latlon = Function(coords_fs)
 
-    mesh_dg_fs = VectorFunctionSpace(mesh, DG1_elt)
-    coords_dg = Function(mesh_dg_fs)
-    coords_latlon = Function(mesh_dg_fs)
-
-    shapes = {"nDOFs": mesh_dg_fs.finat_element.space_dimension(),
+    shapes = {"nDOFs": coords_fs.finat_element.space_dimension(),
               'dim': 3}
-    print(shapes['nDOFs'])
 
-    par_loop("""
-for (int i=0; i<{nDOFs}; i++) {{
-    for (int j=0; j<{dim}; j++) {{
-        dg[i*{dim} + j] = cg[i*{dim} + j];
-    }}
-}}
-""".format(**shapes), dx, {'dg': (coords_dg, WRITE),
-          'cg': (coords_orig, READ)})
-
-    radius = np.min(np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
+    radius = np.min(np.sqrt(coords_orig.dat.data[:, 0]**2 + coords_orig.dat.data[:, 1]**2 + coords_orig.dat.data[:, 2]**2))
     # lat-lon 'x' = atan2(y, x)
-    coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
+    coords_latlon.dat.data[:, 0] = np.arctan2(coords_orig.dat.data[:, 1], coords_orig.dat.data[:, 0])
     # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-    coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    coords_latlon.dat.data[:, 2] = np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2) - radius
+    coords_latlon.dat.data[:, 1] = np.arcsin(coords_orig.dat.data[:, 2]/np.sqrt(coords_orig.dat.data[:, 0]**2 + coords_orig.dat.data[:, 1]**2 + coords_orig.dat.data[:, 2]**2))
+    # our vertical coordinate is radius - the minimum radius
+    coords_latlon.dat.data[:, 2] = np.sqrt(coords_orig.dat.data[:, 0]**2 + coords_orig.dat.data[:, 1]**2 + coords_orig.dat.data[:, 2]**2) - radius
 
 # We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
 # This kernel amends the longitude coords so that all longitudes in one cell are close together
@@ -635,7 +615,7 @@ void splat_coords(double *coords) {{
 
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-    return Mesh(coords_dg)
+    return Mesh(coords_latlon)
 
 
 def topo_sort(field_deps):
