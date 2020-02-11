@@ -8,8 +8,8 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
                        FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
-                       dx, op2, par_loop, READ, WRITE, DumbCheckpoint,
-                       FILE_CREATE, FILE_READ, interpolate, CellNormal, cross, as_vector)
+                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
+                       CellNormal, cross, as_vector)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -602,7 +602,7 @@ def get_latlon_mesh(mesh):
 void splat_coords(double *coords) {{
     double max_diff = 0.0;
     double diff = 0.0;
-    
+
     for (int i=0; i<{nDOFs}; i++) {{
         for (int j=0; j<{nDOFs}; j++) {{
             diff = coords[i*{dim}] - coords[j*{dim}];
