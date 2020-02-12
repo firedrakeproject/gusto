@@ -142,7 +142,7 @@ if recovered:
     rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
 else:
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
@@ -167,10 +167,7 @@ else:
 linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-if recovered:
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
-else:
-    compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

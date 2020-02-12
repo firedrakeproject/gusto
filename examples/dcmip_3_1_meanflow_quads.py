@@ -131,7 +131,7 @@ state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
+ueqn = VectorInvariant(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 thetaeqn = SUPGAdvection(state, Vt,
                          equation_form="advective")
@@ -144,7 +144,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
 # Build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

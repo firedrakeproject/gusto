@@ -77,7 +77,7 @@ def setup_sk(dirname):
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt)
     advected_fields = []
@@ -89,7 +89,7 @@ def setup_sk(dirname):
     linear_solver = CompressibleSolver(state)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

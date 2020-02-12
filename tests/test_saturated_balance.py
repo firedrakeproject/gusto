@@ -100,7 +100,7 @@ def setup_saturated(dirname):
         rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
         thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
     else:
-        ueqn = EulerPoincare(state, Vu)
+        ueqn = VectorInvariant(state, Vu)
         rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
         thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
@@ -116,10 +116,7 @@ def setup_saturated(dirname):
     linear_solver = CompressibleSolver(state, moisture=moisture)
 
     # Set up forcing
-    if recovered:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
-    else:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture)
+    compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
 
     # add physics
     physics_list = [Condensation(state)]

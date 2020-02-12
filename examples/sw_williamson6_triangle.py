@@ -82,7 +82,7 @@ D0.interpolate(Dexpr)
 state.initialise([('u', u0),
                   ('D', D0)])
 
-ueqn = EulerPoincare(state, u0.function_space())
+ueqn = VectorInvariant(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
 advected_fields = []
@@ -92,7 +92,7 @@ advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-sw_forcing = ShallowWaterForcing(state)
+sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

@@ -63,7 +63,7 @@ def setup_balance(dirname):
                                   ('theta', theta0)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
@@ -75,7 +75,7 @@ def setup_balance(dirname):
     linear_solver = CompressibleSolver(state)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

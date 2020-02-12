@@ -89,7 +89,7 @@ for delta, dt in res_dt.items():
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     supg = True
     if supg:
@@ -114,7 +114,7 @@ for delta, dt in res_dt.items():
     linear_solver = CompressibleSolver(state)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]

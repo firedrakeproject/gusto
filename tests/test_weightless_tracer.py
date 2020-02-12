@@ -77,7 +77,7 @@ def setup_tracer(dirname):
                                   ('theta', theta_b)])
 
     # set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt,
                              equation_form="advective")
@@ -92,7 +92,7 @@ def setup_tracer(dirname):
     # Set up linear solver
     linear_solver = CompressibleSolver(state)
 
-    compressible_forcing = CompressibleForcing(state)
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
