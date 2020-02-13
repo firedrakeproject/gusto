@@ -92,7 +92,7 @@ def setup_tracer(dirname):
     # Set up linear solver
     linear_solver = CompressibleSolver(state)
 
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+    compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,

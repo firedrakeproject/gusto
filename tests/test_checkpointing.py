@@ -89,7 +89,7 @@ def setup_sk(dirname):
     linear_solver = CompressibleSolver(state)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+    compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
     stepper = CrankNicolson(state, advected_fields, linear_solver,
