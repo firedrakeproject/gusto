@@ -15,13 +15,12 @@ def setup_gw(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     fieldlist = ['u', 'p', 'b']
-    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
     parameters = CompressibleParameters()
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="RTCF",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist)
@@ -52,7 +51,7 @@ def setup_gw(dirname):
 def run_gw_incompressible(dirname):
 
     state, forcing = setup_gw(dirname)
-    dt = state.timestepping.dt
+    dt = state.dt
     forcing.apply(dt, state.xn, state.xn, state.xn)
     u = state.xn.split()[0]
     w = Function(state.spaces("DG")).interpolate(u[2])

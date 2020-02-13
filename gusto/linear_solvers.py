@@ -29,10 +29,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.alpha = alpha
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -117,12 +118,11 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+    def __init__(self, state, alpha=0.5,
+                 quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
         self.moisture = moisture
-
-        self.state = state
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -142,15 +142,16 @@ class CompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, alpha, solver_parameters,
+                         overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         import numpy as np
 
         state = self.state
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
+        Dt = state.dt
+        beta_ = Dt*self.alpha
         cp = state.parameters.cp
         mu = state.mu
         Vu = state.spaces("HDiv")
@@ -402,15 +403,11 @@ class IncompressibleSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, solver_parameters=None,
-                 overwrite_solver_parameters=False):
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
-
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
+        Dt = state.dt
+        beta_ = Dt*self.alpha
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vb = state.spaces("HDiv_v")
@@ -530,7 +527,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         state = self.state
         H_ = state.parameters.H
         g_ = state.parameters.g
-        beta_ = state.timestepping.dt*state.timestepping.alpha
+        beta_ = state.dt*self.alpha
 
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)

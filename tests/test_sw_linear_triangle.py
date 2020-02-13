@@ -19,14 +19,14 @@ def setup_sw(dirname):
     mesh.init_cell_orientations(x)
 
     fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=3600.)
+    dt = 3600.
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
     diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostics=diagnostics,

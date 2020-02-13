@@ -37,12 +37,11 @@ def state(tmpdir, geometry):
         x = SpatialCoordinate(mesh)
         uexpr = as_vector([1.0, 0.0])
 
-    timestepping = TimesteppingParameters(dt=dt)
     state = State(mesh,
                   vertical_degree=vertical_degree,
                   horizontal_degree=1,
                   family=family,
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   fieldlist=fieldlist)
 
@@ -92,9 +91,9 @@ def error(geometry):
             "sphere": 2.5e-2}[geometry]
 
 
-def run(state, advected_fields, tmax):
+def run(state, advection_schemes, tmax):
 
-    timestepper = AdvectionDiffusion(state, advected_fields)
+    timestepper = Advection(state, advection_schemes)
     timestepper.run(0, tmax)
     return timestepper.state.fields
 
@@ -130,7 +129,7 @@ def test_advection_dg(geometry, error, state,
     vec_end = Function(vspace).interpolate(vec_end_expr)
 
     s = "_"
-    advected_fields = []
+    advection_schemes = []
 
     # setup scalar fields
     scalar_fields = []
@@ -144,9 +143,9 @@ def test_advection_dg(geometry, error, state,
                 scalar_fields.append(fname)
                 eqn = AdvectionEquation(state, fspace, ibp=ibp, equation_form=equation_form)
                 if time_discretisation == "ssprk":
-                    advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                    advection_schemes.append((fname, SSPRK3(state, f, eqn)))
                 elif time_discretisation == "im":
-                    advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                    advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
     # setup vector fields
     vector_fields = []
@@ -160,11 +159,11 @@ def test_advection_dg(geometry, error, state,
                 vector_fields.append(fname)
                 eqn = AdvectionEquation(state, vspace, ibp=ibp, equation_form=equation_form)
                 if time_discretisation == "ssprk":
-                    advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                    advection_schemes.append((fname, SSPRK3(state, f, eqn)))
                 elif time_discretisation == "im":
-                    advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                    advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
-    end_fields = run(state, advected_fields, tmax)
+    end_fields = run(state, advection_schemes, tmax)
 
     check_errors(f_end, error, end_fields, scalar_fields)
     check_errors(vec_end, error, end_fields, vector_fields)
@@ -180,7 +179,7 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
     f_end = Function(fspace).interpolate(f_end)
 
     s = "_"
-    advected_fields = []
+    advection_schemes = []
     opts = {"broken": EmbeddedDGOptions(),
             "dg": EmbeddedDGOptions(embedding_space=state.spaces("DG"))}
 
@@ -195,9 +194,9 @@ def test_advection_embedded_dg(geometry, error, state, f_init, tmax, f_end):
                 f.interpolate(f_init)
                 scalar_fields.append(fname)
                 eqn = EmbeddedDGAdvection(state, fspace, ibp=ibp, equation_form=equation_form, options=opts[space])
-                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                advection_schemes.append((fname, SSPRK3(state, f, eqn)))
 
-    end_fields = run(state, advected_fields, tmax)
+    end_fields = run(state, advection_schemes, tmax)
     check_errors(f_end, error, end_fields, scalar_fields)
 
 
@@ -208,7 +207,7 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
     in slice geometry.
     """
     s = "_"
-    advected_fields = []
+    advection_schemes = []
 
     cgspace = FunctionSpace(state.mesh, "CG", 1)
     fspace = state.spaces("HDiv_v")
@@ -239,9 +238,9 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
             cg_scalar_fields.append(fname)
             eqn = SUPGAdvection(state, cgspace, equation_form=equation_form)
             if time_discretisation == "ssprk":
-                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                advection_schemes.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
-                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
     # setup cg vector fields
     cg_vector_fields = []
@@ -254,9 +253,9 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
             cg_vector_fields.append(fname)
             eqn = SUPGAdvection(state, vcgspace, equation_form=equation_form)
             if time_discretisation == "ssprk":
-                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                advection_schemes.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
-                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
     # setup HDiv_v fields
     hdiv_v_fields = []
@@ -270,9 +269,9 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
             hdiv_v_fields.append(fname)
             eqn = SUPGAdvection(state, fspace, ibp=ibp, equation_form=equation_form)
             if time_discretisation == "ssprk":
-                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                advection_schemes.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
-                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
     # setup HDiv fields
     hdiv_fields = []
@@ -286,11 +285,11 @@ def test_advection_supg(geometry, error, state, f_init, tmax, f_end):
             hdiv_fields.append(fname)
             eqn = SUPGAdvection(state, vspace, ibp=ibp, equation_form=equation_form)
             if time_discretisation == "ssprk":
-                advected_fields.append((fname, SSPRK3(state, f, eqn)))
+                advection_schemes.append((fname, SSPRK3(state, f, eqn)))
             elif time_discretisation == "im":
-                advected_fields.append((fname, ThetaMethod(state, f, eqn)))
+                advection_schemes.append((fname, ThetaMethod(state, f, eqn)))
 
-    end_fields = run(state, advected_fields, tmax)
+    end_fields = run(state, advection_schemes, tmax)
     check_errors(cg_end, error, end_fields, cg_scalar_fields)
     check_errors(hdiv_v_end, error, end_fields, hdiv_v_fields)
     check_errors(vcg_end, error, end_fields, cg_vector_fields)

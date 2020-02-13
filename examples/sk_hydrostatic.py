@@ -23,7 +23,6 @@ H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt)
 
 dirname = 'sk_hydrostatic'
 
@@ -34,18 +33,16 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 Omega = as_vector((0., 0., 0.5e-4))
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
+              dt=dt,
               Coriolis=Omega,
-              timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 

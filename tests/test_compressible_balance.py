@@ -24,7 +24,6 @@ def setup_balance(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
@@ -32,7 +31,7 @@ def setup_balance(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostics=diagnostics,

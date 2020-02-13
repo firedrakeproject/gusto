@@ -56,7 +56,7 @@ class Advection(object, metaclass=ABCMeta):
             self.equation = equation
             # get ubar from the equation class
             self.ubar = self.equation.ubar
-            self.dt = self.state.timestepping.dt
+            self.dt = self.state.dt
 
             # get default solver options if none passed in
             if solver_parameters is None:
@@ -157,10 +157,8 @@ class Advection(object, metaclass=ABCMeta):
     def rhs(self):
         return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
 
-    def update_ubar(self, xn, xnp1, alpha):
-        un = xn.split()[0]
-        unp1 = xnp1.split()[0]
-        self.ubar.assign(un + alpha*(unp1-un))
+    def update_ubar(self, u_expr):
+        self.ubar.assign(u_expr)
 
     @cached_property
     def solver(self):
@@ -192,7 +190,7 @@ class NoAdvection(Advection):
     def rhs(self):
         pass
 
-    def update_ubar(self, xn, xnp1, alpha):
+    def update_ubar(self, u_expr):
         pass
 
     def apply(self, x_in, x_out):

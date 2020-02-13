@@ -108,7 +108,7 @@ class TrueResidualV(DiagnosticField):
         H = state.parameters.H
         f = state.parameters.f
         dbdy = state.parameters.dbdy
-        dt = state.timestepping.dt
+        dt = state.dt
         x, y, z = SpatialCoordinate(state.mesh)
         V = FunctionSpace(state.mesh, "DG", 0)
 

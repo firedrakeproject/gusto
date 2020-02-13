@@ -56,7 +56,6 @@ lat = Function(W_Q1).interpolate(lat_expr)
 lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'meanflow_ref_hybridization'
 
@@ -64,14 +63,12 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=10,
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
-diagnostics = Diagnostics(*fieldlist)
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist)
 
 # Initial conditions

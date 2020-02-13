@@ -26,7 +26,6 @@ points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt)
 
 dirname = 'sk_nonlinear'
 
@@ -38,7 +37,6 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters()
-diagnostics = Diagnostics(*fieldlist)
 g = parameters.g
 Tsurf = 300.
 
@@ -46,10 +44,9 @@ diagnostic_fields = [CourantNumber(), Gradient("u"), Gradient("theta_perturbatio
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 

@@ -26,7 +26,7 @@ def setup_fallout(dirname):
     x = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta', 'rain']
-    timestepping = TimesteppingParameters(dt=0.1, maxk=4, maxi=1)
+    dt = 0.1
     output = OutputParameters(dirname=dirname+"/fallout",
                               dumpfreq=10,
                               dumplist=['rain'])
@@ -34,7 +34,7 @@ def setup_fallout(dirname):
     diagnostic_fields = [Precipitation()]
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
@@ -66,16 +66,16 @@ def setup_fallout(dirname):
                       ('rho', rho0),
                       ('rain', rain0)])
 
-    # build advection dictionary
-    advected_fields = []
-    advected_fields.append(("u", NoAdvection(state, u0, None)))
-    advected_fields.append(("rho", NoAdvection(state, rho0, None)))
-    advected_fields.append(("rain", NoAdvection(state, rain0, None)))
+    # build advection schemes
+    advection_schemes = []
+    advection_schemes.append(("u", NoAdvection(state, u0, None)))
+    advection_schemes.append(("rho", NoAdvection(state, rho0, None)))
+    advection_schemes.append(("rain", NoAdvection(state, rain0, None)))
 
     physics_list = [Fallout(state)]
 
     # build time stepper
-    stepper = AdvectionDiffusion(state, advected_fields, physics_list=physics_list)
+    stepper = Advection(state, advection_schemes, physics_list=physics_list)
 
     return stepper, 10.0
 

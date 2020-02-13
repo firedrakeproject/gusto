@@ -19,7 +19,6 @@ H = 5960.
 # setup input that doesn't change with ref level or dt
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 for ref_level, dt in ref_dt.items():
 
@@ -28,8 +27,6 @@ for ref_level, dt in ref_dt.items():
                                  refinement_level=ref_level, degree=3)
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
-
-    timestepping = TimesteppingParameters(dt=dt)
 
     output = OutputParameters(dirname=dirname,
                               dumplist_latlon=['D'],
@@ -40,7 +37,7 @@ for ref_level, dt in ref_dt.items():
 
     state = State(mesh, horizontal_degree=1,
                   family="BDM",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields,

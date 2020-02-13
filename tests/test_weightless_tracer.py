@@ -19,7 +19,7 @@ def setup_tracer(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=10.0, maxk=4, maxi=1)
+    dt = 10.
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq=1,
                               dumplist=['u'],
@@ -28,7 +28,7 @@ def setup_tracer(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
@@ -83,11 +83,11 @@ def setup_tracer(dirname):
                              equation_form="advective")
 
     # build advection dictionary
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advected_fields.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
+    advection_schemes = []
+    advection_schemes.append(("u", ThetaMethod(state, u0, ueqn)))
+    advection_schemes.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advection_schemes.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advection_schemes.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
 
     # Set up linear solver
     linear_solver = CompressibleSolver(state)
@@ -95,7 +95,7 @@ def setup_tracer(dirname):
     compressible_forcing = CompressibleForcing(state)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
+    stepper = CrankNicolson(state, advection_schemes, linear_solver,
                             compressible_forcing)
 
     return stepper, 100.0

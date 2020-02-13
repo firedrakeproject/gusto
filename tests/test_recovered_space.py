@@ -21,7 +21,7 @@ def setup_recovered_space(dirname):
     x, z = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
+    dt = 1.0
     output = OutputParameters(dirname=dirname+"/recovered_space_test",
                               dumpfreq=5,
                               dumplist=['u'])
@@ -29,7 +29,7 @@ def setup_recovered_space(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist)
@@ -76,11 +76,11 @@ def setup_recovered_space(dirname):
                                     options=recovered_opts)
 
     # build advection dictionary
-    advected_fields = []
-    advected_fields.append(('tracer', SSPRK3(state, tracer0, tracereqn)))
+    advection_schemes = []
+    advection_schemes.append(('tracer', SSPRK3(state, tracer0, tracereqn)))
 
     # build time stepper
-    stepper = AdvectionDiffusion(state, advected_fields)
+    stepper = Advection(state, advection_schemes)
 
     return stepper, 100.0
 

@@ -27,7 +27,7 @@ def setup_condens(dirname):
     x = SpatialCoordinate(mesh)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=1.0, maxk=4, maxi=1)
+    dt = 1.0
     output = OutputParameters(dirname=dirname+"/condens",
                               dumpfreq=1,
                               dumplist=['u'],
@@ -36,7 +36,7 @@ def setup_condens(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
@@ -107,18 +107,19 @@ def setup_condens(dirname):
                              equation_form="advective")
 
     # build advection dictionary
-    advected_fields = []
-    advected_fields.append(("u", NoAdvection(state, u0, None)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advected_fields.append(("water_v", SSPRK3(state, water_v0, thetaeqn)))
-    advected_fields.append(("water_c", SSPRK3(state, water_c0, thetaeqn)))
+    advection_schemes = []
+    advection_schemes.append(("u", NoAdvection(state, u0, None)))
+    advection_schemes.append(("rho", SSPRK3(state, rho0, rhoeqn)))
+    advection_schemes.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    advection_schemes.append(("water_v", SSPRK3(state, water_v0, thetaeqn)))
+    advection_schemes.append(("water_c", SSPRK3(state, water_c0, thetaeqn)))
 
     prescribed_fields = [('u', u_evaluation)]
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = AdvectionDiffusion(state, advected_fields, physics_list=physics_list, prescribed_fields=prescribed_fields)
+    stepper = Advection(state, advection_schemes, physics_list=physics_list,
+                        prescribed_fields=prescribed_fields)
 
     return stepper, tmax
 

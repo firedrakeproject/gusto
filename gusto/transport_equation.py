@@ -382,7 +382,7 @@ class SUPGAdvection(AdvectionEquation):
             assert as_ufl(tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
         else:
             # create tuple of default values of size dim
-            dt = state.timestepping.dt
+            dt = state.dt
             default_vals = [supg_params.default*dt]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction

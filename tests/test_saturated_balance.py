@@ -30,7 +30,6 @@ def setup_saturated(dirname):
     degree = 0 if recovered else 1
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
@@ -38,7 +37,7 @@ def setup_saturated(dirname):
 
     state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostics=diagnostics,

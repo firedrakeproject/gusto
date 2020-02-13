@@ -51,7 +51,6 @@ mubar = 0.3/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, alpha=0.51)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=30,
@@ -60,17 +59,15 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
+              dt=dt,
               sponge_function=mu,
               hydrostatic=True,
-              timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
@@ -183,7 +180,9 @@ params = {'mat_type': 'matfree',
                                             'ksp_max_it': 5,
                                             'pc_type': 'bjacobi',
                                             'sub_pc_type': 'ilu'}}}
-linear_solver = CompressibleSolver(state, solver_parameters=params,
+
+alpha = 0.51  # off-centering parameter
+linear_solver = CompressibleSolver(state, alpha, solver_parameters=params,
                                    overwrite_solver_parameters=True)
 
 # Set up forcing
@@ -191,6 +190,6 @@ compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing)
+                        compressible_forcing, alpha=alpha)
 
 stepper.run(t=0, tmax=tmax)

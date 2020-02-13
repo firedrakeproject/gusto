@@ -39,7 +39,6 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 degree = 0 if recovered else 1
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'moist_bf'
 
@@ -57,15 +56,13 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 params = CompressibleParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [Theta_e(), InternalEnergy(), Perturbation('InternalEnergy'), PotentialEnergy()]
 
 state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
               family="CG",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=params,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
@@ -218,11 +215,12 @@ compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poinc
 bcs = [DirichletBC(Vu, 0.0, "bottom"),
        DirichletBC(Vu, 0.0, "top")]
 
-diffused_fields = []
+diffusion_schemes = []
 
 if diffusion:
-    diffused_fields.append(('u', InteriorPenalty(state, Vu, kappa=Constant(60.),
-                                                 mu=Constant(10./deltax), bcs=bcs)))
+    diffusion_schemes.append(('u', InteriorPenalty(
+        state, Vu, kappa=Constant(60.),
+        mu=Constant(10./deltax), bcs=bcs)))
 
 # define condensation
 physics_list = [Condensation(state)]
@@ -230,6 +228,6 @@ physics_list = [Condensation(state)]
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
                         compressible_forcing, physics_list=physics_list,
-                        diffused_fields=diffused_fields)
+                        diffusion_schemes=diffusion_schemes)
 
 stepper.run(t=0, tmax=tmax)

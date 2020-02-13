@@ -22,19 +22,16 @@ x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
 fieldlist = ['u', 'D']
-timestepping = TimesteppingParameters(dt=dt)
 output = OutputParameters(dirname='sw_linear_w2',
                           steady_state_error_fields=['u', 'D'],
                           log_level='INFO')
 parameters = ShallowWaterParameters(H=H)
-diagnostics = Diagnostics(*fieldlist)
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist)
 
 # Coriolis expression

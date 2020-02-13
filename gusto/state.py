@@ -197,7 +197,6 @@ class State(object):
     "BDFM": The BDFM family
     :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
-    :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
@@ -210,9 +209,9 @@ class State(object):
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
                  family="RT",
+                 dt=None,
                  Coriolis=None, sponge_function=None,
                  hydrostatic=None,
-                 timestepping=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
@@ -223,10 +222,10 @@ class State(object):
         self.family = family
         self.vertical_degree = vertical_degree
         self.horizontal_degree = horizontal_degree
+        self.dt = dt
         self.Omega = Coriolis
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
-        self.timestepping = timestepping
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
@@ -306,8 +305,6 @@ class State(object):
         # setup logger
         logger.setLevel(output.log_level)
         set_log_handler(mesh.comm)
-        logger.info("Timestepping parameters that take non-default values:")
-        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
@@ -403,7 +400,7 @@ class State(object):
 
         if len(self.output.point_data) > 0:
             pointdata_filename = self.dumpdir+"/point_data.nc"
-            ndt = int(tmax/self.timestepping.dt)
+            ndt = int(tmax/self.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,

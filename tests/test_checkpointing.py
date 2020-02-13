@@ -23,7 +23,6 @@ def setup_sk(dirname):
     points = np.array([p for p in itertools.product(points_x, points_z)])
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt)
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumplist=['u'], dumpfreq=5, log_level=INFO,
                               point_data=[('rho', points), ('u', points)])
     parameters = CompressibleParameters()
@@ -31,7 +30,7 @@ def setup_sk(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   fieldlist=fieldlist,
@@ -103,5 +102,5 @@ def test_checkpointing(tmpdir):
     dirname = str(tmpdir)
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0., tmax=tmax)
-    dt = stepper.state.timestepping.dt
+    dt = stepper.state.dt
     stepper.run(t=0, tmax=2*tmax+dt, pickup=True)

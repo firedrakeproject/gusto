@@ -96,7 +96,7 @@ class Forcing(object, metaclass=ABCMeta):
         L = self.scaling * L
         # sponge term has a separate scaling factor as it is always implicit
         if self.sponge:
-            L -= self.impl*self.state.timestepping.dt*self.sponge_term()
+            L -= self.impl*self.state.dt*self.sponge_term()
         # hydrostatic term has no scaling factor
         if self.hydrostatic:
             L += (2*self.impl-1)*self.hydrostatic_term()

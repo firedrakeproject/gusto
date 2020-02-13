@@ -15,7 +15,6 @@ def run_compressible_balance_test(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     fieldlist = ['u', 'rho', 'theta']
-    timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
     output = OutputParameters(dirname=dirname+'/test_compressible', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
     diagnostics = Diagnostics(*fieldlist)
@@ -23,7 +22,7 @@ def run_compressible_balance_test(dirname):
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   output=output,
                   parameters=parameters,
                   diagnostics=diagnostics,

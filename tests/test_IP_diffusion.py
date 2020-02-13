@@ -12,13 +12,12 @@ def setup_IPdiffusion(dirname, vector, DG):
     mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
 
     fieldlist = ['u', 'D']
-    timestepping = TimesteppingParameters(dt=dt)
     parameters = CompressibleParameters()
     output = OutputParameters(dirname=dirname)
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
-                  timestepping=timestepping,
+                  dt=dt,
                   parameters=parameters,
                   output=output,
                   fieldlist=fieldlist)
@@ -47,8 +46,8 @@ def setup_IPdiffusion(dirname, vector, DG):
 
     mu = 5.
     f_diffusion = InteriorPenalty(state, f.function_space(), kappa=kappa, mu=mu)
-    diffused_fields = [("f", f_diffusion)]
-    stepper = AdvectionDiffusion(state, diffused_fields=diffused_fields)
+    diffusion_schemes = [("f", f_diffusion)]
+    stepper = Diffusion(state, diffusion_schemes=diffusion_schemes)
     return stepper
 
 

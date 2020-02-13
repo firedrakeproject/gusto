@@ -77,7 +77,7 @@ class Condensation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv
@@ -246,7 +246,7 @@ class Fallout(Physics):
     def apply(self):
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.update_ubar(self.v, self.v, 0)
+        self.advection_method.update_ubar(self.v)
         self.advection_method.apply(self.rain, self.rain)
 
 
@@ -277,7 +277,7 @@ class Coalescence(Physics):
         Vt = self.water_c.function_space()
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
         a = Constant(0.001)  # min cloud conc in kg/kg
@@ -356,7 +356,7 @@ class Evaporation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv

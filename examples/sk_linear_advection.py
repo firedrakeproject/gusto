@@ -21,7 +21,6 @@ H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt)
 
 dirname = 'sk_linear'
 
@@ -34,7 +33,7 @@ parameters = CompressibleParameters()
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
               fieldlist=fieldlist)

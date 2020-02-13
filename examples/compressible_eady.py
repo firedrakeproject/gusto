@@ -44,11 +44,6 @@ Omega = as_vector([0., 0., f*0.5])
 # b is the buoyancy
 fieldlist = ['u', 'rho', 'theta']
 
-# class containing timestepping parameters
-# all values not explicitly set here use the default values provided
-# and documented in configuration.py
-timestepping = TimesteppingParameters(dt=dt)
-
 # class containing output parameters
 # all values not explicitly set here use the default values provided
 # and documented in configuration.py
@@ -65,11 +60,6 @@ output = OutputParameters(dirname=dirname,
 # and documented in configuration.py
 parameters = CompressibleEadyParameters(H=H, f=f)
 
-# class for diagnostics
-# fields passed to this class will have basic diagnostics computed
-# (eg min, max, l2 norm) and these will be output as a json file
-diagnostics = Diagnostics(*fieldlist)
-
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), VelocityY(),
                      ExnerPi(), ExnerPi(reference=True),
@@ -85,11 +75,10 @@ diagnostic_fields = [CourantNumber(), VelocityY(),
 # function spaces and the classes above
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="RTCF",
+              dt=dt,
               Coriolis=Omega,
-              timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 

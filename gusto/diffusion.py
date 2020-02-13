@@ -47,7 +47,7 @@ class InteriorPenalty(Diffusion):
     def __init__(self, state, V, kappa, mu, bcs=None):
         super(InteriorPenalty, self).__init__(state)
 
-        dt = state.timestepping.dt
+        dt = state.dt
         gamma = TestFunction(V)
         phi = TrialFunction(V)
         self.phi1 = Function(V)

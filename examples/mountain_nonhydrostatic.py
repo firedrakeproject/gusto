@@ -48,7 +48,6 @@ mubar = 0.15/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=18,
@@ -57,16 +56,14 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityZ()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
               sponge_function=mu,
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 

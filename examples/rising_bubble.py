@@ -19,7 +19,6 @@ m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 dirname = 'rb'
 
@@ -30,15 +29,13 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 parameters = CompressibleParameters()
-diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
-              timestepping=timestepping,
+              dt=dt,
               output=output,
               parameters=parameters,
-              diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
