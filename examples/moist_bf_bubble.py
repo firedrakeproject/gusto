@@ -211,7 +211,7 @@ advected_fields = [u_advection,
 linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
+compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

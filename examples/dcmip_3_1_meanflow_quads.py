@@ -144,7 +144,7 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+compressible_forcing = CompressibleForcing(state)
 
 # Build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

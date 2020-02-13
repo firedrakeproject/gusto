@@ -145,7 +145,7 @@ linear_solver = IncompressibleSolver(state)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-forcing = IncompressibleForcing(state, euler_poincare=False)
+forcing = IncompressibleForcing(state)
 
 ##############################################################################
 # build time stepper

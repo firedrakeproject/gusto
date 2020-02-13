@@ -167,7 +167,7 @@ else:
 linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+compressible_forcing = CompressibleForcing(state)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

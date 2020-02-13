@@ -92,7 +92,7 @@ advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 linear_solver = ShallowWaterSolver(state)
 
 # Set up forcing
-sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
+sw_forcing = ShallowWaterForcing(state)
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,

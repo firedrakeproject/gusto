@@ -114,7 +114,7 @@ for delta, dt in res_dt.items():
     linear_solver = CompressibleSolver(state)
 
     # Set up forcing
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+    compressible_forcing = CompressibleForcing(state)
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
