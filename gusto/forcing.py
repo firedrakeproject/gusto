@@ -113,7 +113,7 @@ class Forcing(object, metaclass=ABCMeta):
 
         solver_parameters = {}
         if logger.isEnabledFor(DEBUG):
-            solver_parameters["ksp_monitor_true_residual"] = True
+            solver_parameters["ksp_monitor_true_residual"] = None
         self.u_forcing_solver = LinearVariationalSolver(
             u_forcing_problem,
             solver_parameters=solver_parameters,
@@ -222,7 +222,7 @@ class CompressibleForcing(Forcing):
 
             solver_parameters = {}
             if logger.isEnabledFor(DEBUG):
-                solver_parameters["ksp_monitor_true_residual"] = True
+                solver_parameters["ksp_monitor_true_residual"] = None
             self.theta_solver = LinearVariationalSolver(
                 theta_problem,
                 solver_parameters=solver_parameters,
@@ -271,7 +271,7 @@ class IncompressibleForcing(Forcing):
         solver_parameters = {}
 
         if logger.isEnabledFor(DEBUG):
-            solver_parameters["ksp_monitor_true_residual"] = True
+            solver_parameters["ksp_monitor_true_residual"] = None
         self.divergence_solver = LinearVariationalSolver(
             divergence_problem,
             solver_parameters=solver_parameters,
@@ -325,7 +325,7 @@ class EadyForcing(IncompressibleForcing):
 
         solver_parameters = {}
         if logger.isEnabledFor(DEBUG):
-            solver_parameters["ksp_monitor_true_residual"] = True
+            solver_parameters["ksp_monitor_true_residual"] = None
         self.b_forcing_solver = LinearVariationalSolver(
             b_forcing_problem,
             solver_parameters=solver_parameters,
@@ -380,7 +380,7 @@ class CompressibleEadyForcing(CompressibleForcing):
 
         solver_parameters = {}
         if logger.isEnabledFor(DEBUG):
-            solver_parameters["ksp_monitor_true_residual"] = True
+            solver_parameters["ksp_monitor_true_residual"] = None
         self.theta_forcing_solver = LinearVariationalSolver(
             theta_forcing_problem,
             solver_parameters=solver_parameters,

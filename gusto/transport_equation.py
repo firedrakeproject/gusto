@@ -138,7 +138,7 @@ class TransportEquation(object, metaclass=ABCMeta):
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         if logger.isEnabledFor(DEBUG):
-            self.solver_parameters["ksp_monitor_true_residual"] = True
+            self.solver_parameters["ksp_monitor_true_residual"] = None
 
     def mass_term(self, q):
         return inner(self.test, q)*dx

@@ -64,7 +64,7 @@ class Advection(object, metaclass=ABCMeta):
             else:
                 self.solver_parameters = solver_parameters
                 if logger.isEnabledFor(DEBUG):
-                    self.solver_parameters["ksp_monitor_true_residual"] = True
+                    self.solver_parameters["ksp_monitor_true_residual"] = None
 
             self.limiter = limiter
 
