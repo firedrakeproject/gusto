@@ -109,7 +109,7 @@ def setup_unsaturated(dirname):
     if recovered:
         advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
     else:
-        advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
+        advected_fields.append(('u', ImplicitMidpoint(state, u0, ueqn)))
 
     linear_solver = CompressibleSolver(state, moisture=moisture)
 

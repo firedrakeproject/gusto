@@ -79,7 +79,7 @@ def setup_sw(dirname, euler_poincare):
 
     Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("u", ImplicitMidpoint(state, u0, ueqn)))
     advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
     linear_solver = ShallowWaterSolver(state)

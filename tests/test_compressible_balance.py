@@ -66,7 +66,7 @@ def setup_balance(dirname):
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
-    advected_fields = [("u", ThetaMethod(state, u0, ueqn)),
+    advected_fields = [("u", ImplicitMidpoint(state, u0, ueqn)),
                        ("rho", SSPRK3(state, rho0, rhoeqn)),
                        ("theta", SSPRK3(state, theta0, thetaeqn))]
 

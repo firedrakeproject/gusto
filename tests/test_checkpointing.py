@@ -80,7 +80,7 @@ def setup_sk(dirname):
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt)
     advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(("u", ImplicitMidpoint(state, u0, ueqn)))
     advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
     advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 

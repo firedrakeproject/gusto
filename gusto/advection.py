@@ -6,7 +6,7 @@ from gusto.configuration import logger, DEBUG
 from gusto.recovery import Recoverer
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod"]
+__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def embedded_dg(original_apply):
@@ -325,8 +325,10 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=0.5, solver_parameters=None):
+    def __init__(self, state, field, equation, theta=None, solver_parameters=None):
 
+        if theta is None:
+            raise ValueError("please provide a value for theta between 0 and 1")
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
@@ -334,8 +336,8 @@ class ThetaMethod(Advection):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        super(ThetaMethod, self).__init__(state, field, equation,
-                                          solver_parameters=solver_parameters)
+        super().__init__(state, field, equation,
+                         solver_parameters=solver_parameters)
 
         self.theta = theta
 
@@ -354,3 +356,15 @@ class ThetaMethod(Advection):
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
+
+
+class ImplicitMidpoint(ThetaMethod):
+    """
+    Class to implement the implicit midpoint timestepping method, i.e. the
+    theta method with theta=0.5:
+    y_(n+1) = y_n + 0.5*dt*(L(y_n) + L(y_(n+1)))
+    where L is the advection operator.
+    """
+    def __init__(self, state, field, equation, solver_parameters=None):
+        super().__init__(state, field, equation, theta=0.5,
+                         solver_parameters=solver_parameters)

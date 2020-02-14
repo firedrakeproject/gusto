@@ -84,7 +84,7 @@ def setup_tracer(dirname):
 
     # build advection dictionary
     advection_schemes = []
-    advection_schemes.append(("u", ThetaMethod(state, u0, ueqn)))
+    advection_schemes.append(("u", ImplicitMidpoint(state, u0, ueqn)))
     advection_schemes.append(("rho", SSPRK3(state, rho0, rhoeqn)))
     advection_schemes.append(("theta", SSPRK3(state, theta0, thetaeqn)))
     advection_schemes.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
