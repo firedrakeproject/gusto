@@ -25,7 +25,7 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
     elif scheme == "implicit_midpoint":
         advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
     assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
-    
+
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
@@ -46,5 +46,3 @@ def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
         advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
     assert run(state, advection_schemes, setup.tmax, f_end) < setup.tol
-    
-

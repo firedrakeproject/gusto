@@ -2,6 +2,7 @@ from firedrake import norm
 from gusto import *
 import pytest
 
+
 def run(state, advection_schemes, tmax, f_end):
     timestepper = Advection(state, advection_schemes)
     timestepper.run(0, tmax)
@@ -22,7 +23,7 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     if space == "broken":
         opts = EmbeddedDGOptions()
     elif space == "dg":
-        opts = EmbeddedDGOptions(embedding_space=state.spaces("DG"))    
+        opts = EmbeddedDGOptions(embedding_space=state.spaces("DG"))
 
     eqn = EmbeddedDGAdvection(state, V, ibp=ibp,
                               equation_form=equation_form, options=opts)

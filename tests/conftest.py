@@ -20,7 +20,7 @@ def tracer_advection_sphere(tmpdir):
     dt = pi/3. * 0.02
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
     state = State(mesh, horizontal_degree=1, family="BDM", dt=dt,
-                  output=output, fieldlist = ["u", "D"])
+                  output=output, fieldlist=["u", "D"])
 
     u = state.fields("u", space=state.spaces("HDiv"))
     u.project(as_vector([-x[1], x[0], 0.0]))
@@ -40,8 +40,8 @@ def tracer_advection_slice(tmpdir):
     dt = 0.02
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",dt=dt, output=output,
-                  fieldlist = ["u", "rho", "theta"])
+                  family="CG", dt=dt, output=output,
+                  fieldlist=["u", "rho", "theta"])
 
     u = state.fields("u", space=state.spaces("HDiv"))
     u.project(as_vector([1.0, 0.0]))

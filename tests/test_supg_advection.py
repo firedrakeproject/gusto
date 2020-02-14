@@ -2,6 +2,7 @@ from firedrake import norm, FunctionSpace, VectorFunctionSpace, as_vector
 from gusto import *
 import pytest
 
+
 def run(state, advection_schemes, tmax, f_end):
     timestepper = Advection(state, advection_schemes)
     timestepper.run(0, tmax)
