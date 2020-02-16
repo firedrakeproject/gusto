@@ -29,10 +29,13 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, xn=None, dumplist=None, pickup=True):
+    def __init__(self, fieldlist=None, x=None, dumplist=None, pickup=True):
         self.fields = []
+        if dumplist is None:
+            dumplist = []
         if fieldlist is not None:
-            for name, func in zip(fieldlist, xn.split()):
+            setattr(self, "X", x)
+            for name, func in zip(fieldlist, x.split()):
                 setattr(self, name, func)
                 func.dump = name in dumplist
                 func.pickup = pickup
@@ -254,11 +257,10 @@ class State(object):
         # Build the spaces
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
-        # Allocate state
-        self._allocate_state()
         if self.output.dumplist is None:
             self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
+        self.fields = FieldCreator(fieldlist, Function(self.W),
+                                   self.output.dumplist)
 
         # set up bcs
         V = self.fields('u').function_space()
@@ -550,20 +552,6 @@ class State(object):
             self.DG1_space = self.spaces("DG1", mesh, DG1_elt)
 
             self.W = MixedFunctionSpace((V0, V1))
-
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
-
-        W = self.W
-        self.xn = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.xb = Function(W)  # store the old state for diagnostics
-        self.dy = Function(W)
 
 
 def get_latlon_mesh(mesh):

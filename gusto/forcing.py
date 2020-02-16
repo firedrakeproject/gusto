@@ -132,15 +132,19 @@ class Forcing(object, metaclass=ABCMeta):
         :arg implicit: forcing stage for sponge and hydrostatic terms, if present
         """
         self.scaling.assign(scaling)
-        self.x0.assign(x_nl)
+        self.x0.assign(x_nl.X)
         implicit = kwargs.get("implicit")
         if implicit is not None:
             self.impl.assign(int(implicit))
         self.u_forcing_solver.solve()  # places forcing in self.uF
 
-        uF = x_out.split()[0]
+        try:
+            uF = x_out.split()[0]
+            x_out.assign(x_in.X)
+        except:
+            uF = x_out.X.split()[0]
+            x_out.X.assign(x_in.X)
 
-        x_out.assign(x_in)
         uF += self.uF
 
 
