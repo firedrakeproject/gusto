@@ -49,20 +49,7 @@ class Averager(object):
         if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
             raise RuntimeError("Number of local dofs for each field must be equal.")
 
-        # NOTE: Any bcs on the function self.v should just work.
-        # Loop over node extent and dof extent
-        self.shapes = {"nDOFs": self.V.finat_element.space_dimension(),
-                       "dim": np.prod(self.V.shape, dtype=int)}
-        # Averaging kernel
-        average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
-        average_instructions = ("""
-                                for i
-                                    for j
-                                        vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
-                                    end
-                                end
-                                """)
-        self._average_kernel = (average_domain, average_instructions)
+        self._average_kernel = kernels.Average(self.V)
 
     @cached_property
     def _weighting(self):
@@ -70,15 +57,8 @@ class Averager(object):
         Generates a weight function for computing a projection via averaging.
         """
         w = Function(self.V)
-        weight_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
-        weight_instructions = ("""
-                               for i
-                                   for j
-                                      w[i,j] = w[i,j] + 1.0
-                                   end
-                               end
-                               """)
-        _weight_kernel = (weight_domain, weight_instructions)
+
+        _weight_kernel = kernels.AverageWeightings(self.V)
 
         par_loop(_weight_kernel, dx, {"w": (w, INC)}, is_loopy_kernel=True)
         return w

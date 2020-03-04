@@ -3,6 +3,8 @@ This file provides kernels for par loops.
 This are contained in this file as functions so that they can be tested separately.
 """
 
+import numpy as np
+
 def GaussianElimination(DG1):
     """
     A kernel for performing Gaussian elimination locally in each element
@@ -19,10 +21,18 @@ def GaussianElimination(DG1):
     what the field would be at the actual coordinates, which involves
     inverting a local matrix -- which is done by this kernel using
     Gaussian elimination.
+
+    :arg DG1: A 1st order discontinuous Galerkin FunctionSpace.
     """
 
     shapes = {"nDOFs": DG1.finat_element.space_dimension(),
               "dim": DG1.mesh().topological_dimension()}
+
+    # EFF_COORDS are the effective coordinates
+    # ACT_COORDS are the actual coordinates
+    # DG1_OLD is the original field
+    # DG1 is the target field
+    # NUM_EXT is the field containing number of exterior nodes
 
     # In 1D EFF_COORDS and ACT_COORDS have only a single index
     # We can't generalise the expression without causing an error
@@ -221,3 +231,56 @@ def GaussianElimination(DG1):
         """).format(**shapes)
 
     return (domain, instrs)
+
+
+def Average(V):
+    """
+    A kernel for the Averager object.
+
+    For vertices shared between cells, it computes the average
+    value from the neighbouring cells.
+
+    :arg V: The FunctionSpace of the target field for the Averager.
+    """
+
+    shapes = {"nDOFs": V.finat_element.space_dimension(),
+              "dim": np.prod(V.shape, dtype=int)}
+
+    average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
+
+    # Loop over node extent and dof extent
+    # vo is v_out, v is the function in, w is the weight
+    # NOTE: Any bcs on the function v should just work.
+    average_instructions = ("""
+                            for i
+                                for j
+                                    vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
+                                end
+                            end
+                            """)
+
+    return (average_domain, average_instructions)
+
+
+def AverageWeightings(V):
+    """
+    A kernel for finding the weights for the Averager object.
+
+    :arg V: The FunctionSpace of the target field for the Averager.
+    """
+
+    shapes = {"nDOFs": V.finat_element.space_dimension(),
+              "dim": np.prod(V.shape, dtype=int)}
+
+    weight_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
+
+    # w is the weights
+    weight_instructions = ("""
+                           for i
+                               for j
+                                  w[i,j] = w[i,j] + 1.0
+                               end
+                           end
+                           """)
+
+    return (weight_domain, weight_instructions)
