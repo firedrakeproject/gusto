@@ -64,7 +64,7 @@ def expr(geometry, mesh):
 
 @pytest.mark.parametrize("geometry", ["periodic-in-both", "periodic-in-x",
                                       "periodic-in-y", "non-periodic"])
-@pytest.mark.parametrize("element", ["quadrilateral", "triangle"])
+@pytest.mark.parametrize("element", ["quadrilateral"])
 def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     family = "RTCF" if element == "quadrilateral" else "BDM"
