@@ -4,15 +4,12 @@ The recovery operators used for lowest-order advection schemes.
 from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        VectorFunctionSpace, SpatialCoordinate, as_vector,
                        dx, Interpolator, BrokenElement, interval, Constant,
-                       TensorProductElement, FiniteElement, DirichletBC,
-                       VectorElement, conditional, max_value)
+                       TensorProductElement, FiniteElement, DirichletBC)
 from firedrake.utils import cached_property
 from firedrake.parloops import par_loop, READ, INC, WRITE
-from gusto.configuration import logger
 from gusto import kernels
 from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
-import numpy as np
 from enum import Enum
 
 __all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
@@ -287,7 +284,6 @@ class Recoverer(object):
                                                                  method=Boundary_Method.dynamics,
                                                                  eff_coords=eff_coords)
                 else:
-                    vec_DG1 = VectorFunctionSpace(mesh, DG1_element)
 
                     # now, break the problem down into components
                     v_scalars = []
@@ -400,6 +396,7 @@ def find_eff_coords(V0):
 
         return correct_eff_coords(eff_coords_in_DG1)
 
+
 def correct_eff_coords(eff_coords):
     """
     Correct the effective coordinates calculated by simply averaging
@@ -480,6 +477,6 @@ def find_domain_boundaries(mesh):# remember to remove this
     par_loop(_num_ext_kernel, dx,
              {"SUM_EXT": (sum_exterior, WRITE),
               "ON_EXT": (on_exterior, READ)},
-                is_loopy_kernel=True)
+             is_loopy_kernel=True)
 
     return sum_exterior
