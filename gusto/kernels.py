@@ -246,20 +246,20 @@ def Average(V):
     shapes = {"nDOFs": V.finat_element.space_dimension(),
               "dim": np.prod(V.shape, dtype=int)}
 
-    average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
+    domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
 
     # Loop over node extent and dof extent
     # vo is v_out, v is the function in, w is the weight
     # NOTE: Any bcs on the function v should just work.
-    average_instructions = ("""
-                            for i
-                                for j
-                                    vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
-                                end
-                            end
-                            """)
+    instrs = ("""
+                for i
+                    for j
+                        vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
+                    end
+                end
+              """)
 
-    return (average_domain, average_instructions)
+    return (domain, instrs)
 
 
 def AverageWeightings(V):
@@ -272,15 +272,53 @@ def AverageWeightings(V):
     shapes = {"nDOFs": V.finat_element.space_dimension(),
               "dim": np.prod(V.shape, dtype=int)}
 
-    weight_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
+    domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
 
     # w is the weights
-    weight_instructions = ("""
-                           for i
-                               for j
-                                  w[i,j] = w[i,j] + 1.0
-                               end
-                           end
-                           """)
+    instrs = ("""
+                for i
+                    for j
+                        w[i,j] = w[i,j] + 1.0
+                    end
+                end
+              """)
 
-    return (weight_domain, weight_instructions)
+    return (domain, instrs)
+
+
+def PhysicsRecoveryTop():
+    """
+    A kernel for fixing the physics recovery method at the top boundary.
+    This takes a variable from the lowest order density space to the lowest
+    order temperature space.
+    """
+
+    domain = ("{[i]: 0 <= i < 1}")
+
+    # CG1 is the uncorrected field that has been originally recovered
+    # DG1 is the corrected output field
+    instrs = ("""
+                DG1[0] = CG1[0]
+                DG1[1] = -CG1[0] + 2 * CG1[1]
+              """)
+
+    return (domain, instrs)
+
+
+def PhysicsRecoveryBottom():
+    """
+    A kernel for fixing the physics recovery method at the bottom boundary.
+    This takes a variable from the lowest order density space to the lowest
+    order temperature space.
+    """
+
+    domain = ("{[i]: 0 <= i < 1}")
+
+    # CG1 is the uncorrected field that has been originally recovered
+    # DG1 is the corrected output field
+    instrs = ("""
+                DG1[0] = 2 * CG1[0] - CG1[1]
+                DG1[1] = CG1[1]
+              """)
+
+    return (domain, instrs)

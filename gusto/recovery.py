@@ -301,18 +301,9 @@ class Boundary_Recoverer(object):
                      is_loopy_kernel=True)
 
         elif self.method == Boundary_Method.physics:
-            top_bottom_domain = ("{[i]: 0 <= i < 1}")
-            bottom_instructions = ("""
-                                   DG1[0] = 2 * CG1[0] - CG1[1]
-                                   DG1[1] = CG1[1]
-                                   """)
-            top_instructions = ("""
-                                DG1[0] = CG1[0]
-                                DG1[1] = -CG1[0] + 2 * CG1[1]
-                                """)
 
-            self._bottom_kernel = (top_bottom_domain, bottom_instructions)
-            self._top_kernel = (top_bottom_domain, top_instructions)
+            self._bottom_kernel = kernels.PhysicsRecoveryBottom()
+            self._top_kernel = kernels.PhysicsRecoveryTop()
 
     def apply(self):
         self.interpolator.interpolate()
