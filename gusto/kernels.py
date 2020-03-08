@@ -32,7 +32,7 @@ def GaussianElimination(DG1):
     # ACT_COORDS are the actual coordinates
     # DG1_OLD is the original field
     # DG1 is the target field
-    # NUM_EXT is the field containing number of exterior nodes
+    # ON_EXT is the field indicating whether cell is on the exterior
 
     # In 1D EFF_COORDS and ACT_COORDS have only a single index
     # We can't generalise the expression without causing an error
@@ -119,7 +119,7 @@ def GaussianElimination(DG1):
         # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
         # For these loops we must manually iterate the index.
         """
-        if NUM_EXT[0] > 0.0
+        if ON_EXT[0] > 0.0
         """
         # only do Gaussian elimination for elements with effective coordinates
         """
@@ -219,7 +219,7 @@ def GaussianElimination(DG1):
         """
         # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
         """
-            if NUM_EXT[0] > 0.0
+            if ON_EXT[0] > 0.0
             {act_coord_expr}
         """
         # if element is not external, just use old field values.
