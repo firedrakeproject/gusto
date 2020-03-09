@@ -52,8 +52,10 @@ def run_gw_incompressible(dirname):
 
     state, forcing = setup_gw(dirname)
     dt = state.dt
-    forcing.apply(dt, state.xn, state.xn, state.xn)
-    u = state.xn.split()[0]
+    x = TimeLevelFields(state)
+    xn = x.n
+    forcing.apply(dt, xn, xn, xn)
+    u = xn('u')
     w = Function(state.spaces("DG")).interpolate(u[2])
     return w
 

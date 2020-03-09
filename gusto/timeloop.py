@@ -5,7 +5,7 @@ from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
 from gusto.state import FieldCreator
 
-__all__ = ["CrankNicolson", "AdvectionDiffusion", "Advection", "Diffusion"]
+__all__ = ["TimeLevelFields", "CrankNicolson", "AdvectionDiffusion", "Advection", "Diffusion"]
 
 
 class TimeLevelFields(object):
