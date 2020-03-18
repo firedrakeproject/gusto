@@ -6,7 +6,8 @@ from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
-                                               advecting_velocity, subject)
+                                               advecting_velocity, subject,
+                                               all_terms)
 from gusto.recovery import Recoverer
 
 
@@ -99,7 +100,7 @@ class Advection(object, metaclass=ABCMeta):
         # advection occurs
         test = TestFunction(self.fs)
         self.residual = self.residual.label_map(
-            lambda t: t,
+            all_terms,
             map_if_true=lambda t: Term(
                 ufl.replace(t.form, {t.form.arguments()[0]: test}), t.labels))
 
@@ -366,7 +367,7 @@ class ThetaMethod(Advection):
     @cached_property
     def lhs(self):
         l = self.residual.label_map(
-            lambda t: t,
+            all_terms,
             map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.trial}), t.labels))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
@@ -376,7 +377,7 @@ class ThetaMethod(Advection):
     @cached_property
     def rhs(self):
         r = self.residual.label_map(
-            lambda t: t,
+            all_terms,
             map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)

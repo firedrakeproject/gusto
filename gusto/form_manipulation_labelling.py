@@ -6,6 +6,7 @@ from firedrake import Function, Constant
 
 identity = lambda t: t
 drop = lambda t: None
+all_terms = lambda t: True
 
 
 class Term(object):
