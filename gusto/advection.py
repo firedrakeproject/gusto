@@ -6,8 +6,9 @@ from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
-                                               advecting_velocity, subject,
-                                               all_terms, replace_test_function)
+                                               advecting_velocity,
+                                               all_terms, replace_subject,
+                                               replace_test_function)
 from gusto.recovery import Recoverer
 
 
@@ -171,7 +172,7 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.trial}), t.labels),
+            map_if_true=replace_subject(self.trial),
             map_if_false=drop)
 
         return l.form
@@ -179,9 +180,12 @@ class Advection(object, metaclass=ABCMeta):
     @abstractproperty
     def rhs(self):
         r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.q1))
+
+        r = r.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels),
-            map_if_false=lambda t: -self.dt*Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels))
+            map_if_false=lambda t: -self.dt*t)
 
         return r.form
 
@@ -367,7 +371,7 @@ class ThetaMethod(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.trial}), t.labels))
+            map_if_true=replace_subject(self.trial))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
@@ -377,7 +381,7 @@ class ThetaMethod(Advection):
     def rhs(self):
         r = self.residual.label_map(
             all_terms,
-            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels))
+            map_if_true=replace_subject(self.q1))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 

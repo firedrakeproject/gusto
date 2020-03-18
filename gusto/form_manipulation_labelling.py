@@ -26,6 +26,16 @@ def replace_test_function(new_test):
     return repl
 
 
+def replace_subject(new):
+
+    def repl(t):
+        subj = t.get(subject)
+        new_form = ufl.replace(t.form, {subj: new})
+        return Term(new_form, t.labels)
+
+    return repl
+
+
 class Term(object):
     """
     Term class, containing a form and its labels.
