@@ -1,12 +1,16 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, LinearVariationalProblem,
-                       LinearVariationalSolver, Projector, Interpolator)
+from firedrake import (Function, TrialFunction, LinearVariationalProblem,
+                       LinearVariationalSolver, Projector, Interpolator,
+                       BrokenElement, FunctionSpace, TestFunction)
 from firedrake.utils import cached_property
+import ufl
 from gusto.configuration import logger, DEBUG
+from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
+                                               advecting_velocity, subject)
 from gusto.recovery import Recoverer
 
 
-__all__ = ["NoAdvection", "ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def embedded_dg(original_apply):
@@ -46,65 +50,74 @@ class Advection(object, metaclass=ABCMeta):
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, field, equation=None, *, solver_parameters=None,
-                 limiter=None):
+    def __init__(self, state, solver_parameters=None, limiter=None, options=None):
 
-        if equation is not None:
+        self.state = state
 
-            self.state = state
-            self.field = field
-            self.equation = equation
-            # get ubar from the equation class
-            self.ubar = self.equation.ubar
-            self.dt = self.state.dt
+        self.dt = self.state.dt
 
-            # get default solver options if none passed in
-            if solver_parameters is None:
-                self.solver_parameters = equation.solver_parameters
+        self.limiter = limiter
+
+        self.options = options
+        if options is not None:
+            self.discretisation_option = options.name
+        else:
+            self.discretisation_option = None
+
+        # get default solver options if none passed in
+        if solver_parameters is None:
+            self.solver_parameters = {}
+        else:
+            self.solver_parameters = solver_parameters
+            if logger.isEnabledFor(DEBUG):
+                self.solver_parameters["ksp_monitor_true_residual"] = None
+
+    def _setup(self, equation, uadv):
+
+        self.equation = equation
+        self.residual = equation.residual
+
+        self.replace_advecting_velocity(uadv)
+
+        if self.discretisation_option in ["embedded_dg", "recovered"]:
+            # construct the embedding space if not specified
+            if self.options.embedding_space is None:
+                V_elt = BrokenElement(equation.function_space.ufl_element())
+                self.fs = FunctionSpace(self.state.mesh, V_elt)
             else:
-                self.solver_parameters = solver_parameters
-                if logger.isEnabledFor(DEBUG):
-                    self.solver_parameters["ksp_monitor_true_residual"] = None
-
-            self.limiter = limiter
-
-            if hasattr(equation, "options"):
-                self.discretisation_option = equation.options.name
-                self._setup(state, field, equation.options)
-            else:
-                self.discretisation_option = None
-                self.fs = field.function_space()
-
-            # setup required functions
-            self.dq = Function(self.fs)
-            self.q1 = Function(self.fs)
-
-    def _setup(self, state, field, options):
-
-        if options.name in ["embedded_dg", "recovered"]:
-            self.fs = options.embedding_space
+                self.fs = self.options.embedding_space
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
-            self.x_projected = Function(field.function_space())
+            self.x_projected = Function(equation.function_space)
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
+        else:
+            self.fs = equation.function_space
+        # replace the original test function with one defined on
+        # the embedding space, as this is the space where the
+        # advection occurs
+        test = TestFunction(self.fs)
+        self.residual = self.residual.label_map(
+            lambda t: t,
+            map_if_true=lambda t: Term(
+                ufl.replace(t.form, {t.form.arguments()[0]: test}), t.labels))
 
-        if options.name == "embedded_dg":
+        if self.discretisation_option == "embedded_dg":
             if self.limiter is None:
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected,
                                                  solver_parameters=parameters)
             else:
                 self.x_out_projector = Recoverer(self.xdg_out, self.x_projected)
 
-        if options.name == "recovered":
+        if self.discretisation_option == "recovered":
             # set up the necessary functions
-            self.x_in = Function(field.function_space())
-            x_rec = Function(options.recovered_space)
-            x_brok = Function(options.broken_space)
+            self.x_in = Function(equation.function_space)
+            x_rec = Function(self.options.recovered_space)
+            x_brok = Function(self.options.broken_space)
 
             # set up interpolators and projectors
-            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
+            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=self.options.boundary_method)  # recovered function
             self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
             self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
             if self.limiter is not None:
@@ -112,6 +125,11 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Recoverer(x_brok, self.x_projected)
             else:
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
+
+        # setup required functions
+        self.trial = TrialFunction(self.fs)
+        self.dq = Function(self.fs)
+        self.q1 = Function(self.fs)
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -151,20 +169,37 @@ class Advection(object, metaclass=ABCMeta):
 
     @abstractproperty
     def lhs(self):
-        return self.equation.mass_term(self.equation.trial)
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.trial}), t.labels),
+            map_if_false=drop)
+
+        return l.form
 
     @abstractproperty
     def rhs(self):
-        return self.equation.mass_term(self.q1) - self.dt*self.equation.advection_term(self.q1)
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels),
+            map_if_false=lambda t: -self.dt*Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels))
 
-    def update_ubar(self, u_expr):
-        self.ubar.assign(u_expr)
+        return r.form
+
+    def replace_advecting_velocity(self, uadv):
+        # replace the advecting velocity in any terms that contain it
+        if any([t.has_label(advecting_velocity) for t in self.residual]):
+            self.residual = self.residual.label_map(
+                lambda t: t.has_label(advecting_velocity),
+                map_if_true=lambda t: Term(ufl.replace(
+                    t.form, {t.get(advecting_velocity): uadv}), t.labels)
+            )
+            self.residual = advecting_velocity.update_value(self.residual, uadv)
 
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
         problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
-        solver_name = self.field.name()+self.equation.__class__.__name__+self.__class__.__name__
+        solver_name = self.equation.field_name+self.equation.__class__.__name__+self.__class__.__name__
         return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
@@ -177,24 +212,6 @@ class Advection(object, metaclass=ABCMeta):
         :arg x_out: :class:`.Function` object, the output Function.
         """
         pass
-
-
-class NoAdvection(Advection):
-    """
-    An non-advection scheme that does nothing.
-    """
-
-    def lhs(self):
-        pass
-
-    def rhs(self):
-        pass
-
-    def update_ubar(self, u_expr):
-        pass
-
-    def apply(self, x_in, x_out):
-        x_out.assign(x_in)
 
 
 class ExplicitAdvection(Advection):
@@ -210,16 +227,22 @@ class ExplicitAdvection(Advection):
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, field, equation=None, *, subcycles=None,
-                 solver_parameters=None, limiter=None):
-        super().__init__(state, field, equation,
-                         solver_parameters=solver_parameters, limiter=limiter)
+    def __init__(self, state, subcycles=None,
+                 solver_parameters=None, limiter=None, options=None):
+        super().__init__(state, solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+
+        self.subcycles = subcycles
+
+    def _setup(self, equation, uadv):
+
+        super()._setup(equation, uadv)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if subcycles is not None:
-            self.dt = self.dt/subcycles
-            self.ncycles = subcycles
+        if self.subcycles is not None:
+            self.dt = self.dt/self.subcycles
+            self.ncycles = self.subcycles
         else:
             self.dt = self.dt
             self.ncycles = 1
@@ -325,7 +348,7 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, field, equation, theta=None, solver_parameters=None):
+    def __init__(self, state, theta=None, solver_parameters=None):
 
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
@@ -336,21 +359,29 @@ class ThetaMethod(Advection):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        super().__init__(state, field, equation,
-                         solver_parameters=solver_parameters)
+        super().__init__(state, solver_parameters=solver_parameters)
 
         self.theta = theta
 
     @cached_property
     def lhs(self):
-        eqn = self.equation
-        trial = eqn.trial
-        return eqn.mass_term(trial) + self.theta*self.dt*eqn.advection_term(self.state.h_project(trial))
+        l = self.residual.label_map(
+            lambda t: t,
+            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.trial}), t.labels))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: self.theta*self.dt*t)
+
+        return l.form
 
     @cached_property
     def rhs(self):
-        eqn = self.equation
-        return eqn.mass_term(self.q1) - (1.-self.theta)*self.dt*eqn.advection_term(self.state.h_project(self.q1))
+        r = self.residual.label_map(
+            lambda t: t,
+            map_if_true=lambda t: Term(ufl.replace(t.form, {t.get(subject): self.q1}), t.labels))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -(1-self.theta)*self.dt*t)
+
+        return r.form
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
@@ -365,6 +396,5 @@ class ImplicitMidpoint(ThetaMethod):
     y_(n+1) = y_n + 0.5*dt*(L(y_n) + L(y_(n+1)))
     where L is the advection operator.
     """
-    def __init__(self, state, field, equation, solver_parameters=None):
-        super().__init__(state, field, equation, theta=0.5,
-                         solver_parameters=solver_parameters)
+    def __init__(self, state, solver_parameters=None):
+        super().__init__(state, theta=0.5, solver_parameters=solver_parameters)

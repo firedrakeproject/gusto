@@ -4,7 +4,7 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
-from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
+from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
@@ -29,32 +29,47 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, x=None, dumplist=None, pickup=True):
+    def __init__(self, field_fs):
         self.fields = []
-        if dumplist is None:
-            dumplist = []
-        if fieldlist is not None:
-            setattr(self, "X", x)
-            for name, func in zip(fieldlist, x.split()):
-                setattr(self, name, func)
-                func.dump = name in dumplist
-                func.pickup = pickup
-                func.rename(name)
-                self.fields.append(func)
+        for name, fs in field_fs:
+            func = Function(fs)
+            self.add_field(name, func)
+
+    def add_field(self, name, value):
+        setattr(self, name, value)
+        value.rename(name)
+        self.fields.append(value)
+
+    def __call__(self, name, space=None):
+        return getattr(self, name)
+
+    def __iter__(self):
+        return iter(self.fields)
+
+
+class StateFields(FieldCreator):
+
+    def __init__(self, *fields_to_dump):
+        self.fields = []
+        self.fields_to_dump = set(fields_to_dump)
+        self.fields_to_pickup = set(())
+
+    def add_field(self, name, value):
+        super().add_field(name, value)
+        value.dump = name in self.fields_to_dump
+        value.pickup = name in self.fields_to_pickup
 
     def __call__(self, name, space=None, dump=True, pickup=True):
         try:
             return getattr(self, name)
         except AttributeError:
+            if dump:
+                self.fields_to_dump.add(name)
+            if pickup:
+                self.fields_to_pickup.add(name)
             value = Function(space, name=name)
-            setattr(self, name, value)
-            value.dump = dump
-            value.pickup = pickup
-            self.fields.append(value)
+            self.add_field(name, value)
             return value
-
-    def __iter__(self):
-        return iter(self.fields)
 
 
 class PointDataOutput(object):
@@ -203,11 +218,7 @@ class State(object):
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
-    :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
-    :arg u_bc_ids: a list containing the ids of boundaries with no normal
-                   component of velocity. These ids are passed to `DirichletBC`s. For
-                   extruded meshes, top and bottom are added automatically.
     """
 
     def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
@@ -218,9 +229,7 @@ class State(object):
                  output=None,
                  parameters=None,
                  diagnostics=None,
-                 fieldlist=None,
-                 diagnostic_fields=None,
-                 u_bc_ids=None):
+                 diagnostic_fields=None):
 
         self.family = family
         self.vertical_degree = vertical_degree
@@ -234,22 +243,15 @@ class State(object):
         else:
             self.output = output
         self.parameters = parameters
-        if fieldlist is None:
-            raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
-        else:
-            self.fieldlist = fieldlist
+
         if diagnostics is not None:
             self.diagnostics = diagnostics
         else:
-            self.diagnostics = Diagnostics(*fieldlist)
+            self.diagnostics = Diagnostics()
         if diagnostic_fields is not None:
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
-        if u_bc_ids is not None:
-            self.u_bc_ids = u_bc_ids
-        else:
-            self.u_bc_ids = []
 
         # The mesh
         self.mesh = mesh
@@ -258,18 +260,9 @@ class State(object):
         self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
 
         if self.output.dumplist is None:
-            self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, Function(self.W),
-                                   self.output.dumplist)
+            self.output.dumplist = []
 
-        # set up bcs
-        V = self.fields('u').function_space()
-        self.bcs = []
-        if V.extruded:
-            self.bcs.append(DirichletBC(V, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(V, 0.0, "top"))
-        for id in self.u_bc_ids:
-            self.bcs.append(DirichletBC(V, 0.0, id))
+        self.fields = StateFields(*self.output.dumplist)
 
         self.dumpfile = None
 

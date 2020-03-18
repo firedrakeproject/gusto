@@ -4,7 +4,7 @@ import pytest
 
 
 def run(state, advection_schemes, tmax, f_end):
-    timestepper = Advection(state, advection_schemes)
+    timestepper = PrescribedAdvection(state, advection_schemes)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -19,11 +19,14 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
     V = state.spaces("DG")
     f = state.fields("f", V)
     f.interpolate(setup.f_init)
-    eqn = AdvectionEquation(state, V, equation_form=equation_form)
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f")
+    else:
+        eqn = ContinuityEquation(state, V, "f")
     if scheme == "ssprk":
-        advection_schemes = [("f", SSPRK3(state, f, eqn))]
+        advection_schemes = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
-        advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
+        advection_schemes = [(eqn, ImplicitMidpoint(state))]
     assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
 
 
@@ -39,10 +42,13 @@ def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
     gdim = state.mesh.geometric_dimension()
     f_init = as_vector((setup.f_init, *[0.]*(gdim-1)))
     f.interpolate(f_init)
-    eqn = AdvectionEquation(state, V, equation_form=equation_form)
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f")
+    else:
+        eqn = ContinuityEquation(state, V, "f")
     if scheme == "ssprk":
-        advection_schemes = [("f", SSPRK3(state, f, eqn))]
+        advection_schemes = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
-        advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
+        advection_schemes = [(eqn, ImplicitMidpoint(state))]
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
     assert run(state, advection_schemes, setup.tmax, f_end) < setup.tol

@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer, Boundary_Method
 from gusto.advection import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter

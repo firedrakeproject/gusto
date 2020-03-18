@@ -5,12 +5,12 @@ from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
 from gusto.state import FieldCreator
 
-__all__ = ["TimeLevelFields", "CrankNicolson", "AdvectionDiffusion", "Advection", "Diffusion"]
+__all__ = ["TimeLevelFields", "CrankNicolson", "PrescribedAdvection"]
 
 
 class TimeLevelFields(object):
 
-    def __init__(self, state, time_levels=None):
+    def __init__(self, state, eqn_schemes, time_levels=None):
         default_time_levels = ("nm1", "n", "np1")
         if time_levels is not None:
             time_levels = tuple(time_levels) + default_time_levels
@@ -18,9 +18,11 @@ class TimeLevelFields(object):
             time_levels = default_time_levels
 
         for level in time_levels:
-            setattr(self, level, FieldCreator(state.fieldlist,
-                                              Function(state.W),
-                                              pickup=False))
+            field_fs = []
+            for eqn, _ in eqn_schemes:
+                field_fs.append(tuple((eqn.field_name, eqn.function_space)))
+
+            setattr(self, level, FieldCreator(field_fs))
 
     def initialise(self, state):
         for field in self.n:
@@ -45,30 +47,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a
-         function that returns the field as a function of time.
     """
 
-    def __init__(self, state, advection_schemes=None, diffusion_schemes=None,
-                 physics_list=None, prescribed_fields=None):
+    def __init__(self, state, eqn_schemes=None, physics_list=None):
 
         self.state = state
-        if advection_schemes is None:
-            self.advection_schemes = ()
+        if eqn_schemes is None:
+            self.eqn_schemes = ()
         else:
-            self.advection_schemes = tuple(advection_schemes)
-        if diffusion_schemes is None:
-            self.diffusion_schemes = ()
-        else:
-            self.diffusion_schemes = tuple(diffusion_schemes)
+            self.eqn_schemes = tuple(eqn_schemes)
         if physics_list is not None:
             self.physics_list = physics_list
         else:
             self.physics_list = []
-        if prescribed_fields is not None:
-            self.prescribed_fields = prescribed_fields
-        else:
-            self.prescribed_fields = []
 
     def _apply_bcs(self):
         """
@@ -81,15 +72,22 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         for bc in bcs:
             bc.apply(unp1)
 
-    def setup_timeloop(self, state):
-        self.x = TimeLevelFields(state)
+    def setup_timeloop(self):
+        self.x = TimeLevelFields(self.state, self.eqn_schemes)
+        for eqn, scheme in self.eqn_schemes:
+            scheme._setup(eqn, self.advecting_velocity)
 
     @abstractmethod
     def timestep(self):
         """
         Implement the timestep
         """
-        pass
+        xn = self.x.n
+        xnp1 = self.x.np1
+
+        for eqn, scheme in self.eqn_schemes:
+            name = eqn.field_name
+            scheme.apply(xn(name), xnp1(name))
 
     def run(self, t, tmax, pickup=False):
         """
@@ -110,7 +108,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         dt = state.dt
 
-        self.setup_timeloop(state)
+        self.setup_timeloop()
 
         self.x.initialise(state)
 
@@ -121,9 +119,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             state.t.assign(t)
 
             self.x.update()
-
-            for name, evaluation in self.prescribed_fields:
-                state.fields(name).project(evaluation(state.t))
 
             self.timestep()
 
@@ -190,6 +185,13 @@ class CrankNicolson(BaseTimestepper):
         self.active_advection = [(name, scheme) for name, scheme in advection_schemes if name in state.fieldlist]
 
     @property
+    def advecting_velocity(self):
+        xn = self.x.n
+        xnp1 = self.x.np1
+        # computes ubar from un and unp1
+        return xn('u') + self.alpha*(xnp1('u')-xn('u'))
+
+    @property
     def passive_advection(self):
         """
         Advected fields that are not part of the semi implicit step are
@@ -218,8 +220,6 @@ class CrankNicolson(BaseTimestepper):
 
             with timed_stage("Advection"):
                 for name, advection in self.active_advection:
-                    # first computes ubar from un and unp1
-                    advection.update_ubar(xn('u') + alpha*(xnp1('u')-xn('u')))
                     # advects a field from xstar and puts result in xp
                     advection.apply(xstar(name), xp(name))
 
@@ -255,42 +255,21 @@ class CrankNicolson(BaseTimestepper):
                 diffusion.apply(field, field)
 
 
-class AdvectionDiffusion(BaseTimestepper):
-    """
-    This class implements a splitting method for the advection-diffusion
-    equations.
-    """
+class PrescribedAdvection(BaseTimestepper):
+
+    def __init__(self, state, eqn_schemes, physics_list=None,
+                 prescribed_advecting_velocity=None):
+
+        self.prescribed_advecting_velocity = prescribed_advecting_velocity
+        super().__init__(state, eqn_schemes=eqn_schemes,
+                         physics_list=physics_list)
+
+    @property
+    def advecting_velocity(self):
+        return self.state.fields('u')
 
     def timestep(self):
+        if self.prescribed_advecting_velocity is not None:
+            self.state.fields('u').project(self.prescribed_advecting_velocity)
 
-        state = self.state
-
-        for name, scheme in self.advection_schemes:
-            field = getattr(state.fields, name)
-            scheme.update_ubar(state.fields('u'))
-            scheme.apply(field, field)
-
-        with timed_stage("Diffusion"):
-            for name, scheme in self.diffusion_schemes:
-                field = getattr(state.fields, name)
-                scheme.apply(field, field)
-
-
-class Advection(AdvectionDiffusion):
-
-    def __init__(self, state, advection_schemes, physics_list=None,
-                 prescribed_fields=None):
-        super().__init__(state, advection_schemes,
-                         diffusion_schemes=None,
-                         physics_list=physics_list,
-                         prescribed_fields=prescribed_fields)
-
-
-class Diffusion(AdvectionDiffusion):
-
-    def __init__(self, state, diffusion_schemes, physics_list=None,
-                 prescribed_fields=None):
-        super().__init__(state, advection_schemes=None,
-                         diffusion_schemes=diffusion_schemes,
-                         physics_list=physics_list,
-                         prescribed_fields=prescribed_fields)
+        super().timestep()

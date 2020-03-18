@@ -4,7 +4,7 @@ import pytest
 
 
 def run(state, advection_schemes, tmax, f_end):
-    timestepper = Advection(state, advection_schemes)
+    timestepper = PrescribedAdvection(state, advection_schemes)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -25,8 +25,10 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     elif space == "dg":
         opts = EmbeddedDGOptions(embedding_space=state.spaces("DG"))
 
-    eqn = EmbeddedDGAdvection(state, V, ibp=ibp,
-                              equation_form=equation_form, options=opts)
-    advection_schemes = [("f", SSPRK3(state, f, eqn))]
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+    else:
+        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
+    advection_schemes = [(eqn, SSPRK3(state, options=opts))]
 
     assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
