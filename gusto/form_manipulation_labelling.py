@@ -9,6 +9,23 @@ drop = lambda t: None
 all_terms = lambda t: True
 
 
+def replace_test_function(new_test):
+    """
+    :arg new_test: a :func:`TestFunction`
+
+    Returns a function that takes in t, a :class:`Term`, and returns
+    a new :class:`Term` with form containing the new_test and
+    labels=t.labels
+    """
+
+    def repl(t):
+        test = t.form.arguments()[0]
+        new_form = ufl.replace(t.form, {test: new_test})
+        return Term(new_form, t.labels)
+
+    return repl
+
+
 class Term(object):
     """
     Term class, containing a form and its labels.

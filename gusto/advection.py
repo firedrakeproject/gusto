@@ -7,7 +7,7 @@ import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
                                                advecting_velocity, subject,
-                                               all_terms)
+                                               all_terms, replace_test_function)
 from gusto.recovery import Recoverer
 
 
@@ -101,8 +101,7 @@ class Advection(object, metaclass=ABCMeta):
         test = TestFunction(self.fs)
         self.residual = self.residual.label_map(
             all_terms,
-            map_if_true=lambda t: Term(
-                ufl.replace(t.form, {t.form.arguments()[0]: test}), t.labels))
+            map_if_true=replace_test_function(test))
 
         if self.discretisation_option == "embedded_dg":
             if self.limiter is None:
