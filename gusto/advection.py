@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TrialFunction, LinearVariationalProblem,
-                       LinearVariationalSolver, Projector, Interpolator,
-                       BrokenElement, FunctionSpace, TestFunction)
+from firedrake import (Function, TrialFunction, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, Projector, Interpolator,
+                       BrokenElement, FunctionSpace, TestFunction, action)
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
@@ -12,7 +12,7 @@ from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
 from gusto.recovery import Recoverer
 
 
-__all__ = ["ForwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def embedded_dg(original_apply):
@@ -68,18 +68,21 @@ class Advection(object, metaclass=ABCMeta):
 
         # get default solver options if none passed in
         if solver_parameters is None:
-            self.solver_parameters = {}
+            self.solver_parameters = {'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
         else:
             self.solver_parameters = solver_parameters
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def _setup(self, equation, uadv):
+    def _setup(self, equation, uadv=None):
 
         self.equation = equation
         self.residual = equation.residual
 
-        self.replace_advecting_velocity(uadv)
+        if uadv is not None:
+            self.replace_advecting_velocity(uadv)
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
@@ -202,9 +205,9 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dq)
+        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq)
         solver_name = self.equation.field_name+self.equation.__class__.__name__+self.__class__.__name__
-        return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply(self, x_in, x_out):
@@ -345,6 +348,34 @@ class SSPRK3(ExplicitAdvection):
         for i in range(3):
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
+
+
+class BackwardEuler(Advection):
+
+    @property
+    def lhs(self):
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.trial))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: self.dt*t)
+
+        return l.form
+
+    @property
+    def rhs(self):
+
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.q1),
+            map_if_false=drop)
+
+        return r.form
+
+    def apply(self, x_in, x_out):
+        self.q1.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.dq)
 
 
 class ThetaMethod(Advection):

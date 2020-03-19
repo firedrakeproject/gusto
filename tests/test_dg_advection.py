@@ -3,8 +3,8 @@ from gusto import *
 import pytest
 
 
-def run(state, advection_schemes, tmax, f_end):
-    timestepper = PrescribedAdvection(state, advection_schemes)
+def run(state, advection_scheme, tmax, f_end):
+    timestepper = PrescribedAdvection(state, advection_scheme)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -24,10 +24,10 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
     else:
         eqn = ContinuityEquation(state, V, "f")
     if scheme == "ssprk":
-        advection_schemes = [(eqn, SSPRK3(state))]
+        advection_scheme = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
-        advection_schemes = [(eqn, ImplicitMidpoint(state))]
-    assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
+        advection_scheme = [(eqn, ImplicitMidpoint(state))]
+    assert run(state, advection_scheme, setup.tmax, setup.f_end) < setup.tol
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])

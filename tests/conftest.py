@@ -10,7 +10,7 @@ TracerSetup = namedtuple('TracerSetup', opts)
 TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 
-def tracer_advection_sphere(tmpdir):
+def tracer_sphere(tmpdir):
     mesh = IcosahedralSphereMesh(radius=1,
                                  refinement_level=3,
                                  degree=1)
@@ -33,7 +33,7 @@ def tracer_advection_sphere(tmpdir):
     return TracerSetup(state, tmax, f_init, f_end, tol)
 
 
-def tracer_advection_slice(tmpdir):
+def tracer_slice(tmpdir):
     m = PeriodicIntervalMesh(15, 1.)
     mesh = ExtrudedMesh(m, layers=15, layer_height=1./15.)
 
@@ -54,13 +54,34 @@ def tracer_advection_slice(tmpdir):
     return TracerSetup(state, tmax, f_init, f_end, tol)
 
 
+def tracer_blob_slice(tmpdir):
+    dt = 0.01
+    L = 10.
+    m = PeriodicIntervalMesh(50, L)
+    mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
+
+    output = OutputParameters(dirname=str(tmpdir))
+    state = State(mesh, vertical_degree=1, horizontal_degree=1,
+                  family="CG", dt=dt, output=output)
+
+    tmax = 2.5
+    x = SpatialCoordinate(mesh)
+    f_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
+
+    return TracerSetup(state, tmax, f_init)
+
+
 @pytest.fixture()
 def tracer_setup():
 
-    def _tracer_setup(tmpdir, geometry):
+    def _tracer_setup(tmpdir, geometry, blob=False):
         if geometry == "sphere":
-            return tracer_advection_sphere(tmpdir)
+            assert not blob
+            return tracer_sphere(tmpdir)
         elif geometry == "slice":
-            return tracer_advection_slice(tmpdir)
+            if blob:
+                return tracer_blob_slice(tmpdir)
+            else:
+                return tracer_slice(tmpdir)
 
     return _tracer_setup

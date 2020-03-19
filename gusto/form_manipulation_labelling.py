@@ -192,5 +192,6 @@ class Label(object):
 
 time_derivative = Label("time_derivative")
 advection = Label("advection")
+diffusion = Label("diffusion")
 advecting_velocity = Label("advecting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)

@@ -1,11 +1,10 @@
-from abc import ABCMeta, abstractmethod
 from firedrake import Function
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.linear_solvers import IncompressibleSolver
 from gusto.state import FieldCreator
 
-__all__ = ["TimeLevelFields", "CrankNicolson", "PrescribedAdvection"]
+__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedAdvection"]
 
 
 class TimeLevelFields(object):
@@ -35,9 +34,9 @@ class TimeLevelFields(object):
             field.assign(self.np1(field.name()))
 
 
-class BaseTimestepper(object, metaclass=ABCMeta):
+class Timestepper(object):
     """
-    Base timestepping class for Gusto
+    Basic timestepping class for Gusto
 
     :arg state: a :class:`.State` object
     :arg advection_schemes: iterable of ``(field_name, scheme)`` pairs
@@ -61,6 +60,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             self.physics_list = []
 
+    def advecting_velocity(self):
+        return None
+
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -74,10 +76,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
     def setup_timeloop(self):
         self.x = TimeLevelFields(self.state, self.eqn_schemes)
+
         for eqn, scheme in self.eqn_schemes:
             scheme._setup(eqn, self.advecting_velocity)
 
-    @abstractmethod
     def timestep(self):
         """
         Implement the timestep
@@ -138,7 +140,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
-class CrankNicolson(BaseTimestepper):
+class CrankNicolson(Timestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
     splitting and auxilliary semi-Lagrangian advection.
@@ -255,7 +257,7 @@ class CrankNicolson(BaseTimestepper):
                 diffusion.apply(field, field)
 
 
-class PrescribedAdvection(BaseTimestepper):
+class PrescribedAdvection(Timestepper):
 
     def __init__(self, state, eqn_schemes, physics_list=None,
                  prescribed_advecting_velocity=None):

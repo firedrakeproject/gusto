@@ -2,6 +2,7 @@ from abc import ABCMeta
 from firedrake import TestFunction, Function, inner, dx
 from gusto.form_manipulation_labelling import subject, time_derivative
 from gusto.transport_equation import advection_form, continuity_form
+from gusto.diffusion import interior_penalty_diffusion_form
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
@@ -71,4 +72,27 @@ class ContinuityEquation(PrognosticEquation):
 
         self.residual = (
             mass_form + continuity_form(state, function_space, **kwargs)
+        )
+
+
+class DiffusionEquation(PrognosticEquation):
+    """
+    Class defining the advection equation.
+
+    :arg state: :class:`.State` object
+    :arg function_space: :class:`.FunctionSpace` object
+    :arg field_name: name of the prognostic field
+    :kwargs: any kwargs to be passed on to the advection_form
+    """
+    def __init__(self, state, function_space, field_name,
+                 **kwargs):
+        super().__init__(state, function_space, field_name)
+
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
+        self.residual = (
+            mass_form
+            + interior_penalty_diffusion_form(state, function_space, **kwargs)
         )
