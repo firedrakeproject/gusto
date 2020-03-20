@@ -1,14 +1,14 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       VectorFunctionSpace, Constant, exp, as_vector)
+                       VectorFunctionSpace, Constant, exp, as_vector, norm)
 import pytest
 
 
-def run(state, diffusion_scheme, tmax):
+def run(state, diffusion_scheme, tmax, f_end):
 
     timestepper = Timestepper(state, diffusion_scheme)
     timestepper.run(0., tmax)
-    return timestepper.state.fields("f")
+    return norm(timestepper.state.fields("f") - f_end)
 
 
 @pytest.mark.parametrize("vector", [True, False])
@@ -19,31 +19,37 @@ def test_diffusion(tmpdir, vector, DG, tracer_setup):
     state = setup.state
     f_init = setup.f_init
     tmax = setup.tmax
-    
+    tol = 3.e-2
+    kappa = 1.
+
+    f_end_expr = (1/(1+4*tmax))*f_init**(1/(1+4*tmax))
+
     if vector:
-        kappa = Constant([[0.05, 0.], [0., 0.05]])
+        kappa = Constant([[kappa, 0.], [0., kappa]])
         if DG:
             V = VectorFunctionSpace(state.mesh, "DG", 1)
         else:
             V = state.spaces("HDiv")
         f_init = as_vector([f_init, 0.])
+        f_end_expr = as_vector([f_end_expr, 0.])
     else:
-        kappa = 0.05
         if DG:
             V = state.spaces("DG")
         else:
             V = state.spaces("HDiv_v")
 
     f = state.fields("f", V)
+    f_end = state.fields("f_end", V)
     try:
         f.interpolate(f_init)
+        f_end.interpolate(f_end_expr)
     except NotImplementedError:
         f.project(f_init)
+        f_end.project(f_end_expr)
 
     mu = 5.
 
     eqn = DiffusionEquation(state, V, "f", kappa=kappa, mu=mu)
     diffusion_scheme = [(eqn, BackwardEuler(state))]
-    f_end = run(state, diffusion_scheme, tmax)
 
-    assert f_end.dat.data.max() < 0.7
+    assert run(state, diffusion_scheme, tmax, f_end) < tol

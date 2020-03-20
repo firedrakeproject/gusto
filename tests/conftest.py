@@ -57,14 +57,14 @@ def tracer_slice(tmpdir):
 def tracer_blob_slice(tmpdir):
     dt = 0.01
     L = 10.
-    m = PeriodicIntervalMesh(50, L)
-    mesh = ExtrudedMesh(m, layers=50, layer_height=0.2)
+    m = PeriodicIntervalMesh(10, L)
+    mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
-    output = OutputParameters(dirname=str(tmpdir))
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG", dt=dt, output=output)
 
-    tmax = 2.5
+    tmax = 1.
     x = SpatialCoordinate(mesh)
     f_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
 
