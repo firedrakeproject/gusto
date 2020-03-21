@@ -3,8 +3,8 @@ from gusto import *
 import pytest
 
 
-def run(state, advection_schemes, tmax, f_end):
-    timestepper = Advection(state, advection_schemes)
+def run(state, advection_scheme, tmax, f_end):
+    timestepper = PrescribedAdvection(state, advection_scheme)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -27,13 +27,18 @@ def test_supg_advection_scalar(tmpdir, equation_form, scheme, space,
     f = state.fields("f", V)
     f.interpolate(setup.f_init)
 
-    eqn = SUPGAdvection(state, V, ibp=ibp, equation_form=equation_form)
-    if scheme == "ssprk":
-        advection_schemes = [("f", SSPRK3(state, f, eqn))]
-    elif scheme == "implicit_midpoint":
-        advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
+    opts = SUPGOptions()
 
-    assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+    else:
+        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
+    if scheme == "ssprk":
+        advection_scheme = [(eqn, SSPRK3(state, options=opts))]
+    elif scheme == "implicit_midpoint":
+        advection_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
+
+    assert run(state, advection_scheme, setup.tmax, setup.f_end) < setup.tol
 
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
@@ -44,6 +49,8 @@ def test_supg_advection_vector(tmpdir, equation_form, scheme, space,
 
     setup = tracer_setup(tmpdir, geometry="slice")
     state = setup.state
+    tmax = setup.tmax
+    tol = setup.tol
 
     gdim = state.mesh.geometric_dimension()
     f_init = as_vector((setup.f_init, *[0.]*(gdim-1)))
@@ -58,11 +65,16 @@ def test_supg_advection_vector(tmpdir, equation_form, scheme, space,
         f.project(f_init)
         ibp = IntegrateByParts.TWICE
 
-    eqn = SUPGAdvection(state, V, ibp=ibp, equation_form=equation_form)
+    opts = SUPGOptions()
+
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+    else:
+        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
     if scheme == "ssprk":
-        advection_schemes = [("f", SSPRK3(state, f, eqn))]
+        advection_scheme = [(eqn, SSPRK3(state, options=opts))]
     elif scheme == "implicit_midpoint":
-        advection_schemes = [("f", ImplicitMidpoint(state, f, eqn))]
+        advection_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
 
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
-    assert run(state, advection_schemes, setup.tmax, f_end) < setup.tol
+    assert run(state, advection_scheme, tmax, f_end) < tol
