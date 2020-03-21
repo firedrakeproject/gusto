@@ -7,7 +7,12 @@ from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
 # This bubble is then advected by a prescribed advection scheme
 
 
-def setup_recovered_space(dirname):
+def run(state, advection_scheme, tmax):
+    timestepper = PrescribedAdvection(state, advection_scheme)
+    timestepper.run(0, tmax)
+
+
+def test_recovered_space_setup(tmpdir):
 
     # declare grid shape, with length L and height H
     L = 400.
@@ -18,24 +23,14 @@ def setup_recovered_space(dirname):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-    x, z = SpatialCoordinate(mesh)
 
-    fieldlist = ['u', 'rho']
     dt = 1.0
-    output = OutputParameters(dirname=dirname+"/recovered_space_test",
-                              dumpfreq=5,
-                              dumplist=['u'])
-    parameters = CompressibleParameters()
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=5)
 
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
                   dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist)
-
-    # declare initial fields
-    u0 = state.fields("u")
+                  output=output)
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
@@ -43,11 +38,21 @@ def setup_recovered_space(dirname):
     VDG1 = state.spaces("DG1")
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
-    # set up tracer field
+    # declare initial fields
+    u0 = state.fields("u", space=state.spaces("HDiv"))
     tracer0 = state.fields("tracer", VDG0)
+
+    x, z = SpatialCoordinate(mesh)
+
+    # set up velocity field
+    u_max = Constant(10.0)
+    psi_expr = - u_max * z
+    psi0 = Function(Vpsi).interpolate(psi_expr)
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
+
+    u0.project(gradperp(psi0))
 
     # set up bubble
     xc = 200.
@@ -58,40 +63,12 @@ def setup_recovered_space(dirname):
                                                 Constant(0.2),
                                                 Constant(0.0)), Constant(0.0)))
 
-    # set up velocity field
-    u_max = Constant(10.0)
-    psi_expr = - u_max * z
-    psi0 = Function(Vpsi).interpolate(psi_expr)
-    u0.project(gradperp(psi0))
-
-    state.initialise([('u', u0),
-                      ('tracer', tracer0)])
-
-    # set up advection schemes
+    # set up advection scheme
     recovered_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
                                       boundary_method=Boundary_Method.dynamics)
-    tracereqn = EmbeddedDGAdvection(state, VDG0, equation_form="continuity",
-                                    options=recovered_opts)
+    tracereqn = ContinuityEquation(state, VDG0, "tracer")
+    advection_scheme = [(tracereqn, SSPRK3(state, options=recovered_opts))]
 
-    # build advection dictionary
-    advection_schemes = []
-    advection_schemes.append(('tracer', SSPRK3(state, tracer0, tracereqn)))
-
-    # build time stepper
-    stepper = Advection(state, advection_schemes)
-
-    return stepper, 100.0
-
-
-def run_recovered_space(dirname):
-
-    stepper, tmax = setup_recovered_space(dirname)
-    stepper.run(t=0, tmax=tmax)
-
-
-def test_recovered_space_setup(tmpdir):
-
-    dirname = str(tmpdir)
-    run_recovered_space(dirname)
+    run(state, advection_scheme, tmax=10)
