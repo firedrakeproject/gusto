@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       VectorFunctionSpace, Constant, exp, as_vector, norm)
+from firedrake import (VectorFunctionSpace, Constant, as_vector, norm)
 import pytest
 
 
