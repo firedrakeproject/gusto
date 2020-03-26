@@ -126,7 +126,7 @@ def GaussianElimination(DG1):
         # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
         # For these loops we must manually iterate the index.
         """
-        if ON_EXT[0] > 0.0
+        if NUM_EXT[0] > 0.0
         """
         # only do Gaussian elimination for elements with effective coordinates
         """
@@ -226,7 +226,7 @@ def GaussianElimination(DG1):
         """
         # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
         """
-            if ON_EXT[0] > 0.0
+            if NUM_EXT[0] > 0.0
             {act_coord_expr}
         """
         # if element is not external, just use old field values.
