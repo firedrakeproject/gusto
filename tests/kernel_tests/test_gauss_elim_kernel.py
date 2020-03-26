@@ -4,11 +4,11 @@ A test of the Gaussian elimination kernel used for the BoundaryRecoverer.
 
 from firedrake import (IntervalMesh, FunctionSpace, Function, RectangleMesh,
                        VectorFunctionSpace, FiniteElement, dx)
-from firedrake.parloops import par_loop, READ, INC, WRITE
+from firedrake.parloops import par_loop, READ, WRITE
 
 from gusto import kernels
-import numpy as np
 import pytest
+
 
 @pytest.fixture
 def mesh(geometry):
@@ -58,14 +58,14 @@ def setup_values(geometry, field_init, field_true,
         field_true.dat.data[1] = -1.0
         field_true.dat.data[2] = -3.0
         field_true.dat.data[3] = 1.0
-        act_coords.dat.data[0,:] = [0.0, 0.0]
-        act_coords.dat.data[1,:] = [1.0, 0.0]
-        act_coords.dat.data[2,:] = [0.0, 1.0]
-        act_coords.dat.data[3,:] = [1.0, 1.0]
-        eff_coords.dat.data[0,:] = [0.5, 0.5]
-        eff_coords.dat.data[1,:] = [1.0, 0.5]
-        eff_coords.dat.data[2,:] = [0.5, 1.0]
-        eff_coords.dat.data[3,:] = [1.0, 1.0]
+        act_coords.dat.data[0, :] = [0.0, 0.0]
+        act_coords.dat.data[1, :] = [1.0, 0.0]
+        act_coords.dat.data[2, :] = [0.0, 1.0]
+        act_coords.dat.data[3, :] = [1.0, 1.0]
+        eff_coords.dat.data[0, :] = [0.5, 0.5]
+        eff_coords.dat.data[1, :] = [1.0, 0.5]
+        eff_coords.dat.data[2, :] = [0.5, 1.0]
+        eff_coords.dat.data[3, :] = [1.0, 1.0]
 
     return field_init, field_true, act_coords, eff_coords
 

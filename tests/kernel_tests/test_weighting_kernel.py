@@ -2,13 +2,13 @@
 A test of the AverageWeightings kernel used for the Averager.
 """
 
-from firedrake import (IntervalMesh, Function, RectangleMesh, as_vector,
-                       FunctionSpace, VectorFunctionSpace, FiniteElement, dx)
-from firedrake.parloops import par_loop, READ, INC
+from firedrake import (IntervalMesh, Function, RectangleMesh,
+                       VectorFunctionSpace, dx)
+from firedrake.parloops import par_loop, INC
 
 from gusto import kernels
-import numpy as np
 import pytest
+
 
 @pytest.fixture
 def mesh(geometry):

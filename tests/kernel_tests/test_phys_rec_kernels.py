@@ -4,15 +4,14 @@ which are used for the BoundaryRecoverer with the physics boundary
 recovery method.
 """
 
-from firedrake import (IntervalMesh, Function, RectangleMesh, as_vector,
-                       FunctionSpace, VectorFunctionSpace, FiniteElement, dx,
-                       ExtrudedMesh, interval, TensorProductElement, BrokenElement)
+from firedrake import (IntervalMesh, Function, BrokenElement,
+                       FunctionSpace, FiniteElement, dx,
+                       ExtrudedMesh, interval, TensorProductElement)
 from firedrake.parloops import par_loop, READ, WRITE
 from pyop2 import ON_TOP, ON_BOTTOM
-
 from gusto import kernels
-import numpy as np
 import pytest
+
 
 def setup_values(boundary, initial_field, true_field):
     # Initial field is in Vt
@@ -79,4 +78,4 @@ def test_physics_recovery_kernels(boundary):
     tolerance = 1e-12
     index = 11 if boundary == "top" else 6
     assert abs(true_field.dat.data[index] - new_field.dat.data[index]) < tolerance, \
-            "Value at %s from physics recovery is not correct" % boundary
+        "Value at %s from physics recovery is not correct" % boundary

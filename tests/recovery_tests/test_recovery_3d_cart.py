@@ -19,6 +19,7 @@ import pytest
 
 np.random.seed(0)
 
+
 @pytest.fixture
 def mesh(geometry, element):
 
@@ -50,6 +51,7 @@ def mesh(geometry, element):
     extruded_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=deltaz)
 
     return extruded_mesh
+
 
 @pytest.fixture
 def expr(geometry, mesh):

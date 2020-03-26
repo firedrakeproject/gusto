@@ -280,7 +280,6 @@ class Boundary_Recoverer(object):
                             end
                             """).format(**shapes)
 
-
             _num_ext_kernel = (num_ext_domain, num_ext_instructions)
             _eff_coords_kernel = (coords_domain, coords_insts)
             self._gaussian_elimination_kernel = kernels.GaussianElimination(VDG1)

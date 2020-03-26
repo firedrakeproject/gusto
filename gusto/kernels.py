@@ -5,6 +5,7 @@ This are contained in this file as functions so that they can be tested separate
 
 import numpy as np
 
+
 def GaussianElimination(DG1):
     """
     A kernel for performing Gaussian elimination locally in each element
@@ -38,15 +39,18 @@ def GaussianElimination(DG1):
     # We can't generalise the expression without causing an error
     # So here we write special bits of code for the 1D case vs multi-dimensional
     if shapes['dim'] == 1:
-        eff_coord_expr = ("""
+        eff_coord_expr = (
+            """
             A[i,0] = 1.0
             A[i,1] = EFF_COORDS[i]
             """)
-        act_coord_expr = ("""
+        act_coord_expr = (
+            """
             DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii]
             """)
     else:
-        eff_coord_expr = ("""
+        eff_coord_expr = (
+            """
             A[i,0] = 1.0
             A[i,1] = EFF_COORDS[i,0]
             if {nDOFs} == 3
@@ -55,10 +59,10 @@ def GaussianElimination(DG1):
                 A[i,2] = EFF_COORDS[i,1]
                 A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
             elif {nDOFs} == 6
-        """
-        # N.B we use {nDOFs} - 1 to access the z component in 3D cases
-        # Otherwise loopy tries to search for this component in 2D cases, raising an error
-        """
+            """
+            # N.B we use {nDOFs} - 1 to access the z component in 3D cases
+            # Otherwise loopy tries to search for this component in 2D cases, raising an error
+            """
                 A[i,2] = EFF_COORDS[i,1]
                 A[i,3] = EFF_COORDS[i,{dim}-1]
                 A[i,4] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
@@ -73,7 +77,8 @@ def GaussianElimination(DG1):
             end
             """).format(**shapes)
 
-        act_coord_expr = ("""
+        act_coord_expr = (
+            """
             if {nDOFs} == 2
                 DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
             elif {nDOFs} == 3
@@ -90,7 +95,8 @@ def GaussianElimination(DG1):
     shapes['act_coord_expr'] = act_coord_expr
     shapes['eff_coord_expr'] = eff_coord_expr
 
-    domain = ("""
+    domain = (
+        """
         {{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii]:
         0 <= i < {nDOFs} and 0 <= ii_loop < {nDOFs} and
         0 <= jj_loop < {nDOFs} and 0 <= kk < {nDOFs} and
@@ -99,7 +105,8 @@ def GaussianElimination(DG1):
         0 <= iiii < {nDOFs}}}
         """).format(**shapes)
 
-    instrs = ("""
+    instrs = (
+        """
         <int> ii = 0
         <int> jj = 0
         <int> ll = 0
@@ -119,7 +126,7 @@ def GaussianElimination(DG1):
         # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
         # For these loops we must manually iterate the index.
         """
-        if NUM_EXT[0] > 0.0
+        if ON_EXT[0] > 0.0
         """
         # only do Gaussian elimination for elements with effective coordinates
         """
@@ -219,7 +226,7 @@ def GaussianElimination(DG1):
         """
         # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
         """
-            if NUM_EXT[0] > 0.0
+            if ON_EXT[0] > 0.0
             {act_coord_expr}
         """
         # if element is not external, just use old field values.
@@ -251,13 +258,14 @@ def Average(V):
     # Loop over node extent and dof extent
     # vo is v_out, v is the function in, w is the weight
     # NOTE: Any bcs on the function v should just work.
-    instrs = ("""
-                for i
-                    for j
-                        vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
-                    end
-                end
-              """)
+    instrs = (
+        """
+        for i
+            for j
+                vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
+            end
+        end
+        """)
 
     return (domain, instrs)
 
@@ -275,13 +283,14 @@ def AverageWeightings(V):
     domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**shapes)
 
     # w is the weights
-    instrs = ("""
-                for i
-                    for j
-                        w[i,j] = w[i,j] + 1.0
-                    end
-                end
-              """)
+    instrs = (
+        """
+        for i
+            for j
+                w[i,j] = w[i,j] + 1.0
+            end
+        end
+        """)
 
     return (domain, instrs)
 
@@ -297,10 +306,11 @@ def PhysicsRecoveryTop():
 
     # CG1 is the uncorrected field that has been originally recovered
     # DG1 is the corrected output field
-    instrs = ("""
-                DG1[0] = CG1[0]
-                DG1[1] = -CG1[0] + 2 * CG1[1]
-              """)
+    instrs = (
+        """
+        DG1[0] = CG1[0]
+        DG1[1] = -CG1[0] + 2 * CG1[1]
+        """)
 
     return (domain, instrs)
 
@@ -316,9 +326,10 @@ def PhysicsRecoveryBottom():
 
     # CG1 is the uncorrected field that has been originally recovered
     # DG1 is the corrected output field
-    instrs = ("""
-                DG1[0] = 2 * CG1[0] - CG1[1]
-                DG1[1] = CG1[1]
-              """)
+    instrs = (
+        """
+        DG1[0] = 2 * CG1[0] - CG1[1]
+        DG1[1] = CG1[1]
+        """)
 
     return (domain, instrs)

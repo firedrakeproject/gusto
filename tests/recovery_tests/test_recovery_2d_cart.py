@@ -17,6 +17,7 @@ import pytest
 
 np.random.seed(0)
 
+
 @pytest.fixture
 def mesh(geometry, element):
 
@@ -43,6 +44,7 @@ def mesh(geometry, element):
         m = RectangleMesh(ncolumnsx, ncolumnsy, Lx, Ly, quadrilateral=quadrilateral)
 
     return m
+
 
 @pytest.fixture
 def expr(geometry, mesh):
