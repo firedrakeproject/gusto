@@ -3,8 +3,7 @@ A test of the Average kernel used for the Averager.
 """
 
 from firedrake import (IntervalMesh, Function, RectangleMesh,
-                       VectorFunctionSpace, FiniteElement, dx)
-from firedrake.parloops import par_loop, READ, INC
+                       VectorFunctionSpace, FiniteElement)
 
 from gusto import kernels
 import pytest
@@ -91,11 +90,7 @@ def test_average(geometry, mesh):
     DG_field, weights, true_values = setup_values(geometry, DG_field, weights)
 
     kernel = kernels.Average(vec_CG1)
-    par_loop(kernel, dx,
-             {"vo": (CG_field, INC),
-              "v": (DG_field, READ),
-              "w": (weights, READ)},
-             is_loopy_kernel=True)
+    kernel.apply(CG_field, weights, DG_field)
 
     tolerance = 1e-12
     if geometry == "1D":

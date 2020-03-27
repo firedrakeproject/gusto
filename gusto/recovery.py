@@ -7,10 +7,9 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        TensorProductElement, FiniteElement, DirichletBC,
                        VectorElement, conditional, max_value)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, INC, WRITE
+from firedrake.parloops import par_loop, READ, WRITE
 from gusto.configuration import logger
 from gusto import kernels
-from pyop2 import ON_TOP, ON_BOTTOM
 import ufl
 import numpy as np
 from enum import Enum
@@ -49,7 +48,7 @@ class Averager(object):
         if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
             raise RuntimeError("Number of local dofs for each field must be equal.")
 
-        self._average_kernel = kernels.Average(self.V)
+        self.average_kernel = kernels.Average(self.V)
 
     @cached_property
     def _weighting(self):
@@ -58,9 +57,9 @@ class Averager(object):
         """
         w = Function(self.V)
 
-        _weight_kernel = kernels.AverageWeightings(self.V)
+        weight_kernel = kernels.AverageWeightings(self.V)
+        weight_kernel.apply(w)
 
-        par_loop(_weight_kernel, dx, {"w": (w, INC)}, is_loopy_kernel=True)
         return w
 
     def project(self):
@@ -70,10 +69,7 @@ class Averager(object):
 
         # Ensure that the function being populated is zeroed out
         self.v_out.dat.zero()
-        par_loop(self._average_kernel, dx, {"vo": (self.v_out, INC),
-                                            "w": (self._weighting, READ),
-                                            "v": (self.v, READ)},
-                 is_loopy_kernel=True)
+        self.average_kernel.apply(self.v_out, self._weighting, self.v)
         return self.v_out
 
 
@@ -282,7 +278,7 @@ class Boundary_Recoverer(object):
 
             _num_ext_kernel = (num_ext_domain, num_ext_instructions)
             _eff_coords_kernel = (coords_domain, coords_insts)
-            self._gaussian_elimination_kernel = kernels.GaussianElimination(VDG1)
+            self.gaussian_elimination_kernel = kernels.GaussianElimination(VDG1)
 
             # find number of external DOFs per cell
             par_loop(_num_ext_kernel, dx,
@@ -301,32 +297,22 @@ class Boundary_Recoverer(object):
 
         elif self.method == Boundary_Method.physics:
 
-            self._bottom_kernel = kernels.PhysicsRecoveryBottom()
-            self._top_kernel = kernels.PhysicsRecoveryTop()
+            self.bottom_kernel = kernels.PhysicsRecoveryBottom()
+            self.top_kernel = kernels.PhysicsRecoveryTop()
 
     def apply(self):
         self.interpolator.interpolate()
         if self.method == Boundary_Method.physics:
-            par_loop(self._bottom_kernel, dx,
-                     args={"DG1": (self.v_DG1, WRITE),
-                           "CG1": (self.v_CG1, READ)},
-                     is_loopy_kernel=True,
-                     iterate=ON_BOTTOM)
+            self.bottom_kernel.apply(self.v_DG1, self.v_CG1)
+            self.top_kernel.apply(self.v_DG1, self.v_CG1)
 
-            par_loop(self._top_kernel, dx,
-                     args={"DG1": (self.v_DG1, WRITE),
-                           "CG1": (self.v_CG1, READ)},
-                     is_loopy_kernel=True,
-                     iterate=ON_TOP)
         else:
             self.v_DG1_old.assign(self.v_DG1)
-            par_loop(self._gaussian_elimination_kernel, dx,
-                     {"DG1_OLD": (self.v_DG1_old, READ),
-                      "DG1": (self.v_DG1, WRITE),
-                      "ACT_COORDS": (self.act_coords, READ),
-                      "EFF_COORDS": (self.eff_coords, READ),
-                      "NUM_EXT": (self.num_ext, READ)},
-                     is_loopy_kernel=True)
+            self.gaussian_elimination_kernel.apply(self.v_DG1_old,
+                                                   self.v_DG1,
+                                                   self.act_coords,
+                                                   self.eff_coords,
+                                                   self.num_ext)
 
 
 class Recoverer(object):

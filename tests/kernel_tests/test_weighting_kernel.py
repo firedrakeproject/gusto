@@ -3,8 +3,7 @@ A test of the AverageWeightings kernel used for the Averager.
 """
 
 from firedrake import (IntervalMesh, Function, RectangleMesh,
-                       VectorFunctionSpace, dx)
-from firedrake.parloops import par_loop, INC
+                       VectorFunctionSpace)
 
 from gusto import kernels
 import pytest
@@ -86,9 +85,7 @@ def test_average(geometry, mesh):
     true_values = setup_values(geometry, true_values)
 
     kernel = kernels.AverageWeightings(vec_CG1)
-    par_loop(kernel, dx,
-             {"w": (weights, INC)},
-             is_loopy_kernel=True)
+    kernel.apply(weights)
 
     tolerance = 1e-12
     if geometry == "1D":
