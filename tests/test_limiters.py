@@ -22,15 +22,12 @@ def setup_limiters(dirname):
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
     output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist=['u', 'chemical', 'moisture_higher', 'moisture_lower'])
     parameters = CompressibleParameters()
-    fieldlist = ['u', 'rho', 'theta', 'chemical', 'moisture_higher', 'moisture_lower']
-    diagnostic_fields = []
+
     state = State(mesh, vertical_degree=1, horizontal_degree=1,
                   family="CG",
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
+                  parameters=parameters)
 
     x, z = SpatialCoordinate(mesh)
 
@@ -46,7 +43,7 @@ def setup_limiters(dirname):
     Vt0_brok = FunctionSpace(mesh, BrokenElement(Vt0_element))
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
-    u = state.fields("u", dump=True)
+    u = state.fields("u", state.spaces("HDiv"), dump=True)
     chemical = state.fields("chemical", Vr, dump=True)
     moisture_higher = state.fields("moisture_higher", Vt, dump=True)
     moisture_lower = state.fields("moisture_lower", Vt0, dump=True)
@@ -118,18 +115,18 @@ def setup_limiters(dirname):
                                       broken_space=Vt0_brok,
                                       boundary_method=Boundary_Method.dynamics)
 
-    chemeqn = AdvectionEquation(state, Vr, equation_form="advective")
-    moisteqn_higher = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=dg_opts)
-    moisteqn_lower = EmbeddedDGAdvection(state, Vt0, equation_form="advective", options=recovered_opts)
+    chemeqn = AdvectionEquation(state, Vr, "chemical")
+    moisteqn_higher = AdvectionEquation(state, Vt, "moisture_higher")
+    moisteqn_lower = AdvectionEquation(state, Vt0, "moisture_lower")
 
     # build advection dictionary
     advection_schemes = []
-    advection_schemes.append(('chemical', SSPRK3(state, chemical, chemeqn, limiter=VertexBasedLimiter(Vr))))
-    advection_schemes.append(('moisture_higher', SSPRK3(state, moisture_higher, moisteqn_higher, limiter=ThetaLimiter(Vt))))
-    advection_schemes.append(('moisture_lower', SSPRK3(state, moisture_lower, moisteqn_lower, limiter=VertexBasedLimiter(Vr))))
+    advection_schemes.append((chemeqn, SSPRK3(state, limiter=VertexBasedLimiter(Vr))))
+    advection_schemes.append((moisteqn_higher, SSPRK3(state, options=dg_opts, limiter=ThetaLimiter(Vt))))
+    advection_schemes.append((moisteqn_lower, SSPRK3(state, options=recovered_opts, limiter=VertexBasedLimiter(Vr))))
 
     # build time stepper
-    stepper = Advection(state, advection_schemes)
+    stepper = PrescribedAdvection(state, advection_schemes)
 
     return stepper, tmax
 
