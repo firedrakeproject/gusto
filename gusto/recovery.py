@@ -7,9 +7,9 @@ from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        TensorProductElement, FiniteElement, DirichletBC,
                        VectorElement, conditional, max_value)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, INC, WRITE
+from firedrake.parloops import par_loop, READ, WRITE
 from gusto.configuration import logger
-from pyop2 import ON_TOP, ON_BOTTOM
+from gusto import kernels
 import ufl
 import numpy as np
 from enum import Enum
@@ -48,20 +48,7 @@ class Averager(object):
         if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
             raise RuntimeError("Number of local dofs for each field must be equal.")
 
-        # NOTE: Any bcs on the function self.v should just work.
-        # Loop over node extent and dof extent
-        self.shapes = {"nDOFs": self.V.finat_element.space_dimension(),
-                       "dim": np.prod(self.V.shape, dtype=int)}
-        # Averaging kernel
-        average_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
-        average_instructions = ("""
-                                for i
-                                    for j
-                                        vo[i,j] = vo[i,j] + v[i,j] / w[i,j]
-                                    end
-                                end
-                                """)
-        self._average_kernel = (average_domain, average_instructions)
+        self.average_kernel = kernels.Average(self.V)
 
     @cached_property
     def _weighting(self):
@@ -69,17 +56,10 @@ class Averager(object):
         Generates a weight function for computing a projection via averaging.
         """
         w = Function(self.V)
-        weight_domain = "{{[i, j]: 0 <= i < {nDOFs} and 0 <= j < {dim}}}".format(**self.shapes)
-        weight_instructions = ("""
-                               for i
-                                   for j
-                                      w[i,j] = w[i,j] + 1.0
-                                   end
-                               end
-                               """)
-        _weight_kernel = (weight_domain, weight_instructions)
 
-        par_loop(_weight_kernel, dx, {"w": (w, INC)}, is_loopy_kernel=True)
+        weight_kernel = kernels.AverageWeightings(self.V)
+        weight_kernel.apply(w)
+
         return w
 
     def project(self):
@@ -89,10 +69,7 @@ class Averager(object):
 
         # Ensure that the function being populated is zeroed out
         self.v_out.dat.zero()
-        par_loop(self._average_kernel, dx, {"vo": (self.v_out, INC),
-                                            "w": (self._weighting, READ),
-                                            "v": (self.v, READ)},
-                 is_loopy_kernel=True)
+        self.average_kernel.apply(self.v_out, self._weighting, self.v)
         return self.v_out
 
 
@@ -299,179 +276,9 @@ class Boundary_Recoverer(object):
                             end
                             """).format(**shapes)
 
-            elimin_domain = ("{{[i, ii_loop, jj_loop, kk, ll_loop, mm, iii_loop, kkk_loop, iiii]: "
-                             "0 <= i < {nDOFs} and 0 <= ii_loop < {nDOFs} and "
-                             "0 <= jj_loop < {nDOFs} and 0 <= kk < {nDOFs} and "
-                             "0 <= ll_loop < {nDOFs} and 0 <= mm < {nDOFs} and "
-                             "0 <= iii_loop < {nDOFs} and 0 <= kkk_loop < {nDOFs} and "
-                             "0 <= iiii < {nDOFs}}}").format(**shapes)
-            elimin_insts = ("""
-                            <int> ii = 0
-                            <int> jj = 0
-                            <int> ll = 0
-                            <int> iii = 0
-                            <int> jjj = 0
-                            <int> i_max = 0
-                            <float64> A_max = 0.0
-                            <float64> temp_f = 0.0
-                            <float64> temp_A = 0.0
-                            <float64> c = 0.0
-                            <float64> f[{nDOFs}] = 0.0
-                            <float64> a[{nDOFs}] = 0.0
-                            <float64> A[{nDOFs},{nDOFs}] = 0.0
-                            """
-                            # We are aiming to find the vector a that solves A*a = f, for matrix A and vector f.
-                            # This is done by performing row operations (swapping and scaling) to obtain A in upper diagonal form.
-                            # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
-                            # For these loops we must manually iterate the index.
-                            """
-                            if NUM_EXT[0] > 0.0
-                            """
-                            # only do Gaussian elimination for elements with effective coordinates
-                            """
-                                for i
-                            """
-                            # fill f with the original field values and A with the effective coordinate values
-                            """
-                                    f[i] = DG1_OLD[i]
-                                    A[i,0] = 1.0
-                                    A[i,1] = EFF_COORDS[i,0]
-                                    if {nDOFs} == 3
-                                        A[i,2] = EFF_COORDS[i,1]
-                                    elif {nDOFs} == 4
-                                        A[i,2] = EFF_COORDS[i,1]
-                                        A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
-                                    elif {nDOFs} == 6
-                            """
-                            # N.B we use {nDOFs} - 1 to access the z component in 3D cases
-                            # Otherwise loopy tries to search for this component in 2D cases, raising an error
-                            """
-                                        A[i,2] = EFF_COORDS[i,1]
-                                        A[i,3] = EFF_COORDS[i,{dim}-1]
-                                        A[i,4] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
-                                        A[i,5] = EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
-                                    elif {nDOFs} == 8
-                                        A[i,2] = EFF_COORDS[i,1]
-                                        A[i,3] = EFF_COORDS[i,0]*EFF_COORDS[i,1]
-                                        A[i,4] = EFF_COORDS[i,{dim}-1]
-                                        A[i,5] = EFF_COORDS[i,0]*EFF_COORDS[i,{dim}-1]
-                                        A[i,6] = EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
-                                        A[i,7] = EFF_COORDS[i,0]*EFF_COORDS[i,1]*EFF_COORDS[i,{dim}-1]
-                                    end
-                                end
-                            """
-                            # now loop through rows/columns of A
-                            """
-                                for ii_loop
-                                    A_max = fabs(A[ii,ii])
-                                    i_max = ii
-                            """
-                            # loop to find the largest value in the ii-th column
-                            # set i_max as the index of the row with this largest value.
-                            """
-                                    jj = ii + 1
-                                    for jj_loop
-                                        if jj < {nDOFs}
-                                            if fabs(A[jj,ii]) > A_max
-                                                i_max = jj
-                                            end
-                                            A_max = fmax(A_max, fabs(A[jj,ii]))
-                                        end
-                                        jj = jj + 1
-                                    end
-                            """
-                            # if the max value in the ith column isn't in the ii-th row, we must swap the rows
-                            """
-                                    if i_max != ii
-                            """
-                            # swap the elements of f
-                            """
-                                        temp_f = f[ii]  {{id=set_temp_f}}
-                                        f[ii] = f[i_max]  {{id=set_f_imax, dep=set_temp_f}}
-                                        f[i_max] = temp_f  {{id=set_f_ii, dep=set_f_imax}}
-                            """
-                            # swap the elements of A
-                            # N.B. kk runs from ii to (nDOFs-1) as elements below diagonal should be 0
-                            """
-                                        for kk
-                                            if kk > ii - 1
-                                                temp_A = A[ii,kk]  {{id=set_temp_A}}
-                                                A[ii, kk] = A[i_max, kk]  {{id=set_A_ii, dep=set_temp_A}}
-                                                A[i_max, kk] = temp_A  {{id=set_A_imax, dep=set_A_ii}}
-                                            end
-                                        end
-                                    end
-                            """
-                            # scale the rows below the ith row
-                            """
-                                    ll = ii + 1
-                                    for ll_loop
-                                        if ll > ii
-                                            if ll < {nDOFs}
-                            """
-                            # find scaling factor
-                            """
-                                                c = - A[ll,ii] / A[ii,ii]
-                                                for mm
-                                                    A[ll, mm] = A[ll, mm] + c * A[ii,mm]
-                                                end
-                                                f[ll] = f[ll] + c * f[ii]
-                                            end
-                                        end
-                                        ll = ll + 1
-                                    end
-                                    ii = ii + 1
-                                end
-                            """
-                            # do back substitution of upper diagonal A to obtain a
-                            """
-                                iii = 0
-                                for iii_loop
-                            """
-                            # jjj starts at the bottom row and works upwards
-                            """
-                                    jjj = {nDOFs} - iii - 1  {{id=assign_jjj}}
-                                    a[jjj] = f[jjj]   {{id=set_a, dep=assign_jjj}}
-                                    for kkk_loop
-                                        if kkk_loop > {nDOFs} - iii_loop - 1
-                                            a[jjj] = a[jjj] - A[jjj,kkk_loop] * a[kkk_loop]
-                                        end
-                                    end
-                                    a[jjj] = a[jjj] / A[jjj,jjj]
-                                    iii = iii + 1
-                                end
-                            end
-                            """
-                            # Do final loop to assign output values
-                            """
-                            for iiii
-                            """
-                            # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
-                            """
-                                if NUM_EXT[0] > 0.0
-                                    if {nDOFs} == 2
-                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
-                                    elif {nDOFs} == 3
-                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1]
-                                    elif {nDOFs} == 4
-                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
-                                    elif {nDOFs} == 6
-                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,{dim}-1] + a[4]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
-                                    elif {nDOFs} == 8
-                                        DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
-                                    end
-                            """
-                            # if element is not external, just use old field values.
-                            """
-                                else
-                                    DG1[iiii] = DG1_OLD[iiii]
-                                end
-                            end
-                            """).format(**shapes)
-
             _num_ext_kernel = (num_ext_domain, num_ext_instructions)
             _eff_coords_kernel = (coords_domain, coords_insts)
-            self._gaussian_elimination_kernel = (elimin_domain, elimin_insts)
+            self.gaussian_elimination_kernel = kernels.GaussianElimination(VDG1)
 
             # find number of external DOFs per cell
             par_loop(_num_ext_kernel, dx,
@@ -489,42 +296,23 @@ class Boundary_Recoverer(object):
                      is_loopy_kernel=True)
 
         elif self.method == Boundary_Method.physics:
-            top_bottom_domain = ("{[i]: 0 <= i < 1}")
-            bottom_instructions = ("""
-                                   DG1[0] = 2 * CG1[0] - CG1[1]
-                                   DG1[1] = CG1[1]
-                                   """)
-            top_instructions = ("""
-                                DG1[0] = CG1[0]
-                                DG1[1] = -CG1[0] + 2 * CG1[1]
-                                """)
 
-            self._bottom_kernel = (top_bottom_domain, bottom_instructions)
-            self._top_kernel = (top_bottom_domain, top_instructions)
+            self.bottom_kernel = kernels.PhysicsRecoveryBottom()
+            self.top_kernel = kernels.PhysicsRecoveryTop()
 
     def apply(self):
         self.interpolator.interpolate()
         if self.method == Boundary_Method.physics:
-            par_loop(self._bottom_kernel, dx,
-                     args={"DG1": (self.v_DG1, WRITE),
-                           "CG1": (self.v_CG1, READ)},
-                     is_loopy_kernel=True,
-                     iterate=ON_BOTTOM)
+            self.bottom_kernel.apply(self.v_DG1, self.v_CG1)
+            self.top_kernel.apply(self.v_DG1, self.v_CG1)
 
-            par_loop(self._top_kernel, dx,
-                     args={"DG1": (self.v_DG1, WRITE),
-                           "CG1": (self.v_CG1, READ)},
-                     is_loopy_kernel=True,
-                     iterate=ON_TOP)
         else:
             self.v_DG1_old.assign(self.v_DG1)
-            par_loop(self._gaussian_elimination_kernel, dx,
-                     {"DG1_OLD": (self.v_DG1_old, READ),
-                      "DG1": (self.v_DG1, WRITE),
-                      "ACT_COORDS": (self.act_coords, READ),
-                      "EFF_COORDS": (self.eff_coords, READ),
-                      "NUM_EXT": (self.num_ext, READ)},
-                     is_loopy_kernel=True)
+            self.gaussian_elimination_kernel.apply(self.v_DG1_old,
+                                                   self.v_DG1,
+                                                   self.act_coords,
+                                                   self.eff_coords,
+                                                   self.num_ext)
 
 
 class Recoverer(object):
