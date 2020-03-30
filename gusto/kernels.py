@@ -1,6 +1,6 @@
 """
 This file provides kernels for par loops.
-This are contained in this file as functions so that they can be tested separately.
+These are contained in this file as functions so that they can be tested separately.
 """
 
 import numpy as np
@@ -14,8 +14,8 @@ class GaussianElimination(object):
     A kernel for performing Gaussian elimination locally in each element
     for the BoundaryRecoverer procedure.
 
-    This takes a scalar field in DG1, the coordinates of the DoFs and the
-    "effective" coordinates of the DoFs. These "effective" coordinates
+    The apply method takes a scalar field in DG1, the coordinates of the DoFs
+    and the effective" coordinates of the DoFs. These "effective" coordinates
     correspond to the locations of the DoFs from the original space (i.e.
     the one being recovered from).
 
