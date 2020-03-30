@@ -29,8 +29,7 @@ def setup_limiters(dirname):
                   output=output,
                   parameters=parameters)
 
-    x, z = SpatialCoordinate(mesh)
-
+    # set up the function spaces:
     Vr = state.spaces("DG")
     Vt = state.spaces("HDiv_v")
     Vpsi = FunctionSpace(mesh, "CG", 2)
@@ -43,10 +42,14 @@ def setup_limiters(dirname):
     Vt0_brok = FunctionSpace(mesh, BrokenElement(Vt0_element))
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
-    u = state.fields("u", state.spaces("HDiv"), dump=True)
-    chemical = state.fields("chemical", Vr, dump=True)
-    moisture_higher = state.fields("moisture_higher", Vt, dump=True)
-    moisture_lower = state.fields("moisture_lower", Vt0, dump=True)
+    # set up the equations:
+    chemeqn = AdvectionEquation(state, Vr, "chemical")
+    moisteqn_higher = AdvectionEquation(state, Vt, "moisture_higher")
+    moisteqn_lower = AdvectionEquation(state, Vt0, "moisture_lower")
+
+    x, z = SpatialCoordinate(mesh)
+
+    u = state.fields("u", state.spaces("HDiv"))
 
     x_lower = 2 * Ld / 5
     x_upper = 3 * Ld / 5
@@ -67,6 +70,10 @@ def setup_limiters(dirname):
                                                         0.0),
                                             0.0),
                                 0.0)
+
+    chemical = state.fields("chemical")
+    moisture_higher = state.fields("moisture_higher")
+    moisture_lower = state.fields("moisture_lower")
 
     chemical.assign(1.0)
     moisture_higher.assign(280.)
@@ -103,21 +110,12 @@ def setup_limiters(dirname):
     gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
     u.project(gradperp(psi))
 
-    state.initialise([('u', u),
-                      ('chemical', chemical),
-                      ('moisture_higher', moisture_higher),
-                      ('moisture_lower', moisture_lower)])
-
     # set up advection schemes
     dg_opts = EmbeddedDGOptions()
     recovered_opts = RecoveredOptions(embedding_space=Vr,
                                       recovered_space=VCG1,
                                       broken_space=Vt0_brok,
                                       boundary_method=Boundary_Method.dynamics)
-
-    chemeqn = AdvectionEquation(state, Vr, "chemical")
-    moisteqn_higher = AdvectionEquation(state, Vt, "moisture_higher")
-    moisteqn_lower = AdvectionEquation(state, Vt0, "moisture_lower")
 
     # build advection dictionary
     advection_schemes = []

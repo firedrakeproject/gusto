@@ -17,86 +17,20 @@ class IntegrateByParts(Enum):
     TWICE = 2
 
 
-def is_cg(V):
-    """
-    Function to check is a given space, V, is CG. Broken elements are
-    always discontinuous; for vector elements we check the names of
-    the sobolev spaces of the subelements and for all other elements
-    we just check the sobolev space name.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return False
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space().name == "H1"
-
-
-def is_dg(V):
-    """
-    Function to check is a given space, V, is DG. Broken elements are
-    always discontinuous; for vector elements we check the names of
-    the sobolev spaces of the subelements and for all other elements
-    we just check the sobolev space name.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return True
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "L2" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space().name == "L2"
-
-
 def surface_measures(V):
     """
     Function returning the correct surface measures to use for the
     given function space, V, based on its continuity and also on
     whether the underlying mesh is extruded.
     """
-    # CG spaces don't require surface terms
-    if is_cg(V):
-        return None
+    if V.extruded:
+        # if the mesh is extruded we need both the vertical and
+        # horizontal interior facets
+        return (dS_v + dS_h)
     else:
-        # for extruded meshes we have to unpick things
-        if V.extruded:
-            dim = V.mesh().topological_dimension()
-            ele = V.ufl_element()
-
-            # Broken elements are discontinuous so need dS_v and dS_h
-            if is_dg(V):
-                return (dS_v + dS_h)
-
-            # Figure out which spaces we have
-            elif type(ele) == VectorElement:
-                spaces = [ele._sub_elements[i].sobolev_space().name
-                          for i in range(dim)]
-            else:
-                spaces = [ele.sobolev_space()[i].name for i in range(dim)]
-
-            # Based on the space names, these ones are discontinuous
-            # enough to require surface terms
-            discont = [i for i, name in enumerate(spaces) if name in ["L2", "HDiv"]]
-            # as the mesh is extruded, the dim-1 element of discont
-            # tells us about the vertical discontinuity
-            is_discontinuous_v = dim-1 in discont
-            # check now for horizontal discontinuity
-            is_discontinuous_h = any([i in discont for i in range(dim-1)])
-
-            # return surface measures
-            if is_discontinuous_h and is_discontinuous_v:
-                return (dS_v + dS_h)
-            elif is_discontinuous_h:
-                return dS_v
-            elif is_discontinuous_v:
-                return dS_h
-            else:
-                raise ValueError("Sorry, we have failed to figure out the surface measures for this space")
-        else:
-            # if we're here we're discontinuous in some way, but not
-            # on an extruded mesh so things are easy
-            return dS
+        # if we're here we're discontinuous in some way, but not
+        # on an extruded mesh so things are easy
+        return dS
 
 
 def setup_functions(state, V):
