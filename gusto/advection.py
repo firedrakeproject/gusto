@@ -93,10 +93,17 @@ class Advection(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def _setup(self, equation, uadv=None):
+    def setup(self, equation, uadv=None, *active_labels):
 
         self.equation = equation
-        self.residual = equation.residual
+
+        if len(active_labels) > 0:
+            self.residual = equation.residual.label_map(
+                lambda t: any(t.has_label(time_derivative, *active_labels)),
+                map_if_false=drop)
+        else:
+            self.residual = equation.residual
+
         options = self.options
 
         if uadv is not None:
@@ -291,9 +298,9 @@ class ExplicitAdvection(Advection):
 
         self.subcycles = subcycles
 
-    def _setup(self, equation, uadv):
+    def setup(self, equation, uadv, *active_labels):
 
-        super()._setup(equation, uadv)
+        super().setup(equation, uadv, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt

@@ -96,3 +96,31 @@ class DiffusionEquation(PrognosticEquation):
             mass_form
             + interior_penalty_diffusion_form(state, function_space, **kwargs)
         )
+
+
+class AdvectionDiffusionEquation(PrognosticEquation):
+    """
+    Class defining the advection-diffusion equation.
+
+    :arg state: :class:`.State` object
+    :arg field_name: name of the prognostic field
+    :arg function_space: :class:`.FunctionSpace` object, the function
+    :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
+    """
+    def __init__(self, state, function_space, field_name, **kwargs):
+        super().__init__(state, function_space, field_name)
+        dkwargs = {}
+        for k in ["kappa", "mu"]:
+            assert k in kwargs.keys(), "diffusion form requires %s kwarg " % k
+            dkwargs[k] = kwargs.pop(k)
+        akwargs = kwargs
+
+        test = TestFunction(function_space)
+        q = Function(function_space)
+        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+
+        self.residual = (
+            mass_form
+            + advection_form(state, function_space, **akwargs)
+            + interior_penalty_diffusion_form(state, function_space, **dkwargs)
+        )

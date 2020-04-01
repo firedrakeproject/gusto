@@ -9,7 +9,7 @@ __all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedAdvecti
 
 class TimeLevelFields(object):
 
-    def __init__(self, state, eqn_schemes, time_levels=None):
+    def __init__(self, state, equations, time_levels=None):
         default_time_levels = ("nm1", "n", "np1")
         if time_levels is not None:
             time_levels = tuple(time_levels) + default_time_levels
@@ -18,7 +18,7 @@ class TimeLevelFields(object):
 
         for level in time_levels:
             field_fs = []
-            for eqn, _ in eqn_schemes:
+            for eqn in equations:
                 field_fs.append(tuple((eqn.field_name, eqn.function_space)))
 
             setattr(self, level, FieldCreator(field_fs))
@@ -48,13 +48,23 @@ class Timestepper(object):
     :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
-    def __init__(self, state, eqn_schemes=None, physics_list=None):
+    def __init__(self, state, problem, physics_list=None):
 
         self.state = state
-        if eqn_schemes is None:
-            self.eqn_schemes = ()
-        else:
-            self.eqn_schemes = tuple(eqn_schemes)
+
+        self.equations = []
+        self.schemes = []
+        for eqn, method in problem:
+            if type(method) is tuple:
+                for scheme, *active_labels in method:
+                    scheme.setup(eqn, self.advecting_velocity, *active_labels)
+                    self.schemes.append((eqn.field_name, scheme))
+            else:
+                scheme = method
+                scheme.setup(eqn, self.advecting_velocity)
+                self.schemes.append((eqn.field_name, scheme))
+            self.equations.append(eqn)
+
         if physics_list is not None:
             self.physics_list = physics_list
         else:
@@ -75,10 +85,7 @@ class Timestepper(object):
             bc.apply(unp1)
 
     def setup_timeloop(self):
-        self.x = TimeLevelFields(self.state, self.eqn_schemes)
-
-        for eqn, scheme in self.eqn_schemes:
-            scheme._setup(eqn, self.advecting_velocity)
+        self.x = TimeLevelFields(self.state, self.equations)
 
     def timestep(self):
         """
@@ -87,9 +94,9 @@ class Timestepper(object):
         xn = self.x.n
         xnp1 = self.x.np1
 
-        for eqn, scheme in self.eqn_schemes:
-            name = eqn.field_name
+        for name, scheme in self.schemes:
             scheme.apply(xn(name), xnp1(name))
+            xn(name).assign(xnp1(name))
 
     def run(self, t, tmax, pickup=False):
         """
@@ -259,11 +266,11 @@ class CrankNicolson(Timestepper):
 
 class PrescribedAdvection(Timestepper):
 
-    def __init__(self, state, eqn_schemes, physics_list=None,
+    def __init__(self, state, problem, physics_list=None,
                  prescribed_advecting_velocity=None):
 
         self.prescribed_advecting_velocity = prescribed_advecting_velocity
-        super().__init__(state, eqn_schemes=eqn_schemes,
+        super().__init__(state, problem,
                          physics_list=physics_list)
 
     @property
