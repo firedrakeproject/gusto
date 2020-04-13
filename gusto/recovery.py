@@ -129,7 +129,7 @@ class Boundary_Recoverer(object):
             DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
         DG1 = FunctionSpace(mesh, DG1_element)
 
-        self.num_ext = Function(DG0)
+        self.num_ext = find_domain_boundaries(mesh)
 
         # check function spaces of functions
         if self.method == Boundary_Method.dynamics:
@@ -430,16 +430,15 @@ def find_domain_boundaries(mesh):#!! remember to remove this
     Makes a scalar DG0 function whose values are 0. everywhere except for in
     cells on the boundary of the domain, where the values are 1.0.
     This allows boundary cells to be identified easily.
-    :arg CG1: a CG1 field.
+    :arg mesh: the mesh.
     """
 
     DG0 = FunctionSpace(mesh, "DG", 0)
-    CG1 = FunctionSpace(mesh, "CG", 1)
 
-    on_exterior = Function(CG1)
+    on_exterior = Function(DG0)
 
     bc_codes = ['on_boundary', 'top', 'bottom']
-    bcs = [DirichletBC(CG1, Constant(1.0), bc_code, method='geometric') for bc_code in bc_codes]
+    bcs = [DirichletBC(DG0, Constant(1.0), bc_code, method='geometric') for bc_code in bc_codes]
 
     for bc in bcs:
         try:
@@ -447,23 +446,4 @@ def find_domain_boundaries(mesh):#!! remember to remove this
         except ValueError:
             pass
 
-    sum_exterior = Function(DG0).interpolate(Constant(0.0))
-
-    shapes = {"nDOFs": CG1.finat_element.space_dimension()}
-
-    num_ext_domain = ("{{[i]: 0 <= i < {nDOFs}}}").format(**shapes)
-    num_ext_instructions = ("""
-                            for i
-                                SUM_EXT[0] = SUM_EXT[0] + ON_EXT[i]
-                            end
-                            """)
-
-    _num_ext_kernel = (num_ext_domain, num_ext_instructions)
-
-    # find number of external DOFs per cell
-    par_loop(_num_ext_kernel, dx,
-             {"SUM_EXT": (sum_exterior, WRITE),
-              "ON_EXT": (on_exterior, READ)},
-             is_loopy_kernel=True)
-
-    return sum_exterior
+    return on_exterior
