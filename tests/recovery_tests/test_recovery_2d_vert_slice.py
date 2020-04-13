@@ -19,6 +19,7 @@ import pytest
 
 np.random.seed(0)
 
+
 @pytest.fixture
 def mesh(geometry):
 
@@ -39,6 +40,7 @@ def mesh(geometry):
 
     return extruded_mesh
 
+
 @pytest.fixture
 def expr(geometry, mesh):
 
@@ -50,6 +52,7 @@ def expr(geometry, mesh):
         analytic_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * z
 
     return analytic_expr
+
 
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
 def test_vertical_slice_recovery(geometry, mesh, expr):

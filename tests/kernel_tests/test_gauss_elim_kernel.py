@@ -3,12 +3,11 @@ A test of the Gaussian elimination kernel used for the BoundaryRecoverer.
 """
 
 from firedrake import (IntervalMesh, FunctionSpace, Function, RectangleMesh,
-                       VectorFunctionSpace, FiniteElement, dx)
-from firedrake.parloops import par_loop, READ, INC, WRITE
+                       VectorFunctionSpace, FiniteElement)
 
 from gusto import kernels
-import numpy as np
 import pytest
+
 
 @pytest.fixture
 def mesh(geometry):
@@ -58,14 +57,14 @@ def setup_values(geometry, field_init, field_true,
         field_true.dat.data[1] = -1.0
         field_true.dat.data[2] = -3.0
         field_true.dat.data[3] = 1.0
-        act_coords.dat.data[0,:] = [0.0, 0.0]
-        act_coords.dat.data[1,:] = [1.0, 0.0]
-        act_coords.dat.data[2,:] = [0.0, 1.0]
-        act_coords.dat.data[3,:] = [1.0, 1.0]
-        eff_coords.dat.data[0,:] = [0.5, 0.5]
-        eff_coords.dat.data[1,:] = [1.0, 0.5]
-        eff_coords.dat.data[2,:] = [0.5, 1.0]
-        eff_coords.dat.data[3,:] = [1.0, 1.0]
+        act_coords.dat.data[0, :] = [0.0, 0.0]
+        act_coords.dat.data[1, :] = [1.0, 0.0]
+        act_coords.dat.data[2, :] = [0.0, 1.0]
+        act_coords.dat.data[3, :] = [1.0, 1.0]
+        eff_coords.dat.data[0, :] = [0.5, 0.5]
+        eff_coords.dat.data[1, :] = [1.0, 0.5]
+        eff_coords.dat.data[2, :] = [0.5, 1.0]
+        eff_coords.dat.data[3, :] = [1.0, 1.0]
 
     return field_init, field_true, act_coords, eff_coords
 
@@ -95,13 +94,7 @@ def test_gaussian_elimination(geometry, mesh):
                                                                   eff_coords)
 
     kernel = kernels.GaussianElimination(DG1)
-    par_loop(kernel, dx,
-             {"DG1_OLD": (field_init, READ),
-              "DG1": (field_final, WRITE),
-              "ACT_COORDS": (act_coords, READ),
-              "EFF_COORDS": (eff_coords, READ),
-              "NUM_EXT": (num_ext, READ)},
-             is_loopy_kernel=True)
+    kernel.apply(field_init, field_final, act_coords, eff_coords, num_ext)
 
     tolerance = 1e-12
     assert abs(field_true.dat.data[0] - field_final.dat.data[0]) < tolerance

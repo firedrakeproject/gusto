@@ -15,6 +15,7 @@ import pytest
 
 np.random.seed(0)
 
+
 @pytest.fixture
 def mesh(geometry):
 
@@ -28,6 +29,7 @@ def mesh(geometry):
         m = IntervalMesh(ncolumnsx, Lx)
 
     return m
+
 
 @pytest.fixture
 def expr(geometry, mesh):
