@@ -60,13 +60,12 @@ def expr(geometry, mesh):
         analytic_expr = np.random.randn() + np.random.randn() * x
     elif geometry == "non-periodic":
         analytic_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * y
-        analytic_expr = 1.0 + 1.0 * x + 1.0 * y# remove
     return analytic_expr
 
 
-@pytest.mark.parametrize("geometry", ["non-periodic"])#,
-                                      #"periodic-in-y", "non-periodic"])#restore periodic-in-both and periodic in y and non-periodic
-@pytest.mark.parametrize("element", ["triangular"])#restore quadrilateral
+@pytest.mark.parametrize("geometry", ["periodic-in-both", "periodic-in-x",
+                                      "periodic-in-y", "non-periodic"])
+@pytest.mark.parametrize("element", ["quadrilateral", "triangular"])
 def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     family = "RTCF" if element == "quadrilateral" else "BDM"
@@ -97,12 +96,10 @@ def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     # make the recoverers and do the recovery
     rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    #v_recoverer = Recoverer(v_Vu, v_CG1, VDG=vec_DG1, boundary_method=Boundary_Method.dynamics)
+    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=vec_DG1, boundary_method=Boundary_Method.dynamics)
 
     rho_recoverer.project()
-    #v_recoverer.project()
-    import pdb; pdb.set_trace()
-
+    v_recoverer.project()
 
     rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
     v_diff = errornorm(v_CG1, v_CG1_true) / norm(v_CG1_true)

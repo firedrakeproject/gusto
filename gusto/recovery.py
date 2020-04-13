@@ -187,8 +187,6 @@ class Boundary_Recoverer(object):
             self.top_kernel.apply(self.v_DG1, self.v_CG1)
 
         else:
-            for eff, act in zip(self.eff_coords.dat.data[:], self.act_coords.dat.data[:]):
-                print(eff, act)
             self.v_DG1_old.assign(self.v_DG1)
             self.gaussian_elimination_kernel.apply(self.v_DG1_old,
                                                    self.v_DG1,
@@ -434,16 +432,21 @@ def find_domain_boundaries(mesh):#!! remember to remove this
     """
 
     DG0 = FunctionSpace(mesh, "DG", 0)
+    CG1 = FunctionSpace(mesh, "CG", 1)
 
-    on_exterior = Function(DG0)
+    on_exterior_DG0 = Function(DG0)
+    on_exterior_CG1 = Function(CG1)
 
+    # we get values in CG1 initially as DG0 will not work for triangular elements
     bc_codes = ['on_boundary', 'top', 'bottom']
-    bcs = [DirichletBC(DG0, Constant(1.0), bc_code, method='geometric') for bc_code in bc_codes]
+    bcs = [DirichletBC(CG1, Constant(1.0), bc_code, method='geometric') for bc_code in bc_codes]
 
     for bc in bcs:
         try:
-            bc.apply(on_exterior)
+            bc.apply(on_exterior_CG1)
         except ValueError:
             pass
 
-    return on_exterior
+    on_exterior_DG0.interpolate(on_exterior_CG1)
+
+    return on_exterior_DG0
