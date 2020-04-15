@@ -262,8 +262,7 @@ class State(object):
         # The mesh
         self.mesh = mesh
 
-        # Build the spaces
-        self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
+        self.spaces = SpaceCreator()
 
         if self.output.dumplist is None:
             self.output.dumplist = []
@@ -511,7 +510,6 @@ class State(object):
         mixed function space self.W = (V2,V3,Vt)
         """
 
-        self.spaces = SpaceCreator()
         if vertical_degree is not None:
             # horizontal base spaces
             cell = mesh._base_mesh.ufl_cell().cellname()

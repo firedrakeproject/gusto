@@ -29,10 +29,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, alpha=0.5, solver_parameters=None,
+    def __init__(self, state, equations, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.equations = equations
         self.alpha = alpha
 
         if solver_parameters is not None:
@@ -118,7 +119,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, state, alpha=0.5,
+    def __init__(self, state, equations, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
@@ -142,7 +143,7 @@ class CompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
-        super().__init__(state, alpha, solver_parameters,
+        super().__init__(state, equations, alpha, solver_parameters,
                          overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
@@ -540,7 +541,7 @@ class ShallowWaterSolver(TimesteppingSolver):
         g = Constant(g_)
 
         # Split up the rhs vector (symbolically)
-        W = state.W
+        W = self.equations.function_space
         self.xrhs = Function(W)
         u_in, D_in = split(self.xrhs)
 
@@ -572,7 +573,7 @@ class ShallowWaterSolver(TimesteppingSolver):
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result dy.
         """
 
         self.xrhs.assign(xrhs)

@@ -174,9 +174,12 @@ class ShallowWaterEquations(PrognosticEquation):
 
         mesh = state.mesh
         cell = mesh.ufl_cell().cellname()
-        V1_elt = FiniteElement(family, cell, horizontal_degree+1)
-
+        V1_elt = FiniteElement(family, cell, horizontal_degree+1,
+                               variant="equispaced")
         V1 = state.spaces("HDiv", mesh, V1_elt)
-        V2 = state.spaces("DG", mesh, "DG", horizontal_degree)
+
+        DG_elt = FiniteElement("DG", cell, horizontal_degree,
+                               variant="equispaced")
+        V2 = state.spaces("DG", mesh, DG_elt)
 
         return V1, V2

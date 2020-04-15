@@ -68,7 +68,7 @@ def setup_sw(dirname, euler_poincare):
     advected_fields.append((ImplicitMidpoint(state, "u")))
     advected_fields.append((SSPRK3(state, "D")))
 
-    linear_solver = ShallowWaterSolver(state)
+    linear_solver = ShallowWaterSolver(state, eqns)
 
     # build time stepper
     stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
