@@ -1,7 +1,7 @@
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, Function)
+                       as_vector, FunctionSpace)
 from math import pi
 from netCDF4 import Dataset
 import pytest
@@ -21,7 +21,6 @@ def setup_sw(dirname, euler_poincare):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    fieldlist = ['u', 'D']
     dt = 1500.
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
@@ -44,52 +43,39 @@ def setup_sw(dirname, euler_poincare):
                          ZonalComponent('u'),
                          RadialComponent('u')]
 
-    state = State(mesh, vertical_degree=None, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+                  diagnostic_fields=diagnostic_fields)
+
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1,
+                                 fexpr=fexpr)
 
     # interpolate initial conditions
     u0 = state.fields("u")
     D0 = state.fields("D")
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    Omega = parameters.Omega
     g = parameters.g
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([('u', u0),
-                      ('D', D0)])
 
-    if euler_poincare:
-        ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
-    else:
-        ueqn = VectorInvariant(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
-
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", ImplicitMidpoint(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+    advected_fields.append((ImplicitMidpoint(state, "u")))
+    advected_fields.append((SSPRK3(state, "D")))
 
     linear_solver = ShallowWaterSolver(state)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
+    f = state.fields("coriolis")
     vrel_analytical = state.fields("AnalyticalRelativeVorticity", vspace)
     vrel_analytical.interpolate(vexpr)
     vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", vspace)

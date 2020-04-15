@@ -1,14 +1,13 @@
 from enum import Enum
-from firedrake import (Function, TestFunction, FacetNormal,
+from firedrake import (Function, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_t, ds_b, VectorElement,
+                       ds_v, ds_t, ds_b,
                        outer, sign, cross, CellNormal,
-                       curl, BrokenElement)
-from gusto.form_manipulation_labelling import (advection, advecting_velocity,
-                                               subject)
+                       curl)
+from gusto.form_manipulation_labelling import advection, advecting_velocity
 
 
-__all__ = ["IntegrateByParts", "advection_form", "continuity_form"]
+__all__ = ["IntegrateByParts", "advection_form", "continuity_form", "vector_invariant_form"]
 
 
 class IntegrateByParts(Enum):
@@ -17,34 +16,9 @@ class IntegrateByParts(Enum):
     TWICE = 2
 
 
-def surface_measures(V):
-    """
-    Function returning the correct surface measures to use for the
-    given function space, V, based on its continuity and also on
-    whether the underlying mesh is extruded.
-    """
-    if V.extruded:
-        # if the mesh is extruded we need both the vertical and
-        # horizontal interior facets
-        return (dS_v + dS_h)
-    else:
-        # if we're here we're discontinuous in some way, but not
-        # on an extruded mesh so things are easy
-        return dS
+def linear_advection_form(state, test, qbar, ibp=IntegrateByParts.NEVER):
 
-
-def setup_functions(state, V):
-    q = Function(V)
-    test = TestFunction(V)
     ubar = Function(state.spaces("HDiv"))
-    dS_ = surface_measures(V)
-
-    return q, test, ubar, dS_
-
-
-def linear_advection_form(state, V, qbar, ibp=IntegrateByParts.NEVER):
-
-    _, test, ubar, _ = setup_functions(state, V)
 
     L = test*dot(ubar, state.k)*dot(state.k, grad(qbar))*dx
 
@@ -53,39 +27,42 @@ def linear_advection_form(state, V, qbar, ibp=IntegrateByParts.NEVER):
     return advection(form)
 
 
-def linear_continuity_form(state, V, qbar):
+def linear_continuity_form(state, test, qbar):
 
-    _, test, ubar, _ = setup_functions(state, V)
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
     n = FacetNormal(state.mesh)
 
-    L = (-dot(grad(test), ubar)*qbar*dx + jump(ubar*test, n)*avg(qbar)*dS)
+    L = -dot(grad(test), ubar)*qbar*dx + jump(ubar*test, n)*avg(qbar)*dS_
 
     form = advecting_velocity(L, ubar)
 
     return advection(form)
 
 
-def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
+def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
-
-    q, test, ubar, dS = setup_functions(state, V)
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(div(outer(test, ubar)), q)*dx
     else:
         L = inner(outer(test, ubar), grad(q))*dx
 
-    if dS is not None and ibp != IntegrateByParts.NEVER:
+    if ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     if outflow:
         n = FacetNormal(state.mesh)
@@ -93,32 +70,32 @@ def advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
         L += test*un*q*(ds_v + ds_t + ds_b)
 
     form = advecting_velocity(L, ubar)
-    form = subject(form, q)
 
     return advection(form)
 
 
-def continuity_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
+def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
-
-    q, test, ubar, dS = setup_functions(state, V)
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
         L = -inner(grad(test), outer(q, ubar))*dx
     else:
         L = inner(test, div(outer(q, ubar)))*dx
 
-    if dS is not None and ibp != IntegrateByParts.NEVER:
+    if ibp != IntegrateByParts.NEVER:
         n = FacetNormal(state.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
-        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS
+        L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
 
         if ibp == IntegrateByParts.TWICE:
             L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     if outflow:
         n = FacetNormal(state.mesh)
@@ -126,46 +103,47 @@ def continuity_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
         L += test*un*q*(ds_v + ds_t + ds_b)
 
     form = advecting_velocity(L, ubar)
-    form = subject(form, q)
 
     return advection(form)
 
 
-def vector_manifold_advection_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
+def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
-    q, test, ubar, dS = setup_functions(state, V)
+    L = advection_form(state, test, q, ibp, outflow)
 
-    L = advection_form(state, V, ibp, outflow)
-
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
-    L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
-    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
+    L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
+    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
 
     return L
 
 
-def vector_manifold_continuity_form(state, V, *, ibp=IntegrateByParts.ONCE, outflow=False):
+def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
-    q, test, ubar, dS = setup_functions(state, V)
+    L = continuity_form(state, test, q, ibp, outflow)
 
-    L = continuity_form(state, V, ibp, outflow)
-
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
     n = FacetNormal(state.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
-    L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS
-    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS
+    L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
+    L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
 
     form = advecting_velocity(L, ubar)
-    form = subject(form, q)
 
     return advection(form)
 
 
-def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
 
-    q, test, ubar, dS = setup_functions(state, V)
-
+    Vu = state.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
     n = FacetNormal(state.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
 
@@ -184,7 +162,7 @@ def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
         L = (
             inner(q, curl(cross(ubar, test)))*dx
             - inner(both(Upwind*q),
-                    both(cross(n, cross(ubar, test))))*dS
+                    both(cross(n, cross(ubar, test))))*dS_
         )
 
     else:
@@ -200,43 +178,40 @@ def vector_invariant_form(state, V, *, ibp=IntegrateByParts.ONCE):
             L = (
                 -inner(perp(grad(inner(test, perp(ubar)))), q)*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS
+                        perp_u_upwind(q))*dS_
             )
         else:
             L = (
                 (-inner(test, div(perp(q))*perp(ubar)))*dx
                 - inner(jump(inner(test, perp(ubar)), n),
-                        perp_u_upwind(q))*dS
+                        perp_u_upwind(q))*dS_
                 + jump(inner(test,
-                             perp(ubar))*perp(q), n)*dS
+                             perp(ubar))*perp(q), n)*dS_
             )
 
     L -= 0.5*div(test)*inner(q, ubar)*dx
 
     form = advecting_velocity(L, ubar)
-    form = subject(form, q)
 
     return advection(form)
 
 
-def kinetic_energy_form(state, V):
+def kinetic_energy_form(state, test, q):
 
-    q, test, ubar, _ = setup_functions(state, V)
-
+    ubar = Function(state.spaces("HDiv"))
     L = 0.5*div(test)*inner(q, ubar)*dx
 
     form = advecting_velocity(L, ubar)
-    form = subject(form, q)
 
     return advection(form)
 
 
-def advection_equation_circulation_form(state, V, *,
+def advection_equation_circulation_form(state, test, q,
                                         ibp=IntegrateByParts.ONCE):
 
     form = (
-        vector_invariant_form(state, V, ibp=ibp)
-        - kinetic_energy_form(state, V)
+        vector_invariant_form(state, test, q, ibp=ibp)
+        - kinetic_energy_form(state, test, q)
     )
 
     return form

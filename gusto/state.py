@@ -29,16 +29,23 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
 
-    def __init__(self, field_fs):
+    def __init__(self, equations):
         self.fields = []
-        for name, fs in field_fs:
-            func = Function(fs)
-            self.add_field(name, func)
+        for eqn in equations:
+            subfield_names = eqn.field_names if hasattr(eqn, "field_names") else None
+            self.add_field(eqn.field_name, eqn.function_space, subfield_names)
 
-    def add_field(self, name, value):
+    def add_field(self, name, space, subfield_names=None):
+        value = Function(space, name=name)
         setattr(self, name, value)
-        value.rename(name)
         self.fields.append(value)
+
+        if len(space) > 1:
+            assert len(space) == len(subfield_names)
+            for field_name, field in zip(subfield_names, value.split()):
+                setattr(self, field_name, field)
+                field.rename(field_name)
+                self.fields.append(field)
 
     def __call__(self, name, space=None):
         return getattr(self, name)
@@ -51,25 +58,24 @@ class StateFields(FieldCreator):
 
     def __init__(self, *fields_to_dump):
         self.fields = []
-        self.fields_to_dump = set(fields_to_dump)
-        self.fields_to_pickup = set(())
+        self.output_specified = len(fields_to_dump) > 0
+        self.to_dump = set((fields_to_dump))
+        self.to_pickup = set(())
 
-    def add_field(self, name, value):
-        super().add_field(name, value)
-        value.dump = name in self.fields_to_dump
-        value.pickup = name in self.fields_to_pickup
-
-    def __call__(self, name, space=None, dump=True, pickup=True):
+    def __call__(self, name, space=None, subfield_names=None, dump=True,
+                 pickup=False):
         try:
             return getattr(self, name)
         except AttributeError:
-            if dump:
-                self.fields_to_dump.add(name)
+            self.add_field(name, space, subfield_names)
+            if not self.output_specified and dump:
+                if subfield_names is not None:
+                    self.to_dump.update(subfield_names)
+                else:
+                    self.to_dump.add(name)
             if pickup:
-                self.fields_to_pickup.add(name)
-            value = Function(space, name=name)
-            self.add_field(name, value)
-            return value
+                self.to_pickup.add(name)
+            return getattr(self, name)
 
 
 class PointDataOutput(object):
@@ -266,6 +272,8 @@ class State(object):
 
         self.dumpfile = None
 
+        self.bcs = []
+
         # figure out if we're on a sphere
         try:
             self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
@@ -359,7 +367,7 @@ class State(object):
                 comm=self.mesh.comm)
 
             # make list of fields to dump
-            self.to_dump = [field for field in self.fields if field.dump]
+            self.to_dump = [f for f in self.fields if f.name() in self.fields.to_dump]
 
             # make dump counter
             self.dumpcount = itertools.count()
@@ -410,7 +418,7 @@ class State(object):
                                         mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
-            self.to_pickup = [field for field in self.fields if field.pickup]
+            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
 
         # if we want to checkpoint then make a checkpoint counter
         if self.output.checkpoint:

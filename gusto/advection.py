@@ -3,11 +3,12 @@ from firedrake import (Function, TrialFunction, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, action, Constant, dot, grad, as_ufl)
+from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
-                                               advecting_velocity,
+                                               advecting_velocity, prognostic,
                                                all_terms, replace_subject,
                                                replace_test_function)
 from gusto.recovery import Recoverer
@@ -69,9 +70,11 @@ class Advection(object, metaclass=ABCMeta):
     :arg options: :class:`.AdvectionOptions` object
     """
 
-    def __init__(self, state, solver_parameters=None, limiter=None, options=None):
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 limiter=None, options=None):
 
         self.state = state
+        self.field_name = field_name
 
         self.dt = self.state.dt
 
@@ -95,19 +98,30 @@ class Advection(object, metaclass=ABCMeta):
 
     def setup(self, equation, uadv=None, *active_labels):
 
-        self.equation = equation
+        self.residual = equation.residual
+
+        if self.field_name is not None:
+            self.idx = equation.field_names.index(self.field_name)
+            self.fs = self.state.fields(self.field_name).function_space()
+            self.residual = self.residual.label_map(
+                lambda t: t.get(prognostic) == self.field_name,
+                lambda t: Term(
+                    split_form(t.form)[self.idx].form,
+                    t.labels),
+                drop)
+        else:
+            self.field_name = equation.field_name
+            self.fs = equation.function_space
+            self.idx = None
 
         if len(active_labels) > 0:
-            self.residual = equation.residual.label_map(
+            self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
                 map_if_false=drop)
-        else:
-            self.residual = equation.residual
 
         options = self.options
 
-        if uadv is not None:
-            self.replace_advecting_velocity(uadv)
+        self.replace_advecting_velocity(uadv)
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
@@ -118,13 +132,14 @@ class Advection(object, metaclass=ABCMeta):
                 self.fs = options.embedding_space
             self.xdg_in = Function(self.fs)
             self.xdg_out = Function(self.fs)
-            self.x_projected = Function(equation.function_space)
+            if self.idx is None:
+                self.x_projected = Function(equation.function_space)
+            else:
+                self.x_projected = Function(self.state.fields(self.field_name).function_space())
             new_test = TestFunction(self.fs)
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
-        else:
-            self.fs = equation.function_space
 
         if self.discretisation_option == "supg":
             # construct tau, if it is not specified
@@ -232,7 +247,7 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.trial),
+            map_if_true=replace_subject(self.trial, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -241,7 +256,7 @@ class Advection(object, metaclass=ABCMeta):
     def rhs(self):
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1))
+            map_if_true=replace_subject(self.q1, self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -252,6 +267,7 @@ class Advection(object, metaclass=ABCMeta):
     def replace_advecting_velocity(self, uadv):
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.residual]):
+            assert uadv is not None
             self.residual = self.residual.label_map(
                 lambda t: t.has_label(advecting_velocity),
                 map_if_true=lambda t: Term(ufl.replace(
@@ -263,7 +279,7 @@ class Advection(object, metaclass=ABCMeta):
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq)
-        solver_name = self.equation.field_name+self.equation.__class__.__name__+self.__class__.__name__
+        solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
@@ -291,9 +307,10 @@ class ExplicitAdvection(Advection):
     :arg limiter: :class:`.Limiter` object.
     """
 
-    def __init__(self, state, subcycles=None,
+    def __init__(self, state, field_name=None, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
-        super().__init__(state, solver_parameters=solver_parameters,
+        super().__init__(state, field_name,
+                         solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
         self.subcycles = subcycles
@@ -413,7 +430,7 @@ class BackwardEuler(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial))
+            map_if_true=replace_subject(self.trial, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -424,7 +441,7 @@ class BackwardEuler(Advection):
 
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.q1),
+            map_if_true=replace_subject(self.q1, self.idx),
             map_if_false=drop)
 
         return r.form
@@ -440,7 +457,8 @@ class ThetaMethod(Advection):
     Class to implement the theta timestepping method:
     y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
     """
-    def __init__(self, state, theta=None, solver_parameters=None, options=None):
+    def __init__(self, state, field_name=None, theta=None,
+                 solver_parameters=None, options=None):
 
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
@@ -451,7 +469,8 @@ class ThetaMethod(Advection):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        super().__init__(state, solver_parameters=solver_parameters,
+        super().__init__(state, field_name,
+                         solver_parameters=solver_parameters,
                          options=options)
 
         self.theta = theta
@@ -460,7 +479,7 @@ class ThetaMethod(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial))
+            map_if_true=replace_subject(self.trial, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
@@ -470,7 +489,7 @@ class ThetaMethod(Advection):
     def rhs(self):
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1))
+            map_if_true=replace_subject(self.q1, self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
@@ -489,6 +508,8 @@ class ImplicitMidpoint(ThetaMethod):
     y_(n+1) = y_n + 0.5*dt*(L(y_n) + L(y_(n+1)))
     where L is the advection operator.
     """
-    def __init__(self, state, solver_parameters=None, options=None):
-        super().__init__(state, theta=0.5, solver_parameters=solver_parameters,
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 options=None):
+        super().__init__(state, field_name, theta=0.5,
+                         solver_parameters=solver_parameters,
                          options=options)

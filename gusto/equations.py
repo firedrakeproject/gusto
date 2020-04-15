@@ -1,7 +1,11 @@
 from abc import ABCMeta
-from firedrake import TestFunction, Function, inner, dx
-from gusto.form_manipulation_labelling import subject, time_derivative
-from gusto.transport_equation import advection_form, continuity_form
+from firedrake import (TestFunction, Function, inner, dx, FiniteElement,
+                       FunctionSpace, MixedFunctionSpace, TestFunctions,
+                       div)
+from gusto.form_manipulation_labelling import (subject, time_derivative,
+                                               advection, prognostic)
+from gusto.transport_equation import (advection_form, continuity_form,
+                                      vector_invariant_form)
 from gusto.diffusion import interior_penalty_diffusion_form
 
 
@@ -23,12 +27,15 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.function_space = function_space
         self.field_name = field_name
 
-        # default is to dump the field unless user has specified
-        # otherwise when setting up the output parameters
-        dump = state.output.dumplist or True
-        state.fields(field_name, space=function_space, dump=dump, pickup=True)
-
-        state.diagnostics.register(field_name)
+        if len(function_space) > 1:
+            assert hasattr(self, "field_names")
+            state.fields(field_name, function_space,
+                         subfield_names=self.field_names)
+            for name in self.field_names:
+                state.diagnostics.register(name)
+        else:
+            state.fields(field_name, function_space)
+            state.diagnostics.register(field_name)
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -46,10 +53,10 @@ class AdvectionEquation(PrognosticEquation):
 
         test = TestFunction(function_space)
         q = Function(function_space)
-        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+        mass_form = time_derivative(inner(q, test)*dx)
 
-        self.residual = (
-            mass_form + advection_form(state, function_space, **kwargs)
+        self.residual = subject(
+            mass_form + advection_form(state, test, q, **kwargs), q
         )
 
 
@@ -68,10 +75,10 @@ class ContinuityEquation(PrognosticEquation):
 
         test = TestFunction(function_space)
         q = Function(function_space)
-        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+        mass_form = time_derivative(inner(q, test)*dx)
 
-        self.residual = (
-            mass_form + continuity_form(state, function_space, **kwargs)
+        self.residual = subject(
+            mass_form + continuity_form(state, test, q, **kwargs), q
         )
 
 
@@ -90,11 +97,11 @@ class DiffusionEquation(PrognosticEquation):
 
         test = TestFunction(function_space)
         q = Function(function_space)
-        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+        mass_form = time_derivative(inner(q, test)*dx)
 
-        self.residual = (
+        self.residual = subject(
             mass_form
-            + interior_penalty_diffusion_form(state, function_space, **kwargs)
+            + interior_penalty_diffusion_form(state, test, q, **kwargs), q
         )
 
 
@@ -117,10 +124,59 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 
         test = TestFunction(function_space)
         q = Function(function_space)
-        mass_form = subject(time_derivative(inner(q, test)*dx), q)
+        mass_form = time_derivative(inner(q, test)*dx)
 
-        self.residual = (
+        self.residual = subject(
             mass_form
-            + advection_form(state, function_space, **akwargs)
-            + interior_penalty_diffusion_form(state, function_space, **dkwargs)
+            + advection_form(state, test, q, **akwargs)
+            + interior_penalty_diffusion_form(state, test, q, **dkwargs), q
         )
+
+
+class ShallowWaterEquations(PrognosticEquation):
+
+    field_names = ["u", "D"]
+
+    def __init__(self, state, family, degree, fexpr=None):
+
+        spaces = self.build_spaces(state, family, degree)
+        W = MixedFunctionSpace(spaces)
+
+        field_name = "_".join(self.field_names)
+        super().__init__(state, W, field_name)
+
+        V = FunctionSpace(state.mesh, "CG", 1)
+        f = state.fields("coriolis", space=V)
+        f.interpolate(fexpr)
+
+        g = state.parameters.g
+
+        w, phi = TestFunctions(W)
+        X = Function(W)
+        u, D = X.split()
+
+        u_mass = prognostic(inner(u, w)*dx, "u")
+        D_mass = prognostic(inner(D, phi)*dx, "D")
+        mass_form = time_derivative(u_mass + D_mass)
+
+        u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+        D_adv = prognostic(continuity_form(state, phi, D), "D")
+        advection_form = advection(u_adv + D_adv)
+
+        coriolis_form = prognostic(f*inner(state.perp(u), w)*dx, "u")
+
+        pressure_gradient_form = prognostic(-g*div(w)*D*dx, "u")
+
+        self.residual = subject(mass_form + advection_form
+                                + coriolis_form + pressure_gradient_form, X)
+
+    def build_spaces(self, state, family, horizontal_degree):
+
+        mesh = state.mesh
+        cell = mesh.ufl_cell().cellname()
+        V1_elt = FiniteElement(family, cell, horizontal_degree+1)
+
+        V1 = state.spaces("HDiv", mesh, V1_elt)
+        V2 = state.spaces("DG", mesh, "DG", horizontal_degree)
+
+        return V1, V2
