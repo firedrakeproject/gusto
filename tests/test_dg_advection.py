@@ -16,13 +16,16 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
                              tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
-    V = state.spaces("DG")
-    f = state.fields("f", V)
-    f.interpolate(setup.f_init)
+    V = state.spaces("DG", "DG", 1)
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f")
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree)
     else:
-        eqn = ContinuityEquation(state, V, "f")
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree)
+    state.fields("f").interpolate(setup.f_init)
+    state.fields("u").project(setup.uexpr)
+
     if scheme == "ssprk":
         advection_scheme = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
@@ -37,15 +40,17 @@ def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
                              tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
-    V = VectorFunctionSpace(state.mesh, "DG", 1)
-    f = state.fields("f", V)
     gdim = state.mesh.geometric_dimension()
     f_init = as_vector((setup.f_init, *[0.]*(gdim-1)))
-    f.interpolate(f_init)
+    V = VectorFunctionSpace(state.mesh, "DG", 1)
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f")
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree)
     else:
-        eqn = ContinuityEquation(state, V, "f")
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree)
+    state.fields("f").interpolate(f_init)
+    state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
         advection_schemes = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":

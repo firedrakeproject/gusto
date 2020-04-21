@@ -7,17 +7,14 @@ def run(setup):
     state = setup.state
     tmax = setup.tmax
     f_init = setup.f_init
-    fspace = state.spaces("DG")
+    V = state.spaces("DG", "DG", 1)
 
-    u = state.fields("u", space=state.spaces("HDiv"))
-    u0 = 10.
-    u.project(as_vector([u0, 0.]))
-
-    equation = AdvectionDiffusionEquation(state, fspace, "f", kappa=1., mu=5)
+    equation = AdvectionDiffusionEquation(state, V, "f", ufamily=setup.family,
+                                          udegree=setup.degree, kappa=1., mu=5)
     problem = [(equation, ((SSPRK3(state), advection),
                            (BackwardEuler(state), diffusion)))]
-    f = state.fields("f")
-    f.interpolate(f_init)
+    state.fields("f").interpolate(f_init)
+    state.fields("u").project(as_vector([10, 0.]))
 
     timestepper = PrescribedAdvection(state, problem)
 

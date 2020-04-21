@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import PeriodicSquareMesh, exp, SpatialCoordinate, Constant, FunctionSpace
+from firedrake import PeriodicSquareMesh, exp, SpatialCoordinate, Constant
 
 
 def setup_gaussian(dirname):
@@ -7,45 +7,33 @@ def setup_gaussian(dirname):
     L = 1.
     mesh = PeriodicSquareMesh(n, n, L)
 
-    fieldlist = ['u', 'D']
     parameters = ShallowWaterParameters(H=1.0, g=1.0)
     dt = 0.1
     output = OutputParameters(dirname=dirname+'/sw_plane_gaussian_subcycled')
     diagnostic_fields = [CourantNumber()]
 
-    state = State(mesh, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+                  diagnostic_fields=diagnostic_fields)
 
-    u0 = state.fields("u")
+    eqns = ShallowWaterEquations(state, family="BDM", degree=1,
+                                 fexpr=Constant(1.))
+
     D0 = state.fields("D")
     x, y = SpatialCoordinate(mesh)
     H = Constant(state.parameters.H)
     D0.interpolate(H + exp(-50*((x-0.5)**2 + (y-0.5)**2)))
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", V)
-    f.interpolate(Constant(1.))  # Coriolis frequency (1/s)
 
-    state.initialise([("u", u0), ("D", D0)])
-
-    ueqn = EmbeddedDGAdvection(state, u0.function_space(), options=EmbeddedDGOptions())
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
     advected_fields = []
-    advected_fields.append(("u", SSPRK3(state, u0, ueqn, subcycles=2)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
+    advected_fields.append((SSPRK3(state, "u", options=EmbeddedDGOptions(), subcycles=2)))
+    advected_fields.append((SSPRK3(state, "D", subcycles=2)))
 
-    linear_solver = ShallowWaterSolver(state)
-
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state)
+    linear_solver = ShallowWaterSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
 
     return stepper
 

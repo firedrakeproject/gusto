@@ -23,15 +23,14 @@ def setup_limiters(dirname):
     output = OutputParameters(dirname=dirname, dumpfreq=1, dumplist=['u', 'chemical', 'moisture_higher', 'moisture_lower'])
     parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters)
 
     # set up the function spaces:
-    Vr = state.spaces("DG")
-    Vt = state.spaces("HDiv_v")
+    Vr = state.spaces("DG", "DG", 1)
+    Vt = state.spaces("theta", degree=1)
     Vpsi = FunctionSpace(mesh, "CG", 2)
 
     cell = mesh._base_mesh.ufl_cell().cellname()
@@ -43,13 +42,13 @@ def setup_limiters(dirname):
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
     # set up the equations:
-    chemeqn = AdvectionEquation(state, Vr, "chemical")
+    chemeqn = AdvectionEquation(state, Vr, "chemical", ufamily="CG", udegree=1)
     moisteqn_higher = AdvectionEquation(state, Vt, "moisture_higher")
     moisteqn_lower = AdvectionEquation(state, Vt0, "moisture_lower")
 
     x, z = SpatialCoordinate(mesh)
 
-    u = state.fields("u", state.spaces("HDiv"))
+    u = state.fields("u")
 
     x_lower = 2 * Ld / 5
     x_upper = 3 * Ld / 5

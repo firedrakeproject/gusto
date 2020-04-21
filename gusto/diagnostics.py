@@ -86,7 +86,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
     def setup(self, state, space=None):
         if not self._initialised:
             if space is None:
-                space = state.spaces("DG0", state.mesh, "DG", 0)
+                space = state.spaces("DG0", "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
             self._initialised = True
 
@@ -122,7 +122,7 @@ class VelocityX(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityX, self).setup(state, space=space)
 
     def compute(self, state):
@@ -136,7 +136,7 @@ class VelocityZ(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityZ, self).setup(state, space=space)
 
     def compute(self, state):
@@ -150,7 +150,7 @@ class VelocityY(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityY, self).setup(state, space=space)
 
     def compute(self, state):
@@ -385,7 +385,7 @@ class ExnerPi(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(ExnerPi, self).setup(state, space=space)
 
     def compute(self, state):
@@ -641,7 +641,7 @@ class Precipitation(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("DG0", state.mesh, "DG", 0)
+            space = state.spaces("DG0", "DG", 0)
             super().setup(state, space=space)
 
             rain = state.fields('rain')
@@ -685,7 +685,7 @@ class Vorticity(DiagnosticField):
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
-            except AttributeError:
+            except UnboundLocalError:
                 dgspace = state.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)

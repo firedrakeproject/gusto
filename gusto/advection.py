@@ -126,7 +126,7 @@ class Advection(object, metaclass=ABCMeta):
         if self.discretisation_option in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
             if options.embedding_space is None:
-                V_elt = BrokenElement(equation.function_space.ufl_element())
+                V_elt = BrokenElement(self.fs.ufl_element())
                 self.fs = FunctionSpace(self.state.mesh, V_elt)
             else:
                 self.fs = options.embedding_space

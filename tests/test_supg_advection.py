@@ -1,4 +1,4 @@
-from firedrake import norm, FunctionSpace, VectorFunctionSpace, as_vector
+from firedrake import norm, VectorFunctionSpace, as_vector
 from gusto import *
 import pytest
 
@@ -11,7 +11,7 @@ def run(state, advection_scheme, tmax, f_end):
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
-@pytest.mark.parametrize("space", ["CG", "HDiv_v"])
+@pytest.mark.parametrize("space", ["CG", "theta"])
 def test_supg_advection_scalar(tmpdir, equation_form, scheme, space,
                                tracer_setup):
 
@@ -19,20 +19,22 @@ def test_supg_advection_scalar(tmpdir, equation_form, scheme, space,
     state = setup.state
 
     if space == "CG":
-        V = FunctionSpace(state.mesh, "CG", 1)
+        V = state.spaces("CG1", "CG", 1)
         ibp = IntegrateByParts.NEVER
     else:
-        V = state.spaces(space)
+        V = state.spaces("theta", degree=1)
         ibp = IntegrateByParts.TWICE
-    f = state.fields("f", V)
-    f.interpolate(setup.f_init)
 
     opts = SUPGOptions()
 
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree, ibp=ibp)
     else:
-        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree, ibp=ibp)
+    state.fields("f").interpolate(setup.f_init)
+    state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
         advection_scheme = [(eqn, SSPRK3(state, options=opts))]
     elif scheme == "implicit_midpoint":
@@ -49,32 +51,34 @@ def test_supg_advection_vector(tmpdir, equation_form, scheme, space,
 
     setup = tracer_setup(tmpdir, geometry="slice")
     state = setup.state
-    tmax = setup.tmax
-    tol = setup.tol
 
     gdim = state.mesh.geometric_dimension()
     f_init = as_vector((setup.f_init, *[0.]*(gdim-1)))
     if space == "CG":
         V = VectorFunctionSpace(state.mesh, "CG", 1)
-        f = state.fields("f", V)
-        f.interpolate(f_init)
         ibp = IntegrateByParts.NEVER
     else:
-        V = state.spaces(space)
-        f = state.fields("f", V)
-        f.project(f_init)
+        V = state.spaces("HDiv", setup.family, setup.degree)
         ibp = IntegrateByParts.TWICE
 
     opts = SUPGOptions()
 
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree, ibp=ibp)
     else:
-        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree, ibp=ibp)
+    f = state.fields("f")
+    try:
+        f.interpolate(f_init)
+    except NotImplementedError:
+        f.project(f_init)
+    state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
         advection_scheme = [(eqn, SSPRK3(state, options=opts))]
     elif scheme == "implicit_midpoint":
         advection_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
 
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
-    assert run(state, advection_scheme, tmax, f_end) < tol
+    assert run(state, advection_scheme, setup.tmax, f_end) < setup.tol

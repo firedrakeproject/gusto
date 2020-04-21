@@ -18,13 +18,96 @@ __all__ = ["State"]
 
 class SpaceCreator(object):
 
-    def __call__(self, name, mesh=None, family=None, degree=None):
+    def __init__(self, mesh):
+        self.mesh = mesh
+        self.extruded_mesh = hasattr(mesh, "_base_mesh")
+        self._initialised_base_spaces = False
+
+    def __call__(self, name, family=None, degree=None):
         try:
             return getattr(self, name)
         except AttributeError:
-            value = FunctionSpace(mesh, family, degree)
+            if name == "HDiv" and family in ["BDM", "RT", "CG"]:
+                value = self.build_hdiv_space(family, degree)
+            elif name == "theta":
+                value = self.build_theta_space(degree)
+            elif family == "DG":
+                value = self.build_dg_space(degree)
+            elif family == "CG":
+                value = self.build_cg_space(degree)
             setattr(self, name, value)
             return value
+
+    def build_compatible_spaces(self, family, degree):
+        if self.extruded_mesh and not self._initialised_base_spaces:
+            self.build_base_spaces(family, degree)
+            Vu = self.build_hdiv_space(family, degree)
+            setattr(self, "HDiv", Vu)
+            Vth = self.build_theta_space(degree)
+            setattr(self, "theta", Vth)
+            Vdg = self.build_dg_space(degree)
+            setattr(self, "DG", Vdg)
+            return Vu, Vth, Vdg
+        else:
+            Vu = self.build_hdiv_space(family, degree)
+            setattr(self, "HDiv", Vu)
+            Vdg = self.build_dg_space(degree)
+            setattr(self, "DG", Vdg)
+            return Vu, Vdg
+
+    def build_base_spaces(self, family, degree):
+
+        cell = self.mesh._base_mesh.ufl_cell().cellname()
+
+        # horizontal base spaces
+        self.S1 = FiniteElement(family, cell, degree+1, variant="equispaced")
+        self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+
+        # vertical base spaces
+        self.T0 = FiniteElement("CG", interval, degree+1, variant="equispaced")
+        self.T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+
+        self._initialised_base_spaces = True
+
+    def build_hdiv_space(self, family, degree):
+        if self.extruded_mesh and not self._initialised_base_spaces:
+            self.build_base_spaces(family, degree)
+            Vh_elt = HDiv(TensorProductElement(self.S1, self.T1))
+            Vt_elt = TensorProductElement(self.S2, self.T0)
+            Vv_elt = HDiv(Vt_elt)
+            V_elt = Vh_elt + Vv_elt
+        else:
+            cell = self.mesh.ufl_cell().cellname()
+            V_elt = FiniteElement(family, cell, degree+1,
+                                  variant="equispaced")
+        return FunctionSpace(self.mesh, V_elt)
+
+    def build_dg_space(self, degree):
+        if self.extruded_mesh:
+            if not self._initialised_base_spaces:
+                cell = self.mesh._base_mesh.ufl_cell().cellname()
+                self.S2 = FiniteElement("DG", cell, degree,
+                                        variant="equispaced")
+                self.T1 = FiniteElement("DG", interval, degree,
+                                        variant="equispaced")
+            V_elt = TensorProductElement(self.S2, self.T1)
+        else:
+            cell = self.mesh.ufl_cell().cellname()
+            V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
+        return FunctionSpace(self.mesh, V_elt)
+
+    def build_theta_space(self, degree):
+        assert self.extruded_mesh
+        if not self._initialised_base_spaces:
+            cell = self.mesh._base_mesh.ufl_cell().cellname()
+            self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+            self.T0 = FiniteElement("CG", interval, degree+1,
+                                    variant="equispaced")
+        V_elt = TensorProductElement(self.S2, self.T0)
+        return FunctionSpace(self.mesh, V_elt)
+
+    def build_cg_space(self, degree):
+        return FunctionSpace(self.mesh, "CG", degree)
 
 
 class FieldCreator(object):
@@ -47,7 +130,7 @@ class FieldCreator(object):
                 field.rename(field_name)
                 self.fields.append(field)
 
-    def __call__(self, name, space=None):
+    def __call__(self, name):
         return getattr(self, name)
 
     def __iter__(self):
@@ -208,18 +291,6 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
-    :arg vertical_degree: integer, required for vertically extruded meshes.
-    Specifies the degree for the pressure space in the vertical
-    (the degrees for other spaces are inferred). Defaults to None.
-    :arg horizontal_degree: integer, the degree for spaces in the horizontal
-    (specifies the degree for the pressure space, other spaces are inferred)
-    defaults to 1.
-    :arg family: string, specifies the velocity space family to use.
-    Options:
-    "RT": The Raviart-Thomas family (default, recommended for quads)
-    "BDM": The BDM family
-    "BDFM": The BDFM family
-    :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
@@ -227,21 +298,16 @@ class State(object):
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
-                 family="RT",
+    def __init__(self, mesh,
                  dt=None,
-                 Coriolis=None, sponge_function=None,
+                 sponge_function=None,
                  hydrostatic=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
 
-        self.family = family
-        self.vertical_degree = vertical_degree
-        self.horizontal_degree = horizontal_degree
         self.dt = dt
-        self.Omega = Coriolis
         self.mu = sponge_function
         self.hydrostatic = hydrostatic
         if output is None:
@@ -262,7 +328,7 @@ class State(object):
         # The mesh
         self.mesh = mesh
 
-        self.spaces = SpaceCreator()
+        self.spaces = SpaceCreator(mesh)
 
         if self.output.dumplist is None:
             self.output.dumplist = []

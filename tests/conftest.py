@@ -5,7 +5,7 @@ from gusto import *
 from collections import namedtuple
 import pytest
 
-opts = ('state', 'tmax', 'f_init', 'f_end', 'tol')
+opts = ('state', 'tmax', 'f_init', 'f_end', 'family', 'degree', 'uexpr', 'tol')
 TracerSetup = namedtuple('TracerSetup', opts)
 TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
@@ -19,18 +19,16 @@ def tracer_sphere(tmpdir):
 
     dt = pi/3. * 0.02
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
-    state = State(mesh, horizontal_degree=1, family="BDM", dt=dt,
-                  output=output)
+    state = State(mesh, dt=dt, output=output)
 
-    u = state.fields("u", space=state.spaces("HDiv"))
-    u.project(as_vector([-x[1], x[0], 0.0]))
+    uexpr = as_vector([-x[1], x[0], 0.0])
 
     tmax = pi/2
     f_init = exp(-x[2]**2 - x[0]**2)
     f_end = exp(-x[2]**2 - x[1]**2)
     tol = 2.5e-2
 
-    return TracerSetup(state, tmax, f_init, f_end, tol)
+    return TracerSetup(state, tmax, f_init, f_end, "BDM", 1, uexpr, tol)
 
 
 def tracer_slice(tmpdir):
@@ -39,11 +37,9 @@ def tracer_slice(tmpdir):
 
     dt = 0.02
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG", dt=dt, output=output)
+    state = State(mesh, dt=dt, output=output)
 
-    u = state.fields("u", space=state.spaces("HDiv"))
-    u.project(as_vector([1.0, 0.0]))
+    uexpr = as_vector([1.0, 0.0])
 
     tmax = 2.5
     x = SpatialCoordinate(mesh)
@@ -51,7 +47,7 @@ def tracer_slice(tmpdir):
     f_end = sin(2*pi*(x[0]-0.5))*sin(2*pi*x[1])
     tol = 7e-2
 
-    return TracerSetup(state, tmax, f_init, f_end, tol)
+    return TracerSetup(state, tmax, f_init, f_end, "CG", 1, uexpr, tol)
 
 
 def tracer_blob_slice(tmpdir):
@@ -61,14 +57,13 @@ def tracer_blob_slice(tmpdir):
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG", dt=dt, output=output)
+    state = State(mesh, dt=dt, output=output)
 
     tmax = 1.
     x = SpatialCoordinate(mesh)
     f_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
 
-    return TracerSetup(state, tmax, f_init)
+    return TracerSetup(state, tmax, f_init, family="CG", degree=1)
 
 
 @pytest.fixture()

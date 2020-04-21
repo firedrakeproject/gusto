@@ -28,16 +28,19 @@ def test_diffusion(tmpdir, vector, DG, tracer_setup):
         if DG:
             V = VectorFunctionSpace(state.mesh, "DG", 1)
         else:
-            V = state.spaces("HDiv")
+            V = state.spaces("HDiv", "CG", 1)
         f_init = as_vector([f_init, 0.])
         f_end_expr = as_vector([f_end_expr, 0.])
     else:
         if DG:
-            V = state.spaces("DG")
+            V = state.spaces("DG", "DG", 1)
         else:
-            V = state.spaces("HDiv_v")
+            V = state.spaces("theta", degree=1)
 
-    f = state.fields("f", V)
+    mu = 5.
+
+    eqn = DiffusionEquation(state, V, "f", kappa=kappa, mu=mu)
+    f = state.fields("f")
     f_end = state.fields("f_end", V)
     try:
         f.interpolate(f_init)
@@ -46,9 +49,6 @@ def test_diffusion(tmpdir, vector, DG, tracer_setup):
         f.project(f_init)
         f_end.project(f_end_expr)
 
-    mu = 5.
-
-    eqn = DiffusionEquation(state, V, "f", kappa=kappa, mu=mu)
     diffusion_scheme = [(eqn, BackwardEuler(state))]
 
     assert run(state, diffusion_scheme, tmax, f_end) < tol

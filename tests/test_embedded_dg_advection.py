@@ -16,19 +16,22 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
                                       tracer_setup):
     setup = tracer_setup(tmpdir, geometry="slice")
     state = setup.state
-    V = state.spaces("HDiv_v")
-    f = state.fields("f", V)
-    f.interpolate(setup.f_init)
+    V = state.spaces("theta", degree=1)
 
     if space == "broken":
         opts = EmbeddedDGOptions()
     elif space == "dg":
-        opts = EmbeddedDGOptions(embedding_space=state.spaces("DG"))
+        opts = EmbeddedDGOptions(embedding_space=state.spaces("DG1", "DG", 1))
 
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ibp=ibp)
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree, ibp=ibp)
     else:
-        eqn = ContinuityEquation(state, V, "f", ibp=ibp)
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree, ibp=ibp)
+    state.fields("f").interpolate(setup.f_init)
+    state.fields("u").project(setup.uexpr)
+
     advection_schemes = [(eqn, SSPRK3(state, options=opts))]
 
     assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol

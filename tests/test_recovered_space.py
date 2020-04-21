@@ -27,20 +27,20 @@ def test_recovered_space_setup(tmpdir):
     dt = 1.0
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=5)
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output)
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
     VDG0 = FunctionSpace(mesh, "DG", 0)
-    VDG1 = state.spaces("DG1")
+    VDG1 = state.spaces("DG", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
-    # declare initial fields
-    u0 = state.fields("u", space=state.spaces("HDiv"))
-    tracer0 = state.fields("tracer", VDG0)
+    tracereqn = ContinuityEquation(state, VDG0, "tracer", ufamily="CG",
+                                   udegree=1)
+    # initialise fields
+    u0 = state.fields("u")
 
     x, z = SpatialCoordinate(mesh)
 
@@ -58,17 +58,18 @@ def test_recovered_space_setup(tmpdir):
     xc = 200.
     zc = 200.
     rc = 100.
-    tracer0.interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
-                                    conditional(sqrt((z - zc) ** 2.0) < rc,
-                                                Constant(0.2),
-                                                Constant(0.0)), Constant(0.0)))
+    tracer = state.fields("tracer")
+    tracer.interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
+                                   conditional(sqrt((z - zc) ** 2.0) < rc,
+                                               Constant(0.2),
+                                               Constant(0.0)), Constant(0.0)))
 
     # set up advection scheme
     recovered_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
                                       boundary_method=Boundary_Method.dynamics)
-    tracereqn = ContinuityEquation(state, VDG0, "tracer")
+
     advection_scheme = [(tracereqn, SSPRK3(state, options=recovered_opts))]
 
     run(state, advection_scheme, tmax=10)

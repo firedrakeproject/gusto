@@ -1,7 +1,6 @@
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, inner, dx, FiniteElement,
-                       FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       div)
+from firedrake import (TestFunction, Function, inner, dx, div,
+                       FunctionSpace, MixedFunctionSpace, TestFunctions)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic)
 from gusto.transport_equation import (advection_form, continuity_form,
@@ -48,9 +47,12 @@ class AdvectionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the advection_form
     """
     def __init__(self, state, function_space, field_name,
-                 **kwargs):
+                 ufamily=None, udegree=None, **kwargs):
         super().__init__(state, function_space, field_name)
 
+        if not hasattr(state.fields, "u"):
+            V = state.spaces("HDiv", ufamily, udegree)
+            state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
@@ -70,9 +72,12 @@ class ContinuityEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the continuity_form
     """
     def __init__(self, state, function_space, field_name,
-                 **kwargs):
+                 ufamily=None, udegree=None, **kwargs):
         super().__init__(state, function_space, field_name)
 
+        if not hasattr(state.fields, "u"):
+            V = state.spaces("HDiv", ufamily, udegree)
+            state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
@@ -114,7 +119,8 @@ class AdvectionDiffusionEquation(PrognosticEquation):
     :arg function_space: :class:`.FunctionSpace` object, the function
     :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
     """
-    def __init__(self, state, function_space, field_name, **kwargs):
+    def __init__(self, state, function_space, field_name,
+                 ufamily=None, udegree=None, **kwargs):
         super().__init__(state, function_space, field_name)
         dkwargs = {}
         for k in ["kappa", "mu"]:
@@ -122,6 +128,9 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             dkwargs[k] = kwargs.pop(k)
         akwargs = kwargs
 
+        if not hasattr(state.fields, "u"):
+            V = state.spaces("HDiv", ufamily, udegree)
+            state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
@@ -139,7 +148,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None):
 
-        spaces = self.build_spaces(state, family, degree)
+        spaces = state.spaces.build_compatible_spaces(family, degree)
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
@@ -169,17 +178,3 @@ class ShallowWaterEquations(PrognosticEquation):
 
         self.residual = subject(mass_form + advection_form
                                 + coriolis_form + pressure_gradient_form, X)
-
-    def build_spaces(self, state, family, horizontal_degree):
-
-        mesh = state.mesh
-        cell = mesh.ufl_cell().cellname()
-        V1_elt = FiniteElement(family, cell, horizontal_degree+1,
-                               variant="equispaced")
-        V1 = state.spaces("HDiv", mesh, V1_elt)
-
-        DG_elt = FiniteElement("DG", cell, horizontal_degree,
-                               variant="equispaced")
-        V2 = state.spaces("DG", mesh, DG_elt)
-
-        return V1, V2
