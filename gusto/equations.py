@@ -2,10 +2,15 @@ from abc import ABCMeta
 from firedrake import (TestFunction, Function, inner, dx, div,
                        FunctionSpace, MixedFunctionSpace, TestFunctions)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
-                                               advection, prognostic)
+                                               advection, prognostic,
+                                               advecting_velocity, Term)
 from gusto.transport_equation import (advection_form, continuity_form,
-                                      vector_invariant_form)
+                                      vector_invariant_form,
+                                      vector_manifold_advection_form,
+                                      kinetic_energy_form,
+                                      advection_equation_circulation_form)
 from gusto.diffusion import interior_penalty_diffusion_form
+import ufl
 
 
 class PrognosticEquation(object, metaclass=ABCMeta):
@@ -146,7 +151,8 @@ class ShallowWaterEquations(PrognosticEquation):
 
     field_names = ["u", "D"]
 
-    def __init__(self, state, family, degree, fexpr=None):
+    def __init__(self, state, family, degree, fexpr=None,
+                 u_advection_option="vector_invariant_form"):
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
         W = MixedFunctionSpace(spaces)
@@ -168,9 +174,25 @@ class ShallowWaterEquations(PrognosticEquation):
         D_mass = prognostic(inner(D, phi)*dx, "D")
         mass_form = time_derivative(u_mass + D_mass)
 
-        u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+        # define velocity advection term
+        if u_advection_option == "vector_invariant_form":
+            u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+        elif u_advection_option == "vector_advection_form":
+            u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
+        elif u_advection_option == "circulation_form":
+            ke_form = kinetic_energy_form(state, w, u)
+            ke_form = advection.remove(ke_form)
+            ke_form = ke_form.label_map(
+                lambda t: t.has_label(advecting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(advecting_velocity): u}), t.labels))
+            ke_form = advecting_velocity.remove(ke_form)
+            u_adv = advection_equation_circulation_form(state, w, u)
+        else:
+            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+
         D_adv = prognostic(continuity_form(state, phi, D), "D")
-        advection_form = advection(u_adv + D_adv)
+        advection_form = u_adv + D_adv
 
         coriolis_form = prognostic(f*inner(state.perp(u), w)*dx, "u")
 
@@ -178,3 +200,6 @@ class ShallowWaterEquations(PrognosticEquation):
 
         self.residual = subject(mass_form + advection_form
                                 + coriolis_form + pressure_gradient_form, X)
+
+        if u_advection_option == "circulation_form":
+            self.residual += subject(ke_form, X)

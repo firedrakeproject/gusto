@@ -12,7 +12,7 @@ day = 24.*60.*60.
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 
-def setup_sw(dirname, euler_poincare):
+def setup_sw(dirname, u_advection_option):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -52,7 +52,8 @@ def setup_sw(dirname, euler_poincare):
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = ShallowWaterEquations(state, family="BDM", degree=1,
-                                 fexpr=fexpr)
+                                 fexpr=fexpr,
+                                 u_advection_option=u_advection_option)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -86,17 +87,19 @@ def setup_sw(dirname, euler_poincare):
     return stepper, 0.25*day
 
 
-def run_sw(dirname, euler_poincare):
+def run_sw(dirname, u_advection_option):
 
-    stepper, tmax = setup_sw(dirname, euler_poincare)
+    stepper, tmax = setup_sw(dirname, u_advection_option)
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.parametrize("euler_poincare", [True, False])
-def test_sw_setup(tmpdir, euler_poincare):
+@pytest.mark.parametrize("u_advection_option",
+                         ["vector_invariant_form", "circulation_form",
+                          "vector_advection_form"])
+def test_sw_setup(tmpdir, u_advection_option):
 
     dirname = str(tmpdir)
-    run_sw(dirname, euler_poincare=euler_poincare)
+    run_sw(dirname, u_advection_option)
     filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
 
