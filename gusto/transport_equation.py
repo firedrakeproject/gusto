@@ -30,11 +30,9 @@ def linear_advection_form(state, test, qbar):
 def linear_continuity_form(state, test, qbar):
 
     Vu = state.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
-    n = FacetNormal(state.mesh)
 
-    L = -dot(grad(test), ubar)*qbar*dx + jump(ubar*test, n)*avg(qbar)*dS_
+    L = qbar*test*div(ubar)*dx
 
     form = advecting_velocity(L, ubar)
 

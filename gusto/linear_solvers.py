@@ -10,7 +10,7 @@ from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
 from gusto.form_manipulation_labelling import (linearisation, Term, drop,
-                                               replace_subject, time_derivative)
+                                               time_derivative)
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -536,7 +536,7 @@ class LinearTimesteppingSolver(object):
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
-        
+
         W = equation.function_space
         beta = dt*alpha
 
@@ -544,12 +544,10 @@ class LinearTimesteppingSolver(object):
         self.xrhs = Function(W)
 
         aeqn = residual.label_map(lambda t: t.has_label(time_derivative),
-                                  map_if_false=lambda t: -beta*t)
+                                  map_if_false=lambda t: beta*t)
         Leqn = residual.label_map(lambda t: t.has_label(time_derivative),
                                   map_if_false=drop)
 
-        print("lhs: ", aeqn.form)
-        print("rhs: ", action(Leqn.form, self.xrhs))
         # Place to put result of solver
         self.dy = Function(W)
 

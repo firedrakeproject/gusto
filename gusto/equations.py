@@ -212,9 +212,6 @@ class ShallowWaterEquations(PrognosticEquation):
         advection_form = subject(u_adv + D_adv, X)
 
         coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
-        linear_coriolis_form = coriolis_form.label_map(
-            all_terms, replace_subject(trials))
-        coriolis_form = linearisation(coriolis_form, linear_coriolis_form)
 
         pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
         linear_pressure_gradient_form = pressure_gradient_form.label_map(
