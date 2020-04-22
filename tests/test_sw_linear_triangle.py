@@ -22,22 +22,17 @@ def setup_sw(dirname):
     dt = 3600.
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
-    diagnostics = Diagnostics(*fieldlist)
 
-    state = State(mesh, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist)
+                  parameters=parameters)
 
     # Coriolis
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", Function(V))
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
+
+    eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -49,22 +44,11 @@ def setup_sw(dirname):
     Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([('u', u0),
-                      ('D', D0)])
 
-    Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp=IntegrateByParts.ONCE, equation_form="continuity")
-    advected_fields = []
-    advected_fields.append(("u", NoAdvection(state, u0, None)))
-    advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
-
-    linear_solver = ShallowWaterSolver(state)
-
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state, linear=True)
+    advection_schemes = [ForwardEuler(state, "D")]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    stepper = CrankNicolson(state, eqns, advection_schemes)
 
     return stepper, 2*day
 
