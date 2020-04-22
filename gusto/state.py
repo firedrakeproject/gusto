@@ -43,11 +43,11 @@ class SpaceCreator(object):
             self.build_base_spaces(family, degree)
             Vu = self.build_hdiv_space(family, degree)
             setattr(self, "HDiv", Vu)
-            Vth = self.build_theta_space(degree)
-            setattr(self, "theta", Vth)
             Vdg = self.build_dg_space(degree)
             setattr(self, "DG", Vdg)
-            return Vu, Vth, Vdg
+            Vth = self.build_theta_space(degree)
+            setattr(self, "theta", Vth)
+            return Vu, Vdg, Vth
         else:
             Vu = self.build_hdiv_space(family, degree)
             setattr(self, "HDiv", Vu)
@@ -70,8 +70,9 @@ class SpaceCreator(object):
         self._initialised_base_spaces = True
 
     def build_hdiv_space(self, family, degree):
-        if self.extruded_mesh and not self._initialised_base_spaces:
-            self.build_base_spaces(family, degree)
+        if self.extruded_mesh:
+            if not self._initialised_base_spaces:
+                self.build_base_spaces(family, degree)
             Vh_elt = HDiv(TensorProductElement(self.S1, self.T1))
             Vt_elt = TensorProductElement(self.S2, self.T0)
             Vv_elt = HDiv(Vt_elt)
@@ -564,7 +565,7 @@ class State(object):
         """
         for name, profile in reference_profiles:
             field = getattr(self.fields, name)
-            ref = self.fields(name+'bar', field.function_space(), False)
+            ref = self.fields(name+'bar')
             ref.interpolate(profile)
 
     def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):

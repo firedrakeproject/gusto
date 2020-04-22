@@ -116,7 +116,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     # Calculate hydrostatic Pi
     VDG = state.spaces("DG")
-    Vv = state.spaces("Vv")
+    Vu = state.spaces("HDiv")
+    Vv = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
     W = MixedFunctionSpace((Vv, VDG))
     v, pi = TrialFunctions(W)
     dv, dpi = TestFunctions(W)

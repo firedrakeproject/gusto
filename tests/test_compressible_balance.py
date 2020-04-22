@@ -23,20 +23,15 @@ def setup_balance(dirname):
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
     output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
-    diagnostic_fields = []
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
+                  parameters=parameters)
+
+    eqns = CompressibleEulerEquations(state, "CG", 1)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -55,30 +50,19 @@ def setup_balance(dirname):
     # Calculate hydrostatic Pi
     compressible_hydrostatic_balance(state, theta0, rho0, solve_for_rho=True)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0)])
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
-
-    advected_fields = [("u", ImplicitMidpoint(state, u0, ueqn)),
-                       ("rho", SSPRK3(state, rho0, rhoeqn)),
-                       ("theta", SSPRK3(state, theta0, thetaeqn))]
+    advected_fields = [ImplicitMidpoint(state, "u"),
+                       SSPRK3(state, "rho"),
+                       SSPRK3(state, "theta", options=EmbeddedDGOptions())]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    linear_solver = CompressibleSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing)
+    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver=linear_solver)
 
     return stepper, tmax
 

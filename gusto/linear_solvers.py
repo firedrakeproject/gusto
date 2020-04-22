@@ -159,7 +159,7 @@ class CompressibleSolver(TimesteppingSolver):
         mu = state.mu
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
-        Vtheta = state.spaces("HDiv_v")
+        Vtheta = state.spaces("theta")
         Vrho = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
@@ -167,12 +167,12 @@ class CompressibleSolver(TimesteppingSolver):
         beta = Constant(beta_)
         beta_cp = Constant(beta_ * cp)
 
-        h_deg = state.horizontal_degree
-        v_deg = state.vertical_degree
+        h_deg = Vrho.ufl_element().degree()[0]
+        v_deg = Vrho.ufl_element().degree()[1]
         Vtrace = FunctionSpace(state.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
-        self.xrhs = Function(state.W)
+        self.xrhs = Function(self.equations.function_space)
         u_in, rho_in, theta_in = split(self.xrhs)
 
         # Build the function space for "broken" u, rho, and pressure trace
