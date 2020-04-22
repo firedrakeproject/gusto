@@ -7,7 +7,7 @@ from firedrake import (Function, FacetNormal,
 from gusto.form_manipulation_labelling import advection, advecting_velocity
 
 
-__all__ = ["IntegrateByParts", "advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form"]
+__all__ = ["IntegrateByParts", "advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form", "linear_continuity_form"]
 
 
 class IntegrateByParts(Enum):
@@ -16,7 +16,7 @@ class IntegrateByParts(Enum):
     TWICE = 2
 
 
-def linear_advection_form(state, test, qbar, ibp=IntegrateByParts.NEVER):
+def linear_advection_form(state, test, qbar):
 
     ubar = Function(state.spaces("HDiv"))
 

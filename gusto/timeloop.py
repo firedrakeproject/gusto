@@ -3,6 +3,7 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
 from gusto.form_manipulation_labelling import advection, diffusion
+from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
 __all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedAdvection"]
@@ -164,7 +165,8 @@ class CrankNicolson(Timestepper):
              iterations and alpha is the offcentering parameter
     """
 
-    def __init__(self, state, equation_set, advection_schemes, linear_solver,
+    def __init__(self, state, equation_set, advection_schemes,
+                 linear_solver=None,
                  diffusion_schemes=None,
                  physics_list=None, **kwargs):
 
@@ -190,7 +192,10 @@ class CrankNicolson(Timestepper):
         W = equation_set.function_space
         self.xrhs = Function(W)
         self.dy = Function(W)
-        self.linear_solver = linear_solver
+        if linear_solver is None:
+            self.linear_solver = LinearTimesteppingSolver(equation_set, state.dt, self.alpha)
+        else:
+            self.linear_solver = linear_solver
         self.forcing = Forcing(equation_set, state.dt, self.alpha)
 
         # list of fields that are advected as part of the nonlinear iteration

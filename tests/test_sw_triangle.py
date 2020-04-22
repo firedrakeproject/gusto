@@ -69,10 +69,8 @@ def setup_sw(dirname, u_advection_option):
     advected_fields.append((ImplicitMidpoint(state, "u")))
     advected_fields.append((SSPRK3(state, "D")))
 
-    linear_solver = ShallowWaterSolver(state, eqns)
-
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
+    stepper = CrankNicolson(state, eqns, advected_fields)
 
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R

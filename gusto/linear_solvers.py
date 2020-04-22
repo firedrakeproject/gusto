@@ -1,7 +1,7 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner, action,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace)
 from firedrake.petsc import flatten_parameters
@@ -9,11 +9,13 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
+from gusto.form_manipulation_labelling import (linearisation, Term, drop,
+                                               replace_subject, time_derivative)
 from gusto import thermodynamics
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "ShallowWaterSolver", "CompressibleSolver"]
+__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -507,7 +509,7 @@ class IncompressibleSolver(TimesteppingSolver):
         b.assign(self.b)
 
 
-class ShallowWaterSolver(TimesteppingSolver):
+class LinearTimesteppingSolver(object):
     """
     Timestepping linear solver object for the nonlinear shallow water
     equations with prognostic variables u and D. The linearized system
@@ -528,47 +530,37 @@ class ShallowWaterSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self):
-        state = self.state
-        H_ = state.parameters.H
-        g_ = state.parameters.g
-        beta_ = state.dt*self.alpha
+    def __init__(self, equation, dt, alpha):
 
-        # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
-        H = Constant(H_)
-        g = Constant(g_)
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            lambda t: Term(t.get(linearisation).form, t.labels),
+            drop)
+        
+        W = equation.function_space
+        beta = dt*alpha
 
         # Split up the rhs vector (symbolically)
-        W = self.equations.function_space
         self.xrhs = Function(W)
-        u_in, D_in = split(self.xrhs)
 
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        aeqn = residual.label_map(lambda t: t.has_label(time_derivative),
+                                  map_if_false=lambda t: -beta*t)
+        Leqn = residual.label_map(lambda t: t.has_label(time_derivative),
+                                  map_if_false=drop)
 
-        eqn = (
-            inner(w, u) - beta*g*div(w)*D
-            - inner(w, u_in)
-            + phi*D + beta*H*phi*div(u)
-            - phi*D_in
-        )*dx
+        print("lhs: ", aeqn.form)
+        print("rhs: ", action(Leqn.form, self.xrhs))
+        # Place to put result of solver
+        self.dy = Function(W)
 
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+        # Solver
+        bcs = None
+        problem = LinearVariationalProblem(aeqn.form, action(Leqn.form, self.xrhs),
+                                           self.dy, bcs=bcs)
 
-        # Place to put result of u rho solver
-        self.uD = Function(W)
-
-        # Solver for u, D
-        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
-        uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.uD, bcs=bcs)
-
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -577,5 +569,5 @@ class ShallowWaterSolver(TimesteppingSolver):
         """
 
         self.xrhs.assign(xrhs)
-        self.uD_solver.solve()
-        dy.assign(self.uD)
+        self.solver.solve()
+        dy.assign(self.dy)

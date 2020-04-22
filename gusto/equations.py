@@ -1,14 +1,18 @@
 from abc import ABCMeta
 from firedrake import (TestFunction, Function, inner, dx, div,
-                       FunctionSpace, MixedFunctionSpace, TestFunctions)
+                       FunctionSpace, MixedFunctionSpace, TestFunctions,
+                       TrialFunctions)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic,
-                                               advecting_velocity, Term)
+                                               advecting_velocity, Term,
+                                               all_terms, replace_subject,
+                                               linearisation)
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
                                       vector_manifold_advection_form,
                                       kinetic_energy_form,
-                                      advection_equation_circulation_form)
+                                      advection_equation_circulation_form,
+                                      linear_continuity_form)
 from gusto.diffusion import interior_penalty_diffusion_form
 import ufl
 
@@ -165,13 +169,21 @@ class ShallowWaterEquations(PrognosticEquation):
         f.interpolate(fexpr)
 
         g = state.parameters.g
+        H = state.parameters.H
 
         w, phi = TestFunctions(W)
+        trials = TrialFunctions(W)
         X = Function(W)
         u, D = X.split()
 
-        u_mass = prognostic(inner(u, w)*dx, "u")
-        D_mass = prognostic(inner(D, phi)*dx, "D")
+        u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
+        linear_u_mass = u_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        u_mass = linearisation(u_mass, linear_u_mass)
+        D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
+        linear_D_mass = D_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        D_mass = linearisation(D_mass, linear_D_mass)
         mass_form = time_derivative(u_mass + D_mass)
 
         # define velocity advection term
@@ -187,19 +199,28 @@ class ShallowWaterEquations(PrognosticEquation):
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(advecting_velocity): u}), t.labels))
             ke_form = advecting_velocity.remove(ke_form)
-            u_adv = advection_equation_circulation_form(state, w, u)
+            u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
-
         D_adv = prognostic(continuity_form(state, phi, D), "D")
-        advection_form = u_adv + D_adv
+        linear_D_adv = linear_continuity_form(state, phi, H).label_map(
+            lambda t: t.has_label(advecting_velocity),
+            lambda t: Term(ufl.replace(
+                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+        D_adv = linearisation(D_adv, linear_D_adv)
 
-        coriolis_form = prognostic(f*inner(state.perp(u), w)*dx, "u")
+        advection_form = subject(u_adv + D_adv, X)
 
-        pressure_gradient_form = prognostic(-g*div(w)*D*dx, "u")
+        coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
+        linear_coriolis_form = coriolis_form.label_map(
+            all_terms, replace_subject(trials))
+        coriolis_form = linearisation(coriolis_form, linear_coriolis_form)
 
-        self.residual = subject(mass_form + advection_form
-                                + coriolis_form + pressure_gradient_form, X)
+        pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
+        linear_pressure_gradient_form = pressure_gradient_form.label_map(
+            all_terms, replace_subject(trials))
+        pressure_gradient_form = linearisation(pressure_gradient_form,
+                                               linear_pressure_gradient_form)
 
-        if u_advection_option == "circulation_form":
-            self.residual += subject(ke_form, X)
+        self.residual = (mass_form + advection_form
+                         + coriolis_form + pressure_gradient_form)
