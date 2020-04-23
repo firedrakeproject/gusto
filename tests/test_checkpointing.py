@@ -42,7 +42,6 @@ def setup_sk(dirname):
     theta0 = state.fields("theta")
 
     # spaces
-    Vu = u0.function_space()
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 

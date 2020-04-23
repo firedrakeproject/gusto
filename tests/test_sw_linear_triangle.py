@@ -1,7 +1,6 @@
 from os import path
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, Function)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
 from netCDF4 import Dataset
 
@@ -18,7 +17,6 @@ def setup_sw(dirname):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    fieldlist = ['u', 'D']
     dt = 3600.
     output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
     parameters = ShallowWaterParameters(H=H)
