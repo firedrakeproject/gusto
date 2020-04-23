@@ -1,7 +1,8 @@
 from abc import ABCMeta
 from firedrake import (TestFunction, Function, inner, dx, div,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunctions, FacetNormal, jump, avg, dS_v)
+                       TrialFunctions, FacetNormal, jump, avg, dS_v,
+                       DirichletBC)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic,
                                                advecting_velocity, Term,
@@ -14,7 +15,7 @@ from gusto.transport_equation import (advection_form, continuity_form,
                                       kinetic_energy_form,
                                       advection_equation_circulation_form,
                                       linear_continuity_form,
-                                      linear_advection_form)
+                                      linear_advection_form, IntegrateByParts)
 from gusto.diffusion import interior_penalty_diffusion_form
 import ufl
 
@@ -158,13 +159,22 @@ class ShallowWaterEquations(PrognosticEquation):
     field_names = ["u", "D"]
 
     def __init__(self, state, family, degree, fexpr=None,
-                 u_advection_option="vector_invariant_form"):
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
+
+        Vu = self.function_space[0]
+        self.bcs = []
+        if no_normal_flow_bc_ids is None:
+            no_normal_flow_bc_ids = []
+
+        for id in no_normal_flow_bc_ids:
+            self.bcs.append(DirichletBC(Vu, 0.0, id))
 
         V = FunctionSpace(state.mesh, "CG", 1)
         f = state.fields("coriolis", space=V)
@@ -229,13 +239,24 @@ class CompressibleEulerEquations(PrognosticEquation):
 
     field_names = ['u', 'rho', 'theta']
 
-    def __init__(self, state, family, degree, u_advection_option="vector_invariant_form"):
+    def __init__(self, state, family, degree, u_advection_option="vector_invariant_form", no_normal_flow_bc_ids=None):
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
+
+        Vu = self.function_space[0]
+        self.bcs = []
+        if no_normal_flow_bc_ids is None:
+            no_normal_flow_bc_ids = []
+
+        if Vu.extruded:
+            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+        for id in no_normal_flow_bc_ids:
+            self.bcs.append(DirichletBC(Vu, 0.0, id))
 
         g = state.parameters.g
         cp = state.parameters.cp
@@ -259,7 +280,7 @@ class CompressibleEulerEquations(PrognosticEquation):
                                              replace_subject(trials))
         rho_mass = linearisation(rho_mass, linear_rho_mass)
 
-        theta_mass = subject(prognostic(inner(theta, phi)*dx, "theta"), X)
+        theta_mass = subject(prognostic(inner(theta, gamma)*dx, "theta"), X)
         linear_theta_mass = theta_mass.label_map(all_terms,
                                                  replace_subject(trials))
         theta_mass = linearisation(theta_mass, linear_theta_mass)
@@ -289,7 +310,7 @@ class CompressibleEulerEquations(PrognosticEquation):
                 t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
         rho_adv = linearisation(rho_adv, linear_rho_adv)
 
-        theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
+        theta_adv = prognostic(advection_form(state, gamma, theta, ibp=IntegrateByParts.TWICE), "theta")
         linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
             lambda t: t.has_label(advecting_velocity),
             lambda t: Term(ufl.replace(
@@ -299,12 +320,12 @@ class CompressibleEulerEquations(PrognosticEquation):
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
 
         # define pressure gradient term and its linearisation
-        pressure_gradient_form = subject(
+        pressure_gradient_form = subject(prognostic(
             cp*(-div(theta*w)*pi*dx
-                + jump(theta*w, n)*avg(pi)*dS_v), X)
+                + jump(theta*w, n)*avg(pi)*dS_v), "u"), X)
 
         # define gravity term and its linearisation
-        gravity_form = subject(Term(g*inner(state.k, w)*dx), X)
+        gravity_form = subject(prognostic(Term(g*inner(state.k, w)*dx), "u"), X)
 
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form + gravity_form)

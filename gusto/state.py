@@ -152,7 +152,7 @@ class StateFields(FieldCreator):
             return getattr(self, name)
         except AttributeError:
             self.add_field(name, space, subfield_names)
-            if not self.output_specified and dump:
+            if dump:
                 if subfield_names is not None:
                     self.to_dump.update(subfield_names)
                 else:
@@ -337,8 +337,6 @@ class State(object):
         self.fields = StateFields(*self.output.dumplist)
 
         self.dumpfile = None
-
-        self.bcs = []
 
         # figure out if we're on a sphere
         try:
@@ -564,7 +562,6 @@ class State(object):
         :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
         for name, profile in reference_profiles:
-            field = getattr(self.fields, name)
             ref = self.fields(name+'bar')
             ref.interpolate(profile)
 

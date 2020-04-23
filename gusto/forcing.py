@@ -43,7 +43,7 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
 
-        bcs = None
+        bcs = equation.bcs
 
         explicit_forcing_problem = LinearVariationalProblem(
             a.form, L_explicit.form, self.xF, bcs=bcs

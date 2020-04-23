@@ -167,6 +167,9 @@ class Advection(object, metaclass=ABCMeta):
                         [vals[j] if i == j else 0. for i, v in enumerate(vals)]
                     ) for j in range(dim)])
                 )
+                self.solver_parameters = {'ksp_type': 'gmres',
+                                          'pc_type': 'bjacobi',
+                                          'sub_pc_type': 'ilu'}
 
             test = TestFunction(self.fs)
             new_test = test + dot(dot(uadv, tau), grad(test))

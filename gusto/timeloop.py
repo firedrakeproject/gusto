@@ -78,9 +78,7 @@ class Timestepper(object):
         """
         unp1 = self.x.np1("u")
 
-        bcs = self.state.bcs
-
-        for bc in bcs:
+        for bc in self.bcs:
             bc.apply(unp1)
 
     def setup_timeloop(self):
@@ -197,6 +195,7 @@ class CrankNicolson(Timestepper):
         else:
             self.linear_solver = linear_solver
         self.forcing = Forcing(equation_set, state.dt, self.alpha)
+        self.bcs = equation_set.bcs
 
         # list of fields that are advected as part of the nonlinear iteration
         self.active_advection = [(name, scheme)
