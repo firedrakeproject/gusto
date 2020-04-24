@@ -164,6 +164,7 @@ class CrankNicolson(Timestepper):
     """
 
     def __init__(self, state, equation_set, advection_schemes,
+                 auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
                  physics_list=None, **kwargs):
@@ -176,15 +177,26 @@ class CrankNicolson(Timestepper):
 
         schemes = []
         self.advection_schemes = []
+        self.active_advection = []
         for scheme in advection_schemes:
             schemes.append((scheme, advection))
-            self.advection_schemes.append((scheme.field_name, scheme))
+            assert scheme.field_name in equation_set.field_names
+            self.active_advection.append((scheme.field_name, scheme))
         if diffusion_schemes is None:
             self.diffusion_schemes = []
         for scheme in self.diffusion_schemes:
+            assert scheme.field_name in equation_set.field_names
             schemes.append((scheme, diffusion))
             self.diffusion_schemes.append((scheme.field_name, scheme))
-        super().__init__(state, [(equation_set, tuple(schemes))], physics_list)
+
+        problem = [(equation_set, tuple(schemes))]
+        if auxiliary_equations_and_schemes is not None:
+            problem.append(*auxiliary_equations_and_schemes)
+            self.auxiliary_schemes = [(eqn.field_name, scheme) for eqn, scheme in auxiliary_equations_and_schemes]
+        else:
+            self.auxiliary_schemes = []
+
+        super().__init__(state, problem, physics_list)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -196,16 +208,6 @@ class CrankNicolson(Timestepper):
             self.linear_solver = linear_solver
         self.forcing = Forcing(equation_set, state.dt, self.alpha)
         self.bcs = equation_set.bcs
-
-        # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [(name, scheme)
-                                 for name, scheme in self.advection_schemes
-                                 if name in equation_set.field_names]
-
-        # list of fields that are passively advected
-        self.passive_advection = [(name, scheme)
-                                  for name, scheme in self.advection_schemes
-                                  if name not in equation_set.field_names]
 
     @property
     def advecting_velocity(self):
@@ -253,10 +255,9 @@ class CrankNicolson(Timestepper):
 
             self._apply_bcs()
 
-        for name, scheme in self.passive_advection:
-            field = getattr(xn, name)
+        for name, scheme in self.auxiliary_schemes:
             # advects a field from xn and puts result in xnp1
-            scheme.apply(field, field)
+            scheme.apply(xn(name), xnp1(name))
 
         self.x.update()
 
@@ -280,6 +281,6 @@ class PrescribedAdvection(Timestepper):
 
     def timestep(self):
         if self.prescribed_advecting_velocity is not None:
-            self.state.fields('u').project(self.prescribed_advecting_velocity)
+            self.state.fields('u').project(self.prescribed_advecting_velocity(self.state.t))
 
         super().timestep()

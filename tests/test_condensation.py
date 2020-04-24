@@ -26,38 +26,38 @@ def setup_condens(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     x = SpatialCoordinate(mesh)
 
-    fieldlist = ['u', 'rho', 'theta']
     dt = 1.0
     output = OutputParameters(dirname=dirname+"/condens",
                               dumpfreq=1,
-                              dumplist=['u'],
-                              perturbation_fields=['theta', 'rho'])
+                              dumplist=['u'])
     parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=[Sum('water_v', 'water_c')])
+
+    # spaces
+    Vpsi = FunctionSpace(mesh, "CG", 2)
+    Vt = state.spaces("theta", degree=1)
+    Vr = state.spaces("DG", "DG", degree=1)
+
+    # set up equations
+    rhoeqn = ContinuityEquation(state, Vr, "rho", ufamily="CG", udegree=1)
+    thetaeqn = AdvectionEquation(state, Vt, "theta")
+    wveqn = AdvectionEquation(state, Vt, "water_v")
+    wceqn = AdvectionEquation(state, Vt, "water_c")
 
     # declare initial fields
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-
-    # spaces
-    Vpsi = FunctionSpace(mesh, "CG", 2)
-    Vt = theta0.function_space()
-    Vr = rho0.function_space()
+    water_v0 = state.fields("water_v")
+    water_c0 = state.fields("water_c")
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
-
-    # declare tracer field and a background field
-    water_v0 = state.fields("water_v", Vt)
-    water_c0 = state.fields("water_c", Vt)
 
     # Isentropic background state
     Tsurf = Constant(300.)
@@ -93,33 +93,19 @@ def setup_condens(dirname):
     rho0.interpolate(rho_b)
     water_v0.interpolate(w_expr)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0),
-                      ('water_v', water_v0),
-                      ('water_c', water_c0)])
-    state.set_reference_profiles([('rho', rho_b),
-                                  ('theta', theta_b)])
+    # build probem
+    problem = []
+    problem.append((rhoeqn, SSPRK3(state)))
+    problem.append((thetaeqn, SSPRK3(state, options=SUPGOptions())))
+    problem.append((wveqn, SSPRK3(state)))
+    problem.append((wceqn, SSPRK3(state)))
 
-    # set up advection schemes
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt,
-                             equation_form="advective")
-
-    # build advection dictionary
-    advection_schemes = []
-    advection_schemes.append(("u", NoAdvection(state, u0, None)))
-    advection_schemes.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advection_schemes.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advection_schemes.append(("water_v", SSPRK3(state, water_v0, thetaeqn)))
-    advection_schemes.append(("water_c", SSPRK3(state, water_c0, thetaeqn)))
-
-    prescribed_fields = [('u', u_evaluation)]
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = Advection(state, advection_schemes, physics_list=physics_list,
-                        prescribed_fields=prescribed_fields)
+    stepper = PrescribedAdvection(state, problem,
+                                  physics_list=physics_list,
+                                  prescribed_advecting_velocity=u_evaluation)
 
     return stepper, tmax
 

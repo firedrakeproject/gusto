@@ -1,8 +1,8 @@
 from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, \
+from firedrake import PeriodicIntervalMesh, Constant, \
     SpatialCoordinate, ExtrudedMesh, sqrt, \
-    conditional, cos
+    conditional, cos, as_vector
 from netCDF4 import Dataset
 from math import pi
 
@@ -25,31 +25,25 @@ def setup_fallout(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     x = SpatialCoordinate(mesh)
 
-    fieldlist = ['u', 'rho', 'theta', 'rain']
     dt = 0.1
     output = OutputParameters(dirname=dirname+"/fallout",
                               dumpfreq=10,
                               dumplist=['rain'])
     parameters = CompressibleParameters()
     diagnostic_fields = [Precipitation()]
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
 
-    # declare initial fields
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+    Vt = state.spaces("theta", degree=1)
+    Vrho = state.spaces("DG", "DG", 1)
+    problem = [(AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1), ForwardEuler(state))]
+    rho0 = state.fields("rho").assign(1.)
 
-    # spaces
-    Vt = theta0.function_space()
-
-    # declare tracer field and a background field
-    rain0 = state.fields("rain", Vt)
+    physics_list = [Fallout(state)]
+    rain0 = state.fields("rain")
 
     # set up rain
     xc = L / 2
@@ -60,22 +54,13 @@ def setup_fallout(dirname):
 
     rain0.interpolate(rain_expr)
 
-    rho0.assign(1.0)
-
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('rain', rain0)])
-
-    # build advection schemes
-    advection_schemes = []
-    advection_schemes.append(("u", NoAdvection(state, u0, None)))
-    advection_schemes.append(("rho", NoAdvection(state, rho0, None)))
-    advection_schemes.append(("rain", NoAdvection(state, rain0, None)))
-
-    physics_list = [Fallout(state)]
+    def zero_u(t):
+        return as_vector((Constant(0.), Constant(0.)))
 
     # build time stepper
-    stepper = Advection(state, advection_schemes, physics_list=physics_list)
+    stepper = PrescribedAdvection(state, problem,
+                                  physics_list=physics_list,
+                                  prescribed_advecting_velocity=zero_u)
 
     return stepper, 10.0
 

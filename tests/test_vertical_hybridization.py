@@ -14,22 +14,17 @@ def run_compressible_balance_test(dirname):
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
-    output = OutputParameters(dirname=dirname+'/test_compressible', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
-    diagnostic_fields = []
+    output = OutputParameters(dirname=dirname+'/test_compressible', dumpfreq=10, dumplist=['u'])
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist,
-                  diagnostic_fields=diagnostic_fields)
+                  parameters=parameters)
 
-    theta0 = state.fields("theta")
+    state.spaces.build_compatible_spaces("CG", 1)
+    Vth = state.spaces("theta")
+    theta0 = Function(Vth)
 
     # Isentropic background state
     Tsurf = Constant(300.)
@@ -37,7 +32,8 @@ def run_compressible_balance_test(dirname):
 
     # Calculate hydrostatic Pi
     VDG = state.spaces("DG")
-    Vv = state.spaces("Vv")
+    Vu = state.spaces("HDiv")
+    Vv = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
     W = MixedFunctionSpace((Vv, VDG))
     v, pi = TrialFunctions(W)
     dv, dpi = TestFunctions(W)

@@ -18,7 +18,6 @@ def setup_tracer(dirname):
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
 
-    fieldlist = ['u', 'rho', 'theta']
     dt = 10.
     output = OutputParameters(dirname=dirname+"/tracer",
                               dumpfreq=1,
@@ -26,26 +25,25 @@ def setup_tracer(dirname):
                               perturbation_fields=['theta', 'rho'])
     parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=[Difference('theta', 'tracer')])
 
-    # declare initial fields
-    u0 = state.fields("u")
+    eqns = CompressibleEulerEquations(state, "CG", 1)
+
+    # Initial density and potential temperature fields
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
 
+    tracer_eqn = AdvectionEquation(state, theta0.function_space(), "tracer")
+    # Initial tracer
+    tracer0 = state.fields("tracer")
+
     # spaces
-    Vu = u0.function_space()
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-
-    # declare tracer field and a background field
-    tracer0 = state.fields("tracer", Vt)
 
     # Isentropic background state
     Tsurf = Constant(300.)
@@ -69,34 +67,22 @@ def setup_tracer(dirname):
     rho0.interpolate(rho_b)
     tracer0.interpolate(theta0)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0),
-                      ('tracer', tracer0)])
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
     # set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = SUPGAdvection(state, Vt,
-                             equation_form="advective")
 
-    # build advection dictionary
-    advection_schemes = []
-    advection_schemes.append(("u", ImplicitMidpoint(state, u0, ueqn)))
-    advection_schemes.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advection_schemes.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advection_schemes.append(("tracer", SSPRK3(state, tracer0, thetaeqn)))
+    advection_schemes = [ImplicitMidpoint(state, "u"),
+                         SSPRK3(state, "rho"),
+                         SSPRK3(state, "theta", options=SUPGOptions())]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    compressible_forcing = CompressibleForcing(state)
+    linear_solver = CompressibleSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, advection_schemes, linear_solver,
-                            compressible_forcing)
+    stepper = CrankNicolson(state, eqns, advection_schemes,
+                            auxiliary_equations_and_schemes=[(tracer_eqn, SSPRK3(state, options=SUPGOptions()))],
+                            linear_solver=linear_solver)
 
     return stepper, 100.0
 
