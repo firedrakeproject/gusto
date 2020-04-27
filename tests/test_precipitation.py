@@ -37,10 +37,9 @@ def setup_fallout(dirname):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
-    Vt = state.spaces("theta", degree=1)
     Vrho = state.spaces("DG", "DG", 1)
     problem = [(AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1), ForwardEuler(state))]
-    rho0 = state.fields("rho").assign(1.)
+    state.fields("rho").assign(1.)
 
     physics_list = [Fallout(state)]
     rain0 = state.fields("rain")

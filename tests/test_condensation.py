@@ -54,7 +54,6 @@ def setup_condens(dirname):
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
     water_v0 = state.fields("water_v")
-    water_c0 = state.fields("water_c")
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
