@@ -320,7 +320,8 @@ def saturated_hydrostatic_balance(state, theta_e, water_t, pi0=None,
     theta0.interpolate(theta_e)
     water_v0.interpolate(water_t)
 
-    if state.vertical_degree == 0:
+    v_deg = Vr.ufl_element().degree()[1]
+    if v_deg == 0:
         boundary_method = Boundary_Method.physics
     else:
         boundary_method = None
