@@ -3,13 +3,14 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Constant, Function,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 from os import path
 from netCDF4 import Dataset
+import pytest
 
 # this tests the moist-saturated hydrostatic balance, by setting up a vertical slice
 # with this initial procedure, before taking a few time steps and ensuring that
 # the resulting velocities are very small
 
 
-def setup_saturated(dirname):
+def setup_saturated(dirname, recovered):
 
     # set up grid and time stepping parameters
     dt = 1.
@@ -26,30 +27,30 @@ def setup_saturated(dirname):
 
     # option to easily change between recovered and not if necessary
     # default should be to use lowest order set of spaces
-    recovered = True
     degree = 0 if recovered else 1
 
-    fieldlist = ['u', 'rho', 'theta']
     output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
     parameters = CompressibleParameters()
-    diagnostics = Diagnostics(*fieldlist)
     diagnostic_fields = [Theta_e()]
 
-    state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostics=diagnostics,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
+
+    if recovered:
+        u_advection_option = "vector_advection_form"
+    else:
+        u_advection_option = "vector_invariant_form"
+    eqns = MoistCompressibleEulerEquations(state, "CG", degree, u_advection_option=u_advection_option)
 
     # Initial conditions
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("water_v", theta0.function_space())
-    water_c0 = state.fields("water_c", theta0.function_space())
+    water_v0 = state.fields("water_v")
+    water_c0 = state.fields("water_c")
     moisture = ['water_v', 'water_c']
 
     # spaces
@@ -67,18 +68,13 @@ def setup_saturated(dirname):
     saturated_hydrostatic_balance(state, theta_e, water_t)
     water_c0.assign(water_t - water_v0)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0),
-                      ('water_v', water_v0),
-                      ('water_c', water_c0)])
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0),
                                   ('water_v', water_v0)])
 
     # Set up advection schemes
     if recovered:
-        VDG1 = state.spaces("DG1")
+        VDG1 = state.spaces("DG1", "DG", 1)
         VCG1 = FunctionSpace(mesh, "CG", 1)
         Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
         Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
@@ -95,51 +91,51 @@ def setup_saturated(dirname):
         theta_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=Vt_brok)
-        ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
-        rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
-        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
+        wv_opts = RecoveredOptions(embedding_space=VDG1,
+                                   recovered_space=VCG1,
+                                   broken_space=Vt_brok)
+        wc_opts = RecoveredOptions(embedding_space=VDG1,
+                                   recovered_space=VCG1,
+                                   broken_space=Vt_brok)
     else:
-        ueqn = EulerPoincare(state, Vu)
-        rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+        u_opts = None
+        rho_opts = None
+        theta_opts = EmbeddedDGOptions()
+        wv_opts = EmbeddedDGOptions()
+        wc_opts = EmbeddedDGOptions()
 
-    advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
-                       ('theta', SSPRK3(state, theta0, thetaeqn)),
-                       ('water_v', SSPRK3(state, water_v0, thetaeqn)),
-                       ('water_c', SSPRK3(state, water_c0, thetaeqn))]
+    advected_fields = [SSPRK3(state, 'rho', options=rho_opts),
+                       SSPRK3(state, 'theta', options=theta_opts),
+                       SSPRK3(state, 'water_v', options=wv_opts),
+                       SSPRK3(state, 'water_c', options=wc_opts)]
     if recovered:
-        advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
+        advected_fields.append(SSPRK3(state, 'u', options=u_opts))
     else:
-        advected_fields.append(('u', ImplicitMidpoint(state, u0, ueqn)))
+        advected_fields.append(ImplicitMidpoint(state, 'u'))
 
-    linear_solver = CompressibleSolver(state, moisture=moisture)
-
-    # Set up forcing
-    if recovered:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=False)
-    else:
-        compressible_forcing = CompressibleForcing(state, moisture=moisture)
+    linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
     # add physics
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing, physics_list=physics_list)
+    stepper = CrankNicolson(state, eqns, advected_fields,
+                            linear_solver=linear_solver,
+                            physics_list=physics_list)
 
     return stepper, tmax
 
 
-def run_saturated(dirname):
+def run_saturated(dirname, recovered):
 
-    stepper, tmax = setup_saturated(dirname)
+    stepper, tmax = setup_saturated(dirname, recovered)
     stepper.run(t=0, tmax=tmax)
 
-
-def test_saturated_setup(tmpdir):
+@pytest.mark.parametrize("recovered", [True, False])
+def test_saturated_setup(tmpdir, recovered):
 
     dirname = str(tmpdir)
-    run_saturated(dirname)
+    run_saturated(dirname, recovered)
     filename = path.join(dirname, "saturated_balance/diagnostics.nc")
     data = Dataset(filename, "r")
     u = data.groups['u']

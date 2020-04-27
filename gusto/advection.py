@@ -191,7 +191,7 @@ class Advection(object, metaclass=ABCMeta):
 
         if self.discretisation_option == "recovered":
             # set up the necessary functions
-            self.x_in = Function(equation.function_space)
+            self.x_in = Function(self.state.fields(self.field_name).function_space())
             x_rec = Function(options.recovered_space)
             x_brok = Function(options.broken_space)
 

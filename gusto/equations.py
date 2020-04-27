@@ -7,7 +7,7 @@ from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic,
                                                advecting_velocity, Term,
                                                all_terms, replace_subject,
-                                               linearisation)
+                                               linearisation, name)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
@@ -42,8 +42,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             assert hasattr(self, "field_names")
             state.fields(field_name, function_space,
                          subfield_names=self.field_names)
-            for name in self.field_names:
-                state.diagnostics.register(name)
+            for fname in self.field_names:
+                state.diagnostics.register(fname)
         else:
             state.fields(field_name, function_space)
             state.diagnostics.register(field_name)
@@ -202,6 +202,8 @@ class ShallowWaterEquations(PrognosticEquation):
         if u_advection_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
         elif u_advection_option == "vector_advection_form":
+            u_adv = prognostic(advection_form(state, w, u), "u")
+        elif u_advection_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
         elif u_advection_option == "circulation_form":
             ke_form = kinetic_energy_form(state, w, u)
@@ -241,13 +243,13 @@ class CompressibleEulerEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, u_advection_option="vector_invariant_form", no_normal_flow_bc_ids=None):
 
-        spaces = state.spaces.build_compatible_spaces(family, degree)
+        spaces = self._build_spaces(state, family, degree)
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = self.function_space[0]
+        Vu = W[0]
         self.bcs = []
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
@@ -261,10 +263,12 @@ class CompressibleEulerEquations(PrognosticEquation):
         g = state.parameters.g
         cp = state.parameters.cp
 
-        w, phi, gamma = TestFunctions(W)
+        tests = TestFunctions(W)
+        w, phi, gamma = tests[0:3]
         trials = TrialFunctions(W)
         X = Function(W)
-        u, rho, theta = X.split()
+        self.X = X
+        u, rho, theta = X.split()[0:3]
         rhobar = state.fields("rhobar", space=rho.function_space(), dump=False)
         thetabar = state.fields("thetabar", space=theta.function_space(), dump=False)
         pi = Pi(state.parameters, rho, theta)
@@ -291,6 +295,8 @@ class CompressibleEulerEquations(PrognosticEquation):
         if u_advection_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
         elif u_advection_option == "vector_advection_form":
+            u_adv = prognostic(advection_form(state, w, u), "u")
+        elif u_advection_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
         elif u_advection_option == "circulation_form":
             ke_form = kinetic_energy_form(state, w, u)
@@ -320,12 +326,60 @@ class CompressibleEulerEquations(PrognosticEquation):
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
 
         # define pressure gradient term and its linearisation
-        pressure_gradient_form = subject(prognostic(
+        pressure_gradient_form = name(subject(prognostic(
             cp*(-div(theta*w)*pi*dx
-                + jump(theta*w, n)*avg(pi)*dS_v), "u"), X)
+                + jump(theta*w, n)*avg(pi)*dS_v), "u"), X), "pressure_gradient")
 
         # define gravity term and its linearisation
         gravity_form = subject(prognostic(Term(g*inner(state.k, w)*dx), "u"), X)
 
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form + gravity_form)
+
+    def _build_spaces(self, state, family, degree):
+        return state.spaces.build_compatible_spaces(family, degree)
+
+
+class MoistCompressibleEulerEquations(CompressibleEulerEquations):
+
+    field_names = ['u', 'rho', 'theta', 'water_v', 'water_c']
+
+    def __init__(self, state, family, degree,
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
+
+        super().__init__(state, family, degree, u_advection_option,
+                         no_normal_flow_bc_ids)
+
+        Vth = state.spaces("theta")
+        state.fields("water_vbar", space=Vth, dump=False)
+
+        W = self.function_space
+        _, _, gamma, p, q = TestFunctions(W)
+        X = self.X
+        u, _, theta, water_v, water_c = X.split()
+
+        self.residual += time_derivative(subject(prognostic(inner(water_v, p)*dx, "water_v") + prognostic(inner(water_c, q)*dx, "water_c"), X))
+        self.residual += subject(prognostic(advection_form(state, p, water_v), "water_v") + prognostic(advection_form(state, q, water_c), "water_c"), X)
+        water_t = water_v + water_c
+
+        self.residual = self.residual.label_map(
+            lambda t: t.get(name) == "pressure_gradient",
+            replace_subject(theta/(1+water_t), 2))
+
+        cv = state.parameters.cv
+        cp = state.parameters.cp
+        c_vv = state.parameters.c_vv
+        c_pv = state.parameters.c_pv
+        c_pl = state.parameters.c_pl
+        R_d = state.parameters.R_d
+        R_v = state.parameters.R_v
+        c_vml = cv + water_v * c_vv + water_c * c_pl
+        c_pml = cp + water_v * c_pv + water_c * c_pl
+        R_m = R_d + water_v * R_v
+
+        self.residual -= subject(prognostic(gamma * theta * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u)*dx, "theta"), X)
+
+    def _build_spaces(self, state, family, degree):
+        Vu, Vrho, Vth = state.spaces.build_compatible_spaces(family, degree)
+        return Vu, Vrho, Vth, Vth, Vth

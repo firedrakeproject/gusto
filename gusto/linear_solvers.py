@@ -173,7 +173,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(self.equations.function_space)
-        u_in, rho_in, theta_in = split(self.xrhs)
+        u_in, rho_in, theta_in = split(self.xrhs)[0:3]
 
         # Build the function space for "broken" u, rho, and pressure trace
         M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
@@ -366,7 +366,7 @@ class CompressibleSolver(TimesteppingSolver):
             bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
-        u, rho, theta = dy.split()
+        u, rho, theta = dy.split()[0:3]
         u.assign(u1)
         rho.assign(rho1)
 

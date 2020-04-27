@@ -85,13 +85,14 @@ class SpaceCreator(object):
 
     def build_dg_space(self, degree):
         if self.extruded_mesh:
-            if not self._initialised_base_spaces:
+            if not self._initialised_base_spaces or self.T1.degree() != degree:
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
-                self.S2 = FiniteElement("DG", cell, degree,
-                                        variant="equispaced")
-                self.T1 = FiniteElement("DG", interval, degree,
-                                        variant="equispaced")
-            V_elt = TensorProductElement(self.S2, self.T1)
+                S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+                T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+            else:
+                S2 = self.S2
+                T1 = self.T1
+            V_elt = TensorProductElement(S2, T1)
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, degree, variant="equispaced")

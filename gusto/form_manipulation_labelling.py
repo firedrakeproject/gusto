@@ -241,3 +241,4 @@ advecting_velocity = Label("advecting_velocity", validator=lambda value: type(va
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) == LabelledForm)
+name = Label("name", validator=lambda value: type(value) == str)
