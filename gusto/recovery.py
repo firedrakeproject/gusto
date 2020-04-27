@@ -3,11 +3,9 @@ The recovery operators used for lowest-order advection schemes.
 """
 from firedrake import (expression, function, Function, FunctionSpace, Projector,
                        VectorFunctionSpace, SpatialCoordinate, as_vector,
-                       dx, Interpolator, BrokenElement, interval, Constant,
+                       Interpolator, BrokenElement, interval, Constant,
                        TensorProductElement, FiniteElement, DirichletBC)
 from firedrake.utils import cached_property
-from firedrake.parloops import par_loop, READ, WRITE
-from gusto.configuration import logger
 from gusto import kernels
 import ufl
 from enum import Enum
@@ -423,7 +421,7 @@ def correct_eff_coords(eff_coords):
     return adjusted_coords
 
 
-def find_domain_boundaries(mesh):#!! remember to remove this
+def find_domain_boundaries(mesh):
     """
     Makes a scalar DG0 function whose values are 0. everywhere except for in
     cells on the boundary of the domain, where the values are 1.0.
