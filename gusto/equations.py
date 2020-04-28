@@ -4,7 +4,7 @@ from firedrake import (TestFunction, Function, inner, dx, div,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
-                                               advection, prognostic,
+                                               advection, prognostic, drop,
                                                advecting_velocity, Term,
                                                all_terms, replace_subject,
                                                linearisation, name)
@@ -355,17 +355,12 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
         state.fields("water_vbar", space=Vth, dump=False)
 
         W = self.function_space
-        _, _, gamma, p, q = TestFunctions(W)
+        w, _, gamma, p, q = TestFunctions(W)
         X = self.X
-        u, _, theta, water_v, water_c = X.split()
+        u, rho, theta, water_v, water_c = X.split()
 
         self.residual += time_derivative(subject(prognostic(inner(water_v, p)*dx, "water_v") + prognostic(inner(water_c, q)*dx, "water_c"), X))
         self.residual += subject(prognostic(advection_form(state, p, water_v), "water_v") + prognostic(advection_form(state, q, water_c), "water_c"), X)
-        water_t = water_v + water_c
-
-        self.residual = self.residual.label_map(
-            lambda t: t.get(name) == "pressure_gradient",
-            replace_subject(theta/(1+water_t), 2))
 
         cv = state.parameters.cv
         cp = state.parameters.cp
@@ -377,6 +372,18 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
         c_vml = cv + water_v * c_vv + water_c * c_pl
         c_pml = cp + water_v * c_pv + water_c * c_pl
         R_m = R_d + water_v * R_v
+
+        water_t = water_v + water_c
+        pi = Pi(state.parameters, rho, theta)
+        n = FacetNormal(state.mesh)
+
+        self.residual = self.residual.label_map(
+            lambda t: t.get(name) == "pressure_gradient",
+            drop)
+        theta_v = theta/(1+water_t)
+        self.residual += subject(prognostic(
+            cp*(-div(theta_v*w)*pi*dx
+                + jump(theta_v*w, n)*avg(pi)*dS_v), "u"), X)
 
         self.residual -= subject(prognostic(gamma * theta * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml)) * div(u)*dx, "theta"), X)
 

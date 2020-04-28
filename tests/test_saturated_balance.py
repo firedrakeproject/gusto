@@ -98,7 +98,6 @@ def setup_saturated(dirname, recovered):
                                    recovered_space=VCG1,
                                    broken_space=Vt_brok)
     else:
-        u_opts = None
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
         wv_opts = EmbeddedDGOptions()
@@ -130,6 +129,7 @@ def run_saturated(dirname, recovered):
 
     stepper, tmax = setup_saturated(dirname, recovered)
     stepper.run(t=0, tmax=tmax)
+
 
 @pytest.mark.parametrize("recovered", [True, False])
 def test_saturated_setup(tmpdir, recovered):
