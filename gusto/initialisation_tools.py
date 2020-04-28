@@ -432,7 +432,8 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     theta0.assign(theta_d * 1.01)
     water_v0.assign(0.01)
 
-    if state.vertical_degree == 0:
+    v_deg = Vr.ufl_element().degree()[1]
+    if v_deg == 0:
         method = Boundary_Method.physics
     else:
         method = None
