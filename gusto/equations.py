@@ -1,5 +1,5 @@
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, sin, inner, dx, div,
+from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate)
@@ -246,7 +246,8 @@ class CompressibleEulerEquations(PrognosticEquation):
 
     field_names = ['u', 'rho', 'theta']
 
-    def __init__(self, state, family, degree, sponge=None,
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 extra_terms=None,
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None):
@@ -344,6 +345,10 @@ class CompressibleEulerEquations(PrognosticEquation):
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form + gravity_form)
 
+        if Omega is not None:
+            self.residual += subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), X)
+
         if sponge is not None:
             W_DG = FunctionSpace(state.mesh, "DG", 2)
             x = SpatialCoordinate(state.mesh)
@@ -354,9 +359,9 @@ class CompressibleEulerEquations(PrognosticEquation):
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-            mu = Function(W_DG).interpolate(muexpr)
+            self.mu = Function(W_DG).interpolate(muexpr)
             self.residual -= name(subject(prognostic(
-                mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), X), "sponge")
+                self.mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), X), "sponge")
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
@@ -366,6 +371,13 @@ class CompressibleEulerEquations(PrognosticEquation):
                 self.residual += subject(
                     prognostic(interior_penalty_diffusion_form(
                         state, test, fn, diffusion), field), X)
+
+        if extra_terms is not None:
+            for field, term in extra_terms:
+                idx = self.field_names.index(field)
+                test = tests[idx]
+                self.residual += subject(prognostic(
+                    inner(test, term)*dx, field), X)
 
     def _build_spaces(self, state, family, degree):
         return state.spaces.build_compatible_spaces(family, degree)
