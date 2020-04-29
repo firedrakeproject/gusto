@@ -9,8 +9,10 @@ def run(setup):
     f_init = setup.f_init
     V = state.spaces("DG", "DG", 1)
 
+    diffusion_params = DiffusionParameters(kappa=1., mu=5)
     equation = AdvectionDiffusionEquation(state, V, "f", ufamily=setup.family,
-                                          udegree=setup.degree, kappa=1., mu=5)
+                                          udegree=setup.degree,
+                                          diffusion_parameters=diffusion_params)
     problem = [(equation, ((SSPRK3(state), advection),
                            (BackwardEuler(state), diffusion)))]
     state.fields("f").interpolate(f_init)

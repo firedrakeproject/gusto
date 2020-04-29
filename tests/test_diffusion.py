@@ -39,7 +39,9 @@ def test_diffusion(tmpdir, vector, DG, tracer_setup):
 
     mu = 5.
 
-    eqn = DiffusionEquation(state, V, "f", kappa=kappa, mu=mu)
+    diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
+    eqn = DiffusionEquation(state, V, "f",
+                            diffusion_parameters=diffusion_params)
     f = state.fields("f")
     f_end = state.fields("f_end", V)
     try:

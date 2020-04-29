@@ -109,7 +109,7 @@ class DiffusionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the advection_form
     """
     def __init__(self, state, function_space, field_name,
-                 **kwargs):
+                 diffusion_parameters):
         super().__init__(state, function_space, field_name)
 
         test = TestFunction(function_space)
@@ -118,7 +118,8 @@ class DiffusionEquation(PrognosticEquation):
 
         self.residual = subject(
             mass_form
-            + interior_penalty_diffusion_form(state, test, q, **kwargs), q
+            + interior_penalty_diffusion_form(
+                state, test, q, diffusion_parameters), q
         )
 
 
@@ -132,13 +133,9 @@ class AdvectionDiffusionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
     """
     def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, **kwargs):
+                 ufamily=None, udegree=None, diffusion_parameters=None,
+                 **kwargs):
         super().__init__(state, function_space, field_name)
-        dkwargs = {}
-        for k in ["kappa", "mu"]:
-            assert k in kwargs.keys(), "diffusion form requires %s kwarg " % k
-            dkwargs[k] = kwargs.pop(k)
-        akwargs = kwargs
 
         if not hasattr(state.fields, "u"):
             V = state.spaces("HDiv", ufamily, udegree)
@@ -149,8 +146,9 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 
         self.residual = subject(
             mass_form
-            + advection_form(state, test, q, **akwargs)
-            + interior_penalty_diffusion_form(state, test, q, **dkwargs), q
+            + advection_form(state, test, q, **kwargs)
+            + interior_penalty_diffusion_form(
+                state, test, q, diffusion_parameters), q
         )
 
 
