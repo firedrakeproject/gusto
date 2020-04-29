@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import (as_vector, VectorFunctionSpace,
-                       PeriodicIntervalMesh, ExtrudedMesh,
+from firedrake import (as_vector, PeriodicIntervalMesh, ExtrudedMesh,
                        sin, SpatialCoordinate, Function)
 import numpy as np
 import sys
@@ -11,76 +10,49 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 3600.
 
-##############################################################################
 # set up mesh
-##############################################################################
-# Construct 1d periodic base mesh
 columns = 300  # number of columns
 L = 3.0e5
 m = PeriodicIntervalMesh(columns, L)
 
-# build 2D mesh by extruding the base mesh
 nlayers = 10  # horizontal layers
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-##############################################################################
-# set up all the other things that state requires
-##############################################################################
-
-# list of prognostic fieldnames
-# this is passed to state and used to construct a dictionary,
-# state.field_dict so that we can access fields by name
-# u is the 2D velocity
-# p is the pressure
-# b is the buoyancy
-fieldlist = ['u', 'p', 'b']
-
-# class containing output parameters
-# all values not explicitly set here use the default values provided
-# and documented in configuration.py
+# output parameters
 output = OutputParameters(dirname='gw_incompressible',
                           dumpfreq=10,
                           dumplist=['u'],
                           perturbation_fields=['b'],
                           log_level='INFO')
 
-# class containing physical parameters
-# all values not explicitly set here use the default values provided
-# and documented in configuration.py
+# physical parameters
 parameters = CompressibleParameters()
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber()]
 
-# setup state, passing in the mesh, information on the required finite element
-# function spaces, z, k, and the classes above
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="CG",
+# setup state
+state = State(mesh,
               dt=dt,
               output=output,
               parameters=parameters,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
-##############################################################################
+eqns = IncompressibleBoussinesqEquations(state, "CG", 1)
+
 # Initial conditions
-##############################################################################
-# set up functions on the spaces constructed by state
 u0 = state.fields("u")
 b0 = state.fields("b")
 p0 = state.fields("p")
 
 # spaces
-Vu = u0.function_space()
 Vb = b0.function_space()
 
 x, z = SpatialCoordinate(mesh)
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
-# the following is symbolic algebra, using the default buoyancy frequency
-# from the parameters class.
 N = parameters.N
 bref = z*(N**2)
 # interpolate the expression to the function
@@ -95,54 +67,27 @@ b0.interpolate(b_b + b_pert)
 
 incompressible_hydrostatic_balance(state, b_b, p0)
 
-# interpolate velocity to vector valued function space
-W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
-uinit = Function(W_VectorCG1).interpolate(as_vector([20.0, 0.0]))
-# project to the function space we actually want to use
-# this step is purely because it is not yet possible to interpolate to the
-# vector function spaces we require for the compatible finite element
-# methods that we use
+uinit = (as_vector([20.0, 0.0]))
 u0.project(uinit)
 
-# pass these initial conditions to the state.initialise method
-state.initialise([('u', u0),
-                  ('b', b0)])
 # set the background buoyancy
 state.set_reference_profiles([('b', b_b)])
 
-##############################################################################
 # Set up advection schemes
-##############################################################################
-# advected_fields is a dictionary containing field_name: advection class
-ueqn = EulerPoincare(state, Vu)
 supg = True
 if supg:
-    beqn = SUPGAdvection(state, Vb,
-                         equation_form="advective")
+    b_opts = SUPGOptions()
 else:
-    beqn = EmbeddedDGAdvection(state, Vb,
-                               equation_form="advective")
-advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("b", SSPRK3(state, b0, beqn)))
+    b_opts = EmbeddedDGOptions()
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "b", options=b_opts)]
 
-##############################################################################
 # Set up linear solver for the timestepping scheme
-##############################################################################
-linear_solver = IncompressibleSolver(state)
+linear_solver = IncompressibleSolver(state, eqns)
 
-##############################################################################
-# Set up forcing
-##############################################################################
-forcing = IncompressibleForcing(state)
-
-##############################################################################
 # build time stepper
-##############################################################################
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        forcing)
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver)
 
-##############################################################################
 # Run!
-##############################################################################
 stepper.run(t=0, tmax=tmax)

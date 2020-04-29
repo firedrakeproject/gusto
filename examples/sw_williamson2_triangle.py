@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
 import sys
 
@@ -18,7 +17,6 @@ R = 6371220.
 H = 5960.
 
 # setup input that doesn't change with ref level or dt
-fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
@@ -40,13 +38,15 @@ for ref_level, dt in ref_dt.items():
                          ShallowWaterPotentialEnergy(),
                          ShallowWaterPotentialEnstrophy()]
 
-    state = State(mesh, horizontal_degree=1,
-                  family="BDM",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=diagnostic_fields,
-                  fieldlist=fieldlist)
+                  diagnostic_fields=diagnostic_fields)
+
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
+    eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -54,33 +54,16 @@ for ref_level, dt in ref_dt.items():
     x = SpatialCoordinate(mesh)
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    Omega = parameters.Omega
     g = parameters.g
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
-    # Coriolis expression
-    fexpr = 2*Omega*x[2]/R
-    V = FunctionSpace(mesh, "CG", 1)
-    f = state.fields("coriolis", V)
-    f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    state.initialise([('u', u0),
-                      ('D', D0)])
 
-    ueqn = VectorInvariant(state, u0.function_space())
-    Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
-
-    linear_solver = ShallowWaterSolver(state)
-
-    # Set up forcing
-    sw_forcing = ShallowWaterForcing(state, euler_poincare=False)
+    advected_fields = [ImplicitMidpoint(state, "u"),
+                       SSPRK3(state, "D", subcycles=2)]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+    stepper = CrankNicolson(state, eqns, advected_fields)
 
     stepper.run(t=0, tmax=tmax)
