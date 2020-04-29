@@ -1,8 +1,8 @@
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, inner, dx, div,
+from firedrake import (TestFunction, Function, sin, inner, dx, div,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
-                       DirichletBC)
+                       DirichletBC, conditional, SpatialCoordinate)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic, drop,
                                                advecting_velocity, Term,
@@ -248,7 +248,9 @@ class CompressibleEulerEquations(PrognosticEquation):
 
     field_names = ['u', 'rho', 'theta']
 
-    def __init__(self, state, family, degree, u_advection_option="vector_invariant_form", no_normal_flow_bc_ids=None):
+    def __init__(self, state, family, degree, sponge=None,
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
 
         spaces = self._build_spaces(state, family, degree)
         W = MixedFunctionSpace(spaces)
@@ -342,6 +344,20 @@ class CompressibleEulerEquations(PrognosticEquation):
 
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form + gravity_form)
+
+        if sponge is not None:
+            W_DG = FunctionSpace(state.mesh, "DG", 2)
+            x = SpatialCoordinate(state.mesh)
+            z = x[-1]
+            H = sponge.H
+            zc = sponge.z_level
+            mubar = sponge.mubar
+            muexpr = conditional(z <= zc,
+                                 0.0,
+                                 mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
+            mu = Function(W_DG).interpolate(muexpr)
+            self.residual -= name(subject(prognostic(
+                mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), X), "sponge")
 
     def _build_spaces(self, state, family, degree):
         return state.spaces.build_compatible_spaces(family, degree)

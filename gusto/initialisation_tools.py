@@ -200,8 +200,10 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         rho0.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
 
 
-def remove_initial_w(u, Vv):
-    bc = DirichletBC(u.function_space()[0], 0.0, "bottom")
+def remove_initial_w(u):
+    Vu = u.function_space()
+    Vv = FunctionSpace(Vu._ufl_domain, Vu.ufl_element()._elements[-1])
+    bc = DirichletBC(Vu[0], 0.0, "bottom")
     bc.apply(u)
     uv = Function(Vv).project(u)
     ustar = Function(u.function_space()).project(uv)

@@ -39,7 +39,7 @@ class Forcing(object):
                                drop)
 
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) == "divergence_form",
+            lambda t: t.has_label(time_derivative) or t.get(name) in ["divergence_form", "sponge"],
             drop,
             replace_subject(self.x0))
 
@@ -50,7 +50,7 @@ class Forcing(object):
         )
 
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) == "divergence_form",
+            lambda t: t.has_label(time_derivative) or t.get(name) in ["divergence_form", "sponge"],
             drop,
             replace_subject(self.x0))
         if any(t.get(name) == "divergence_form" for t in residual):
