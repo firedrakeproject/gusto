@@ -250,6 +250,7 @@ class CompressibleEulerEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, sponge=None,
                  u_advection_option="vector_invariant_form",
+                 diffusion_options=None,
                  no_normal_flow_bc_ids=None):
 
         spaces = self._build_spaces(state, family, degree)
@@ -359,6 +360,15 @@ class CompressibleEulerEquations(PrognosticEquation):
             self.residual -= name(subject(prognostic(
                 mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), X), "sponge")
 
+        if diffusion_options is not None:
+            for field, diffusion in diffusion_options:
+                idx = self.field_names.index(field)
+                test = tests[idx]
+                fn = X.split()[idx]
+                self.residual += subject(
+                    prognostic(interior_penalty_diffusion_form(
+                        state, test, fn, diffusion), field), X)
+
     def _build_spaces(self, state, family, degree):
         return state.spaces.build_compatible_spaces(family, degree)
 
@@ -369,11 +379,13 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
 
     def __init__(self, state, family, degree, sponge=None,
                  u_advection_option="vector_invariant_form",
+                 diffusion_options=None,
                  no_normal_flow_bc_ids=None):
 
         super().__init__(state, family, degree,
                          sponge=sponge,
                          u_advection_option=u_advection_option,
+                         diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids)
 
         Vth = state.spaces("theta")

@@ -2,7 +2,7 @@ from gusto import *
 from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
-                       LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
+                       LinearVariationalProblem, LinearVariationalSolver,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
@@ -34,10 +34,8 @@ m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
-diffusion = False
+diffusion = True
 degree = 0 if recovered else 1
-
-fieldlist = ['u', 'rho', 'theta']
 
 dirname = 'dry_bf_bubble'
 
@@ -53,16 +51,20 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 params = CompressibleParameters()
-diagnostic_fields = []
 
-state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
-              family="CG",
+state = State(mesh,
               dt=dt,
               output=output,
-              parameters=params,
-              fieldlist=fieldlist,
-              diagnostic_fields=diagnostic_fields,
-              u_bc_ids=[1, 2])
+              parameters=params)
+
+if diffusion:
+    diffusion_options = [('u', DiffusionParameters(kappa=60., mu=10./deltax))]
+else:
+    diffusion_options = None
+
+eqns = CompressibleEulerEquations(state, "CG", degree,
+                                  diffusion_options=diffusion_options,
+                                  no_normal_flow_bc_ids=[1, 2])
 
 # Initial conditions
 u0 = state.fields("u")
@@ -107,10 +109,6 @@ rho_problem = LinearVariationalProblem(lhs, rhs, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-# initialise fields
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
@@ -134,15 +132,9 @@ if recovered:
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)
-
-    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
 else:
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
-
+    rho_opts = None
+    theta_opts = EmbeddedDGOptions()
 
 # set up limiter
 if limit:
@@ -153,36 +145,23 @@ if limit:
 else:
     limiter = None
 
-advected_fields = [('rho', SSPRK3(state, rho0, rhoeqn)),
-                   ('theta', SSPRK3(state, theta0, thetaeqn, limiter=limiter))]
+advected_fields = [SSPRK3(state, "rho", options=rho_opts),
+                   SSPRK3(state, "theta", options=theta_opts, limiter=limiter)]
 if recovered:
-    advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
+    advected_fields.append(SSPRK3(state, "u", options=u_opts))
 else:
-    advected_fields.append(('u', ThetaMethod(state, u0, ueqn)))
+    advected_fields.append(ImplicitMidpoint(state, "u"))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-if recovered:
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
-else:
-    compressible_forcing = CompressibleForcing(state)
-
-# diffusion
-bcs = [DirichletBC(Vu, 0.0, "bottom"),
-       DirichletBC(Vu, 0.0, "top")]
+linear_solver = CompressibleSolver(state, eqns)
 
 diffusion_schemes = []
-
 if diffusion:
-    diffusion_schemes.append(('u', InteriorPenalty(
-        state, Vu, kappa=Constant(60.),
-        mu=Constant(10./deltax), bcs=bcs)))
+    diffusion_schemes.append(BackwardEuler(state, "u"))
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing,
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver,
                         diffusion_schemes=diffusion_schemes)
 
 stepper.run(t=0, tmax=tmax)

@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       Constant, DirichletBC, pi, cos, Function, sqrt,
+                       Constant, pi, cos, Function, sqrt,
                        conditional)
 import sys
 
@@ -26,8 +26,6 @@ for delta, dt in res_dt.items():
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
-
     output = OutputParameters(dirname=dirname,
                               dumpfreq=5,
                               dumplist=['u'],
@@ -37,13 +35,18 @@ for delta, dt in res_dt.items():
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
+
+    diffusion_options = [
+        ("u", DiffusionParameters(kappa=75., mu=10./delta)),
+        ("theta", DiffusionParameters(kappa=75., mu=10./delta))]
+
+    eqns = CompressibleEulerEquations(state, "CG", 1,
+                                      diffusion_options=diffusion_options)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -76,43 +79,28 @@ for delta, dt in res_dt.items():
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0)])
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     supg = True
     if supg:
-        thetaeqn = SUPGAdvection(state, Vt,
-                                 equation_form="advective")
+        theta_opts = SUPGOptions()
     else:
-        thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective",
-                                       options=EmbeddedDGOptions())
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+        thetaeqn = EmbeddedDGOptions()
+    advected_fields = [ImplicitMidpoint(state, "u"),
+                       SSPRK3(state, "rho"),
+                       SSPRK3(state, "theta", options=theta_opts)]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
+    linear_solver = CompressibleSolver(state, eqns)
 
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
-
-    bcs = [DirichletBC(Vu, 0.0, "bottom"),
-           DirichletBC(Vu, 0.0, "top")]
-    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75.,
-                                             mu=Constant(10./delta), bcs=bcs)),
-                       ("theta", InteriorPenalty(state, Vt, kappa=75.,
-                                                 mu=Constant(10./delta)))]
+    diffusion_schemes = [BackwardEuler(state, "u"),
+                         BackwardEuler(state, "theta")]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing, diffused_fields)
+    stepper = CrankNicolson(state, eqns, advected_fields,
+                            linear_solver=linear_solver,
+                            diffusion_schemes=diffusion_schemes)
 
     stepper.run(t=0, tmax=tmax)

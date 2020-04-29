@@ -182,17 +182,20 @@ class CrankNicolson(Timestepper):
             schemes.append((scheme, advection))
             assert scheme.field_name in equation_set.field_names
             self.active_advection.append((scheme.field_name, scheme))
-        if diffusion_schemes is None:
-            self.diffusion_schemes = []
-        for scheme in self.diffusion_schemes:
-            assert scheme.field_name in equation_set.field_names
-            schemes.append((scheme, diffusion))
-            self.diffusion_schemes.append((scheme.field_name, scheme))
+
+        self.diffusion_schemes = []
+        if diffusion_schemes is not None:
+            for scheme in diffusion_schemes:
+                assert scheme.field_name in equation_set.field_names
+                schemes.append((scheme, diffusion))
+                self.diffusion_schemes.append((scheme.field_name, scheme))
 
         problem = [(equation_set, tuple(schemes))]
         if auxiliary_equations_and_schemes is not None:
             problem.append(*auxiliary_equations_and_schemes)
-            self.auxiliary_schemes = [(eqn.field_name, scheme) for eqn, scheme in auxiliary_equations_and_schemes]
+            self.auxiliary_schemes = [
+                (eqn.field_name, scheme)
+                for eqn, scheme in auxiliary_equations_and_schemes]
         else:
             self.auxiliary_schemes = []
 
@@ -263,7 +266,7 @@ class CrankNicolson(Timestepper):
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
-                scheme.apply(field, field)
+                scheme.apply(xn(name), xnp1(name))
 
 
 class PrescribedAdvection(Timestepper):

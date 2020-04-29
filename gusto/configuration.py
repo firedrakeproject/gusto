@@ -7,7 +7,7 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters"]
+__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -161,3 +161,9 @@ class SpongeLayerParameters(Configuration):
     H = None
     z_level = None
     mubar = None
+
+
+class DiffusionParameters(Configuration):
+
+    kappa = None
+    mu = None

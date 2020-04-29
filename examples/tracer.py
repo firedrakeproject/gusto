@@ -26,8 +26,6 @@ for delta, dt in res_dt.items():
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'rho', 'theta']
-
     output = OutputParameters(dirname=dirname,
                               dumpfreq=5,
                               dumplist=['u'],
@@ -37,19 +35,24 @@ for delta, dt in res_dt.items():
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="CG",
+    state = State(mesh,
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  fieldlist=fieldlist,
                   diagnostic_fields=diagnostic_fields)
+
+    diffusion_options = [
+        ("u", DiffusionParameters(kappa=75., mu=10./delta)),
+        ("theta", DiffusionParameters(kappa=75., mu=10./delta))]
+    eqns = CompressibleEulerEquations(state, "CG", 1,
+                                      diffusion_options=diffusion_options)
+    watereqn = AdvectionEquation(state, state.spaces("theta"), "water")
 
     # Initial conditions
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water0 = state.fields("water", theta0.function_space())
+    water0 = state.fields("water")
 
     # spaces
     Vu = u0.function_space()
@@ -78,48 +81,33 @@ for delta, dt in res_dt.items():
     water0.interpolate(theta_pert)
     rho0.assign(rho_b)
 
-    state.initialise([('u', u0),
-                      ('rho', rho0),
-                      ('theta', theta0),
-                      ('water', water0)])
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     supg = True
     if supg:
-        thetaeqn = SUPGAdvection(state, Vt,
-                                 equation_form="advective")
-        watereqn = SUPGAdvection(state, Vt,
-                                 equation_form="advective")
+        theta_opts = SUPGOptions()
+        water_opts = SUPGOptions()
     else:
-        thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective",
-                                       options=EmbeddedDGOptions())
-        watereqn = EmbeddedDGAdvection(state, Vt,
-                                       equation_form="advective",
-                                       options=EmbeddedDGOptions())
-    advected_fields = []
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-    advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-    advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
-    advected_fields.append(("water", SSPRK3(state, water0, watereqn)))
+        theta_opts = EmbeddedDGOptions()
+        water_opts = EmbeddedDGOptions()
+    advected_fields = [ImplicitMidpoint(state, "u"),
+                       SSPRK3(state, "rho"),
+                       SSPRK3(state, "theta", options=theta_opts)]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
-
-    # Set up forcing
-    compressible_forcing = CompressibleForcing(state)
+    linear_solver = CompressibleSolver(state, eqns)
 
     bcs = [DirichletBC(Vu, 0.0, "bottom"),
            DirichletBC(Vu, 0.0, "top")]
-    diffused_fields = [("u", InteriorPenalty(state, Vu, kappa=75., mu=Constant(10./delta), bcs=bcs)),
-                       ("theta", InteriorPenalty(state, Vt, kappa=75., mu=Constant(10./delta)))]
+    diffusion_schemes = [BackwardEuler(state, "u"),
+                         BackwardEuler(state, "theta")]
 
     # build time stepper
-    stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            compressible_forcing, diffused_fields)
+    stepper = CrankNicolson(state, eqns, advected_fields,
+                            auxiliary_equations_and_schemes=[(watereqn, SSPRK3(state, options=water_opts))],
+                            linear_solver=linear_solver,
+                            diffusion_schemes=diffusion_schemes)
 
     stepper.run(t=0, tmax=tmax)

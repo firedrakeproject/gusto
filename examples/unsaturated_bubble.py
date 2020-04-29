@@ -6,7 +6,7 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
-                       LinearVariationalProblem, LinearVariationalSolver, DirichletBC,
+                       LinearVariationalProblem, LinearVariationalSolver,
                        FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
@@ -29,7 +29,6 @@ else:
     deltax = 20. if recovered else 40.
     tmax = 600.
 
-
 L = 3600.
 h = 2400.
 nlayers = int(h/deltax)
@@ -45,26 +44,32 @@ if recovered:
 if diffusion:
     dirname += '_diffusion'
 
-fieldlist = ['u', 'rho', 'theta']
-output = OutputParameters(dirname=dirname, dumpfreq=20, dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['theta', 'water_v', 'rho'], log_level='INFO')
+output = OutputParameters(dirname=dirname, dumpfreq=20,
+                          perturbation_fields=['theta', 'water_v', 'rho'],
+                          log_level='INFO')
 params = CompressibleParameters()
 diagnostic_fields = [RelativeHumidity(), Theta_e()]
 
-state = State(mesh, vertical_degree=degree, horizontal_degree=degree,
-              family="CG",
+state = State(mesh,
               dt=dt,
               output=output,
               parameters=params,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
+
+if diffusion:
+    diffusion_options = [('u', DiffusionParameters(kappa=60., mu=10./deltax))]
+else:
+    diffusion_options = None
+
+eqns = MoistCompressibleEulerEquations(state, "CG", 1,
+                                       diffusion_options=diffusion_options)
 
 # Initial conditions
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
-water_v0 = state.fields("water_v", theta0.function_space())
-water_c0 = state.fields("water_c", theta0.function_space())
+water_v0 = state.fields("water_v")
+water_c0 = state.fields("water_c")
 rain0 = state.fields("rain", theta0.function_space())
 moisture = ["water_v", "water_c", "rain"]
 
@@ -109,7 +114,8 @@ theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
 H = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
-unsaturated_hydrostatic_balance(state, theta_d, H, pi_boundary=Constant(pi_surf))
+unsaturated_hydrostatic_balance(state, theta_d, H,
+                                pi_boundary=Constant(pi_surf))
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
@@ -123,18 +129,20 @@ r1 = 300.
 r2 = 200.
 r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
 
-H_expr = conditional(r > r1, 0.0,
-                     conditional(r > r2,
-                                 (1 - humidity) * cos(pi * (r - r2)
-                                                      / (2 * (r1 - r2))) ** 2,
-                                 1 - humidity))
+H_expr = conditional(
+    r > r1, 0.0,
+    conditional(r > r2,
+                (1 - humidity) * cos(pi * (r - r2)
+                                     / (2 * (r1 - r2))) ** 2,
+                1 - humidity))
 H_pert = Function(Vt).interpolate(H_expr)
 H.assign(H + H_pert)
 
 # now need to find perturbed rho, theta_vd and r_v
 # follow approach used in unsaturated hydrostatic setup
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok, boundary_method=physics_boundary_method)
+rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok,
+                          boundary_method=physics_boundary_method)
 rho_h = Function(Vr)
 w_h = Function(Vt)
 delta = 1.0
@@ -197,64 +205,46 @@ for i in range(max_outer_solve_count):
     if i == max_outer_solve_count:
         raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
-water_c0.assign(0.0)
-rain0.assign(0.0)
-
 # initialise fields
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0),
-                  ('water_v', water_v0),
-                  ('water_c', water_c0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
                               ('water_v', water_vb)])
 
 # Set up advection schemes
 if recovered:
-    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
+    u_advection = SSPRK3(state, "u")
+    rho_opts = EmbeddedDGOptions()
+    theta_opts = EmbeddedDGOptions()
     limiter = VertexBasedLimiter(VDG1)
 else:
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+    u_advection = ImplicitMidpoint(state, "u")
+    rho_opts = None
+    theta_opts = EmbeddedDGOptions()
     limiter = ThetaLimiter(Vt)
 
-u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
-euler_poincare = False if recovered else True
-
 advected_fields = [u_advection,
-                   ('rho', SSPRK3(state, rho0, rhoeqn)),
-                   ('theta', SSPRK3(state, theta0, thetaeqn)),
-                   ('water_v', SSPRK3(state, water_v0, thetaeqn, limiter=limiter)),
-                   ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
-                   ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
+                   SSPRK3(state, "rho", options=rho_opts),
+                   SSPRK3(state, "theta", options=theta_opts),
+                   SSPRK3(state, "water_v", limiter=limiter),
+                   SSPRK3(state, "water_c", limiter=limiter),
+                   SSPRK3(state, "rain", limiter=limiter)]
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state, moisture=moisture)
-
-# Set up forcing
-compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
-
-# diffusion
-bcs = [DirichletBC(Vu, 0.0, "bottom"),
-       DirichletBC(Vu, 0.0, "top")]
+linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 diffusion_schemes = []
 
 if diffusion:
-    diffusion_schemes.append(('u', InteriorPenalty(
-        state, Vu, kappa=Constant(60.),
-        mu=Constant(10./deltax), bcs=bcs)))
+    diffusion_schemes.append(BackwardEuler(state, "u"))
 
 # define condensation
-physics_list = [Fallout(state), Coalescence(state), Evaporation(state), Condensation(state)]
+physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
+                Condensation(state)]
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing, physics_list=physics_list,
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver,
+                        physics_list=physics_list,
                         diffusion_schemes=diffusion_schemes)
 
 stepper.run(t=0, tmax=tmax)

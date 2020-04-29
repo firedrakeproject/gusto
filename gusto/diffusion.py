@@ -6,7 +6,7 @@ from gusto.form_manipulation_labelling import subject, diffusion
 __all__ = ["interior_penalty_diffusion_form"]
 
 
-def interior_penalty_diffusion_form(state, test, q, kappa, mu):
+def interior_penalty_diffusion_form(state, test, q, parameters):
     """
     Interior penalty diffusion form
 
@@ -18,6 +18,9 @@ def interior_penalty_diffusion_form(state, test, q, kappa, mu):
     :arg: kappa: strength of diffusion
 
     """
+    kappa = parameters.kappa
+    mu = parameters.mu
+
     n = FacetNormal(state.mesh)
 
     form = inner(grad(test), grad(q)*kappa)*dx
