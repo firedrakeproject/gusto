@@ -158,7 +158,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
     field_names = ["u", "D"]
 
-    def __init__(self, state, family, degree, fexpr=None,
+    def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None):
 
@@ -175,10 +175,6 @@ class ShallowWaterEquations(PrognosticEquation):
 
         for id in no_normal_flow_bc_ids:
             self.bcs.append(DirichletBC(Vu, 0.0, id))
-
-        V = FunctionSpace(state.mesh, "CG", 1)
-        f = state.fields("coriolis", space=V)
-        f.interpolate(fexpr)
 
         g = state.parameters.g
         H = state.parameters.H
@@ -225,16 +221,27 @@ class ShallowWaterEquations(PrognosticEquation):
 
         adv_form = subject(u_adv + D_adv, X)
 
-        coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
-
         pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
         linear_pressure_gradient_form = pressure_gradient_form.label_map(
             all_terms, replace_subject(trials))
         pressure_gradient_form = linearisation(pressure_gradient_form,
                                                linear_pressure_gradient_form)
 
-        self.residual = (mass_form + adv_form
-                         + coriolis_form + pressure_gradient_form)
+        self.residual = (mass_form + adv_form + pressure_gradient_form)
+
+        # add on optional coriolis and topography forms
+        if fexpr is not None:
+            V = FunctionSpace(state.mesh, "CG", 1)
+            f = state.fields("coriolis", space=V)
+            f.interpolate(fexpr)
+            coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
+            self.residual += coriolis_form
+
+        if bexpr is not None:
+            b = state.fields("topography", state.spaces("DG"))
+            b.interpolate(bexpr)
+            topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
+            self.residual += topography_form
 
 
 class CompressibleEulerEquations(PrognosticEquation):
