@@ -416,7 +416,7 @@ class IncompressibleSolver(TimesteppingSolver):
         beta_ = Dt*self.alpha
         mu = state.mu
         Vu = state.spaces("HDiv")
-        Vb = state.spaces("HDiv_v")
+        Vb = state.spaces("theta")
         Vp = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
@@ -424,7 +424,7 @@ class IncompressibleSolver(TimesteppingSolver):
         beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
-        self.xrhs = Function(state.W)
+        self.xrhs = Function(self.equations.function_space)
         u_in, p_in, b_in = split(self.xrhs)
 
         # Build the reduced function space for u,p

@@ -421,7 +421,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         X = Function(W)
         self.X = X
         u, p, b = X.split()
-        bbar = state.fields("b_bar", space=b.function_space(), dump=False)
+        bbar = state.fields("bbar", space=b.function_space(), dump=False)
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -472,7 +472,8 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
 
         gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), X)
 
-        divergence_form = subject(prognostic(phi*div(u)*dx, "p"), X)
+        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), X),
+                               "divergence_form")
 
         self.residual = (mass_form + adv_form + divergence_form
                          + pressure_gradient_form + gravity_form)
