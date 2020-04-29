@@ -18,8 +18,6 @@ ncolumns = int(L/10.)
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-fieldlist = ['u', 'rho', 'theta']
-
 dirname = 'rb'
 
 output = OutputParameters(dirname=dirname,
@@ -31,13 +29,13 @@ output = OutputParameters(dirname=dirname,
 parameters = CompressibleParameters()
 diagnostic_fields = [CourantNumber()]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="CG",
+state = State(mesh,
               dt=dt,
               output=output,
               parameters=parameters,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
+
+eqns = CompressibleEulerEquations(state, "CG", 1)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -68,36 +66,24 @@ theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 theta0.interpolate(theta_b + theta_pert)
 rho0.interpolate(rho_b)
 
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt,
-                             equation_form="advective")
+    theta_opts = SUPGOptions()
 else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                   equation_form="advective",
-                                   options=EmbeddedDGOptions())
+    theta_opts = EmbeddedDGOptions()
 advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+advected_fields.append(ImplicitMidpoint(state, "u"))
+advected_fields.append(SSPRK3(state, "rho"))
+advected_fields.append(SSPRK3(state, "theta", options=theta_opts))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-compressible_forcing = CompressibleForcing(state)
+linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing)
+stepper = CrankNicolson(state, eqns, advected_fields, linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)
