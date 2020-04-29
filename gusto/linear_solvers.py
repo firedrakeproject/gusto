@@ -156,7 +156,6 @@ class CompressibleSolver(TimesteppingSolver):
         Dt = state.dt
         beta_ = Dt*self.alpha
         cp = state.parameters.cp
-        mu = state.mu
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
         Vtheta = state.spaces("theta")
@@ -283,8 +282,8 @@ class CompressibleSolver(TimesteppingSolver):
         )
 
         # contribution of the sponge term
-        if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+        if hasattr(self.equations, "mu"):
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -414,7 +413,6 @@ class IncompressibleSolver(TimesteppingSolver):
         state = self.state      # just cutting down line length a bit
         Dt = state.dt
         beta_ = Dt*self.alpha
-        mu = state.mu
         Vu = state.spaces("HDiv")
         Vb = state.spaces("theta")
         Vp = state.spaces("DG")
@@ -450,8 +448,8 @@ class IncompressibleSolver(TimesteppingSolver):
             + phi*div(u)*dx
         )
 
-        if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+        if hasattr(self.equations, "mu"):
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
