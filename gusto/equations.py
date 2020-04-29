@@ -291,7 +291,7 @@ class CompressibleEulerEquations(PrognosticEquation):
 
         mass_form = time_derivative(u_mass + rho_mass + theta_mass)
 
-        # define velocity advection term
+        # define velocity advection form
         if u_advection_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
         elif u_advection_option == "vector_advection_form":
@@ -325,12 +325,12 @@ class CompressibleEulerEquations(PrognosticEquation):
 
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
 
-        # define pressure gradient term and its linearisation
+        # define pressure gradient form and its linearisation
         pressure_gradient_form = name(subject(prognostic(
             cp*(-div(theta*w)*pi*dx
                 + jump(theta*w, n)*avg(pi)*dS_v), "u"), X), "pressure_gradient")
 
-        # define gravity term and its linearisation
+        # define gravity form and its linearisation
         gravity_form = subject(prognostic(Term(g*inner(state.k, w)*dx), "u"), X)
 
         self.residual = (mass_form + adv_form
@@ -390,3 +390,89 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
     def _build_spaces(self, state, family, degree):
         Vu, Vrho, Vth = state.spaces.build_compatible_spaces(family, degree)
         return Vu, Vrho, Vth, Vth, Vth
+
+
+class IncompressibleBoussinesqEquations(PrognosticEquation):
+
+    field_names = ['u', 'p', 'b']
+
+    def __init__(self, state, family, degree, u_advection_option="vector_invariant_form", no_normal_flow_bc_ids=None):
+
+        spaces = state.spaces.build_compatible_spaces(family, degree)
+        W = MixedFunctionSpace(spaces)
+
+        field_name = "_".join(self.field_names)
+        super().__init__(state, W, field_name)
+
+        Vu = W[0]
+        self.bcs = []
+        if no_normal_flow_bc_ids is None:
+            no_normal_flow_bc_ids = []
+
+        if Vu.extruded:
+            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+        for id in no_normal_flow_bc_ids:
+            self.bcs.append(DirichletBC(Vu, 0.0, id))
+
+        tests = TestFunctions(W)
+        w, phi, gamma = tests[0:3]
+        trials = TrialFunctions(W)
+        X = Function(W)
+        self.X = X
+        u, p, b = X.split()
+        bbar = state.fields("b_bar", space=b.function_space(), dump=False)
+
+        u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
+        linear_u_mass = u_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        u_mass = linearisation(u_mass, linear_u_mass)
+
+        p_mass = subject(prognostic(inner(p, phi)*dx, "p"), X)
+        linear_p_mass = p_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        p_mass = linearisation(p_mass, linear_p_mass)
+
+        b_mass = subject(prognostic(inner(b, gamma)*dx, "b"), X)
+        linear_b_mass = b_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        b_mass = linearisation(b_mass, linear_b_mass)
+
+        mass_form = time_derivative(u_mass + p_mass + b_mass)
+
+        # define velocity advection term
+        if u_advection_option == "vector_invariant_form":
+            u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+        elif u_advection_option == "vector_advection_form":
+            u_adv = prognostic(advection_form(state, w, u), "u")
+        elif u_advection_option == "vector_manifold_advection_form":
+            u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
+        elif u_advection_option == "circulation_form":
+            ke_form = kinetic_energy_form(state, w, u)
+            ke_form = advection.remove(ke_form)
+            ke_form = ke_form.label_map(
+                lambda t: t.has_label(advecting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(advecting_velocity): u}), t.labels))
+            ke_form = advecting_velocity.remove(ke_form)
+            u_adv = advection_equation_circulation_form(state, w, u) + ke_form
+        else:
+            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+
+        b_adv = prognostic(advection_form(state, gamma, b, ibp=IntegrateByParts.TWICE), "b")
+        linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
+            lambda t: t.has_label(advecting_velocity),
+            lambda t: Term(ufl.replace(
+                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+        b_adv = linearisation(b_adv, linear_b_adv)
+
+        adv_form = subject(u_adv + b_adv, X)
+
+        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), X)
+
+        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), X)
+
+        divergence_form = subject(prognostic(phi*div(u)*dx, "p"), X)
+
+        self.residual = (mass_form + adv_form + divergence_form
+                         + pressure_gradient_form + gravity_form)

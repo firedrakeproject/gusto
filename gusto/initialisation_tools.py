@@ -40,7 +40,8 @@ def sphere_to_cartesian(mesh, u_zonal, u_merid):
 def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
 
     # get F
-    Vv = state.spaces("Vv")
+    Vu = state.spaces("HDiv")
+    Vv = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
     v = TrialFunction(Vv)
     w = TestFunction(Vv)
 

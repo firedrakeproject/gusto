@@ -14,19 +14,17 @@ def setup_gw(dirname):
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    fieldlist = ['u', 'p', 'b']
     output = OutputParameters(dirname=dirname+"/gw_incompressible", dumplist=['u'], dumpfreq=5)
     parameters = CompressibleParameters()
 
-    state = State(mesh, vertical_degree=1, horizontal_degree=1,
-                  family="RTCF",
+    state = State(mesh,
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  fieldlist=fieldlist)
+                  parameters=parameters)
+
+    eqns = IncompressibleBoussinesqEquations(state, "RTCF", 1)
 
     # Initial conditions
-    u0 = state.fields("u")
     p0 = state.fields("p")
     b0 = state.fields("b")
 
@@ -38,23 +36,19 @@ def setup_gw(dirname):
     b_b = Function(b0.function_space()).interpolate(bref)
     b0.interpolate(b_b)
     incompressible_hydrostatic_balance(state, b0, p0)
-    state.initialise([('u', u0),
-                      ('p', p0),
+    state.initialise([('p', p0),
                       ('b', b0)])
 
-    # Set up forcing
-    forcing = IncompressibleForcing(state)
-
-    return state, forcing
+    return state, eqns
 
 
 def run_gw_incompressible(dirname):
 
-    state, forcing = setup_gw(dirname)
-    dt = state.dt
-    x = TimeLevelFields(state)
+    state, eqns = setup_gw(dirname)
+    x = TimeLevelFields(state, [eqns])
     xn = x.n
-    forcing.apply(dt, xn, xn, xn)
+    forcing = Forcing(eqns, state.dt, alpha=1.)
+    forcing.apply(xn, xn, xn(eqns.field_name), label="explicit")
     u = xn('u')
     w = Function(state.spaces("DG")).interpolate(u[2])
     return w

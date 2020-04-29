@@ -1,7 +1,7 @@
 from firedrake import (Function, TrialFunctions,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (advection, drop,
+from gusto.form_manipulation_labelling import (advection, drop, name,
                                                time_derivative, replace_subject)
 
 
@@ -39,7 +39,7 @@ class Forcing(object):
                                drop)
 
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: t.has_label(time_derivative) or t.get(name) == "divergence_form",
             drop,
             replace_subject(self.x0))
 
@@ -50,9 +50,14 @@ class Forcing(object):
         )
 
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: t.has_label(time_derivative) or t.get(name) == "divergence_form",
             drop,
             replace_subject(self.x0))
+        if any(t.get(name) == "divergence_form" for t in residual):
+            L_implicit -= dt*residual.label_map(
+                lambda t: t.get(name) == "divergence_form",
+                replace_subject(self.x0),
+                drop)
 
         implicit_forcing_problem = LinearVariationalProblem(
             a.form, L_implicit.form, self.xF, bcs=bcs
