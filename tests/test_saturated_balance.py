@@ -43,7 +43,8 @@ def setup_saturated(dirname, recovered):
         u_advection_option = "vector_advection_form"
     else:
         u_advection_option = "vector_invariant_form"
-    eqns = MoistCompressibleEulerEquations(state, "CG", degree, u_advection_option=u_advection_option)
+    eqns = MoistCompressibleEulerEquations(
+        state, "CG", degree, u_advection_option=u_advection_option)
 
     # Initial conditions
     u0 = state.fields("u")

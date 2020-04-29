@@ -367,12 +367,14 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
 
     field_names = ['u', 'rho', 'theta', 'water_v', 'water_c']
 
-    def __init__(self, state, family, degree,
+    def __init__(self, state, family, degree, sponge=None,
                  u_advection_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None):
 
-        super().__init__(state, family, degree, u_advection_option,
-                         no_normal_flow_bc_ids)
+        super().__init__(state, family, degree,
+                         sponge=sponge,
+                         u_advection_option=u_advection_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids)
 
         Vth = state.spaces("theta")
         state.fields("water_vbar", space=Vth, dump=False)
