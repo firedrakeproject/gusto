@@ -8,15 +8,13 @@ def setup_gaussian(dirname):
     mesh = PeriodicSquareMesh(n, n, L)
 
     parameters = ShallowWaterParameters(H=1.0, g=1.0)
-    dt = 0.1
+    dt = 0.08
     output = OutputParameters(dirname=dirname+'/sw_plane_gaussian_subcycled')
-    diagnostic_fields = [CourantNumber()]
 
     state = State(mesh,
                   dt=dt,
                   output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+                  parameters=parameters)
 
     eqns = ShallowWaterEquations(state, family="BDM", degree=1,
                                  fexpr=Constant(1.))
@@ -30,10 +28,8 @@ def setup_gaussian(dirname):
     advected_fields.append((SSPRK3(state, "u", options=EmbeddedDGOptions(), subcycles=2)))
     advected_fields.append((SSPRK3(state, "D", subcycles=2)))
 
-    linear_solver = ShallowWaterSolver(state, eqns)
-
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver)
+    stepper = CrankNicolson(state, eqns, advected_fields)
 
     return stepper
 
