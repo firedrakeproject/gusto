@@ -2,7 +2,8 @@ from abc import ABCMeta
 from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
-                       DirichletBC, conditional, SpatialCoordinate)
+                       DirichletBC, conditional, SpatialCoordinate,
+                       as_vector)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic, drop,
                                                advecting_velocity, Term,
@@ -387,13 +388,13 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
 
     field_names = ['u', 'rho', 'theta', 'water_v', 'water_c']
 
-    def __init__(self, state, family, degree, sponge=None,
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None):
 
         super().__init__(state, family, degree,
-                         sponge=sponge,
+                         Omega=Omega, sponge=sponge,
                          u_advection_option=u_advection_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids)
@@ -439,11 +440,45 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
         return Vu, Vrho, Vth, Vth, Vth
 
 
+class CompressibleEadyEquations(CompressibleEulerEquations):
+
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 u_advection_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None):
+
+        super().__init__(state, family, degree,
+                         Omega=Omega, sponge=sponge,
+                         u_advection_option=u_advection_option,
+                         diffusion_options=diffusion_options,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+
+        dthetady = state.parameters.dthetady
+        Pi0 = state.parameters.Pi0
+        cp = state.parameters.cp
+        y_vec = as_vector([0., 1., 0.])
+
+        W = self.function_space
+        w, _, gamma = TestFunctions(W)
+        X = self.X
+        u, rho, theta = X.split()
+
+        pi = Pi(state.parameters, rho, theta)
+
+        self.residual -= subject(prognostic(
+            cp*dthetady*(pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
+
+        self.residual += subject(prognostic(
+            gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
+
+
 class IncompressibleBoussinesqEquations(PrognosticEquation):
 
     field_names = ['u', 'p', 'b']
 
-    def __init__(self, state, family, degree, u_advection_option="vector_invariant_form", no_normal_flow_bc_ids=None):
+    def __init__(self, state, family, degree, Omega=None,
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
         W = MixedFunctionSpace(spaces)
@@ -469,6 +504,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         self.X = X
         u, p, b = X.split()
         bbar = state.fields("bbar", space=b.function_space(), dump=False)
+        bbar = state.fields("pbar", space=p.function_space(), dump=False)
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -524,3 +560,35 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
 
         self.residual = (mass_form + adv_form + divergence_form
                          + pressure_gradient_form + gravity_form)
+
+        if Omega is not None:
+            self.residual += subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), X)
+
+
+class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
+    def __init__(self, state, family, degree, Omega=None,
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
+
+        super().__init__(state, family, degree,
+                         Omega=Omega,
+                         u_advection_option=u_advection_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+
+        dbdy = state.parameters.dbdy
+        H = state.parameters.H
+        _, _, z = SpatialCoordinate(state.mesh)
+        eady_exp = Function(state.spaces("DG")).interpolate(z-H/2.)
+        y_vec = as_vector([0., 1., 0.])
+
+        W = self.function_space
+        w, _, gamma = TestFunctions(W)
+        X = self.X
+        u, _, b = X.split()
+
+        self.residual += subject(prognostic(
+            dbdy*eady_exp*inner(w, y_vec)*dx, "u"), X)
+
+        self.residual += subject(prognostic(
+            gamma*dbdy*inner(u, y_vec)*dx, "b"), X)

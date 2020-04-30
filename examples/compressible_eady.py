@@ -15,11 +15,7 @@ else:
     tmax = 30*day
     tdump = 2*hour
 
-
-##############################################################################
 # set up mesh
-##############################################################################
-# Construct 1d periodic base mesh
 columns = 30  # number of columns
 L = 1000000.
 m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
@@ -29,38 +25,19 @@ nlayers = 30  # horizontal layers
 H = 10000.  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-##############################################################################
-# set up all the other things that state requires
-##############################################################################
 # Coriolis expression
 f = 1.e-04
 Omega = as_vector([0., 0., f*0.5])
 
-# list of prognostic fieldnames
-# this is passed to state and used to construct a dictionary,
-# state.field_dict so that we can access fields by name
-# u is the 3D velocity
-# p is the pressure
-# b is the buoyancy
-fieldlist = ['u', 'rho', 'theta']
-
-# class containing output parameters
-# all values not explicitly set here use the default values provided
-# and documented in configuration.py
 dirname = 'compressible_eady'
-
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tdump/dt),
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['rho', 'theta', 'ExnerPi'],
                           log_level='INFO')
 
-# class containing physical parameters
-# all values not explicitly set here use the default values provided
-# and documented in configuration.py
 parameters = CompressibleEadyParameters(H=H, f=f)
 
-# list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), VelocityY(),
                      ExnerPi(), ExnerPi(reference=True),
                      CompressibleKineticEnergy(),
@@ -71,20 +48,15 @@ diagnostic_fields = [CourantNumber(), VelocityY(),
                      Difference("CompressibleKineticEnergy",
                                 "CompressibleKineticEnergyY")]
 
-# setup state, passing in the mesh, information on the required finite element
-# function spaces and the classes above
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="RTCF",
+state = State(mesh,
               dt=dt,
-              Coriolis=Omega,
               output=output,
               parameters=parameters,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
 
-##############################################################################
+eqns = CompressibleEadyEquations(state, "RTCF", 1)
+
 # Initial conditions
-##############################################################################
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
@@ -175,44 +147,18 @@ compressible_eady_initial_v(state, theta0, rho0, v)
 u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
-# pass these initial conditions to the state.initialise method
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
-
 # set the background profiles
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-##############################################################################
 # Set up advection schemes
-##############################################################################
-# we need a DG funciton space for the embedded DG advection scheme
-ueqn = AdvectionEquation(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt)
+advected_fields = [SSPRK3(state, "u"),
+                   SSPRK3(state, "rho"),
+                   SSPRK3(state, "theta")]
 
-advected_fields = []
-advected_fields.append(("u", SSPRK3(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+linear_solver = CompressibleSolver(state, eqns)
 
-##############################################################################
-# Set up linear solver for the timestepping scheme
-##############################################################################
-linear_solver = CompressibleSolver(state)
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver)
 
-##############################################################################
-# Set up forcing
-##############################################################################
-forcing = CompressibleEadyForcing(state, euler_poincare=False)
-
-##############################################################################
-# build time stepper
-##############################################################################
-stepper = CrankNicolson(state, advected_fields, linear_solver, forcing)
-
-##############################################################################
-# Run!
-##############################################################################
 stepper.run(t=0, tmax=tmax)
