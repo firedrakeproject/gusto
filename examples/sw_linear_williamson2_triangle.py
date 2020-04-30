@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
 import sys
 
@@ -21,26 +20,20 @@ mesh = IcosahedralSphereMesh(radius=R,
 x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
-fieldlist = ['u', 'D']
 output = OutputParameters(dirname='sw_linear_w2',
                           steady_state_error_fields=['u', 'D'],
                           log_level='INFO')
 parameters = ShallowWaterParameters(H=H)
 
-state = State(mesh, horizontal_degree=1,
-              family="BDM",
+state = State(mesh,
               dt=dt,
               output=output,
-              parameters=parameters,
-              fieldlist=fieldlist)
+              parameters=parameters)
 
 # Coriolis expression
 Omega = parameters.Omega
 x = SpatialCoordinate(mesh)
 fexpr = 2*Omega*x[2]/R
-V = FunctionSpace(mesh, "CG", 1)
-f = state.fields("coriolis", V)
-f.interpolate(fexpr)  # Coriolis frequency (1/s)
 
 # interpolate initial conditions
 # Initial/current conditions
@@ -52,21 +45,12 @@ g = parameters.g
 Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-state.initialise([('u', u0),
-                  ('D', D0)])
 
-Deqn = LinearAdvection(state, D0.function_space(), state.parameters.H, ibp=IntegrateByParts.ONCE, equation_form="continuity")
-advected_fields = []
-advected_fields.append(("u", NoAdvection(state, u0, None)))
-advected_fields.append(("D", ForwardEuler(state, D0, Deqn)))
+advected_fields = [ForwardEuler(state, "D")]
 
 linear_solver = ShallowWaterSolver(state)
 
-# Set up forcing
-sw_forcing = ShallowWaterForcing(state, linear=True)
-
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        sw_forcing)
+stepper = CrankNicolson(state, advected_fields, linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

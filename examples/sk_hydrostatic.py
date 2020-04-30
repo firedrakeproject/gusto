@@ -22,8 +22,6 @@ m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-fieldlist = ['u', 'rho', 'theta']
-
 dirname = 'sk_hydrostatic'
 
 output = OutputParameters(dirname=dirname,
@@ -35,16 +33,16 @@ output = OutputParameters(dirname=dirname,
 parameters = CompressibleParameters()
 diagnostic_fields = [CourantNumber()]
 
-Omega = as_vector((0., 0., 0.5e-4))
-
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="RTCF",
+state = State(mesh,
               dt=dt,
-              Coriolis=Omega,
               output=output,
               parameters=parameters,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
+
+Omega = as_vector((0., 0., 0.5e-4))
+balanced_pg = as_vector((0., -1.0e-4*20, 0.))
+eqns = CompressibleEulerEquations(state, "RTCF", 1, Omega=Omega,
+                                  extra_terms=[("u", balanced_pg)])
 
 # Initial conditions
 u0 = state.fields("u")
@@ -106,31 +104,20 @@ compressible_hydrostatic_balance(state, theta_b, rho_b,
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt)
 advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+advected_fields.append(ImplicitMidpoint(state, "u"))
+advected_fields.append(SSPRK3(state, "rho"))
+advected_fields.append(SSPRK3(state, "theta", options=SUPGOptions()))
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-# [0,0,2*omega] cross [u,v,0] = [-2*omega*v, 2*omega*u, 0]
-balanced_pg = as_vector((0., 1.0e-4*20, 0.))
-compressible_forcing = CompressibleForcing(state, extra_terms=balanced_pg)
+linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing)
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

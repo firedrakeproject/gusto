@@ -1,7 +1,7 @@
 from gusto import *
-from firedrake import (FunctionSpace, as_vector, VectorFunctionSpace,
+from firedrake import (as_vector, VectorFunctionSpace,
                        PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       exp, pi, cos, Function, conditional, Mesh, sin, op2, sqrt)
+                       exp, pi, cos, Function, conditional, Mesh, op2, sqrt)
 import sys
 
 dt = 5.0
@@ -43,15 +43,6 @@ else:
 new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
 
-# sponge function
-W_DG = FunctionSpace(mesh, "DG", 2)
-x, z = SpatialCoordinate(mesh)
-zc = H-20000.
-mubar = 0.3/dt
-mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-mu = Function(W_DG).interpolate(mu_top)
-fieldlist = ['u', 'rho', 'theta']
-
 output = OutputParameters(dirname=dirname,
                           dumpfreq=30,
                           dumplist=['u'],
@@ -61,15 +52,17 @@ output = OutputParameters(dirname=dirname,
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance()]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="CG",
+state = State(mesh,
               dt=dt,
-              sponge_function=mu,
               hydrostatic=True,
               output=output,
               parameters=parameters,
-              fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
+
+# sponge function
+sponge = SpongeLayerParameters(H=H, z_level=H-20000, mubar=0.3/dt)
+
+eqns = CompressibleEulerEquations(state, "CG", 1, sponge=sponge)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -141,26 +134,20 @@ compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
 theta0.assign(theta_b)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0]))
-remove_initial_w(u0, state.Vv)
+remove_initial_w(u0)
 
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
+    theta_opts = SUPGOptions()
 else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
-advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+    theta_opts = EmbeddedDGOptions()
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "rho"),
+                   SSPRK3(state, "theta", options=theta_opts)]
 
 # Set up linear solver
 params = {'mat_type': 'matfree',
@@ -182,14 +169,12 @@ params = {'mat_type': 'matfree',
                                             'sub_pc_type': 'ilu'}}}
 
 alpha = 0.51  # off-centering parameter
-linear_solver = CompressibleSolver(state, alpha, solver_parameters=params,
+linear_solver = CompressibleSolver(state, eqns, alpha, solver_parameters=params,
                                    overwrite_solver_parameters=True)
 
-# Set up forcing
-compressible_forcing = CompressibleForcing(state)
-
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing, alpha=alpha)
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver,
+                        alpha=alpha)
 
 stepper.run(t=0, tmax=tmax)
