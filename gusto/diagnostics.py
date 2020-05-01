@@ -607,7 +607,8 @@ class HydrostaticImbalance(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("Vv")
+            Vu = state.spaces("HDiv")
+            space = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
             super().setup(state, space=space)
             rho = state.fields("rho")
             rhobar = state.fields("rhobar")

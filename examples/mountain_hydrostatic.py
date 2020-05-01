@@ -83,6 +83,7 @@ R_d = parameters.R_d
 kappa = parameters.kappa
 
 # Hydrostatic case: Isothermal with T = 250
+x, z = SpatialCoordinate(mesh)
 Tsurf = 250.
 N = g/sqrt(c_p*Tsurf)
 
