@@ -55,8 +55,6 @@ lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
 lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 
-fieldlist = ['u', 'rho', 'theta']
-
 dirname = 'meanflow_ref_hybridization'
 
 output = OutputParameters(dirname=dirname,
@@ -64,12 +62,12 @@ output = OutputParameters(dirname=dirname,
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="RTCF",
+state = State(mesh,
               dt=dt,
               output=output,
-              parameters=parameters,
-              fieldlist=fieldlist)
+              parameters=parameters)
+
+eqns = CompressibleEulerEquations(state, "RTCF", 1)
 
 # Initial conditions
 u0 = state.fields.u
@@ -128,24 +126,16 @@ state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-thetaeqn = SUPGAdvection(state, Vt,
-                         equation_form="advective")
-advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "rho" subcycles=2),
+                   SSPRK3(state, "theta", options=SUPGOptions(), subcycles=2)]
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-compressible_forcing = CompressibleForcing(state)
+linear_solver = CompressibleSolver(state, eqns)
 
 # Build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                        compressible_forcing)
+stepper = CrankNicolson(state, eqns, advected_fields,
+                        linear_solver=linear_solver)
 
 # Run!
 stepper.run(t=0, tmax=tmax)
