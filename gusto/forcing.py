@@ -25,6 +25,7 @@ class Forcing(object):
     def __init__(self, equation, dt, alpha):
 
         self.field_name = equation.field_name
+        implicit_terms = ["divergence_form", "sponge"]
 
         W = equation.function_space
         self.x0 = Function(W)
@@ -39,7 +40,7 @@ class Forcing(object):
                                drop)
 
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in ["divergence_form", "sponge"],
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
             drop,
             replace_subject(self.x0))
 
@@ -50,12 +51,12 @@ class Forcing(object):
         )
 
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in ["divergence_form", "sponge"],
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
             drop,
             replace_subject(self.x0))
-        if any(t.get(name) == "divergence_form" for t in residual):
+        if any(t.get(name) in implicit_terms for t in residual):
             L_implicit -= dt*residual.label_map(
-                lambda t: t.get(name) == "divergence_form",
+                lambda t: t.get(name) in implicit_terms,
                 replace_subject(self.x0),
                 drop)
 
