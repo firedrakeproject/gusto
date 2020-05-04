@@ -361,7 +361,7 @@ class CompressibleEulerEquations(PrognosticEquation):
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = Function(W_DG).interpolate(muexpr)
-            self.residual -= name(subject(prognostic(
+            self.residual += name(subject(prognostic(
                 self.mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), X), "sponge")
 
         if diffusion_options is not None:
