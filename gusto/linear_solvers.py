@@ -86,7 +86,10 @@ class CompressibleSolver(TimesteppingSolver):
     (2d) Project the "broken" velocity field into the HDiv-conforming
          space using local averaging.
 
-    (3) Reconstruct theta
+    (3a) Resonstruct rho using the HDiv-conforming velocity, as the
+         density from the mixed system may not be mass-conserving.
+
+    (3b) Reconstruct theta.
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
@@ -316,6 +319,19 @@ class CompressibleSolver(TimesteppingSolver):
         # HDiv-conforming velocity
         self.u_hdiv = Function(Vu)
 
+        # Reconstruction of rho
+        rho = TrialFunction(Vrho)
+        phi = TestFunction(Vrho)
+
+        self.rho = Function(Vrho)
+        rho_eqn = ((phi*(rho - rho_in) - beta*inner(grad(phi), self.u_hdiv)*rhobar)*dx
+                   + beta*jump(phi*self.u_hdiv, n=n)*rhobar_avg('+')*(dS_v + dS_h))
+
+        rho_problem = LinearVariationalProblem(lhs(rho_eqn), rhs(rho_eqn), self.rho)
+        self.rho_solver = LinearVariationalSolver(rho_problem,
+                                                  solver_parameters=cg_ilu_parameters,
+                                                  options_prefix='rhobacksubstitution')
+
         # Reconstruction of theta
         theta = TrialFunction(Vtheta)
         gamma = TestFunction(Vtheta)
@@ -358,10 +374,16 @@ class CompressibleSolver(TimesteppingSolver):
         for bc in self.bcs:
             bc.apply(u1)
 
-        # Copy back into u and rho cpts of dy
+        # Copy back into u cpt of dy
         u, rho, theta = self.state.dy.split()
         u.assign(u1)
-        rho.assign(rho1)
+
+        # Reconstruct rho
+        with timed_region("Gusto:RhoRecon"):
+            self.rho_solver.solve()
+
+        # Copy into rho cpt of dy
+        rho.assign(self.rho)
 
         # Reconstruct theta
         with timed_region("Gusto:ThetaRecon"):
