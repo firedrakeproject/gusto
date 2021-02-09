@@ -9,7 +9,8 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, assemble, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, BrokenElement, errornorm
+    sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, \
+    BrokenElement, errornorm, zero
 from gusto import thermodynamics
 from gusto.configuration import logger
 from gusto.recovery import Recoverer, Boundary_Method
@@ -65,7 +66,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     v, pprime = TrialFunctions(WV)
     w, phi = TestFunctions(WV)
 
-    bcs = [DirichletBC(WV[0], Constant(0.0), bstring)]
+    bcs = [DirichletBC(WV[0], zero(), bstring)]
 
     a = (
         inner(w, v) + div(w)*pprime + div(v)*phi
@@ -150,7 +151,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
 
     arhs -= g*inner(dv, state.k)*dx
 
-    bcs = [DirichletBC(W.sub(0), Constant(0.0), bstring)]
+    bcs = [DirichletBC(W.sub(0), zero(), bstring)]
 
     w = Function(W)
     PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
