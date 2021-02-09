@@ -226,7 +226,7 @@ class CompressibleForcing(Forcing):
             self.theta_solver = LinearVariationalSolver(
                 theta_problem,
                 solver_parameters=solver_parameters,
-                option_prefix="ThetaForcingSolver"
+                options_prefix="ThetaForcingSolver"
             )
 
     def apply(self, scaling, x_in, x_nl, x_out, **kwargs):
