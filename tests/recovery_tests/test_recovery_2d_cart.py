@@ -60,13 +60,12 @@ def expr(geometry, mesh):
         analytic_expr = np.random.randn() + np.random.randn() * x
     elif geometry == "non-periodic":
         analytic_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * y
-
     return analytic_expr
 
 
 @pytest.mark.parametrize("geometry", ["periodic-in-both", "periodic-in-x",
                                       "periodic-in-y", "non-periodic"])
-@pytest.mark.parametrize("element", ["quadrilateral"])
+@pytest.mark.parametrize("element", ["quadrilateral", "triangular"])
 def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     family = "RTCF" if element == "quadrilateral" else "BDM"
@@ -104,7 +103,6 @@ def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
     v_diff = errornorm(v_CG1, v_CG1_true) / norm(v_CG1_true)
-
     tolerance = 1e-7
     error_message = ("""
                      Incorrect recovery for {variable} with {boundary} boundary method
