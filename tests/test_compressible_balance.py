@@ -63,7 +63,7 @@ def setup_balance(dirname):
                                   ('theta', theta0)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 

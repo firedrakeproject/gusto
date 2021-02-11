@@ -77,7 +77,7 @@ def setup_sk(dirname):
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt)
     advected_fields = []

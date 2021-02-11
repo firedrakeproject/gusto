@@ -194,7 +194,7 @@ linear_solver = CompressibleSolver(state)
 ##############################################################################
 # Set up forcing
 ##############################################################################
-forcing = CompressibleEadyForcing(state, euler_poincare=False)
+forcing = CompressibleEadyForcing(state)
 
 ##############################################################################
 # build time stepper

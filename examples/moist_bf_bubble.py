@@ -195,12 +195,11 @@ if recovered:
     rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
 else:
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
 
 u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
-euler_poincare = False if recovered else True
 
 advected_fields = [u_advection,
                    ('rho', SSPRK3(state, rho0, rhoeqn)),
@@ -212,7 +211,7 @@ advected_fields = [u_advection,
 linear_solver = CompressibleSolver(state, moisture=moisture)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state, moisture=moisture, euler_poincare=euler_poincare)
+compressible_forcing = CompressibleForcing(state, moisture=moisture)
 
 # diffusion
 bcs = [DirichletBC(Vu, 0.0, "bottom"),

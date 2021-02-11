@@ -82,7 +82,7 @@ D0.interpolate(Dexpr)
 state.initialise([('u', u0),
                   ('D', D0)])
 
-ueqn = EulerPoincare(state, u0.function_space())
+ueqn = VectorInvariant(state, u0.function_space())
 Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
 
 advected_fields = []

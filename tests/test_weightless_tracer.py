@@ -77,7 +77,7 @@ def setup_tracer(dirname):
                                   ('theta', theta_b)])
 
     # set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     thetaeqn = SUPGAdvection(state, Vt,
                              equation_form="advective")

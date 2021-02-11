@@ -72,7 +72,7 @@ def setup_sw(dirname, euler_poincare):
 
     if euler_poincare:
         ueqn = EulerPoincare(state, u0.function_space())
-        sw_forcing = ShallowWaterForcing(state)
+        sw_forcing = ShallowWaterForcing(state, euler_poincare=True)
     else:
         ueqn = VectorInvariant(state, u0.function_space())
         sw_forcing = ShallowWaterForcing(state, euler_poincare=False)

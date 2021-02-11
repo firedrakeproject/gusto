@@ -78,7 +78,7 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
+ueqn = VectorInvariant(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 supg = True
 if supg:

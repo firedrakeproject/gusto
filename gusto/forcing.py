@@ -24,7 +24,7 @@ class Forcing(object, metaclass=ABCMeta):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, state, euler_poincare=True, linear=False, extra_terms=None, moisture=None):
+    def __init__(self, state, euler_poincare=False, linear=False, extra_terms=None, moisture=None):
         self.state = state
         if linear:
             self.euler_poincare = False

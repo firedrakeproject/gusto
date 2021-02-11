@@ -89,7 +89,7 @@ for delta, dt in res_dt.items():
                                   ('theta', theta_b)])
 
     # Set up advection schemes
-    ueqn = EulerPoincare(state, Vu)
+    ueqn = VectorInvariant(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
     supg = True
     if supg:

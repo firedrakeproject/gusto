@@ -125,7 +125,7 @@ state.set_reference_profiles([('b', b_b)])
 # Set up advection schemes
 ##############################################################################
 # advected_fields is a dictionary containing field_name: advection class
-ueqn = EulerPoincare(state, Vu)
+ueqn = VectorInvariant(state, Vu)
 supg = True
 if supg:
     beqn = SUPGAdvection(state, Vb,
