@@ -220,6 +220,7 @@ else:
     u_advection = ImplicitMidpoint(state, "u")
     rho_opts = None
     theta_opts = EmbeddedDGOptions()
+
     limiter = ThetaLimiter(Vt)
 
 advected_fields = [u_advection,

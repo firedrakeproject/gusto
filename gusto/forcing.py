@@ -90,6 +90,7 @@ class Forcing(object):
         :arg x_nl: :class:`.Function` object
         :arg x_out: :class:`.Function` object
         """
+
         self.x0.assign(x_nl(self.field_name))
 
         self.solvers[label].solve()  # places forcing in self.xF

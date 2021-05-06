@@ -127,7 +127,7 @@ state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 # Set up advection schemes
 advected_fields = [ImplicitMidpoint(state, "u"),
-                   SSPRK3(state, "rho" subcycles=2),
+                   SSPRK3(state, "rho", subcycles=2),
                    SSPRK3(state, "theta", options=SUPGOptions(), subcycles=2)]
 
 # Set up linear solver

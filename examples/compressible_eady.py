@@ -103,31 +103,9 @@ theta_pert = Function(Vt).interpolate(theta_exp)
 theta0.interpolate(theta_b + theta_pert)
 
 # calculate hydrostatic Pi
-piparams = {'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gmres',
-            'ksp_rtol': 1.e-8,
-            'ksp_atol': 1.e-8,
-            'ksp_max_it': 100,
-            'ksp_gmres_restart': 50,
-            'pc_fieldsplit_schur_fact_type': 'FULL',
-            'pc_fieldsplit_schur_precondition': 'selfp',
-            'fieldsplit_0': {'ksp_type': 'cg',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'},
-            'fieldsplit_1': {'ksp_type': 'cg',
-                             'pc_type': 'gamg',
-                             'pc_gamg_sym_graph': True,
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 5,
-                                           'pc_type': 'bjacobi',
-                                           'sub_pc_type': 'ilu'}}}
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b,
-                                 params=piparams)
-compressible_hydrostatic_balance(state, theta0, rho0,
-                                 params=piparams)
+compressible_hydrostatic_balance(state, theta_b, rho_b)
+compressible_hydrostatic_balance(state, theta0, rho0)
 
 # set Pi0
 Pi0 = calculate_Pi0(state, theta0, rho0)

@@ -71,7 +71,6 @@ def setup_tracer(dirname):
                                   ('theta', theta_b)])
 
     # set up advection schemes
-
     advection_schemes = [ImplicitMidpoint(state, "u"),
                          SSPRK3(state, "rho"),
                          SSPRK3(state, "theta", options=SUPGOptions())]

@@ -99,6 +99,7 @@ def setup_saturated(dirname, recovered):
                                    recovered_space=VCG1,
                                    broken_space=Vt_brok)
     else:
+
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
         wv_opts = EmbeddedDGOptions()
@@ -108,6 +109,7 @@ def setup_saturated(dirname, recovered):
                        SSPRK3(state, 'theta', options=theta_opts),
                        SSPRK3(state, 'water_v', options=wv_opts),
                        SSPRK3(state, 'water_c', options=wc_opts)]
+
     if recovered:
         advected_fields.append(SSPRK3(state, 'u', options=u_opts))
     else:
