@@ -79,8 +79,7 @@ class SpaceCreator(object):
             V_elt = Vh_elt + Vv_elt
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement(family, cell, degree+1,
-                                  variant="equispaced")
+            V_elt = FiniteElement(family, cell, degree+1)
         return FunctionSpace(self.mesh, V_elt)
 
     def build_dg_space(self, degree):
