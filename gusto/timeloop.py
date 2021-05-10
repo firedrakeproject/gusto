@@ -21,6 +21,9 @@ class TimeLevelFields(object):
         for level in time_levels:
             setattr(self, level, FieldCreator(equations))
 
+        # hack for Eady diagnostic
+        state.xb = self.nm1
+
     def initialise(self, state):
         for field in self.n:
             field.assign(state.fields(field.name()))

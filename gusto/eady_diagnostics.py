@@ -102,8 +102,12 @@ class TrueResidualV(DiagnosticField):
 
     def setup(self, state):
         super(TrueResidualV, self).setup(state)
-        unew, pnew, bnew = state.xn.split()
-        uold, pold, bold = state.xb.split()
+        unew = state.fields("u")
+        bnew = state.fields("b")
+        pnew = state.fields("p")
+        uold = state.xb("u")
+        bold = state.xb("b")
+        pold = state.xb("p")
         ubar = 0.5*(unew+uold)
         H = state.parameters.H
         f = state.parameters.f
