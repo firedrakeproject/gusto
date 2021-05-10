@@ -353,7 +353,7 @@ class CompressibleEulerEquations(PrognosticEquation):
         if sponge is not None:
             W_DG = FunctionSpace(state.mesh, "DG", 2)
             x = SpatialCoordinate(state.mesh)
-            z = x[-1]
+            z = x[len(x)-1]
             H = sponge.H
             zc = sponge.z_level
             mubar = sponge.mubar
