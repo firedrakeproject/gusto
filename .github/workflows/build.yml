@@ -26,6 +26,12 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
+      - name: sniff environment
+        run: |
+          whoami
+          ls -Al `dirname "$HOME"`
+          cat /etc/passwd
+          pip cache dir
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
