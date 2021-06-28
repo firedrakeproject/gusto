@@ -30,7 +30,7 @@ jobs:
         run: |
           whoami
           ls -Al /github/home
-          cat /etc/passwd
+          mount
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
