@@ -15,10 +15,6 @@ jobs:
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-vanilla:latest
-    env:
-      PATH: /usr/local/bin:/usr/bin:/bin
-      CC: mpicc
-      PYTHONHASHSEED: 1243123
     steps:
       - uses: actions/checkout@v2
       - name: Cleanup
