@@ -29,9 +29,8 @@ jobs:
       - name: sniff environment
         run: |
           whoami
-          ls -Al `dirname "$HOME"`
+          ls -Al /github/home
           cat /etc/passwd
-          pip cache dir
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
