@@ -55,6 +55,7 @@ def expr(geometry, mesh):
 
 
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
+@pytest.mark.xfail
 def test_vertical_slice_recovery(geometry, mesh, expr):
 
     # horizontal base spaces
