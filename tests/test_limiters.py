@@ -5,7 +5,6 @@ from firedrake import (as_vector, PeriodicIntervalMesh, interval, FiniteElement,
                        conditional, sqrt, BrokenElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
-import pytest
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
