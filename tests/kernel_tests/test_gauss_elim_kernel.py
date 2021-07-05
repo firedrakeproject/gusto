@@ -89,6 +89,7 @@ def set_val_at_point_DG(coord_field, coords, field=None, new_value=None):
 
 
 @pytest.mark.parametrize("geometry", ["1D", "2D"])
+@pytest.mark.xfail
 def test_gaussian_elimination(geometry, mesh):
 
     cell = mesh.ufl_cell().cellname()
