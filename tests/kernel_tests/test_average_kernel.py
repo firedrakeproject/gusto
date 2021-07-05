@@ -46,11 +46,11 @@ def setup_values(geometry, DG0_field, weights):
         # We do it for both components of the vector field
 
         CG_index = set_val_at_point(coords_CG1, [1.0, 1.0])
-        set_val_at_point(coords_CG1, [1.0,1.0], weights, [4.0,4.0])
-        set_val_at_point(coords_DG0, [0.5,0.5], DG0_field, [6.0, -3.0])
-        set_val_at_point(coords_DG0, [1.5,0.5], DG0_field, [-7.0, -6.0])
-        set_val_at_point(coords_DG0, [0.5,1.5], DG0_field, [0.0, 3.0])
-        set_val_at_point(coords_DG0, [1.5,1.5], DG0_field, [-9.0, -1.0])
+        set_val_at_point(coords_CG1, [1.0, 1.0], weights, [4.0, 4.0])
+        set_val_at_point(coords_DG0, [0.5, 0.5], DG0_field, [6.0, -3.0])
+        set_val_at_point(coords_DG0, [1.5, 0.5], DG0_field, [-7.0, -6.0])
+        set_val_at_point(coords_DG0, [0.5, 1.5], DG0_field, [0.0, 3.0])
+        set_val_at_point(coords_DG0, [1.5, 1.5], DG0_field, [-9.0, -1.0])
 
         true_values = [0.25 * (6.0 - 7.0 + 0.0 - 9.0),
                        0.25 * (-3.0 - 6.0 + 3.0 - 1.0)]

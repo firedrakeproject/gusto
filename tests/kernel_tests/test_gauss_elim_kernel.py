@@ -36,12 +36,12 @@ def setup_values(geometry, field_init, field_true, act_coords, eff_coords):
         # This would be described by a field with f = 2 - 3*x
         # The initial values at the eff coords would then be 0.5 and -1
 
-        set_val_at_point(act_coords, 0.0, field_init, 0.5)
-        set_val_at_point(act_coords, 1.0, field_init, -1.0)
-        set_val_at_point(act_coords, 0.0, field_true, 2.0)
-        set_val_at_point(act_coords, 1.0, field_true, -1.0)
-        set_val_at_point(act_coords, 0.0, eff_coords, 0.5)
-        set_val_at_point(act_coords, 1.0, eff_coords, 1.0)
+        set_val_at_point_DG(act_coords, 0.0, field_init, 0.5)
+        set_val_at_point_DG(act_coords, 1.0, field_init, -1.0)
+        set_val_at_point_DG(act_coords, 0.0, field_true, 2.0)
+        set_val_at_point_DG(act_coords, 1.0, field_true, -1.0)
+        set_val_at_point_DG(act_coords, 0.0, eff_coords, 0.5)
+        set_val_at_point_DG(act_coords, 1.0, eff_coords, 1.0)
 
     elif geometry == "2D":
         # We consider the unit-square cell: with act coords (0,0), (1,0), (0,1) and (1,1)
@@ -50,27 +50,27 @@ def setup_values(geometry, field_init, field_true, act_coords, eff_coords):
         # This would be described by a field with f = 2 - 3*x - 5*y + 7*x*y
         # The initial values at the eff coords would then be -0.25, 0, -1, 1
 
-        set_val_at_point(act_coords, [0.0, 0.0], field_init, -0.25)
-        set_val_at_point(act_coords, [1.0, 0.0], field_init, 0.0)
-        set_val_at_point(act_coords, [0.0, 1.0], field_init, -1.0)
-        set_val_at_point(act_coords, [1.0, 1.0], field_init, 1.0)
-        set_val_at_point(act_coords, [0.0, 0.0], field_true, 2.0)
-        set_val_at_point(act_coords, [1.0, 0.0], field_true, -1.0)
-        set_val_at_point(act_coords, [0.0, 1.0], field_true, -3.0)
-        set_val_at_point(act_coords, [1.0, 1.0], field_true, 1.0)
-        set_val_at_point(act_coords, [0.0, 0.0], eff_coords, [0.5, 0.5])
-        set_val_at_point(act_coords, [1.0, 0.0], eff_coords, [1.0, 0.5])
-        set_val_at_point(act_coords, [0.0, 1.0], eff_coords, [0.5, 1.0])
-        set_val_at_point(act_coords, [1.0, 1.0], eff_coords, [1.0, 1.0])
+        set_val_at_point_DG(act_coords, [0.0, 0.0], field_init, -0.25)
+        set_val_at_point_DG(act_coords, [1.0, 0.0], field_init, 0.0)
+        set_val_at_point_DG(act_coords, [0.0, 1.0], field_init, -1.0)
+        set_val_at_point_DG(act_coords, [1.0, 1.0], field_init, 1.0)
+        set_val_at_point_DG(act_coords, [0.0, 0.0], field_true, 2.0)
+        set_val_at_point_DG(act_coords, [1.0, 0.0], field_true, -1.0)
+        set_val_at_point_DG(act_coords, [0.0, 1.0], field_true, -3.0)
+        set_val_at_point_DG(act_coords, [1.0, 1.0], field_true, 1.0)
+        set_val_at_point_DG(act_coords, [0.0, 0.0], eff_coords, [0.5, 0.5])
+        set_val_at_point_DG(act_coords, [1.0, 0.0], eff_coords, [1.0, 0.5])
+        set_val_at_point_DG(act_coords, [0.0, 1.0], eff_coords, [0.5, 1.0])
+        set_val_at_point_DG(act_coords, [1.0, 1.0], eff_coords, [1.0, 1.0])
 
     return field_init, field_true, act_coords, eff_coords
 
 
-def set_val_at_point(coord_field, coords, field=None, new_value=None):
+def set_val_at_point_DG(coord_field, coords, field=None, new_value=None):
     """
-    Finds the DoF of a field at a particular coordinate. If new_value is
-    provided then it also assigns the coefficient for the field there to be
-    new_value. Otherwise the DoF index is returned.
+    Finds the DoFs of a field at a particular coordinate. If new_value is
+    provided then it also assigns all the coefficients for the field at this
+    coordinate to be new_value. Otherwise the list of DoF indices is returned.
     """
     num_points = len(coord_field.dat.data[:])
     point_indices = []
@@ -88,7 +88,7 @@ def set_val_at_point(coord_field, coords, field=None, new_value=None):
         return point_indices
 
 
-@pytest.mark.parametrize("geometry", ["1D"])
+@pytest.mark.parametrize("geometry", ["1D", "2D"])
 def test_gaussian_elimination(geometry, mesh):
 
     cell = mesh.ufl_cell().cellname()
