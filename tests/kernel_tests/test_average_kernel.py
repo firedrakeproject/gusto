@@ -84,7 +84,6 @@ def set_val_at_point(coord_field, coords, field=None, new_value=None):
 
 
 @pytest.mark.parametrize("geometry", ["1D", "2D"])
-@pytest.mark.xfail
 def test_average(geometry, mesh):
 
     cell = mesh.ufl_cell().cellname()
