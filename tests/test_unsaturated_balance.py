@@ -3,7 +3,6 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Constant, Function,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
 from os import path
 from netCDF4 import Dataset
-import pytest
 
 # this tests the moist-unsaturated hydrostatic balance, by setting up a vertical slice
 # with this initial procedure, before taking a few time steps and ensuring that
@@ -134,7 +133,6 @@ def run_unsaturated(dirname):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.xfail
 def test_unsaturated_setup(tmpdir):
 
     dirname = str(tmpdir)

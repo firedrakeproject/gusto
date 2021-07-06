@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, FunctionSpace,
                        Function, conditional, sqrt)
-import pytest
 
 # This setup creates a sharp bubble of warm air in a vertical slice
 # This bubble is then advected by a prescribed advection scheme
@@ -92,7 +91,6 @@ def run_recovered_space(dirname):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.xfail
 def test_recovered_space_setup(tmpdir):
 
     dirname = str(tmpdir)

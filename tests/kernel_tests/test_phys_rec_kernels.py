@@ -4,46 +4,80 @@ which are used for the BoundaryRecoverer with the physics boundary
 recovery method.
 """
 
-from firedrake import (IntervalMesh, Function, BrokenElement,
+from firedrake import (IntervalMesh, Function, BrokenElement, VectorElement,
                        FunctionSpace, FiniteElement, ExtrudedMesh,
-                       interval, TensorProductElement)
+                       interval, TensorProductElement, SpatialCoordinate)
 from gusto import kernels
+import numpy as np
 import pytest
 
 
 def setup_values(boundary, initial_field, true_field):
     # Initial field is in Vt
     # True field is in Vt_brok
+    mesh = initial_field.function_space().mesh()
+    x = SpatialCoordinate(mesh)
+    Vec_Vt = FunctionSpace(mesh, VectorElement(initial_field.function_space().ufl_element()))
+    Vec_Vt_brok = FunctionSpace(mesh, VectorElement(true_field.function_space().ufl_element()))
+    coords_Vt = Function(Vec_Vt).interpolate(x)
+    coords_Vt_brok = Function(Vec_Vt_brok).interpolate(x)
 
-    # The DoFs of the Vt and Vt_brok for the mesh
+    # The DoFs of the Vt and Vt_brok for the mesh are laid out as follows:
     # that we use are numbered as follows:
     #
     #       Vt_brok                   Vt
-    #  ------------------    ---3-----7-----11--
-    # |  5  |  11 |  17 |    |     |     |     |
+    #  ------------------    ---o-----o-----o---
+    # |  o  |  o  |  o  |    |     |     |     |
     # |     |     |     |    |     |     |     |
-    # |  4  |  10 |  16 |    |     |     |     |
-    #  -----|-----|------    ---2-----6-----10--
-    # |  3  |  9  |  15 |    |     |     |     |
+    # |  o  |  o  |  o  |    |     |     |     |
+    #  -----|-----|------    ---o-----o-----o---
+    # |  o  |  o  |  o  |    |     |     |     |
     # |     |     |     |    |     |     |     |
-    # |  2  |  8  |  14 |    |     |     |     |
-    #  -----|-----|------    ---1-----5-----9---
-    # |  1  |  7  |  13 |    |     |     |     |
+    # |  o  |  o  |  o  |    |     |     |     |
+    #  -----|-----|------    ---o-----o-----o---
+    # |  o  |  o  |  o  |    |     |     |     |
     # |     |     |     |    |     |     |     |
-    # |  0  |  6  |  12 |    |     |     |     |
-    # -------------------    ---0-----4-----8---
+    # |  o  |  o  |  o  |    |     |     |     |
+    # -------------------    ---o-----o-----o---
 
-    # We put in values for the top/bottom boundaries
+    # Set initial and true values for the central column, top and bottom layers
     if boundary == "top":
-        initial_field.dat.data[6] = 1.0
-        initial_field.dat.data[7] = 2.0
-        true_field.dat.data[11] = 3.0
+        set_val_at_point(coords_Vt, [1.5, 2.0], initial_field, 1.0)
+        set_val_at_point(coords_Vt, [1.5, 3.0], initial_field, 2.0)
+        set_val_at_point(coords_Vt_brok, [1.5, 3.0], true_field, 3.0)
+        boundary_index = set_val_at_point(coords_Vt_brok, [1.5, 3.0])
     elif boundary == "bottom":
-        initial_field.dat.data[4] = 1.0
-        initial_field.dat.data[5] = 2.0
-        true_field.dat.data[6] = 0.0
+        set_val_at_point(coords_Vt, [1.5, 0.0], initial_field, 1.0)
+        set_val_at_point(coords_Vt, [1.5, 1.0], initial_field, 2.0)
+        set_val_at_point(coords_Vt_brok, [1.5, 0.0], true_field, 0.0)
+        boundary_index = set_val_at_point(coords_Vt_brok, [1.5, 0.0])
 
-    return initial_field, true_field
+    return initial_field, true_field, boundary_index
+
+
+def set_val_at_point(coord_field, coords, field=None, new_value=None):
+    """
+    Finds the DoF of a field at a particular coordinate. If new_value is
+    provided then it also assigns the coefficient for the field there to be
+    new_value. Otherwise the DoF index is returned.
+    """
+    num_points = len(coord_field.dat.data[:])
+    point_found = False
+
+    for i in range(num_points):
+        # Do the coordinates at the ith point match our desired coords?
+        if np.allclose(coord_field.dat.data[i], coords, rtol=1e-14):
+            point_found = True
+            point_index = i
+            if field is not None and new_value is not None:
+                field.dat.data[i] = new_value
+            break
+
+    if not point_found:
+        raise ValueError('Your coordinates do not appear to match the coordinates of a DoF')
+
+    if field is None or new_value is None:
+        return point_index
 
 
 @pytest.mark.parametrize("boundary", ["top", "bottom"])
@@ -63,12 +97,11 @@ def test_physics_recovery_kernels(boundary):
     true_field = Function(Vt_brok)
     new_field = Function(Vt_brok)
 
-    initial_field, true_field = setup_values(boundary, initial_field, true_field)
+    initial_field, true_field, boundary_index = setup_values(boundary, initial_field, true_field)
 
     kernel = kernels.PhysicsRecoveryTop() if boundary == "top" else kernels.PhysicsRecoveryBottom()
     kernel.apply(new_field, initial_field)
 
     tolerance = 1e-12
-    index = 11 if boundary == "top" else 6
-    assert abs(true_field.dat.data[index] - new_field.dat.data[index]) < tolerance, \
+    assert abs(true_field.dat.data[boundary_index] - new_field.dat.data[boundary_index]) < tolerance, \
         "Value at %s from physics recovery is not correct" % boundary

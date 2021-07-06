@@ -3,9 +3,10 @@ A test of the AverageWeightings kernel used for the Averager.
 """
 
 from firedrake import (IntervalMesh, Function, RectangleMesh,
-                       VectorFunctionSpace)
+                       VectorFunctionSpace, SpatialCoordinate)
 
 from gusto import kernels
+import numpy as np
 import pytest
 
 
@@ -23,54 +24,65 @@ def mesh(geometry):
     return m
 
 
-def setup_values(geometry, true_values):
+def setup_values(geometry, true_field):
 
     # The true values can be determined by the number of elements
     # that the DoF is shared between.
 
+    x = SpatialCoordinate(true_field.function_space().mesh())
+    coords_CG1 = Function(true_field.function_space()).interpolate(x)
+
     if geometry == "1D":
-        # The numbering of DoFs for CG1 in this mesh is
-        #  |      |  CG1 |       |
-        #  0------1------2-------3
+        # List coords of DoFs
+        edge_coords = [0.0, 3.0]
+        internal_coords = [1.0, 2.0]
 
-        edge_indices = [0, 3]
-        internal_indices = [1, 2]
-
-        for index in edge_indices:
-            true_values.dat.data[index] = 1.0
-        for index in internal_indices:
-            true_values.dat.data[index] = 2.0
+        for coord in edge_coords:
+            set_val_at_point(coords_CG1, coord, true_field, 1.0)
+        for coord in internal_coords:
+            set_val_at_point(coords_CG1, coord, true_field, 2.0)
 
     elif geometry == "2D":
-        # The numbering of DoFs for DG1 and CG1 near the origin in this mesh is
-        #   |     CG1     |
-        #   11-----12-----14-----15
-        #   |      |      |      |
-        #   |      |      |      |
-        #   |      |      |      |
-        #   6------7------10-----13
-        #   |      |      |      |
-        #   |      |      |      |
-        #   |      |      |      |
-        #   1------2------4------8
-        #   |      |      |      |
-        #   |      |      |      |
-        #   |      |      |      |
-        #   0------3------5------9
 
-        # List indices for corners
-        corner_indices = [0, 9, 11, 15]
-        edge_indices = [1, 3, 5, 6, 8, 12, 13, 14]
-        internal_indices = [2, 4, 7, 10]
+        # List coords of DoFs
+        corner_coords = [[0.0, 0.0], [0.0, 3.0], [3.0, 0.0], [3.0, 3.0]]
+        edge_coords = [[0.0, 1.0], [0.0, 2.0], [3.0, 1.0], [3.0, 2.0],
+                       [1.0, 0.0], [2.0, 0.0], [1.0, 3.0], [2.0, 3.0]]
+        internal_coords = [[1.0, 1.0], [1.0, 2.0], [2.0, 1.0], [2.0, 2.0]]
 
-        for index in corner_indices:
-            true_values.dat.data[index] = [1.0, 1.0]
-        for index in edge_indices:
-            true_values.dat.data[index] = [2.0, 2.0]
-        for index in internal_indices:
-            true_values.dat.data[index] = [4.0, 4.0]
+        for coord in corner_coords:
+            set_val_at_point(coords_CG1, coord, true_field, 1.0)
+        for coord in edge_coords:
+            set_val_at_point(coords_CG1, coord, true_field, 2.0)
+        for coord in internal_coords:
+            set_val_at_point(coords_CG1, coord, true_field, 4.0)
 
-    return true_values
+    return true_field
+
+
+def set_val_at_point(coord_field, coords, field=None, new_value=None):
+    """
+    Finds the DoF of a field at a particular coordinate. If new_value is
+    provided then it also assigns the coefficient for the field there to be
+    new_value. Otherwise the DoF index is returned.
+    """
+    num_points = len(coord_field.dat.data[:])
+    point_found = False
+
+    for i in range(num_points):
+        # Do the coordinates at the ith point match our desired coords?
+        if np.allclose(coord_field.dat.data[i], coords, rtol=1e-14):
+            point_found = True
+            point_index = i
+            if field is not None and new_value is not None:
+                field.dat.data[i] = new_value
+            break
+
+    if not point_found:
+        raise ValueError('Your coordinates do not appear to match the coordinates of a DoF')
+
+    if field is None or new_value is None:
+        return point_index
 
 
 @pytest.mark.parametrize("geometry", ["1D", "2D"])
