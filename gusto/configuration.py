@@ -104,7 +104,7 @@ class CompressibleParameters(Configuration):
 class ShallowWaterParameters(Configuration):
 
     """
-    Physical parameters for 3d Compressible Euler
+    Physical parameters for shallow water
     """
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
