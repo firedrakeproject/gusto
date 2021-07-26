@@ -18,11 +18,14 @@ dirname = 'forced_advection'
 output = OutputParameters(dirname=dirname)
 fieldlist = ["u", "rho", "theta"]
 
+diagnostic_fields = [CourantNumber()]
+
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
               family="CG",
               timestepping=timestepping,
               output=output,
-              fieldlist=fieldlist)
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -41,7 +44,7 @@ m1 = state.fields("m1", space=Vth)
 m2 = state.fields("m2", space=Vth)
 m3 = state.fields("m3", space=Vth)
 
-m2.interpolate(H/2 * exp(-((x - L/10)**2 + (z - H/2)**2)/2 * L/5**2))
+m2.interpolate(exp(-((x - L/10)**2 + (z - H/2)**2)/2 / (H/5)**2))
 
 m1eqn = AdvectionEquation(state, Vth, equation_form="advective")
 m2eqn = AdvectionEquation(state, Vth, equation_form="advective")
