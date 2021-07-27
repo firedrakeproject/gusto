@@ -13,7 +13,7 @@ from math import gamma
 from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
+__all__ = ["Physics", "Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
 
 
 class Physics(object, metaclass=ABCMeta):
