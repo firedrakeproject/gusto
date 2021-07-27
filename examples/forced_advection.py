@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
-                       ExtrudedMesh, exp, sin, Function)
+                       ExtrudedMesh, exp, sin, Function, Constant, conditional)
 
 # Implement forced advection test from Zerroukat and Allen 2020
 
@@ -46,5 +46,42 @@ advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 advected_fields.append(("m2", SSPRK3(state, m2, m2eqn)))
 advected_fields.append(("m3", SSPRK3(state, m3, m3eqn)))
 
-timestepper = AdvectionDiffusion(state, advected_fields)
+class Moisture(Physics):
+
+    def __init__(self, state):
+        super().__init__(state)
+        V = state.fields("m1").function_space()
+        self.dm1 = Function(V)
+        self.dm2 = Function(V)
+        self.dm3 = Function(V)
+        self.ms = Function(V)
+
+    def apply(self):
+        m1 = state.fields("m1")
+        m2 = state.fields("m2")
+        m3 = state.fields("m3")
+        gamma1 = Constant(0.9)
+        gamma2 = Constant(0.5)
+        mr = Constant(1.e-4)
+        x, z = SpatialCoordinate(state.mesh)
+        Gamma = Constant(-6.5e-3)   # lapse rate
+        H = Constant(15000)   # depth of mesh
+        T0 = Constant(293)   # temperature at surface
+        T = Gamma * H * z + T0   # temperature profile
+        ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
+        dt = state.timestepping.dt
+        self.dm1.interpolate(conditional(m1 - ms > 0, gamma1 * (m1 - ms), 0))
+        self.dm2.interpolate(
+            conditional(ms - m1 > 0,
+                        conditional(ms - m1 < m2, gamma1 * (ms - m1), m2),
+                        0))
+        self.dm3.interpolate(conditional(m2 - mr > 0, gamma2 * (m2 - mr), 0))
+        m1 += self.dm2 - self.dm1
+        m2 += self.dm1 - self.dm2 - self.dm3
+        m3 += self.dm3
+
+moisture = Moisture(state)
+
+timestepper = AdvectionDiffusion(state, advected_fields,
+                                 physics_list=[moisture])
 timestepper.run(t=0, tmax=20)
