@@ -64,6 +64,7 @@ class Moisture(Physics):
         self.ms = ms
 
     def apply(self):
+        ms = self.ms
         m1 = state.fields("m1")
         m2 = state.fields("m2")
         m3 = state.fields("m3")
