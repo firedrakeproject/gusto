@@ -70,9 +70,9 @@ def test_supg_advection_vector(tmpdir, equation_form, scheme, space,
         eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
                                  udegree=setup.degree, ibp=ibp)
     f = state.fields("f")
-    try:
+    if space == "CG":
         f.interpolate(f_init)
-    except NotImplementedError:
+    else:
         f.project(f_init)
     state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
