@@ -139,6 +139,7 @@ class GaussianElimination(object):
             # fill f with the original field values and A with the effective coordinate values
             """
                     f[i] = DG1_OLD[i]
+                    a[i] = 0.0
                     {eff_coord_expr}
                 end
             """

@@ -1,0 +1,47 @@
+name: Build Gusto
+
+on:
+  # Push to master or PR
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    # Scheduled build at 0330 UTC on Monday mornings to detect bitrot.
+    - cron:  '30 3 * * 1'
+
+jobs:
+  build:
+    name: "Build Gusto"  
+    # The type of runner that the job will run on
+    runs-on: self-hosted
+    # The docker container to use.
+    container:
+      image: firedrakeproject/firedrake-vanilla:latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cleanup
+        if: ${{ always() }}
+        run: |
+          cd ..
+          rm -rf build
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install Gusto
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+      - name: Test Gusto
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          python $(which firedrake-clean)
+          python -m pytest -n 12 -v tests
+      - name: Lint
+        if: ${{ always() }}
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          make lint

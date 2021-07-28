@@ -3,9 +3,10 @@ A test of the Gaussian elimination kernel used for the BoundaryRecoverer.
 """
 
 from firedrake import (IntervalMesh, FunctionSpace, Function, RectangleMesh,
-                       VectorFunctionSpace, FiniteElement)
+                       VectorFunctionSpace, FiniteElement, SpatialCoordinate)
 
 from gusto import kernels
+import numpy as np
 import pytest
 
 
@@ -23,8 +24,10 @@ def mesh(geometry):
     return m
 
 
-def setup_values(geometry, field_init, field_true,
-                 act_coords, eff_coords):
+def setup_values(geometry, field_init, field_true, act_coords, eff_coords):
+
+    x = SpatialCoordinate(field_init.function_space().mesh())
+    act_coords.interpolate(x)
 
     if geometry == "1D":
         # We consider the cell on the left boundary: with act coords (0) and (1)
@@ -33,14 +36,12 @@ def setup_values(geometry, field_init, field_true,
         # This would be described by a field with f = 2 - 3*x
         # The initial values at the eff coords would then be 0.5 and -1
 
-        field_init.dat.data[0] = 0.5
-        field_init.dat.data[1] = -1.0
-        field_true.dat.data[0] = 2.0
-        field_true.dat.data[1] = -1.0
-        act_coords.dat.data[0] = 0.0
-        act_coords.dat.data[1] = 1.0
-        eff_coords.dat.data[0] = 0.5
-        eff_coords.dat.data[1] = 1.0
+        set_val_at_point_DG(act_coords, 0.0, field_init, 0.5)
+        set_val_at_point_DG(act_coords, 1.0, field_init, -1.0)
+        set_val_at_point_DG(act_coords, 0.0, field_true, 2.0)
+        set_val_at_point_DG(act_coords, 1.0, field_true, -1.0)
+        set_val_at_point_DG(act_coords, 0.0, eff_coords, 0.5)
+        set_val_at_point_DG(act_coords, 1.0, eff_coords, 1.0)
 
     elif geometry == "2D":
         # We consider the unit-square cell: with act coords (0,0), (1,0), (0,1) and (1,1)
@@ -49,24 +50,42 @@ def setup_values(geometry, field_init, field_true,
         # This would be described by a field with f = 2 - 3*x - 5*y + 7*x*y
         # The initial values at the eff coords would then be -0.25, 0, -1, 1
 
-        field_init.dat.data[0] = -0.25
-        field_init.dat.data[1] = 0.0
-        field_init.dat.data[2] = -1.0
-        field_init.dat.data[3] = 1.0
-        field_true.dat.data[0] = 2.0
-        field_true.dat.data[1] = -1.0
-        field_true.dat.data[2] = -3.0
-        field_true.dat.data[3] = 1.0
-        act_coords.dat.data[0, :] = [0.0, 0.0]
-        act_coords.dat.data[1, :] = [1.0, 0.0]
-        act_coords.dat.data[2, :] = [0.0, 1.0]
-        act_coords.dat.data[3, :] = [1.0, 1.0]
-        eff_coords.dat.data[0, :] = [0.5, 0.5]
-        eff_coords.dat.data[1, :] = [1.0, 0.5]
-        eff_coords.dat.data[2, :] = [0.5, 1.0]
-        eff_coords.dat.data[3, :] = [1.0, 1.0]
+        set_val_at_point_DG(act_coords, [0.0, 0.0], field_init, -0.25)
+        set_val_at_point_DG(act_coords, [1.0, 0.0], field_init, 0.0)
+        set_val_at_point_DG(act_coords, [0.0, 1.0], field_init, -1.0)
+        set_val_at_point_DG(act_coords, [1.0, 1.0], field_init, 1.0)
+        set_val_at_point_DG(act_coords, [0.0, 0.0], field_true, 2.0)
+        set_val_at_point_DG(act_coords, [1.0, 0.0], field_true, -1.0)
+        set_val_at_point_DG(act_coords, [0.0, 1.0], field_true, -3.0)
+        set_val_at_point_DG(act_coords, [1.0, 1.0], field_true, 1.0)
+        set_val_at_point_DG(act_coords, [0.0, 0.0], eff_coords, [0.5, 0.5])
+        set_val_at_point_DG(act_coords, [1.0, 0.0], eff_coords, [1.0, 0.5])
+        set_val_at_point_DG(act_coords, [0.0, 1.0], eff_coords, [0.5, 1.0])
+        set_val_at_point_DG(act_coords, [1.0, 1.0], eff_coords, [1.0, 1.0])
 
     return field_init, field_true, act_coords, eff_coords
+
+
+def set_val_at_point_DG(coord_field, coords, field=None, new_value=None):
+    """
+    Finds the DoFs of a field at a particular coordinate. If new_value is
+    provided then it also assigns all the coefficients for the field at this
+    coordinate to be new_value. Otherwise the list of DoF indices is returned.
+    """
+    num_points = len(coord_field.dat.data[:])
+    point_indices = []
+    for i in range(num_points):
+        # Do the coordinates at the ith point match our desired coords?
+        if np.allclose(coord_field.dat.data[i], coords, rtol=1e-14):
+            point_indices.append(i)
+            if field is not None and new_value is not None:
+                field.dat.data[i] = new_value
+
+    if len(point_indices) == 0:
+        raise ValueError('Your coordinates do not appear to match the coordinates of a DoF')
+
+    if field is None or new_value is None:
+        return point_indices
 
 
 @pytest.mark.parametrize("geometry", ["1D", "2D"])

@@ -437,7 +437,7 @@ def find_domain_boundaries(mesh):
 
     # we get values in CG1 initially as DG0 will not work for triangular elements
     bc_codes = ['on_boundary', 'top', 'bottom']
-    bcs = [DirichletBC(CG1, Constant(1.0), bc_code, method='geometric') for bc_code in bc_codes]
+    bcs = [DirichletBC(CG1, Constant(1.0), bc_code) for bc_code in bc_codes]
 
     for bc in bcs:
         try:
