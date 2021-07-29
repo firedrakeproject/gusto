@@ -14,7 +14,7 @@ m = PeriodicIntervalMesh(columns, L)
 H = 15e3  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-timestepping = TimesteppingParameters(dt=10)
+timestepping = TimesteppingParameters(dt=15)
 dirname = 'forced_advection'
 output = OutputParameters(dirname=dirname)
 fieldlist = ["u", "rho", "theta"]
@@ -45,15 +45,21 @@ m1 = state.fields("m1", space=Vth)
 m2 = state.fields("m2", space=Vth)
 m3 = state.fields("m3", space=Vth)
 
-# Gaussian initial condition to check behaviour
-m2.interpolate(exp(-((x - L/10)**2 + (z - H/2)**2)/2 / (H/5)**2))
-
 x, z = SpatialCoordinate(state.mesh)
+x = x/L # rescaled to domain
+z = z/H
+
+# set up constants and temperature and saturation profile
 Gamma = Constant(-6.5e-3)   # lapse rate
 H = Constant(15000)   # depth of mesh
 T0 = Constant(293)   # temperature at surface
-T = Gamma * H * z + T0   # temperature profile
+e1 = Constant(0.98) # level of saturation
+e2 = Constant(2/3) # dimensionless height above which m1 is zero
+T = Gamma * H * z + T0   # temperature profile 
 ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
+
+# initialise m1 as in Zerroukat and Allen 2020
+m1.interpolate(conditional(1 > z/e2, 1 - z/e2, 0) * e1 * ms)
 
 m1eqn = AdvectionEquation(state, Vth, equation_form="advective")
 m2eqn = AdvectionEquation(state, Vth, equation_form="advective")
@@ -96,4 +102,4 @@ moisture = Moisture(state, ms)
 
 timestepper = AdvectionDiffusion(state, advected_fields,
                                  physics_list=[moisture])
-timestepper.run(t=0, tmax=2000)
+timestepper.run(t=0, tmax=86400)
