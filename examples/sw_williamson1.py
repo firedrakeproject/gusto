@@ -19,24 +19,18 @@ mesh.init_cell_orientations(x)
 # spherical co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=1)
+timestepping = TimesteppingParameters(dt=3000.)
 dirname = 'williamson1'
 fieldlist = ['u', 'D']
 parameters = ShallowWaterParameters(H=H)
 
 output = OutputParameters(dirname=dirname, steady_state_error_fields=['D', 'u'])
 
-diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
-                         ShallowWaterKineticEnergy(),
-                         ShallowWaterPotentialEnergy(),
-                         ShallowWaterPotentialEnstrophy()]
-
 state = State(mesh, horizontal_degree=1,
               family="BDM",
               timestepping=timestepping,
               output=output,
               parameters=parameters,
-              diagnostic_fields=diagnostic_fields,
               fieldlist=fieldlist)
 
 # interpolate initial conditions
@@ -65,21 +59,12 @@ state.initialise([('u', u0),
 
 
 ### I took this part from W2 case code and I don't really know what's going on
-
-ueqn = VectorInvariant(state, u0.function_space())
-Deqn = AdvectionEquation(state, D0.function_space(), equation_form="continuity")
+Deqn = AdvectionEquation(state, D0.function_space(), equation_form="advective")
 
 advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("D", SSPRK3(state, D0, Deqn, subcycles=2)))
-
-linear_solver = ShallowWaterSolver(state)
-
-# Set up forcing
-sw_forcing = ShallowWaterForcing(state)
+advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
-                            sw_forcing)
+timestepper = AdvectionDiffusion(state, advected_fields)
 
-stepper.run(t=0, tmax=10)
+timestepper.run(t=0, tmax=6000)
