@@ -37,6 +37,4 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
     form += get_flux_form(dS_v, kappa)
     form += get_flux_form(dS_h, kappa)
 
-    form = subject(form, q)
-
     return diffusion(form)
