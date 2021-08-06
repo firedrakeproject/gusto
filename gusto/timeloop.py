@@ -265,11 +265,9 @@ class CrankNicolson(Timestepper):
             # advects a field from xn and puts result in xnp1
             scheme.apply(xn(name), xnp1(name))
 
-        self.x.update()
-
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
-                scheme.apply(xn(name), xnp1(name))
+                scheme.apply(xnp1(name), xnp1(name))
 
 
 class PrescribedAdvection(Timestepper):

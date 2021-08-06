@@ -1,7 +1,8 @@
 from firedrake import (Function, TrialFunctions,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (advection, drop, name,
+from gusto.form_manipulation_labelling import (advection, diffusion,
+                                               drop, name,
                                                time_derivative, replace_subject)
 
 
@@ -33,6 +34,8 @@ class Forcing(object):
 
         residual = equation.residual.label_map(
             lambda t: t.has_label(advection), drop)
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(diffusion), drop)
 
         trials = TrialFunctions(W)
         a = residual.label_map(lambda t: t.has_label(time_derivative),
