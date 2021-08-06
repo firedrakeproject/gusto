@@ -4,9 +4,8 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        Constant)
 from math import pi
 
-# shallow water parameters
+# parameters
 R = 6371220.
-H = 5960.
 day = 24.*60.*60.
 
 # set up mesh
@@ -22,16 +21,13 @@ theta, lamda = latlon_coords(mesh)
 timestepping = TimesteppingParameters(dt=3000.)
 dirname = 'williamson1'
 fieldlist = ['u', 'D']
-parameters = ShallowWaterParameters(H=H)
 
-output = OutputParameters(dirname=dirname,
-                          steady_state_error_fields=['D', 'u'])
+output = OutputParameters(dirname=dirname, dumpfreq=14)
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
               timestepping=timestepping,
               output=output,
-              parameters=parameters,
               fieldlist=fieldlist)
 
 # interpolate initial conditions
@@ -46,22 +42,22 @@ a = R * 3
 r = a * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_c))
 
 uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-Dexpr = (h_max/2)*(1 + cos(pi*r/R))
+m1expr = (h_max/2)*(1 + cos(pi*r/R))
 
-V = FunctionSpace(mesh, "CG", 1)
-f = state.fields("coriolis", V) # zero Coriolis
-f.interpolate(Constant(0))
 
 u0.project(uexpr)
-D0.interpolate(conditional(r < R, Dexpr, 0))
-state.initialise([('u', u0),
-                  ('D', D0)])
 
+# set up advected variable in the same space as the height field 
+Vth = D0.function_space()
+m1 = state.fields("m1", space=Vth)
 
-Deqn = AdvectionEquation(state, D0.function_space(), equation_form="advective")
+# initialise m1 as the height field in W1
+m1.interpolate(conditional(r < R, m1expr, 0))
+
+m1eqn = AdvectionEquation(state, Vth, equation_form="advective")
 
 advected_fields = []
-advected_fields.append(("D", SSPRK3(state, D0, Deqn)))
+advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 
 
 # build time stepper
