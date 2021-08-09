@@ -22,7 +22,7 @@ timestepping = TimesteppingParameters(dt=3000.)
 dirname = 'williamson1'
 fieldlist = ['u', 'D']
 
-output = OutputParameters(dirname=dirname, dumpfreq=14)
+output = OutputParameters(dirname=dirname, dumpfreq=23)
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
@@ -48,13 +48,13 @@ m1expr = (h_max/2)*(1 + cos(pi*r/R))
 u0.project(uexpr)
 
 # set up advected variable in the same space as the height field 
-Vth = D0.function_space()
-m1 = state.fields("m1", space=Vth)
+VD = D0.function_space()
+m1 = state.fields("m1", space=VD)
 
 # initialise m1 as the height field in W1
 m1.interpolate(conditional(r < R, m1expr, 0))
 
-m1eqn = AdvectionEquation(state, Vth, equation_form="advective")
+m1eqn = AdvectionEquation(state, VD, equation_form="advective")
 
 advected_fields = []
 advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
@@ -62,5 +62,5 @@ advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 
 # build time stepper
 timestepper = AdvectionDiffusion(state, advected_fields)
-timestepper.run(t=0, tmax=5*day)
+timestepper.run(t=0, tmax=12*day)
 
