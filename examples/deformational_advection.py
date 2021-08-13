@@ -53,21 +53,25 @@ h2expr = b + c * (h_max/2)*(1 + cos(pi*r2/br))
 
 # velocity parameters
 T = 12*day
-t = state.t
-lamda_p = lamda - 2*pi*t/T
 
 if nondivergent:
-    uexpr = as_vector([10*R/T * (sin(lamda_p))**2 * sin(2*theta) * cos(pi*t/T)
-                       + 2*pi*R/T * cos(theta),
-                       10*R/T * sin(2*lamda_p) * cos(theta) * cos(pi*t/T),
-                       0.0])
+    def uexpr(t):
+        lamda_p = lamda - 2*pi*t/T
+        return as_vector(
+            [10*R/T * (sin(lamda_p))**2 * sin(2*theta) * cos(pi*t/T)
+             + 2*pi*R/T * cos(theta),
+             10*R/T * sin(2*lamda_p) * cos(theta) * cos(pi*t/T),
+             0.0])
 else:
-    uexpr = as_vector([-5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
-                      (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta),
-                      5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T),
-                      0.0])
+    def uexpr(t):
+        lamda_p = lamda - 2*pi*t/T
+        return as_vector(
+            [-5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
+             (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta),
+             5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T),
+             0.0])
 
-u0.project(uexpr)
+u0.project(uexpr(0))
 
 # set up advected variable in the same space as the height field 
 VD = D0.function_space()
@@ -81,7 +85,6 @@ m1eqn = AdvectionEquation(state, VD, equation_form="advective")
 advected_fields = []
 advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 
-
 # build time stepper
-timestepper = AdvectionDiffusion(state, advected_fields)
+timestepper = AdvectionDiffusion(state, advected_fields, prescribed_fields=[("u", uexpr)])
 timestepper.run(t=0, tmax=12*day)
