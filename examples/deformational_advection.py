@@ -57,11 +57,12 @@ T = 12*day
 if nondivergent:
     def uexpr(t):
         lamda_p = lamda - 2*pi*t/T
-        return as_vector(
-            [10*R/T * (sin(lamda_p))**2 * sin(2*theta) * cos(pi*t/T)
-             + 2*pi*R/T * cos(theta),
-             10*R/T * sin(2*lamda_p) * cos(theta) * cos(pi*t/T),
-             0.0])
+        u_zonal = (
+            10*R/T * (sin(lamda_p))**2 * sin(2*theta) * cos(pi*t/T)
+            + 2*pi*R/T * cos(theta)
+        )
+        u_merid = 10*R/T * sin(2*lamda_p) * cos(theta) * cos(pi*t/T)
+        return sphere_to_cartesian(mesh, u_zonal, u_merid)
 else:
     def uexpr(t):
         lamda_p = lamda - 2*pi*t/T
