@@ -1,7 +1,7 @@
-from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       VectorFunctionSpace, Constant, exp, as_vector)
 import pytest
+from firedrake import (Constant, ExtrudedMesh, PeriodicIntervalMesh,
+                       SpatialCoordinate, VectorFunctionSpace, as_vector, exp)
+from gusto import *
 
 
 def setup_IPdiffusion(dirname, vector, DG):
@@ -42,7 +42,9 @@ def setup_IPdiffusion(dirname, vector, DG):
     f = state.fields("f", Space)
     try:
         f.interpolate(fexpr)
-    except AttributeError:
+    except NotImplementedError:
+        # finat elements raise NotImplementedError if they don't
+        # advertise a dual for interpolation.
         f.project(fexpr)
 
     mu = 5.
