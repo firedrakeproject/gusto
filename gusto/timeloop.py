@@ -102,7 +102,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             state.xnp1.assign(state.xn)
 
             for name, evaluation in self.prescribed_fields:
-                state.fields(name).project(evaluation(t))
+                state.fields(name).project(
+                    evaluation(t),
+                    form_compiler_parameters={'quadrature_degree': 8})
 
             self.semi_implicit_step()
 
