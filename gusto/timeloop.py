@@ -114,7 +114,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 advection.apply(field, field)
 
             state.xb.assign(state.xn)
-            state.xn.assign(state.xnp1)
+
+            xnp1_fields = {name: func for (name, func) in
+                           zip(state.fieldlist, state.xnp1.split())}
+            for name in state.fieldlist:
+                prescribed_fieldnames = [fname for (fname, _)
+                                         in self.prescribed_fields]
+                if name not in prescribed_fieldnames:
+                    state.fields(name).assign(xnp1_fields[name])
 
             with timed_stage("Diffusion"):
                 for name, diffusion in self.diffused_fields:
