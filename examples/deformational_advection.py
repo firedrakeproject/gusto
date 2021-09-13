@@ -20,17 +20,22 @@ mesh.init_cell_orientations(x)
 # lat lon co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=3000.)
+timestepping = TimesteppingParameters(dt=2880.)
 dirname = 'deformational_advection'
 fieldlist = ['u', 'D']
 
-output = OutputParameters(dirname=dirname, dumpfreq=23)
+diagnostic_fields = [VelocityX(), VelocityY()]
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=10,
+                          dumplist_latlon=['VelocityX', 'VelocityY', "m1"])
 
 state = State(mesh, horizontal_degree=1,
               family="BDM",
               timestepping=timestepping,
               output=output,
-              fieldlist=fieldlist)
+              fieldlist=fieldlist,
+              diagnostic_fields=diagnostic_fields)
 
 # set up initial conditions
 u0 = state.fields("u")
@@ -42,8 +47,8 @@ alpha = 0.
 h_max = 1
 b = 0.1
 c = 0.9
-lamda_1 = 3*pi/2 - pi/6
-lamda_2 = 3*pi/2 + pi/6 
+lamda_1 = 2*pi/2 - pi/6
+lamda_2 = 2*pi/2 + pi/6 
 theta_c = 0
 br = R/2
 r1 = R * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_1))
@@ -66,12 +71,13 @@ if nondivergent:
 else:
     def uexpr(t):
         lamda_p = lamda - 2*pi*t/T
-        return as_vector(
-            [-5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
-             (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta),
-             5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T),
-             0.0])
-
+        u_zonal = (
+            -5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
+             (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta)
+        )
+        u_merid = 5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T)
+        return sphere_to_cartesian(mesh, u_zonal, u_merid)
+    
 u0.project(uexpr(0))
 
 # set up advected variable in the same space as the height field 
