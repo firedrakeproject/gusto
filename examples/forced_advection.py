@@ -5,8 +5,8 @@ from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
 
 # Implement forced advection test from Zerroukat and Allen 2020
 
-nlayers = 50  # horizontal layers
-columns = 200  # number of columns
+nlayers = 25  # 50  # horizontal layers
+columns = 100  # 200  # number of columns
 L = 200e3
 m = PeriodicIntervalMesh(columns, L)
 
@@ -14,9 +14,9 @@ m = PeriodicIntervalMesh(columns, L)
 H = 15e3  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-timestepping = TimesteppingParameters(dt=15)
+timestepping = TimesteppingParameters(dt=300)
 dirname = 'forced_advection'
-output = OutputParameters(dirname=dirname, dumpfreq=60)
+output = OutputParameters(dirname=dirname, dumpfreq=8)
 fieldlist = ["u", "rho", "theta"]
 
 diagnostic_fields = [CourantNumber()]
@@ -49,9 +49,9 @@ m3 = state.fields("m3", space=Vth)
 Gamma = Constant(-6.5e-3)   # lapse rate
 H = Constant(15000)   # depth of mesh
 T0 = Constant(293)   # temperature at surface
-e1 = Constant(0.98) # level of saturation
-e2 = Constant(2/3) # dimensionless height above which m1 is zero
-T = Gamma * z + T0   # temperature profile 
+e1 = Constant(0.98)  # level of saturation
+e2 = Constant(2/3)  # dimensionless height above which m1 is zero
+T = Gamma * z + T0   # temperature profile
 ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
 
 # initialise m1 as in Zerroukat and Allen 2020
@@ -63,6 +63,7 @@ m2eqn = AdvectionEquation(state, Vth, equation_form="advective")
 advected_fields = []
 advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 advected_fields.append(("m2", SSPRK3(state, m2, m2eqn)))
+
 
 class Moisture(Physics):
     def __init__(self, state, ms):
@@ -91,8 +92,10 @@ class Moisture(Physics):
         m1 += self.dm2 - self.dm1
         m2 += self.dm1 - self.dm2 - self.dm3
         m3 += self.dm3
-        
+
+
 moisture = Moisture(state, ms)
+
 
 timestepper = AdvectionDiffusion(state, advected_fields,
                                  physics_list=[moisture])
