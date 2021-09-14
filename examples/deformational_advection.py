@@ -1,8 +1,7 @@
 from math import pi
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, cos, sin, acos, conditional,
-                       Constant)
+                       cos, sin, acos, conditional)
 
 nondivergent = True
 
@@ -12,7 +11,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=3, degree=3)
+                             refinement_level=3, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -73,7 +72,7 @@ else:
         lamda_p = lamda - 2*pi*t/T
         u_zonal = (
             -5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
-             (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta)
+            (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta)
         )
         u_merid = 5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T)
         return sphere_to_cartesian(mesh, u_zonal, u_merid)
