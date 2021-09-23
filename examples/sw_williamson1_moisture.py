@@ -47,9 +47,6 @@ def uexpr():
     u_merid = -u_max*sin(lamda)*sin(alpha)
     return sphere_to_cartesian(mesh, u_zonal, u_merid)
 
-#uexpr = as_vector(
-#    [u_max*(cos(theta)*cos(alpha) + sin(theta)*cos(lamda)*sin(alpha)),
-#     -u_max*sin(lamda)*sin(alpha), 0.0])
 
 m1expr = (h_max/2)*(1 + cos(pi*r/R))
 
@@ -61,9 +58,9 @@ m1 = state.fields("m1", space=VD)
 m2 = state.fields("m2", space=VD)
 
 # set up constants and temperature and saturation profile
-Gamma = Constant(-6.5e-3)   # lapse rate
-T0 = Constant(293)   # temperature at equator
-T = Gamma * abs(theta - pi/2) + T0   # temperature profile
+Gamma = Constant(-37.5604) #- 694.4 - 222.2*(sin(theta))**2 Constant(-6.5e-3)
+T0 = Constant(300)   # temperature at equator
+T = Gamma * abs(theta) + T0   # temperature profile
 H = pi
 e1 = Constant(0.98)  # level of saturation
 e2 = Constant(2/3)  # dimensionless latitude beyond which m1 is zero
@@ -72,6 +69,9 @@ ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
 # set up a temperature field for viewing the temperature profile
 temp_field = state.fields("temp", space=VD)
 temp_field.interpolate(T)
+
+lat_field = state.fields("lat", space=VD)
+lat_field.interpolate(theta)
 
 # initialise m1 as the height field in W1
 m1.interpolate(conditional(r < R, m1expr, 0))
