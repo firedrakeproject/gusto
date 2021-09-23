@@ -58,25 +58,24 @@ m1 = state.fields("m1", space=VD)
 m2 = state.fields("m2", space=VD)
 
 # set up constants and temperature and saturation profile
-Gamma = Constant(-37.5604) #- 694.4 - 222.2*(sin(theta))**2 Constant(-6.5e-3)
+Gamma = Constant(-37.5604) # lapse rate - this could be lat-dependent
 T0 = Constant(300)   # temperature at equator
 T = Gamma * abs(theta) + T0   # temperature profile
-H = pi
 e1 = Constant(0.98)  # level of saturation
-e2 = Constant(2/3)  # dimensionless latitude beyond which m1 is zero
 ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
 
 # set up a temperature field for viewing the temperature profile
 temp_field = state.fields("temp", space=VD)
 temp_field.interpolate(T)
 
+# set up a field to visualise latitude
 lat_field = state.fields("lat", space=VD)
 lat_field.interpolate(theta)
 
 # initialise m1 as the height field in W1
 m1.interpolate(conditional(r < R, m1expr, 0))
 # initialise m1 as in Zerroukat and Allen 2020
-# m1.interpolate(conditional(lamda < e2*H, (1 - lamda/(e2*H)) * e1 * ms, 0))
+# m1.interpolate(conditional(1 > theta/e2, (1 - theta/e2) * e1 * ms, 0))
 
 
 m1eqn = AdvectionEquation(state, VD, equation_form="advective")
@@ -108,6 +107,8 @@ class Moisture(Physics):
                         0))
         m1 += self.dm2 - self.dm1
         m2 += self.dm1 - self.dm2
+        m1.interpolate(conditional(m1 > 0, m1, 0))
+        m2.interpolate(conditional(m2 > 0, m2, 0))
 
 
 moisture = Moisture(state, ms)
