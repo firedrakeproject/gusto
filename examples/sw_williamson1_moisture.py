@@ -2,7 +2,7 @@ from math import pi
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, cos, sin, acos, conditional,
-                       Constant, exp, Function)
+                       Constant, exp, Function, File)
 
 # parameters
 R = 6371220.
@@ -24,18 +24,21 @@ fieldlist = ['u', 'D']
 
 output = OutputParameters(dirname=dirname, dumpfreq=23)
 
+diagnostics = Diagnostics("u", "m1", "m2")
+
 state = State(mesh, horizontal_degree=1,
               family="BDM",
               timestepping=timestepping,
               output=output,
-              fieldlist=fieldlist)
+              fieldlist=fieldlist,
+              diagnostics=diagnostics)
 
 # interpolate initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 alpha = pi/2
-h_max = 1000
+h_max = 0.032
 lamda_c = 3*pi/2
 theta_c = 0
 a = R * 3
@@ -63,6 +66,9 @@ T0 = Constant(300)   # temperature at equator
 T = Gamma * abs(theta) + T0   # temperature profile
 e1 = Constant(0.98)  # level of saturation
 ms = 3.8e-3 * exp((18 * T - 4824)/(T - 30))   # saturation profile
+msout = Function(VD).interpolate(ms)
+outfile = File('ms.pvd')
+outfile.write(msout)
 
 # set up a temperature field for viewing the temperature profile
 temp_field = state.fields("temp", space=VD)
@@ -72,10 +78,13 @@ temp_field.interpolate(T)
 lat_field = state.fields("lat", space=VD)
 lat_field.interpolate(theta)
 
+mtot = state.fields("mtot", space=VD)
+
 # initialise m1 as the height field in W1
 m1.interpolate(conditional(r < R, m1expr, 0))
 # initialise m1 as in Zerroukat and Allen 2020
 # m1.interpolate(conditional(1 > theta/e2, (1 - theta/e2) * e1 * ms, 0))
+mtot.interpolate(m1 + m2)
 
 
 m1eqn = AdvectionEquation(state, VD, equation_form="advective")
@@ -98,7 +107,7 @@ class Moisture(Physics):
         ms = self.ms
         m1 = state.fields("m1")
         m2 = state.fields("m2")
-        gamma1 = Constant(0.9)
+        gamma1 = Constant(1.0)
         dt = state.timestepping.dt
         self.dm1.interpolate(conditional(m1 - ms > 0, gamma1 * (m1 - ms), 0))
         self.dm2.interpolate(
@@ -107,8 +116,9 @@ class Moisture(Physics):
                         0))
         m1 += self.dm2 - self.dm1
         m2 += self.dm1 - self.dm2
-        m1.interpolate(conditional(m1 > 0, m1, 0))
-        m2.interpolate(conditional(m2 > 0, m2, 0))
+        mtot.interpolate(m1 + m2)
+        #m1.interpolate(conditional(m1 > 0, m1, 0))
+        #m2.interpolate(conditional(m2 > 0, m2, 0))
 
 
 moisture = Moisture(state, ms)
