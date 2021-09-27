@@ -5,8 +5,8 @@ from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
 
 # Implement forced advection test from Zerroukat and Allen 2020
 
-nlayers = 25  # 50  # horizontal layers
-columns = 100  # 200  # number of columns
+nlayers = 50  # horizontal layers
+columns = 200  # number of columns
 L = 200e3
 m = PeriodicIntervalMesh(columns, L)
 
@@ -14,11 +14,11 @@ m = PeriodicIntervalMesh(columns, L)
 H = 15e3  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-timestepping = TimesteppingParameters(dt=300)
+timestepping = TimesteppingParameters(dt=15)
 dirname = 'forced_advection'
 output = OutputParameters(dirname=dirname, dumpfreq=8)
 fieldlist = ["u", "rho", "theta"]
-
+diagnostics = Diagnostics("u", "m1", "m2")
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -26,6 +26,7 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               timestepping=timestepping,
               output=output,
               fieldlist=fieldlist,
+              diagnostics=diagnostics,
               diagnostic_fields=diagnostic_fields)
 
 # Initial conditions
