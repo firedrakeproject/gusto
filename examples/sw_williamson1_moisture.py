@@ -10,7 +10,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=3)
+                             refinement_level=5, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -18,11 +18,11 @@ mesh.init_cell_orientations(x)
 # lat lon co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=3000.)
+timestepping = TimesteppingParameters(dt=720.)
 dirname = 'williamson1_moisture'
 fieldlist = ['u', 'D']
 
-output = OutputParameters(dirname=dirname, dumpfreq=23)
+output = OutputParameters(dirname=dirname, dumpfreq=40)
 
 diagnostics = Diagnostics("u", "m1", "m2")
 
