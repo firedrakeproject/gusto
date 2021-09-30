@@ -3,8 +3,10 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, cos, sin, acos, conditional,
                        Constant, exp, Function, File)
-SSHS = True
-lat_only = False
+SSHS_ms = True
+SSHS_lat_only = False
+Williamson1_u = True
+nondivergent_u = False
 
 # parameters
 R = 6371220.
@@ -12,7 +14,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=5, degree=3)
+                             refinement_level=3, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -20,11 +22,11 @@ mesh.init_cell_orientations(x)
 # lat lon co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=720.)
+timestepping = TimesteppingParameters(dt=3000.)
 dirname = 'williamson1_moisture'
 fieldlist = ['u', 'D']
 
-output = OutputParameters(dirname=dirname, dumpfreq=40)
+output = OutputParameters(dirname=dirname, dumpfreq=23)
 
 diagnostics = Diagnostics("u", "m1", "m2")
 
@@ -40,27 +42,52 @@ u0 = state.fields("u")
 D0 = state.fields("D")
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 alpha = pi/2
-lamda_c = 3*pi/2
+if SSHS_ms:
+    lamda_c = 5*pi/4
+else:
+    lamda_c = 2*pi/3
 theta_c = 0
 a = R * 3
 r = a * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_c))
 # initial height depends on the choice of saturation field
-if SSHS:
-    if lat_only:
+if SSHS_ms:
+    if SSHS_lat_only:
         h_max = 1
     else:
         h_max = 0.087
 else:
     h_max = 0.032
 
-def uexpr():
-    u_zonal = u_max*(cos(theta)*cos(alpha) + sin(theta)*cos(lamda)*sin(alpha))
-    u_merid = -u_max*sin(lamda)*sin(alpha)
-    return sphere_to_cartesian(mesh, u_zonal, u_merid)
 
-mexpr = (h_max/2)*(1 + cos(pi*r/R))
+if Williamson1_u:
+    def uexpr():
+        u_zonal = (
+        u_max*(cos(theta)*cos(alpha) + sin(theta)*cos(lamda)*sin(alpha))
+            )
+        u_merid = -u_max*sin(lamda)*sin(alpha)
+        return sphere_to_cartesian(mesh, u_zonal, u_merid)
+elif nondivergent_u:
+    def uexpr(t):
+        lamda_p = lamda - 2*pi*t/T
+        u_zonal = (
+            10*R/T * (sin(lamda_p))**2 * sin(2*theta) * cos(pi*t/T)
+            + 2*pi*R/T * cos(theta)
+        )
+        u_merid = 10*R/T * sin(2*lamda_p) * cos(theta) * cos(pi*t/T)
+        return sphere_to_cartesian(mesh, u_zonal, u_merid)
+else:
+    def uexpr(t):
+        lamda_p = lamda - 2*pi*t/T
+        u_zonal = (
+             -5*R/T * (sin(lamda_p/2))**2 * sin(2*theta) *
+                (cos(theta))**2 * cos(pi*t/T) + 2*pi*R/T * cos(theta)
+        )
+        u_merid = 5/2*R/T * sin(lamda_p) * (cos(theta))**3 * cos(pi*t/T)
+        return sphere_to_cartesian(mesh, u_zonal, u_merid)
 
 u0.project(uexpr())
+
+mexpr = (h_max/2)*(1 + cos(pi*r/R))
 
 # set up advected variable in the same space as the height field
 VD = D0.function_space()
@@ -68,8 +95,8 @@ m1 = state.fields("m1", space=VD)
 m2 = state.fields("m2", space=VD)
 
 # choose saturation profile: SSHS 2021 paper OR varying in latitude
-if SSHS:
-    if lat_only:
+if SSHS_ms:
+    if SSHS_lat_only:
         alpha_0 = 0
     else:
         alpha_0 = 1
@@ -99,7 +126,7 @@ lon_field.interpolate(lamda)
 mtot = state.fields("mtot", space=VD)
 
 # initialise m1 or m2 as the height field in W1
-if SSHS:
+if SSHS_ms:
     m2.interpolate(conditional(r < R, mexpr, 0))
 else:
     m1.interpolate(conditional(r < R, mexpr, 0))
