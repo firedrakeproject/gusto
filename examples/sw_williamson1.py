@@ -1,7 +1,6 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, cos, sin, acos, conditional,
-                       Constant)
+                       as_vector, cos, sin, acos, conditional)
 from math import pi
 
 # parameters
@@ -10,7 +9,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=3, degree=3)
+                             refinement_level=3, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -33,7 +32,7 @@ state = State(mesh, horizontal_degree=1,
 # interpolate initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-u_max = 2*pi*R/(12*day) # Maximum amplitude of the zonal wind (m/s) - they use a
+u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 alpha = 0.
 h_max = 1000
 lamda_c = 3*pi/2
@@ -47,7 +46,7 @@ m1expr = (h_max/2)*(1 + cos(pi*r/R))
 
 u0.project(uexpr)
 
-# set up advected variable in the same space as the height field 
+# set up advected variable in the same space as the height field
 VD = D0.function_space()
 m1 = state.fields("m1", space=VD)
 
@@ -63,4 +62,3 @@ advected_fields.append(("m1", SSPRK3(state, m1, m1eqn)))
 # build time stepper
 timestepper = AdvectionDiffusion(state, advected_fields)
 timestepper.run(t=0, tmax=12*day)
-
