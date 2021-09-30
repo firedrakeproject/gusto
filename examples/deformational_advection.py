@@ -3,7 +3,7 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        cos, sin, acos, conditional)
 
-nondivergent = True
+nondivergent = False
 
 # parameters
 R = 6371220.
@@ -11,7 +11,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=3)
+                             refinement_level=5, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -19,14 +19,14 @@ mesh.init_cell_orientations(x)
 # lat lon co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=2880.)
+timestepping = TimesteppingParameters(dt=720.)
 dirname = 'deformational_advection'
 fieldlist = ['u', 'D']
 
-diagnostic_fields = [VelocityX(), VelocityY()]
+diagnostic_fields = [CourantNumber(), VelocityX(), VelocityY()]
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=10,
+                          dumpfreq=40,
                           dumplist_latlon=['VelocityX', 'VelocityY', "m1"])
 
 state = State(mesh, horizontal_degree=1,
