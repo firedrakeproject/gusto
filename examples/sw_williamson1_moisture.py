@@ -3,10 +3,20 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, cos, sin, acos, conditional,
                        Constant, exp, Function, File)
-SSHS_ms = True
+SSHS_ms = False
 SSHS_lat_only = False
 Williamson1_u = True
 nondivergent_u = False
+
+high_res = False
+if high_res:
+    refinement_level=5
+    dt=720.
+    dumpfreq=40
+else:
+    refinement_level=3
+    dt=3000.
+    dumpfreq=23
 
 # parameters
 R = 6371220.
@@ -14,7 +24,7 @@ day = 24.*60.*60.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=3)
+                             refinement_level=refinement_level, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -22,11 +32,18 @@ mesh.init_cell_orientations(x)
 # lat lon co-ordinates
 theta, lamda = latlon_coords(mesh)
 
-timestepping = TimesteppingParameters(dt=3000.)
-dirname = 'williamson1_moisture'
+timestepping = TimesteppingParameters(dt=dt)
+dirname = (
+    'williamson1moisture'
+    +'_SSHSsat='+ str(bool(SSHS_ms))
+    +'_latOnly=' + str(bool(SSHS_lat_only))
+    +'_W1u=' + str(bool(Williamson1_u))
+    +'_nondivergent=' + str(bool(nondivergent_u))
+    )
+          
 fieldlist = ['u', 'D']
 
-output = OutputParameters(dirname=dirname, dumpfreq=23)
+output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq)
 
 diagnostics = Diagnostics("u", "m1", "m2")
 
@@ -42,10 +59,7 @@ u0 = state.fields("u")
 D0 = state.fields("D")
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 alpha = pi/2
-if SSHS_ms:
-    lamda_c = 5*pi/4
-else:
-    lamda_c = 2*pi/3
+lamda_c = 3*pi/2
 theta_c = 0
 a = R * 3
 r = a * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_c))
@@ -114,7 +128,7 @@ else: # varying in latitude
 
 # write moisture out to a file
 msout = Function(VD).interpolate(ms)
-outfile = File('ms.pvd')
+outfile = File('msSSHSsat=' + str(bool(SSHS_ms)) + '.pvd')
 outfile.write(msout)
 
 # set up fields to visualise latitude and longitude
