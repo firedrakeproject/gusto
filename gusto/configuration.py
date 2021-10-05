@@ -77,6 +77,7 @@ class OutputParameters(Configuration):
     point_data = []
     tolerance = None
 
+
 class CompressibleParameters(Configuration):
 
     """
