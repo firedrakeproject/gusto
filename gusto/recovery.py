@@ -1,14 +1,16 @@
 """
 The recovery operators used for lowest-order advection schemes.
 """
-from firedrake import (expression, function, Function, FunctionSpace, Projector,
-                       VectorFunctionSpace, SpatialCoordinate, as_vector,
-                       Interpolator, BrokenElement, interval, Constant,
-                       TensorProductElement, FiniteElement, DirichletBC)
-from firedrake.utils import cached_property
-from gusto import kernels
-import ufl
 from enum import Enum
+
+import ufl
+from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
+                       Function, FunctionSpace, Interpolator, Projector,
+                       SpatialCoordinate, TensorProductElement,
+                       VectorFunctionSpace, as_vector, function, interval)
+from firedrake.utils import cached_property
+
+from gusto import kernels
 
 __all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
 
@@ -28,7 +30,7 @@ class Averager(object):
 
     def __init__(self, v, v_out):
 
-        if isinstance(v, expression.Expression) or not isinstance(v, (ufl.core.expr.Expr, function.Function)):
+        if not isinstance(v, (ufl.core.expr.Expr, function.Function)):
             raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v))
 
         # Check shape values
@@ -213,7 +215,7 @@ class Recoverer(object):
     def __init__(self, v_in, v_out, VDG=None, boundary_method=None):
 
         # check if v_in is valid
-        if isinstance(v_in, expression.Expression) or not isinstance(v_in, (ufl.core.expr.Expr, function.Function)):
+        if not isinstance(v_in, (ufl.core.expr.Expr, function.Function)):
             raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v_in))
 
         self.v_in = v_in
