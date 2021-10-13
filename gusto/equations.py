@@ -161,7 +161,7 @@ class ShallowWaterEquations(PrognosticEquation):
                  u_advection_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None):
 
-        spaces = state.spaces.build_compatible_spaces(family, degree)
+        spaces = self._build_spaces(state, family, degree)
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
@@ -178,10 +178,10 @@ class ShallowWaterEquations(PrognosticEquation):
         g = state.parameters.g
         H = state.parameters.H
 
-        w, phi = TestFunctions(W)
+        w, phi = TestFunctions(W)[0:2]
         trials = TrialFunctions(W)
         X = Function(W)
-        u, D = X.split()
+        u, D = X.split()[0:2]
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -241,6 +241,26 @@ class ShallowWaterEquations(PrognosticEquation):
             b.interpolate(bexpr)
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
             self.residual += topography_form
+
+    def _build_spaces(self, state, family, degree):
+        Vu, VD = state.spaces.build_compatible_spaces(family, degree)
+        return Vu, VD
+
+
+class MoistShallowWaterEquations(ShallowWaterEquations):
+
+    field_names = ["u", "D", "r"]
+
+    def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 u_advection_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
+        super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
+                         u_advection_option=u_advection_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+
+    def _build_spaces(self, state, family, degree):
+        Vu, VD = state.spaces.build_compatible_spaces(family, degree)
+        return Vu, VD, VD
 
 
 class CompressibleEulerEquations(PrognosticEquation):
