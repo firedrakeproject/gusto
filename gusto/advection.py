@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TrialFunction, NonlinearVariationalProblem,
+from firedrake import (Function, TrialFunction, TrialFunctions,
+                       NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, action, Constant, dot, grad, as_ufl)
@@ -206,7 +207,10 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
 
         # setup required functions
-        self.trial = TrialFunction(self.fs)
+        if len(self.fs) > 1:
+            self.trial = TrialFunctions(self.fs)
+        else:
+            self.trial = TrialFunction(self.fs)
         self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
 

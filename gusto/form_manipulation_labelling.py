@@ -94,7 +94,7 @@ class Term(object):
     __radd__ = __add__
 
     def __mul__(self, other):
-        if type(other) is float:
+        if type(other) in (float, int):
             other = Constant(other)
         elif type(other) not in [Constant, ufl.algebra.Product]:
             return NotImplemented

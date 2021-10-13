@@ -72,8 +72,9 @@ class Timestepper(object):
         else:
             self.physics_list = []
 
+    @property
     def advecting_velocity(self):
-        return None
+        return self.x.n('u')
 
     def _apply_bcs(self):
         """

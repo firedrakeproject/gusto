@@ -12,7 +12,7 @@ day = 24.*60.*60.
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 
-def setup_sw(dirname, u_advection_option):
+def setup_sw(dirname, dt, u_advection_option):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -21,7 +21,6 @@ def setup_sw(dirname, u_advection_option):
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    dt = 1500.
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
     parameters = ShallowWaterParameters(H=H)
     diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
@@ -65,13 +64,6 @@ def setup_sw(dirname, u_advection_option):
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    advected_fields = []
-    advected_fields.append((ImplicitMidpoint(state, "u")))
-    advected_fields.append((SSPRK3(state, "D")))
-
-    # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields)
-
     vspace = FunctionSpace(state.mesh, "CG", 3)
     vexpr = (2*u_max/R)*x[2]/R
     f = state.fields("coriolis")
@@ -82,22 +74,10 @@ def setup_sw(dirname, u_advection_option):
     pv_analytical = state.fields("AnalyticalPotentialVorticity", vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
-    return stepper, 0.25*day
+    return state, eqns
 
 
-def run_sw(dirname, u_advection_option):
-
-    stepper, tmax = setup_sw(dirname, u_advection_option)
-    stepper.run(t=0, tmax=tmax)
-
-
-@pytest.mark.parametrize("u_advection_option",
-                         ["vector_invariant_form", "circulation_form",
-                          "vector_advection_form"])
-def test_sw_setup(tmpdir, u_advection_option):
-
-    dirname = str(tmpdir)
-    run_sw(dirname, u_advection_option)
+def check_results(dirname):
     filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
 
@@ -142,3 +122,36 @@ def test_sw_setup(tmpdir, u_advection_option):
 
     u_zonal = data.groups["u_zonal"]
     assert u_max * (1 - tolerance) < u_zonal["max"][0] < u_max * (1 + tolerance)
+
+
+@pytest.mark.parametrize("u_advection_option",
+                         ["vector_invariant_form", "circulation_form",
+                          "vector_advection_form"])
+def test_sw_setup(tmpdir, u_advection_option):
+
+    dirname = str(tmpdir)
+    dt = 1500
+    state, eqns = setup_sw(dirname, dt, u_advection_option)
+
+    advected_fields = []
+    advected_fields.append((ImplicitMidpoint(state, "u")))
+    advected_fields.append((SSPRK3(state, "D")))
+    stepper = CrankNicolson(state, eqns, advected_fields)
+    stepper.run(t=0, tmax=0.25*day)
+
+    check_results(dirname)
+
+
+@pytest.mark.parametrize("u_advection_option",
+                         ["vector_invariant_form", "circulation_form",
+                          "vector_advection_form"])
+def test_sw_ssprk3(tmpdir, u_advection_option):
+
+    dirname = str(tmpdir)
+    dt = 100
+    state, eqns = setup_sw(dirname, dt, u_advection_option)
+
+    stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+    stepper.run(t=0, tmax=0.01*day)
+
+    check_results(dirname)
