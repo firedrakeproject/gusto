@@ -181,6 +181,7 @@ class ShallowWaterEquations(PrognosticEquation):
         w, phi = TestFunctions(W)[0:2]
         trials = TrialFunctions(W)
         X = Function(W)
+        self.X = X
         u, D = X.split()[0:2]
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
@@ -249,7 +250,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
 class MoistShallowWaterEquations(ShallowWaterEquations):
 
-    field_names = ["u", "D", "r"]
+    field_names = ["u", "D", "Q"]
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
@@ -257,6 +258,27 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
                          u_advection_option=u_advection_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+
+        W = self.function_space
+        _, phi, gamma = TestFunctions(W)
+        X = self.X
+        _, D, Q = X.split()
+        P = Function(Q.function_space())
+
+        # add in forcing to depth equations
+        beta = state.parameters.beta
+        self.residual += prognostic(beta*inner(phi, P)*dx, "D")
+
+        # add moisture evolution equation
+        self.residual += (
+            subject(
+                prognostic(
+                    time_derivative(inner(gamma, Q)*dx)
+                    + advection(continuity_form(state, gamma, Q))
+                    + inner(gamma, P)*dx,
+                    "Q"),
+                X)
+            )
 
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
