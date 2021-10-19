@@ -21,11 +21,16 @@ x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
 
-output = OutputParameters(dirname=dirname)
+diagnostic_fields = [VelocityX(), VelocityY()]
+
+output = OutputParameters(dirname=dirname,
+                          dumplist_latlon = ['VelocityX', 'VelocityY',
+                                             "Q", "D"])
 
 state = State(mesh,
               dt=dt,
               output=output,
+              diagnostic_fields=diagnostic_fields,
               parameters=parameters)
 
 Omega = parameters.Omega
@@ -49,7 +54,7 @@ r_w = 600000
 h_f = 10
 Dexpr = H - h_f * exp(-(r/r_w)**2)
 dr_dtheta = (
-    (sin(theta_c) * cos(lamda)
+    (sin(theta_c) * cos(theta)
      - cos(theta_c) * sin(theta) * cos(lamda - lamda_c)) /
     sqrt(1 - (sin(theta_c) * sin(theta) +
               cos(theta_c) * cos(theta) * cos(lamda - lamda_c))**2)
@@ -88,5 +93,5 @@ advected_fields.append((ImplicitMidpoint(state, "u")))
 advected_fields.append((SSPRK3(state, "D")))
 advected_fields.append((SSPRK3(state, "Q")))
 
-stepper = CrankNicolson(state, eqns, advected_fields)
-stepper.run(t=0, tmax=0.25*day)
+stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+stepper.run(t=0, tmax=0.01*day)
