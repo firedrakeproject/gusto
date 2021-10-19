@@ -69,8 +69,8 @@ def uexpr():
         (2 * g * h_f)/(R * r_w**2 * fexpr) * r * exp(-(r/r_w)**2) * dr_dtheta
         )
     u_merid = (
-        (-2 * g * h_f)/(R * r_w**2 * fexpr * cos(theta)) * R * exp
-        (-(r/r_w)**2) * dr_dlamda
+        (-2 * g * h_f)/(R * r_w**2 * fexpr * cos(theta)) * r * exp(-(r/r_w)**2)
+        * dr_dlamda
         )
     return sphere_to_cartesian(mesh, u_zonal, u_merid)
 
