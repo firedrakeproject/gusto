@@ -267,7 +267,7 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
 
         # add in forcing to depth equations
         beta = state.parameters.beta
-        self.residual += prognostic(beta*inner(phi, P)*dx, "D")
+        self.residual += subject(prognostic(beta*inner(phi, P)*dx, "D"), X)
 
         # add moisture evolution equation
         self.residual += (

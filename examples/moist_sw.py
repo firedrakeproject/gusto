@@ -16,15 +16,15 @@ parameters = MoistShallowWaterParameters(H=H)
 
 dirname = "moist_sw"
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=3)
+                             refinement_level=4, degree=3)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
 
-diagnostic_fields = [VelocityX(), VelocityY()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), CourantNumber()]
 
 output = OutputParameters(dirname=dirname,
-                          dumplist_latlon = ['VelocityX', 'VelocityY',
+                          dumplist_latlon = ['u_meridional', 'u_zonal',
                                              "Q", "D"])
 
 state = State(mesh,
@@ -47,12 +47,14 @@ Q0 = state.fields("Q")
 
 # parameters for setting up initial conditions
 g = parameters.g
-theta_c = 10 * pi/180 
+theta_c = 20 * pi/180 
 lamda_c = 0
 r = R * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_c))
-r_w = 600000
+r_w = 1000000
 h_f = 10
 Dexpr = H - h_f * exp(-(r/r_w)**2)
+D0.interpolate(Dexpr)
+
 dr_dtheta = (
     (sin(theta_c) * cos(theta)
      - cos(theta_c) * sin(theta) * cos(lamda - lamda_c)) /
@@ -72,7 +74,10 @@ def uexpr():
         (-2 * g * h_f)/(R * r_w**2 * fexpr * cos(theta)) * r * exp(-(r/r_w)**2)
         * dr_dlamda
         )
-    return sphere_to_cartesian(mesh, u_zonal, u_merid)
+    return u_zonal, u_merid
+
+u_z = Function(D0.function_space(), name="u_z").interpolate(conditional(r<1.5*r_w, uexpr()[0], 0.))
+u_m = Function(D0.function_space(), name="u_m").interpolate(conditional(r<1.5*r_w, uexpr()[1], 0.))
 
 Q_sat = 0.9
 Q_off = 0.01
@@ -84,8 +89,7 @@ Q_background.interpolate(conditional((Q_sat - Q_off) - (cos(theta) + Q_min) < 0,
 Qexpr = Q_background + Q_f * exp(-(r/r_w)**2)
 
 # interpolate initial conditions 
-D0.interpolate(Dexpr)
-u0.project(uexpr())
+u0.project(sphere_to_cartesian(mesh, u_z, u_m))
 Q0.interpolate(Qexpr)
 
 advected_fields = []
@@ -94,4 +98,4 @@ advected_fields.append((SSPRK3(state, "D")))
 advected_fields.append((SSPRK3(state, "Q")))
 
 stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
-stepper.run(t=0, tmax=0.01*day)
+stepper.run(t=0, tmax=10*dt)
