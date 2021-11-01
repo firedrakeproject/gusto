@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector)
+                       as_vector, Constant)
 from gusto.form_manipulation_labelling import (subject, time_derivative,
                                                advection, prognostic, drop,
                                                advecting_velocity, Term,
@@ -182,6 +182,7 @@ class ShallowWaterEquations(PrognosticEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         u, D = X.split()
+        D.assign(Constant(H))
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
@@ -206,19 +207,30 @@ class ShallowWaterEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
         D_adv = prognostic(continuity_form(state, phi, D), "D")
-        adv_form = subject(D_adv, X)
+
+        u_adv_form = subject(u_adv, X)
+        D_adv_form = subject(D_adv, X)
 
         pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
+        
+        residual = mass_form + u_adv_form + pressure_gradient_form
 
-        residual = (mass_form + adv_form + pressure_gradient_form)
-        residual = residual.label_map(
-            lambda t: t.get(prognostic) == "u",
-            lambda t: linearisation(t, Term(ufl.derivative(t.form, u, trials[0]), t.labels)))
         self.residual = residual.label_map(
-            lambda t: t.get(prognostic) == "D",
-            lambda t: linearisation(t, Term(ufl.derivative(t.form, D, trials[1]), t.labels)))
-        self.residual += subject(u_adv, X)
+            all_terms,
+            lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+        linear_D_adv = linear_continuity_form(state, phi, H).label_map(
+            lambda t: t.has_label(advecting_velocity),
+            lambda t: Term(ufl.replace(
+                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+        D_adv_form = linearisation(D_adv_form, linear_D_adv)
+        self.residual += D_adv_form
+        # linear_pressure_gradient_form = pressure_gradient_form.label_map(
+        #     all_terms, replace_subject(trials))
+        # pressure_gradient_form = linearisation(pressure_gradient_form,
+        #                                        linear_pressure_gradient_form)
+        # self.residual += pressure_gradient_form
 
+        
         # add on optional coriolis and topography forms
         if fexpr is not None:
             V = FunctionSpace(state.mesh, "CG", 1)
