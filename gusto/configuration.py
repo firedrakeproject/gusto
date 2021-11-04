@@ -59,6 +59,7 @@ class OutputParameters(Configuration):
     log_level = WARNING
     dump_vtus = True
     dumpfreq = 1
+    pddumpfreq = None
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
