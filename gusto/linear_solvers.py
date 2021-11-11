@@ -388,19 +388,52 @@ class IncompressibleSolver(TimesteppingSolver):
          passed in.
     """
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
+    solver_paramaters = {'mat_type': 'matfree',
+              'ksp_type': 'preonly',
+              'pc_type': 'python',
+              'pc_python_type': 'firedrake.HybridizationPC',
+              'hybridization': {'ksp_type': 'gmres',
+                                'ksp_gmres_restart': 40,
+                                'mat_type': 'matfree',
+                                'ksp_monitor': None,
+                                'ksp_converged_reason': None,
+                                'ksp_rtol': 1e-9,
+                                'ksp_atol': 1e-30,
+                                'pc_type': 'python',
+                                'pc_python_type': 'firedrake.GTMGPC',
+                                'gt': {'mg_levels': {'ksp_type': 'chebyshev',
+                                                     'pc_type': 'bjacobi',
+                                                     'sub_pc_type': 'ilu',
+                                                     #'ksp_monitor': None,
+                                                     #'ksp_converged_reason': None,
+                                                     #'ksp_max_it': 3
+                                                     },
+                                       'mg_coarse': {'ksp_type': 'preonly',
+                                                     'pc_type': 'gamg',
+                                                     }}}}
+###---CALLBACKS-----------------------------------------------------------------
+
+    def get_p1_space():
+        return FunctionSpace(state.mesh, "CG", 1, vfamily="R", vdegree=0)
+
+    def get_coarse_nullspace():
+        return VectorSpaceBasis(constant=True)
+
+    def get_trace_nullspace(T):
+        return VectorSpaceBasis(constant=True)
+
+    def p1_callback():
+        P1 = get_p1_space()
+        p = TrialFunction(P1)
+        q = TestFunction(P1)
+        return inner(grad(p), grad(q))*dx
+
+
+    appctx = {'get_coarse_operator': p1_callback,
+              'get_coarse_space': get_p1_space,
+              'trace_nullspace': get_trace_nullspace,
+              'get_coarse_op_nullspace': get_coarse_nullspace}
+
 
     def __init__(self, state, solver_parameters=None,
                  overwrite_solver_parameters=False):
@@ -461,10 +494,10 @@ class IncompressibleSolver(TimesteppingSolver):
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
 
         # Provide callback for the nullspace of the trace system
-        def trace_nullsp(T):
-            return VectorSpaceBasis(constant=True)
+        #def trace_nullsp(T):
+            #return VectorSpaceBasis(constant=True)
 
-        appctx = {"trace_nullspace": trace_nullsp}
+        #appctx = {"trace_nullspace": trace_nullsp}
         self.up_solver = LinearVariationalSolver(up_problem,
                                                  solver_parameters=self.solver_parameters,
                                                  appctx=appctx)
