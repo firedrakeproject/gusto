@@ -223,6 +223,14 @@ class ShallowWaterEquations(PrognosticEquation):
             lambda t: Term(ufl.replace(
                 t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
         D_adv_form = linearisation(D_adv_form, linear_D_adv)
+        print("J1: ", linear_D_adv.form.__str__())
+        #print("J1: ", linear_D_adv.form.__repr__())
+        #D_adv_form = D_adv_form.label_map(all_terms,
+        #                                  lambda t: linearisation(
+        #                                      t, Term(ufl.derivative(t.form,(t.get(advecting_velocity), D),trials), t.labels)))
+        print("J2: ", [Term(ufl.derivative(t.form,(t.get(advecting_velocity), D),trials), t.labels).form.__str__() for t in D_adv_form])
+        #print("J2: ", [Term(ufl.derivative(t.form,(t.get(advecting_velocity), D),trials), t.labels).form.__repr__() for t in D_adv_form])
+
         self.residual += D_adv_form
         # linear_pressure_gradient_form = pressure_gradient_form.label_map(
         #     all_terms, replace_subject(trials))
