@@ -2,7 +2,7 @@ from gusto import *
 from firedrake import (PeriodicRectangleMesh, pi, sin, cos, cosh, sinh,
                        sqrt, exp, TestFunction, TrialFunction,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       inner, grad, dx)
+                       inner, grad, dx, PCG64, RandomGenerator)
 
 # set up mesh
 Lx = 3e6
@@ -40,15 +40,29 @@ eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_
 u0 = state.fields("u")
 D0 = state.fields("D")
 
-uexpr = (-g*d_eta/(f*L)) * (1/cosh((y-Ly/2)/L))**2
-vexpr = Constant(0)
 Dexpr = H - d_eta * sinh((y-Ly/2)/L)/cosh((y-Ly/2)/L)
 
-D0.interpolate(Dexpr)
+VD = D0.function_space()
+Dbackground = Function(VD)
+Dbackground.interpolate(Dexpr)
+
+Drandom = Function(VD)
+pcg = PCG64(seed=123456789)
+rg = RandomGenerator(pcg)
+f_beta = rg.beta(VD, 1.0, 2.0)
+amp = max(Dbackground.dat.data)
+Drandom.interpolate(0.01*amp + f_beta)
+print("Number of random numbers: " + str(len(f_beta.dat.data)))
+print(Drandom.dat.data.max())
+print(Drandom.dat.data.min())
+
+D0.interpolate(conditional(y<Ly/2+L/10, conditional(y>Ly/2-L/10, Dbackground+Drandom, Dbackground), Dbackground))
+#D0.interpolate(conditional(Ly/2 - L/2 < y, conditional(y < Ly/2 + L/2, Dbackground + Drandom, Dbackground), Dbackground))
+#D0.interpolate(Dbackground)
 
 Vpsi = FunctionSpace(mesh, "CG", 2)
 psi = Function(Vpsi)
-psi.interpolate((g/f)*D0)
+psi.interpolate((g/f)*Dbackground) # should this be D0? balance with which D?
 
 Vu = u0.function_space()
 w = TestFunction(Vu)
@@ -67,4 +81,4 @@ advected_fields = [ImplicitMidpoint(state, "u"),
 stepper = CrankNicolson(state, eqns, advected_fields)
 
 #stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
-stepper.run(t=0, tmax=10*dt)
+stepper.run(t=0, tmax=240*dt)
