@@ -1,5 +1,8 @@
 from gusto import *
-from firedrake import PeriodicRectangleMesh, pi, sin, cos, cosh,sinh, sqrt
+from firedrake import (PeriodicRectangleMesh, pi, sin, cos, cosh, sinh,
+                       sqrt, exp, TestFunction, TrialFunction,
+                       LinearVariationalProblem, LinearVariationalSolver,
+                       inner, grad, dx)
 
 # set up mesh
 Lx = 3e6
@@ -7,7 +10,7 @@ Ly = 3e6
 delta_x = 3e4
 nx = int(Lx/delta_x)
 
-mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction='y')
+mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
 H = 1000. # making this choice
@@ -30,23 +33,38 @@ x, y = SpatialCoordinate(mesh)
 
 output = OutputParameters(dirname=dirname)
 
-state = State(mesh, dt=dt, output=output, parameters=parameters)
+state = State(mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY(), CourantNumber()])
 
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f))
+eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
 
 u0 = state.fields("u")
 D0 = state.fields("D")
 
-uexpr = Constant(0)
-vexpr = (-g*d_eta/(f*L)) * (1/cosh((x-Lx/2)/L))**2
-Dexpr = H - d_eta * sinh((x-Lx/2)/L)/cosh((x-Lx/2)/L)
+uexpr = (-g*d_eta/(f*L)) * (1/cosh((y-Ly/2)/L))**2
+vexpr = Constant(0)
+Dexpr = H - d_eta * sinh((y-Ly/2)/L)/cosh((y-Ly/2)/L)
 
-u0.project(as_vector((uexpr, vexpr)))
 D0.interpolate(Dexpr)
 
-advected_fields = []
-advected_fields.append((SSPRK3(state, "u")))
-advected_fields.append((SSPRK3(state, "D")))
+Vpsi = FunctionSpace(mesh, "CG", 2)
+psi = Function(Vpsi)
+psi.interpolate((g/f)*D0)
 
-stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+Vu = u0.function_space()
+w = TestFunction(Vu)
+u_ = TrialFunction(Vu)
+
+ap = inner(w, u_)*dx
+Lp = inner(w, state.perp(grad(psi)))*dx
+prob = LinearVariationalProblem(ap, Lp, u0)
+solver = LinearVariationalSolver(prob)
+solver.solve()
+
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "D")]
+
+# build time stepper
+stepper = CrankNicolson(state, eqns, advected_fields)
+
+#stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
 stepper.run(t=0, tmax=10*dt)
