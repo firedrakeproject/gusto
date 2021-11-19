@@ -21,7 +21,7 @@ Bu = 10
 L = sqrt(g*H/(f**2*Bu))
 Ro = 0.1
 d_eta = Ro*f**2*L**2/g
-dt = 2500
+dt = 250
 
 print(g*d_eta/(f*L)**2)
 print(g*H/(f*L)**2)
@@ -50,19 +50,16 @@ Drandom = Function(VD)
 pcg = PCG64(seed=123456789)
 rg = RandomGenerator(pcg)
 f_beta = rg.beta(VD, 1.0, 2.0)
-amp = max(Dbackground.dat.data)
-Drandom.interpolate(0.01*amp + f_beta)
-print("Number of random numbers: " + str(len(f_beta.dat.data)))
-print(Drandom.dat.data.max())
-print(Drandom.dat.data.min())
+noise = f_beta - Constant(0.5) # range (-0.5, 0.5)
+amp = Dbackground.at(Lx/2, Ly/2) # height in the jet
+Drandom.interpolate(0.01*amp*noise)
 
 D0.interpolate(conditional(y<Ly/2+L/10, conditional(y>Ly/2-L/10, Dbackground+Drandom, Dbackground), Dbackground))
-#D0.interpolate(conditional(Ly/2 - L/2 < y, conditional(y < Ly/2 + L/2, Dbackground + Drandom, Dbackground), Dbackground))
-#D0.interpolate(Dbackground)
 
 Vpsi = FunctionSpace(mesh, "CG", 2)
 psi = Function(Vpsi)
-psi.interpolate((g/f)*Dbackground) # should this be D0? balance with which D?
+# balancing initial velocity with the original height field (no noise)
+psi.interpolate((g/f)*Dbackground)
 
 Vu = u0.function_space()
 w = TestFunction(Vu)
