@@ -48,6 +48,7 @@ class OutputParameters(Configuration):
     log_level = WARNING
     dump_vtus = True
     dumpfreq = 1
+    pddumpfreq = None
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
@@ -64,6 +65,7 @@ class OutputParameters(Configuration):
     #: List of ordered pairs (name, points) where name is the field
     # name and points is the points at which to dump them
     point_data = []
+    tolerance = None
 
 
 class CompressibleParameters(Configuration):

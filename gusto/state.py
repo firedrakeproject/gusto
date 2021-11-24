@@ -164,7 +164,7 @@ class StateFields(FieldCreator):
 
 class PointDataOutput(object):
     def __init__(self, filename, ndt, field_points, description,
-                 field_creator, comm, create=True):
+                 field_creator, comm, tolerance=None, create=True):
         """Create a dump file that stores fields evaluated at points.
 
         :arg filename: The filename.
@@ -178,6 +178,7 @@ class PointDataOutput(object):
         self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
+        self.tolerance = tolerance
         self.comm = comm
         if not create:
             return
@@ -222,7 +223,7 @@ class PointDataOutput(object):
 
         val_list = []
         for field_name, points in self.field_points:
-            val_list.append((field_name, np.asarray(field_creator(field_name).at(points))))
+            val_list.append((field_name, np.asarray(field_creator(field_name).at(points, tolerance=self.tolerance))))
 
         if self.comm.rank == 0:
             with Dataset(self.filename, "a") as dataset:
@@ -464,6 +465,7 @@ class State(object):
                                                        create=not pickup)
 
         if len(self.output.point_data) > 0:
+            # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
             ndt = int(tmax/self.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
@@ -471,7 +473,16 @@ class State(object):
                                                     self.output.dirname,
                                                     self.fields,
                                                     self.mesh.comm,
+                                                    self.output.tolerance,
                                                     create=not pickup)
+
+            # make point data dump counter
+            self.pddumpcount = itertools.count()
+
+            # set frequency of point data output - defaults to
+            # dumpfreq if not set by user
+            if self.output.pddumpfreq is None:
+                self.output.pddumpfreq = self.output.dumpfreq
 
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the dumb checkpointing
@@ -524,7 +535,7 @@ class State(object):
             # Output diagnostic data
             self.diagnostic_output.dump(self, t)
 
-        if len(output.point_data) > 0:
+        if len(output.point_data) > 0 and (next(self.pddumpcount) % output.pddumpfreq) == 0:
             # Output pointwise data
             self.pointdata_output.dump(self.fields, t)
 
