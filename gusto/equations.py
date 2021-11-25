@@ -167,7 +167,7 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = self.function_space[0]
-        self.bcs = {'u':[]}
+        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
@@ -259,15 +259,15 @@ class CompressibleEulerEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = []
+        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         if Vu.extruded:
-            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         g = state.parameters.g
         cp = state.parameters.cp
@@ -486,15 +486,15 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = []
+        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         if Vu.extruded:
-            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         tests = TestFunctions(W)
         w, phi, gamma = tests[0:3]
