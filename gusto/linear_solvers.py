@@ -9,9 +9,9 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (linearisation, Term, drop,
-                                               time_derivative)
+from gusto.labels import linearisation, time_derivative
 from gusto import thermodynamics
+from gusto.fml.form_manipulation_labelling import Term, drop
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -549,7 +549,7 @@ class LinearTimesteppingSolver(object):
         self.dy = Function(W)
 
         # Solver
-        bcs = equation.bcs
+        bcs = equation.bcs['u']
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
                                            self.dy, bcs=bcs)

@@ -8,11 +8,10 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (Term, drop, time_derivative,
-                                               advecting_velocity, prognostic,
-                                               all_terms, replace_subject,
-                                               replace_test_function)
+from gusto.labels import (time_derivative, advecting_velocity, prognostic,
+                          replace_subject, replace_test_function)
 from gusto.recovery import Recoverer
+from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
@@ -100,6 +99,7 @@ class Advection(object, metaclass=ABCMeta):
     def setup(self, equation, uadv=None, *active_labels):
 
         self.residual = equation.residual
+        self.bcs = equation.bcs['u']
 
         if self.field_name is not None:
             self.idx = equation.field_names.index(self.field_name)
@@ -285,7 +285,7 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq)
+        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 

@@ -4,11 +4,10 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        as_vector)
-from gusto.form_manipulation_labelling import (subject, time_derivative,
-                                               advection, prognostic, drop,
-                                               advecting_velocity, Term,
-                                               all_terms, replace_subject,
-                                               linearisation, name)
+from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
+from gusto.labels import (subject, time_derivative, advection, prognostic,
+                          advecting_velocity, replace_subject, linearisation,
+                          name)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
@@ -168,12 +167,12 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = self.function_space[0]
-        self.bcs = []
+        self.bcs = {'u':[]}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         g = state.parameters.g
         H = state.parameters.H
