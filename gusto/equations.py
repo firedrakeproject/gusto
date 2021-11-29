@@ -37,6 +37,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.state = state
         self.function_space = function_space
         self.field_name = field_name
+        self.bcs = {}
 
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
@@ -44,9 +45,11 @@ class PrognosticEquation(object, metaclass=ABCMeta):
                          subfield_names=self.field_names)
             for fname in self.field_names:
                 state.diagnostics.register(fname)
+                self.bcs[fname] = []
         else:
             state.fields(field_name, function_space)
             state.diagnostics.register(field_name)
+            self.bcs[field_name] = []
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -167,7 +170,6 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = self.function_space[0]
-        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
