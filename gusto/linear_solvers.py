@@ -335,7 +335,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = self.equations.bcs
+        self.bcs = self.equations.bcs['u']
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -456,7 +456,7 @@ class IncompressibleSolver(TimesteppingSolver):
         # Place to put result of u p solver
         self.up = Function(M)
 
-        bcs = None if len(self.equations.bcs) == 0 else self.equations.bcs
+        bcs = None if len(self.equations.bcs) == 0 else self.equations.bcs['u']
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
