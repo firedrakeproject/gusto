@@ -261,7 +261,6 @@ class CompressibleEulerEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
@@ -488,7 +487,6 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = {'u': []}
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
