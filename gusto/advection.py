@@ -99,7 +99,6 @@ class Advection(object, metaclass=ABCMeta):
     def setup(self, equation, uadv=None, *active_labels):
 
         self.residual = equation.residual
-        self.bcs = equation.bcs['u']
 
         if self.field_name is not None:
             self.idx = equation.field_names.index(self.field_name)
@@ -115,6 +114,7 @@ class Advection(object, metaclass=ABCMeta):
             self.fs = equation.function_space
             self.idx = None
 
+        self.bcs = equation.bcs[self.field_name]
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
