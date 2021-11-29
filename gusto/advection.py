@@ -109,12 +109,16 @@ class Advection(object, metaclass=ABCMeta):
                     split_form(t.form)[self.idx].form,
                     t.labels),
                 drop)
+            self.bcs = equation.bcs[self.field_name]
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
+            if len(self.fs) > 0:
+                self.bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
+            else:
+                self.bcs = equation.bcs[self.field_name]
             self.idx = None
 
-        self.bcs = equation.bcs[self.field_name]
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
