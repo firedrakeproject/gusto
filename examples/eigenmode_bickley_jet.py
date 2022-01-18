@@ -46,6 +46,21 @@ D_b.interpolate(Dexpr)
 
 W = eqns.function_space
 Vu, VD = W.split()
+#print(type(Vu))
+#print(type(Vu.sub(0)))
+# Trying to extract the v-component space
+### 1
+#v_space = Vu.sub(1)
+### 2
+#vector_space = W.sub(0)
+#v_space = vector_space.sub(1)
+### 3
+#vector_space = W.sub(0)
+#Vu, Vv = vector_space.split()
+### 4
+#v_space = Vu[1]
+### 5
+#v_space = functionspaceimpl.IndexedFunctionSpace(1, W.sub(0), W)
 
 # use the streamfunction to define a balanced background velocity
 Vpsi = FunctionSpace(mesh, "CG", 2)
@@ -75,8 +90,8 @@ tau = w_vector[1]
 # define what we need to build matrices
 v_bar = u_b[1]
 eta_bar = D_b
-dxv_bar = Function(W.sub(1))
-dxeta_bar = Function(W.sub(1)) # should W.sub(2) work here?
+dxv_bar = Function(v_space)
+dxeta_bar = Function(W.sub(1))
 dxv_bar_expr = (2*g*d_eta)/(f*L**2)*(1/cosh(x/L)**2)*tanh(x/L)
 dxeta_bar_expr = -d_eta/L * (1/cosh(x/L))**2
 dxv_bar.interpolate(dxv_bar_expr)
