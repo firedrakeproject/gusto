@@ -28,8 +28,6 @@ x, y = SpatialCoordinate(mesh)
 
 output = OutputParameters(dirname=dirname)
 
-#timestepping = TimesteppingParameters(dt=dt)
-
 fieldlist = ['u', 'D']
 
 state = State(mesh, output=output, parameters=parameters,
@@ -46,21 +44,6 @@ D_b.interpolate(Dexpr)
 
 W = eqns.function_space
 Vu, VD = W.split()
-#print(type(Vu))
-#print(type(Vu.sub(0)))
-# Trying to extract the v-component space
-### 1
-#v_space = Vu.sub(1)
-### 2
-#vector_space = W.sub(0)
-#v_space = vector_space.sub(1)
-### 3
-#vector_space = W.sub(0)
-#Vu, Vv = vector_space.split()
-### 4
-#v_space = Vu[1]
-### 5
-#v_space = functionspaceimpl.IndexedFunctionSpace(1, W.sub(0), W)
 
 # use the streamfunction to define a balanced background velocity
 Vpsi = FunctionSpace(mesh, "CG", 2)
@@ -75,7 +58,9 @@ solver = LinearVariationalSolver(prob)
 solver.solve()
 
 # set up function spaces to store the eigenmodes - where should these go?
-eigenmodes_real, eigenmodes_imag = Function(W.sub(0)), Function(W.sub(0))
+#U_eigenmodes_real, U_eigenmodes_imag = Function(W.sub(0)), Function(W.sub(0))
+#eta_eigenmodes_real, eta_eigenmodes_imag = Function(W.sub(1)), Function(W.sub(1))
+eigenmodes_real, eigenmodes_imag = Function(W), Function(W)
 
 # set up test and trial functions
 velocity, eta = TrialFunctions(W)
@@ -87,20 +72,29 @@ v = velocity[1]
 w = w_vector[0]
 tau = w_vector[1]
 
-# define what we need to build matrices
+# define the other functions  we need to build the matrices
 v_bar = u_b[1]
 eta_bar = D_b
-dxv_bar = Function(v_space)
+
 dxeta_bar = Function(W.sub(1))
-dxv_bar_expr = (2*g*d_eta)/(f*L**2)*(1/cosh(x/L)**2)*tanh(x/L)
 dxeta_bar_expr = -d_eta/L * (1/cosh(x/L))**2
-dxv_bar.interpolate(dxv_bar_expr)
 dxeta_bar.interpolate(dxeta_bar_expr)
+
+dxv_bar_expr = (2*g*d_eta)/(f*L**2)*(1/cosh(x/L)**2)*tanh(x/L)
+Ubar = Function(Vu).project(as_vector((0., dxv_bar_expr)))
+dxv_bar = Ubar[1]
+
+# set up arrays to store all k's, eigenvectors and eigenvalues
+k_list = []
+eigenvalue_list = []
+eigenmode_list = []
+sigma_list = []
 
 # loop over range of k values
 for k in np.arange(0.08, 2.58, 0.08):
 
     print(k)
+    eigenmodes_real, eigenmodes_imag = Function(W), Function(W)
 
     a = w * v_bar * u * dx + tau * 1/Ro * u * dx + tau * dxv_bar * u * dx
     + phi * eta_bar * u.dx(0) * dx + phi * dxeta_bar * u * dx
@@ -114,11 +108,12 @@ for k in np.arange(0.08, 2.58, 0.08):
     petsc_a = assemble(a).M.handle
     petsc_m = assemble(m).M.handle
 
-    num_eigenvalues = 1 # what should this be?
+    num_eigenvalues = 1
 
     opts = PETSc.Options()
     opts.setValue("eps_gen_non_hermitian", None)
     opts.setValue("st_pc_factor_shift_type", "NONZERO")
+    opts.setValue("eps_largest_imaginary", None)
 
     es = SLEPc.EPS().create(comm=COMM_WORLD)
     es.setDimensions(num_eigenvalues)
@@ -126,6 +121,31 @@ for k in np.arange(0.08, 2.58, 0.08):
     es.setFromOptions()
     es.solve()
 
-# For each k, check every found eigenvalue and store any that have an imaginary part > 0.
-# Save the maximum of these (biggest positive imaginary part) for each k.
-# Growth rate is k*eigenvalue.   
+    nconv = es.getConverged()
+    print("Number of converged eigenpairs for k = %d is %d" %(k, nconv))
+
+    if nconv > 0:
+        vr, vi = petsc_a.getVecs()
+        lam = es.getEigenpair(0, vr, vi)
+        eigenmodes_real.vector()[:], eigenmodes_imag.vector()[:] = vr, vi
+        k_list.append(k)
+        eigenvalue_list.append(lam)
+        eigenmode_list.append(vr)
+        sigma_list.append(k*lam)
+
+# Extract eigenvector corresponding to the largest growth rate
+max_sigma = max(sigma_list)
+print("maximum growth rate: %f" %max_sigma)
+index = sigma_list[max_sigma]
+print("k value corresponding to the maximum growth rate: %d" %index)
+
+# Save figures
+import matplotlib.pyplot as plt
+plt.scatter(k_list, Re(eigenvalue_list))
+plt.xlabel('k')
+plt.ylabel('c_p')
+plt.savefig('cp_plot')
+plt.show()
+
+
+# Growth rate is k*eigenvalue.
