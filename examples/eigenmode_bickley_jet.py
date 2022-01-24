@@ -123,14 +123,19 @@ for k in np.arange(0.08, 2.58, 0.08):
 
     nconv = es.getConverged()
     print("Number of converged eigenpairs for k = %d is %d" %(k, nconv))
-
+    outfile = File("eigenmode_%f.pvd"%k)
     if nconv > 0:
         vr, vi = petsc_a.getVecs()
         lam = es.getEigenpair(0, vr, vi)
-        eigenmodes_real.vector()[:], eigenmodes_imag.vector()[:] = vr, vi
+        #eigenmodes_real.dat.data[:], eigenmodes_imag.dat.data[:] = vr, vi
+        #eigenmodes_real.dat.vec, eigenmodes_imag.dat.vec = vr, vi
+        with eigenmodes_real.dat.vec as vr:
+            with eigenmodes_imag.dat.vec as vi:
+                ur, vr, etar = eigenmodes_real.split()
+                ui, vi, etai = eigenmodes_imag.split()
+                outfile.write(ur, vr, etar, ui, vi, etai)
         k_list.append(k)
         eigenvalue_list.append(lam)
-        eigenmode_list.append(vr)
         sigma_list.append(k*lam)
 
 # Extract eigenvector corresponding to the largest growth rate
