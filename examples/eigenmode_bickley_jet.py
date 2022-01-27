@@ -91,7 +91,8 @@ eigenmode_list = []
 sigma_list = []
 
 # loop over range of k values
-for k in np.arange(0.08, 2.58, 0.08):
+#for k in np.arange(0.08, 2.58, 0.08):
+for k in np.arange(0.5, 1.4, 0.06): #smaller range to speed it up
 
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(W), Function(W)
@@ -122,7 +123,7 @@ for k in np.arange(0.08, 2.58, 0.08):
     es.solve()
 
     nconv = es.getConverged()
-    print("Number of converged eigenpairs for k = %d is %d" %(k, nconv))
+    print("Number of converged eigenpairs for k = %f is %f" %(k, nconv))
     outfile = File("eigenmode_%f.pvd"%k)
     if nconv > 0:
         vr, vi = petsc_a.getVecs()
@@ -131,26 +132,30 @@ for k in np.arange(0.08, 2.58, 0.08):
         #eigenmodes_real.dat.vec, eigenmodes_imag.dat.vec = vr, vi
         with eigenmodes_real.dat.vec as vr:
             with eigenmodes_imag.dat.vec as vi:
-                ur, vr, etar = eigenmodes_real.split()
-                ui, vi, etai = eigenmodes_imag.split()
-                outfile.write(ur, vr, etar, ui, vi, etai)
+                ur, etar = eigenmodes_real.split()
+                ui, etai = eigenmodes_imag.split()
+                outfile.write(ur, etar, ui, etai)
         k_list.append(k)
         eigenvalue_list.append(lam)
-        sigma_list.append(k*lam)
+        sigma_list.append(k*np.imag(lam))
 
-# Extract eigenvector corresponding to the largest growth rate
+# Extract k-value corresponding to the largest growth rate
 max_sigma = max(sigma_list)
 print("maximum growth rate: %f" %max_sigma)
-index = sigma_list[max_sigma]
-print("k value corresponding to the maximum growth rate: %d" %index)
+index = np.argmax(sigma_list)
+k_value = k_list[index]
+print("k value corresponding to the maximum growth rate: %f" %k_value)
 
 # Save figures
 import matplotlib.pyplot as plt
-plt.scatter(k_list, Re(eigenvalue_list))
+
+plt.scatter(k_list, np.real(eigenvalue_list))
 plt.xlabel('k')
 plt.ylabel('c_p')
 plt.savefig('cp_plot')
-plt.show()
 
+plt.scatter(k_list, sigma_list)
+plt.xlabel('k')
+plt.ylabel('sigma')
+plt.savefig('growth_rate_plot')
 
-# Growth rate is k*eigenvalue.
