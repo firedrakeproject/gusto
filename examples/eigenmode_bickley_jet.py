@@ -5,16 +5,16 @@ from slepc4py import SLEPc
 import numpy as np
 
 # set up mesh
-Lx = 3e6
-Ly = 3e6
-delta_x = 3e4
+Lx = 2
+Ly = 2
+delta_x = 0.02
 nx = int(Lx/delta_x)
 
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
-H = 1000.
-f = 1e-4
+H = 1.
+f = 10
 g = 10
 parameters = ShallowWaterParameters(H=H, g=g)
 Bu = 10
