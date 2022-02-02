@@ -525,6 +525,13 @@ class ShallowWaterSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
+    def __init__(self, state, solver_parameters=None,
+                 overwrite_solver_parameters=False,
+                 appctx=None):
+        self.appctx=appctx
+        super().__init__(state, solver_parameters,
+                         overwrite_solver_parameters)
+
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state
@@ -564,7 +571,8 @@ class ShallowWaterSolver(TimesteppingSolver):
 
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+                                                 options_prefix='SWimplicit',
+                                                 appctx=self.appctx)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self):
