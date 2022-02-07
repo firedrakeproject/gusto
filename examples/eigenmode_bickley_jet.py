@@ -4,10 +4,13 @@ from firedrake.petsc import PETSc
 from slepc4py import SLEPc
 import numpy as np
 
+specified_Vbar = True
+analytical_derivatives = True
+
 # set up mesh
 Lx = 2
 Ly = 2
-delta_x = 0.02
+delta_x = 0.01
 nx = int(Lx/delta_x)
 
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
@@ -18,7 +21,7 @@ f = 10
 g = 10
 parameters = ShallowWaterParameters(H=H, g=g)
 Bu = 10
-L = sqrt(g*H/(f**2*Bu))
+L = sqrt(g*H/(f**2*Bu)) # = 0.1
 Ro = 0.1
 d_eta = Ro*f**2*L**2/g
 dt = 250.
@@ -45,21 +48,24 @@ D_b.interpolate(Dexpr)
 W = eqns.function_space
 Vu, VD = W.split()
 
-# use the streamfunction to define a balanced background velocity
-Vpsi = FunctionSpace(mesh, "CG", 2)
-psi = Function(Vpsi)
-psi.interpolate((g/f)*D_b)
-w = TestFunction(Vu)
-u_ = TrialFunction(Vu)
-ap = inner(w, u_)*dx
-Lp = inner(w, state.perp(grad(psi)))*dx
-prob = LinearVariationalProblem(ap, Lp, u_b)
-solver = LinearVariationalSolver(prob)
-solver.solve()
+if specified_Vbar:
+    # expression for the background velocity as given
+    vexpr = -(g*d_eta/f*L) * (1/cosh(x/L))**2
+    Uexpr = Function(Vu).project(as_vector((0., vexpr)))
+    u_b.interpolate(Uexpr)
+else:
+    # use the streamfunction to define a balanced background velocity
+    Vpsi = FunctionSpace(mesh, "CG", 2)
+    psi = Function(Vpsi)
+    w = TestFunction(Vu)
+    u_ = TrialFunction(Vu)
+    ap = inner(w, u_)*dx
+    Lp = inner(w, state.perp(grad(psi)))*dx
+    prob = LinearVariationalProblem(ap, Lp, u_b)
+    solver = LinearVariationalSolver(prob)
+    solver.solve()
 
-# set up function spaces to store the eigenmodes - where should these go?
-#U_eigenmodes_real, U_eigenmodes_imag = Function(W.sub(0)), Function(W.sub(0))
-#eta_eigenmodes_real, eta_eigenmodes_imag = Function(W.sub(1)), Function(W.sub(1))
+# set up function spaces to store the eigenmodes
 eigenmodes_real, eigenmodes_imag = Function(W), Function(W)
 
 # set up test and trial functions
@@ -72,17 +78,23 @@ v = velocity[1]
 w = w_vector[0]
 tau = w_vector[1]
 
-# define the other functions  we need to build the matrices
+# define the other functions we need to build the matrices
 v_bar = u_b[1]
 eta_bar = D_b
 
-dxeta_bar = Function(W.sub(1))
-dxeta_bar_expr = -d_eta/L * (1/cosh(x/L))**2
-dxeta_bar.interpolate(dxeta_bar_expr)
-
-dxv_bar_expr = (2*g*d_eta)/(f*L**2)*(1/cosh(x/L)**2)*tanh(x/L)
-Ubar = Function(Vu).project(as_vector((0., dxv_bar_expr)))
-dxv_bar = Ubar[1]
+# derivatives of V_bar and eta_bar
+if analytical_derivatives:
+    # derivatives of the specified functions
+    dxeta_bar = Function(W.sub(1))
+    dxeta_bar_expr = -d_eta/L * (1/cosh(x/L))**2
+    dxeta_bar.interpolate(dxeta_bar_expr)
+    dxv_bar_expr = (2*g*d_eta)/(f*L**2)*(1/cosh(x/L)**2)*tanh(x/L)
+    Ubar = Function(Vu).project(as_vector((0., dxv_bar_expr)))
+    dxv_bar = Ubar[1]
+else:
+    # derivatives calculated using Firedrake
+    dxv_bar = v_bar.dx(0)
+    dxeta_bar = eta_bar.dx(0)
 
 # set up arrays to store all k's, eigenvectors and eigenvalues
 k_list = []
@@ -92,8 +104,7 @@ sigma_list = []
 
 # loop over range of k values
 #for k in np.arange(0.08, 2.58, 0.08):
-for k in np.arange(0.5, 1.4, 0.06): #smaller range to speed it up
-
+for k in np.arange(2.6, 8.6, 0.2):
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(W), Function(W)
 
@@ -115,6 +126,7 @@ for k in np.arange(0.5, 1.4, 0.06): #smaller range to speed it up
     opts.setValue("eps_gen_non_hermitian", None)
     opts.setValue("st_pc_factor_shift_type", "NONZERO")
     opts.setValue("eps_largest_imaginary", None)
+    opts.setValue("eps_tol", 1e-6)
 
     es = SLEPc.EPS().create(comm=COMM_WORLD)
     es.setDimensions(num_eigenvalues)
@@ -128,8 +140,6 @@ for k in np.arange(0.5, 1.4, 0.06): #smaller range to speed it up
     if nconv > 0:
         vr, vi = petsc_a.getVecs()
         lam = es.getEigenpair(0, vr, vi)
-        #eigenmodes_real.dat.data[:], eigenmodes_imag.dat.data[:] = vr, vi
-        #eigenmodes_real.dat.vec, eigenmodes_imag.dat.vec = vr, vi
         with eigenmodes_real.dat.vec as vr:
             with eigenmodes_imag.dat.vec as vi:
                 ur, etar = eigenmodes_real.split()
@@ -140,6 +150,8 @@ for k in np.arange(0.5, 1.4, 0.06): #smaller range to speed it up
         sigma_list.append(k*np.imag(lam))
 
 # Extract k-value corresponding to the largest growth rate
+print("sigma list:")
+print(sigma_list)
 max_sigma = max(sigma_list)
 print("maximum growth rate: %f" %max_sigma)
 index = np.argmax(sigma_list)
