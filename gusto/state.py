@@ -387,7 +387,7 @@ class State(object):
             for name in self.output.dumplist_latlon:
                 f = self.fields(name)
                 field = Function(
-                    functionspaceimpl.WithGeometry(
+                    functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
                     val=f.topological, name=name+'_ll')
                 self.to_dump_latlon.append(field)
