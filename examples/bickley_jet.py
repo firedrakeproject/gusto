@@ -1,3 +1,5 @@
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, pi, sin, cos, cosh, sinh,
                        sqrt, exp, TestFunction, TrialFunction,
@@ -31,9 +33,9 @@ print(d_eta)
 dirname="bickley_jet"
 x, y = SpatialCoordinate(mesh)
 
-output = OutputParameters(dirname=dirname)
+output = OutputParameters(dirname=dirname, dumpfreq=400)
 
-state = State(mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY(), CourantNumber()])
+state = State(mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY()])
 
 eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
 
@@ -49,10 +51,10 @@ Dbackground.interpolate(Dexpr)
 Drandom = Function(VD)
 pcg = PCG64(seed=123456789)
 rg = RandomGenerator(pcg)
-f_beta = rg.beta(VD, 1.0, 2.0)
-noise = f_beta - Constant(0.5) # range (-0.5, 0.5)
+f_beta = rg.uniform(VD, -1.0, 1.0)
+#noise = f_beta - Constant(0.5) # range (-0.5, 0.5)
 amp = Dbackground.at(Lx/2, Ly/2) # height in the jet
-Drandom.interpolate(0.01*amp*noise)
+Drandom.interpolate(0.001*amp*f_beta)
 
 D0.interpolate(conditional(y<Ly/2+L/10, conditional(y>Ly/2-L/10, Dbackground+Drandom, Dbackground), Dbackground))
 
@@ -78,4 +80,5 @@ advected_fields = [ImplicitMidpoint(state, "u"),
 stepper = CrankNicolson(state, eqns, advected_fields)
 
 #stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
-stepper.run(t=0, tmax=240*dt)
+T_i = 1/f
+stepper.run(t=0, tmax=340*T_i)
