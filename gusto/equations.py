@@ -159,6 +159,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
+                 diffusion_options=None,
                  no_normal_flow_bc_ids=None):
 
         spaces = self._build_spaces(state, family, degree)
@@ -243,6 +244,16 @@ class ShallowWaterEquations(PrognosticEquation):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
             self.residual += topography_form
 
+        if diffusion_options is not None:
+            tests = TestFunctions(W)
+            for field, diffusion in diffusion_options:
+                idx = self.field_names.index(field)
+                test = tests[idx]
+                fn = X.split()[idx]
+                self.residual += subject(
+                    prognostic(interior_penalty_diffusion_form(
+                        state, test, fn, diffusion), field), X)
+
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
         return Vu, VD
@@ -254,9 +265,18 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
+                 diffusion_options=None,
                  no_normal_flow_bc_ids=None):
+
+        if diffusion_options is not None:
+            dry_diffusion_options = []
+            for field, diffusion in diffusion_options:
+                if field in super().field_names:
+                    dry_diffusion_options.append((field, diffusion))
+
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
                          u_advection_option=u_advection_option,
+                         diffusion_options=dry_diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids)
 
         W = self.function_space
@@ -278,7 +298,18 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
                     + inner(gamma, P)*dx,
                     "Q"),
                 X)
-            )
+        )
+
+        if diffusion_options is not None:
+            tests = TestFunctions(W)
+            for field, diffusion in diffusion_options:
+                if field in set(self.field_names)-set(super().field_names):
+                    idx = self.field_names.index(field)
+                    test = tests[idx]
+                    fn = X.split()[idx]
+                    self.residual += subject(
+                        prognostic(interior_penalty_diffusion_form(
+                            state, test, fn, diffusion), field), X)
 
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)

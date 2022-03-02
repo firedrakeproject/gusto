@@ -5,15 +5,15 @@ from firedrake import (PeriodicRectangleMesh, conditional, TestFunction,
 # set up mesh
 Lx = 10000e3
 Ly = 10000e3
-delta_x = 80e3
-nx = int(Lx/delta_x)
+delta = 80e3
+nx = int(Lx/delta)
 
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
 dt = 800
 tau = 800 
-H = 1000. # picked this myself
+H = 1000. # picked this
 g = 10
 f = 2e-11
 lamda_r = 1.1e-5
@@ -23,7 +23,7 @@ q_g = 3
 alpha = 2
 gamma = 5
 nu_u = 1e4
-nu_h = 1e4
+nu_D = 1e4
 nu_q = 2e4
 parameters = MoistShallowWaterParameters(H=H, g=g)
 
@@ -34,18 +34,27 @@ output = OutputParameters(dirname=dirname)
 
 state = State(mesh, dt=dt, output=output, parameters=parameters)
 
-eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
+diffusion_options = [
+    ("u", DiffusionParameters(kappa=nu_u, mu=10./delta)),
+    ("D", DiffusionParameters(kappa=nu_D, mu=10./delta)),
+    ("Q", DiffusionParameters(kappa=nu_q, mu=10./delta))]
 
+eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f),
+                                  diffusion_options=diffusion_options,
+                                  no_normal_flow_bc_ids=[1,2])
+
+# initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
 Q0 = state.fields("Q")
 
+# spaces
 VD = D0.function_space()
 E = Function(VD)
 C = Function(VD)
 
-Eexpr = (q_g - q) * (q_g - q)/tau_e
-Cexpr = (q - q_e) * (q - q_e)/tau
+#Eexpr = (q_g - q) * (q_g - q)/tau_e
+#Cexpr = (q - q_e) * (q - q_e)/tau
 
-E.interpolate(conditional(q_g > q, Eexpr, 0))
-C.interpolate(conditional(q > q_s, Cexpr, 0))
+#E.interpolate(conditional(q_g > q, Eexpr, 0))
+#C.interpolate(conditional(q > q_s, Cexpr, 0))
