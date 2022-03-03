@@ -18,6 +18,7 @@ from gusto.transport_equation import (advection_form, continuity_form,
                                       linear_continuity_form,
                                       linear_advection_form, IntegrateByParts)
 from gusto.diffusion import interior_penalty_diffusion_form
+from gusto.moisture import (condensation, evaporation)
 import ufl
 
 
@@ -283,20 +284,42 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         _, phi, gamma = TestFunctions(W)
         X = self.X
         _, D, Q = X.split()
-        P = Function(Q.function_space())
-
-        # add in forcing to depth equations
-        beta = state.parameters.beta
-        self.residual += subject(prognostic(beta*inner(phi, P)*dx, "D"), X)
 
         # add moisture evolution equation
         self.residual += (
             subject(
                 prognostic(
                     time_derivative(inner(gamma, Q)*dx)
-                    + advection(continuity_form(state, gamma, Q))
-                    + inner(gamma, P)*dx,
+                    + advection(continuity_form(state, gamma, Q)),
                     "Q"),
+                X)
+        )
+
+        # add weak form of condensation to moisture evolution equation
+        self.residual += (
+            subject(
+                prognostic(
+                    condensation(gamma, Q, D, state.parameters),
+                    "Q"),
+                X)
+        )
+
+        # add weak form of evaporation to moisture evolution equation (add -E)
+        self.residual -= (
+            subject(
+                prognostic(
+                    evaporation(gamma, Q, D, state.parameters),
+                    "Q"),
+                X)
+        )
+
+        # add weak form of condensation forcing to depth equation
+        self.residual += (
+            subject(
+                prognostic(
+                    state.parameters.gamma * condensation(
+                        phi, Q, D, state.parameters),
+                    "D"),
                 X)
         )
 
