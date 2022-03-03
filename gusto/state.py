@@ -263,7 +263,7 @@ class State(object):
         self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         # set up bcs
-        V = self.fields('u').function_space()
+        V = self.spaces("HDiv")
         self.bcs = []
         if V.extruded:
             self.bcs.append(DirichletBC(V, 0.0, "bottom"))
