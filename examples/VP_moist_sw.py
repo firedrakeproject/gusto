@@ -13,7 +13,7 @@ mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 # set up parameters
 dt = 800
 tau = 800 
-H = 1000. # picked this
+H = 30.
 g = 10
 f = 2e-11
 lamda_r = 1.1e-5
@@ -24,8 +24,11 @@ alpha = 2
 gamma = 5
 nu_u = 1e4
 nu_D = 1e4
-nu_q = 2e4
-parameters = MoistShallowWaterParameters(H=H, g=g)
+nu_Q = 2e4
+parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
+                                         tau=tau, q_0=q_0, q_g=q_g, alpha=alpha,
+                                         nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
+                                         lamda_r=lamda_r)
 
 dirname="VP_moist_sw"
 x, y, = SpatialCoordinate(mesh)
@@ -37,7 +40,8 @@ state = State(mesh, dt=dt, output=output, parameters=parameters)
 diffusion_options = [
     ("u", DiffusionParameters(kappa=nu_u, mu=10./delta)),
     ("D", DiffusionParameters(kappa=nu_D, mu=10./delta)),
-    ("Q", DiffusionParameters(kappa=nu_q, mu=10./delta))]
+    ("Q", DiffusionParameters(kappa=nu_Q, mu=10./delta))]
+
 
 eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f),
                                   diffusion_options=diffusion_options,
@@ -53,8 +57,3 @@ VD = D0.function_space()
 E = Function(VD)
 C = Function(VD)
 
-#Eexpr = (q_g - q) * (q_g - q)/tau_e
-#Cexpr = (q - q_e) * (q - q_e)/tau
-
-#E.interpolate(conditional(q_g > q, Eexpr, 0))
-#C.interpolate(conditional(q > q_s, Cexpr, 0))
