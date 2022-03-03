@@ -107,7 +107,16 @@ class MoistShallowWaterParameters(ShallowWaterParameters):
     """
     Physical parameters for the moist shallow water equations
     """
-    beta = 0.01
+    gamma = None  # condensation proportionality constant
+    tau_e = None  # timescale of evaporation
+    tau = None  # timescale of condensation
+    q_0 = None  # factor in the saturation humidity expr
+    q_g = None  # surface humidity
+    alpha = None  # exponential factor in the saturation humidity expr
+    nu_u = None  # diffusion constant for u equation
+    nu_D = None  # diffusion constant for D equation
+    nu_Q = None  # diffusion constant for Q equation
+    lamda_r = None  # coefficient of evaporation
 
 
 class EadyParameters(Configuration):
