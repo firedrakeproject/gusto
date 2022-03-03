@@ -77,7 +77,7 @@ class Rexi(object):
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(trial),
             map_if_false=drop)
-        
+
         a = (
             self.ar*equation.mass_term(trial, i=0, j=0)
             + self.tau*equation.L(trial, 0)
