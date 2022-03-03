@@ -1,6 +1,16 @@
 from rexi import *
 from firedrake import Function, TrialFunctions, Constant, \
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
+from gusto import Configuration, replace_subject, drop, time_derivative
+
+
+class RexiParameters(Configuration):
+    """
+    Parameters for the REXI coefficients
+    """
+    h = 0.2
+    M = 64
+    reduce_to_half = False
 
 
 class Rexi(object):
@@ -61,8 +71,11 @@ class Rexi(object):
 
         # set up functions, problem and solver
         W_ = equation.function_space
-        W = MixedFunctionSpace(W_[0], W_[0], W_[1], W[1])
+        W = MixedFunctionSpace((W_[0], W_[0], W_[1], W_[1]))
         self.U0 = Function(W)
+        ur, ui, hr, hi = self.U0.split()
+        U0r = (ur, hr)
+        U0i = (ui, hi)
         self.w_sum = Function(W)
         self.w = Function(W)
         self.w_ = Function(W)
@@ -73,34 +86,69 @@ class Rexi(object):
         trials_r = trials[::2]
         trials_i = trials[1::2]
 
-        mass_form = residual.label_map(
+        ur_mass_form = residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(trial),
+            map_if_true=replace_subject(trials_r[0], 0),
             map_if_false=drop)
 
+        ui_mass_form = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(trials_i[0], 0),
+            map_if_false=drop)
+
+        hr_mass_form = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(trials_r[1], 1),
+            map_if_false=drop)
+
+        hi_mass_form = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(trials_i[1], 1),
+            map_if_false=drop)
+
+        Lr = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(trials_r))
+
+        Li = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(trials_i))
+
         a = (
-            self.ar*equation.mass_term(trial, i=0, j=0)
-            + self.tau*equation.L(trial, 0)
-            - self.ai*equation.mass_term(trial, i=0, j=1)
-            + self.ar*equation.mass_term(trial, i=1, j=1)
-            + self.tau*equation.L(trial, 1)
-            + self.ai*equation.mass_term(trial, i=1, j=0)
+            self.ar * ur_mass_form
+            + self.tau * Lr
+            - self.ai * hr_mass_form
+            + self.ar * hi_mass_form
+            + self.tau * Li
+            + self.ai * ui_mass_form
         )
-        L = equation.mass_term(self.U0)
+        L = (
+            residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(U0r),
+                map_if_false=drop)
+            + 
+            residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(U0i),
+                map_if_false=drop)
+            )
 
         if hasattr(equation, "aP"):
             aP = equation.aP(trial, self.ai, self.tau)
         else:
             aP = None
 
-        rexi_prob = LinearVariationalProblem(a, L, self.w, aP=aP,
+        rexi_prob = LinearVariationalProblem(a.form, L.form, self.w, aP=aP,
                                              constant_jacobian=False)
 
-        if solver_parameters is None:
-            solver_parameters = equation.solver_parameters
+        #if solver_parameters is None:
+        #    solver_parameters = equation.solver_parameters
 
         self.solver = LinearVariationalSolver(
-            rexi_prob, solver_parameters=solver_parameters)
+            rexi_prob)#, solver_parameters=solver_parameters)
 
     def solve(self, U0, dt):
         """
