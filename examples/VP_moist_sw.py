@@ -1,6 +1,9 @@
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
+
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, conditional, TestFunction,
-                       TrialFunction)
+                       TrialFunction, exp, Constant)
 
 # set up mesh
 Lx = 10000e3
@@ -57,3 +60,14 @@ VD = D0.function_space()
 E = Function(VD)
 C = Function(VD)
 
+# Gaussian initial condition in the moisture field
+Q0.interpolate(3*exp(-((x-0.5*Lx)**2/5e11 + (y-0.5*Ly)**2/5e11)))
+D0.interpolate(Constant(H))
+
+advected_fields = []
+advected_fields.append((ImplicitMidpoint(state, "u")))
+advected_fields.append((SSPRK3(state, "D")))
+advected_fields.append((SSPRK3(state, "Q")))
+
+stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+stepper.run(t=0, tmax=10*dt)
