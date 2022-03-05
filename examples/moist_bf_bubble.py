@@ -78,9 +78,9 @@ water_c0 = state.fields("water_c", theta0.function_space())
 moisture = ["water_v", "water_c"]
 
 # spaces
-Vu = u0.function_space()
-Vt = theta0.function_space()
-Vr = rho0.function_space()
+Vu = state.spaces("HDiv")
+Vt = state.spaces("HDiv_v")
+Vr = state.spaces("DG")
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
