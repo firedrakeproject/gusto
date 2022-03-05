@@ -192,7 +192,6 @@ class VerticalHybridizationPC(PCBase):
 
         # Assemble the Schur complement operator and right-hand side
         self.schur_rhs = Function(Vv_tr)
-        print('Create schur_rhs assembly callable')
         self._assemble_Srhs = OneFormAssembler(
             K * Atilde.inv * AssembledVector(self.broken_residual),
             tensor=self.schur_rhs,
@@ -205,7 +204,6 @@ class VerticalHybridizationPC(PCBase):
                                  form_compiler_parameters=self.ctx.fc_params,
                                  mat_type=mat_type,
                                  options_prefix=prefix)
-        print('Create schur assembly callable')
         self._assemble_S = TwoFormAssembler(schur_comp,
                                             tensor=self.S,
                                             bcs=trace_bcs,
@@ -271,14 +269,12 @@ class VerticalHybridizationPC(PCBase):
         R = K_1.T - C * A.inv * K_0.T
         u_rec = M.solve(f - C * A.inv * g - R * lambdar,
                         decomposition="PartialPivLU")
-        print('Create u_rec assembly callable')
         self._sub_unknown = OneFormAssembler(u_rec,
                                              tensor=u,
                                              form_compiler_parameters=self.ctx.fc_params).assemble
 
         sigma_rec = A.solve(g - B * AssembledVector(u) - K_0.T * lambdar,
                             decomposition="PartialPivLU")
-        print('Create sigma_rec assembly callable')
         self._elim_unknown = OneFormAssembler(sigma_rec,
                                               tensor=sigma,
                                               form_compiler_parameters=self.ctx.fc_params).assemble
