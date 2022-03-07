@@ -1,5 +1,6 @@
 from gusto.advection import *                        # noqa
 from gusto.configuration import *                    # noqa
+from gusto.cheby_exp import *                        # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion import *                        # noqa
 from gusto.eady_diagnostics import *                 # noqa
