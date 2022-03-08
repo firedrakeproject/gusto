@@ -263,7 +263,7 @@ class State(object):
         self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
         # set up bcs
-        V = self.fields('u').function_space()
+        V = self.spaces("HDiv")
         self.bcs = []
         if V.extruded:
             self.bcs.append(DirichletBC(V, 0.0, "bottom"))
@@ -387,7 +387,7 @@ class State(object):
             for name in self.output.dumplist_latlon:
                 f = self.fields(name)
                 field = Function(
-                    functionspaceimpl.WithGeometry(
+                    functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
                     val=f.topological, name=name+'_ll')
                 self.to_dump_latlon.append(field)

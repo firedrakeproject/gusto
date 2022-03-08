@@ -75,7 +75,7 @@ class GeostrophicImbalance(DiagnosticField):
         b = state.fields("b")
         p = state.fields("p")
         f = state.parameters.f
-        Vu = u.function_space()
+        Vu = state.spaces("HDiv")
 
         v = TrialFunction(Vu)
         w = TestFunction(Vu)

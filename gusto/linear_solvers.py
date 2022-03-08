@@ -3,7 +3,7 @@ from firedrake import (split, LinearVariationalProblem, Constant,
                        TestFunction, TrialFunction, lhs, rhs, FacetNormal,
                        div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
-                       FunctionSpace, MixedFunctionSpace)
+                       FunctionSpace, MixedFunctionSpace, DirichletBC)
 from firedrake.petsc import flatten_parameters
 from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
@@ -455,7 +455,12 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
+        if len(self.state.bcs) == 0:
+            bcs = None
+        else:
+            # BCs are declared for the plain velocity space. As we need them in
+            # a mixed problem, we replicate the BCs but for subspace of M
+            bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.state.bcs]
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
