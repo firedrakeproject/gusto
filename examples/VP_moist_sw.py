@@ -24,7 +24,7 @@ tau_e = 1e6
 q_0 = 3
 q_g = 3
 alpha = 2
-gamma = 5
+gamma = 5 # 0 if humidity is a passive tracer
 nu_u = 1e4
 nu_D = 1e4
 nu_Q = 2e4
@@ -64,10 +64,14 @@ C = Function(VD)
 Q0.interpolate(3*exp(-((x-0.5*Lx)**2/5e11 + (y-0.5*Ly)**2/5e11)))
 D0.interpolate(Constant(H))
 
-advected_fields = []
-advected_fields.append((ImplicitMidpoint(state, "u")))
-advected_fields.append((SSPRK3(state, "D")))
-advected_fields.append((SSPRK3(state, "Q")))
+# we will have to do something here if we want a different timestepper
 
-stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+#advected_fields = []
+#advected_fields.append((ImplicitMidpoint(state, "u")))
+#advected_fields.append((SSPRK3(state, "D")))
+#advected_fields.append((SSPRK3(state, "Q")))
+
+stepper = Timestepper(state, ((eqns, SSPRK3(state)),),)
+
+
 stepper.run(t=0, tmax=10*dt)
