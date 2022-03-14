@@ -1,3 +1,5 @@
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
 from gusto import *
 import itertools
 from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
@@ -58,7 +60,7 @@ theta0 = state.fields("theta")
 
 # spaces
 Vu = state.spaces("HDiv")
-Vt = state.spaces("HDiv_v")
+Vt = state.spaces("theta")
 Vr = state.spaces("DG")
 
 # Thermodynamic constants required for setting initial conditions
