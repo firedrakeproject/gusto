@@ -1,6 +1,6 @@
 from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v,
                        FacetNormal)
-from gusto.form_manipulation_labelling import subject, diffusion
+from gusto.labels import diffusion
 
 
 __all__ = ["interior_penalty_diffusion_form"]

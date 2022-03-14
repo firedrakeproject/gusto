@@ -4,7 +4,7 @@ from firedrake import (Function, FacetNormal,
                        ds_v, ds_t, ds_b,
                        outer, sign, cross, CellNormal,
                        curl)
-from gusto.form_manipulation_labelling import advection, advecting_velocity
+from gusto.labels import advection, advecting_velocity
 
 
 __all__ = ["IntegrateByParts", "advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form", "linear_continuity_form"]
