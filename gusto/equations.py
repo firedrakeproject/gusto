@@ -274,6 +274,8 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
             for field, diffusion in diffusion_options:
                 if field in super().field_names:
                     dry_diffusion_options.append((field, diffusion))
+        else:
+            dry_diffusion_options = None
 
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
                          u_advection_option=u_advection_option,
