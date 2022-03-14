@@ -2,7 +2,7 @@ from firedrake import Function
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
-from gusto.form_manipulation_labelling import advection, diffusion
+from gusto.labels import advection, diffusion
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
@@ -82,7 +82,7 @@ class Timestepper(object):
         """
         unp1 = self.x.np1("u")
 
-        for bc in self.bcs:
+        for bc in self.bcs['u']:
             bc.apply(unp1)
 
     def setup_timeloop(self):

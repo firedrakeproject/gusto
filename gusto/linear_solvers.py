@@ -9,9 +9,9 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (linearisation, Term, drop,
-                                               time_derivative)
+from gusto.labels import linearisation, time_derivative
 from gusto import thermodynamics
+from gusto.fml.form_manipulation_labelling import Term, drop
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -335,7 +335,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = self.equations.bcs
+        self.bcs = self.equations.bcs['u']
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -456,7 +456,7 @@ class IncompressibleSolver(TimesteppingSolver):
         # Place to put result of u p solver
         self.up = Function(M)
 
-        bcs = None if len(self.equations.bcs) == 0 else self.equations.bcs
+        bcs = None if len(self.equations.bcs) == 0 else self.equations.bcs['u']
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
@@ -549,7 +549,7 @@ class LinearTimesteppingSolver(object):
         self.dy = Function(W)
 
         # Solver
-        bcs = equation.bcs
+        bcs = equation.bcs['u']
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
                                            self.dy, bcs=bcs)

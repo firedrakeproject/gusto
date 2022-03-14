@@ -4,11 +4,10 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        as_vector)
-from gusto.form_manipulation_labelling import (subject, time_derivative,
-                                               advection, prognostic, drop,
-                                               advecting_velocity, Term,
-                                               all_terms, replace_subject,
-                                               linearisation, name)
+from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
+from gusto.labels import (subject, time_derivative, advection, prognostic,
+                          advecting_velocity, replace_subject, linearisation,
+                          name)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
@@ -39,6 +38,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         self.state = state
         self.function_space = function_space
         self.field_name = field_name
+        self.bcs = {}
 
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
@@ -46,9 +46,11 @@ class PrognosticEquation(object, metaclass=ABCMeta):
                          subfield_names=self.field_names)
             for fname in self.field_names:
                 state.diagnostics.register(fname)
+                self.bcs[fname] = []
         else:
             state.fields(field_name, function_space)
             state.diagnostics.register(field_name)
+            self.bcs[field_name] = []
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -170,12 +172,11 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = self.function_space[0]
-        self.bcs = []
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         g = state.parameters.g
         H = state.parameters.H
@@ -358,15 +359,14 @@ class CompressibleEulerEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = []
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         if Vu.extruded:
-            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         g = state.parameters.g
         cp = state.parameters.cp
@@ -585,15 +585,14 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = W[0]
-        self.bcs = []
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         if Vu.extruded:
-            self.bcs.append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(Vu, 0.0, "top"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
-            self.bcs.append(DirichletBC(Vu, 0.0, id))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
         tests = TestFunctions(W)
         w, phi, gamma = tests[0:3]

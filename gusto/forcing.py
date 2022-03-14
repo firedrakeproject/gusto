@@ -1,9 +1,9 @@
 from firedrake import (Function, TrialFunctions,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
-from gusto.form_manipulation_labelling import (advection, diffusion,
-                                               drop, name,
-                                               time_derivative, replace_subject)
+from gusto.labels import (advection, diffusion, name, time_derivative,
+                          replace_subject)
+from gusto.fml.form_manipulation_labelling import drop
 
 
 __all__ = ["Forcing"]
@@ -47,7 +47,7 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
 
-        bcs = equation.bcs
+        bcs = equation.bcs['u']
 
         explicit_forcing_problem = LinearVariationalProblem(
             a.form, L_explicit.form, self.xF, bcs=bcs
