@@ -169,8 +169,8 @@ class ShallowWaterEquations(PrognosticEquation):
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = self.function_space[0]
-        if no_normal_flow_bc_ids is None:
+        Vu = state.spaces("HDiv")
+        if no_normal_flow_bc_ids is not None:
             no_normal_flow_bc_ids = []
 
         for id in no_normal_flow_bc_ids:
@@ -260,7 +260,7 @@ class CompressibleEulerEquations(PrognosticEquation):
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = W[0]
+        Vu = state.spaces("HDiv")
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
@@ -486,7 +486,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = W[0]
+        Vu = state.spaces("HDiv")
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 

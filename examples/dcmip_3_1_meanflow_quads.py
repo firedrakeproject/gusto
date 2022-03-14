@@ -75,9 +75,9 @@ theta0 = state.fields.theta
 rho0 = state.fields.rho
 
 # spaces
-Vu = u0.function_space()
-Vt = theta0.function_space()
-Vr = rho0.function_space()
+Vu = state.spaces("HDiv")
+Vt = state.spaces("HDiv_v")
+Vr = state.spaces("DG")
 
 # Initial conditions with u0
 uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])

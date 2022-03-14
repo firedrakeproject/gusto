@@ -55,9 +55,9 @@ for delta, dt in res_dt.items():
     water0 = state.fields("water")
 
     # spaces
-    Vu = u0.function_space()
-    Vt = theta0.function_space()
-    Vr = rho0.function_space()
+    Vu = state.spaces("HDiv")
+    Vt = state.spaces("HDiv_v")
+    Vr = state.spaces("DG")
 
     # Isentropic background state
     Tsurf = Constant(300.)

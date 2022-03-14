@@ -74,9 +74,9 @@ rain0 = state.fields("rain", theta0.function_space())
 moisture = ["water_v", "water_c", "rain"]
 
 # spaces
-Vu = u0.function_space()
-Vt = theta0.function_space()
-Vr = rho0.function_space()
+Vu = state.spaces("HDiv")
+Vt = state.spaces("HDiv_v")
+Vr = state.spaces("DG")
 Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
