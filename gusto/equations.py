@@ -340,23 +340,26 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         #if sponge is not None:
         x, y = SpatialCoordinate(state.mesh)
         Ly = 10000e3
-        u, D, Q = X.split()[0:3]
+        u, _, _ = X.split()[0:3]
+        w, _, _ = TestFunctions(W)
         sponge_wall_1 = 300e3
         sponge_wall_2 = 9700e3
         sponge_expr = 10e-5 * (
             exp(-140*((0.5*Ly-(y-Ly/2))/(Ly)))
             + exp(-140*((y-Ly/2+0.5*Ly)/(Ly))))
-        sponge = conditional(
+        sponge_function = conditional(
             y < sponge_wall_2, conditional(
                 y > sponge_wall_1, u[1], sponge_expr), sponge_expr)
+
         # visualise in ParaView to check if the function looks okay
-        plot_function = Function(W[1], name='sponge_function')
-        plot_function.interpolate(sponge)
-        output = File("sponge_function_out.pvd")
-        output.write(plot_function)
-        
-        #self.residual += subject(prognostic(sponge, u[1]), X)
-            
+        #plot_function = Function(W[1], name='sponge_function')
+        #plot_function.interpolate(sponge_function)
+        #output = File("sponge_function_out.pvd")
+        #output.write(plot_function)
+
+        sponge_form = w[1] * sponge_function * dx
+        self.residual += subject(prognostic(sponge_form, "u"), X)
+
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
         return Vu, VD, VD
