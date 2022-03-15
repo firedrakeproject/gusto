@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector)
+                       as_vector, exp, File)
 from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
@@ -267,7 +267,7 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
-                 diffusion_options=None,
+                 diffusion_options=None, sponge=None,
                  no_normal_flow_bc_ids=None):
 
         if diffusion_options is not None:
@@ -337,6 +337,26 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
                         prognostic(interior_penalty_diffusion_form(
                             state, test, fn, diffusion), field), X)
 
+        #if sponge is not None:
+        x, y = SpatialCoordinate(state.mesh)
+        Ly = 10000e3
+        u, D, Q = X.split()[0:3]
+        sponge_wall_1 = 300e3
+        sponge_wall_2 = 9700e3
+        sponge_expr = 10e-5 * (
+            exp(-140*((0.5*Ly-(y-Ly/2))/(Ly)))
+            + exp(-140*((y-Ly/2+0.5*Ly)/(Ly))))
+        sponge = conditional(
+            y < sponge_wall_2, conditional(
+                y > sponge_wall_1, u[1], sponge_expr), sponge_expr)
+        # visualise in ParaView to check if the function looks okay
+        plot_function = Function(W[1], name='sponge_function')
+        plot_function.interpolate(sponge)
+        output = File("sponge_function_out.pvd")
+        output.write(plot_function)
+        
+        #self.residual += subject(prognostic(sponge, u[1]), X)
+            
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
         return Vu, VD, VD
