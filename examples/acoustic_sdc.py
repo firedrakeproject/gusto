@@ -2,13 +2,10 @@ from firedrake import (PeriodicIntervalMesh, FunctionSpace, MixedFunctionSpace,
                        TestFunctions, Function, dx, Constant, split,
                        SpatialCoordinate, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, File, exp, cos)
-from gusto import State, PrognosticEquation, OutputParameters
+from gusto import State, PrognosticEquation, OutputParameters, IMEX_Euler, Timestepper
 from gusto.fml.form_manipulation_labelling import Label, drop
-from gusto.labels import time_derivative, subject, replace_subject
+from gusto.labels import time_derivative, subject, replace_subject, fast, slow
 import numpy as np
-
-fast = Label("fast")
-slow = Label("slow")
 
 class AcousticEquation(PrognosticEquation):
 
@@ -48,11 +45,11 @@ class IMEX_SDC(object):
         u11, p11 = split(U_SDC)
         F = equation.residual.label_map(lambda t: t.has_label(time_derivative),
                                         map_if_false=lambda t: dt*t)
-        F_imp = F.label_map(lambda t: t.has_label(time_derivative, fast),
+        F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, fast)),
                             replace_subject(U_SDC),
                             drop)
 
-        F_exp = F.label_map(lambda t: t.has_label(time_derivative, slow),
+        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, slow)),
                             replace_subject(un.split()),
                             drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
@@ -207,9 +204,7 @@ state = State(mesh, dt=dt, output=output)
 
 eqn = AcousticEquation(state)
 
-Un = Function(eqn.function_space)
-U0 = Function(eqn.function_space)
-u0, p0 = U0.split()
+p0 = state.fields("p")
 
 x1 = 0.25
 x0 = 0.75
@@ -226,47 +221,15 @@ def p_init(x, p0=p_0, p1=p_1, x0=x0, x1=x1, coeff=1.):
 
 x = SpatialCoordinate(mesh)[0]
 p0.interpolate(p_init(x))
-outfile = File("acoustic.pvd")
-outfile.write(u0, p0)
 
-F = eqn.residual.label_map(
-    lambda t: t.has_label(time_derivative),
-    map_if_false=lambda t: dt*t)
+scheme = IMEX_Euler(state)
+timestepper = Timestepper(state, ((eqn, scheme),))
+timestepper.run(a, b)
 
-F_imp = F.label_map(
-    lambda t: any(t.has_label(fast, time_derivative)),
-    replace_subject(Un),
-    drop
-    )
-
-F_exp = F.label_map(
-    lambda t: any(t.has_label(slow, time_derivative)),
-    replace_subject(U0.split()),
-    drop
-    )
-
-F_exp = F_exp.label_map(
-    lambda t: t.has_label(time_derivative),
-    lambda t: -1*t
-    )
-
-F = F_imp + F_exp
-
-prob = NonlinearVariationalProblem(F.form, Un)
-solver = NonlinearVariationalSolver(prob)
-
-t = 0
-while t < b:
-
-    solver.solve()
-    U0.assign(Un)
-    u0, p0 = U0.split()
-    t += dt
-    outfile.write(u0, p0)
 
 # To Do:
-# 1. Make IMEX_Euler class based on above
-# 2. Check that Timestepper class will do IMEX_Euler
+# DONE1. Make IMEX_Euler class based on above
+# DONE2. Check that Timestepper class will do IMEX_Euler
 # 3. Instantiate SDC class with all the right parts
 # DONE4. Create form for SDC solve
 # 5. Make SDC class and try with Timestepper class

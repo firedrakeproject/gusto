@@ -1,5 +1,5 @@
 import ufl
-from firedrake import Function
+from firedrake import Function, split
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
 
 
@@ -29,11 +29,11 @@ def replace_subject(new, idx=None):
         if len(subj.function_space()) > 1:
             if type(new) == tuple:
                 assert len(new) == len(subj.function_space())
-                for k, v in zip(subj.split(), new):
+                for k, v in zip(split(subj), new):
                     replace_dict[k] = v
             else:
                 if idx is None:
-                    for k, v in zip(subj.split(), new.split()):
+                    for k, v in zip(split(subj), split(new)):
                         replace_dict[k] = v
                 else:
                     try:
@@ -61,3 +61,5 @@ subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) == LabelledForm)
 name = Label("name", validator=lambda value: type(value) == str)
+fast = Label("fast")
+slow = Label("slow")

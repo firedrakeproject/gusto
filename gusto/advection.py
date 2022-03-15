@@ -9,12 +9,12 @@ from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.labels import (time_derivative, advecting_velocity, prognostic,
-                          replace_subject, replace_test_function)
+                          replace_subject, replace_test_function, fast, slow)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def is_cg(V):
@@ -456,6 +456,52 @@ class BackwardEuler(Advection):
             map_if_false=drop)
 
         return r.form
+
+    def apply(self, x_in, x_out):
+        self.q1.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.dq)
+
+
+class IMEX_Euler(Advection):
+
+    @property
+    def lhs(self):
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt*t)
+
+        l = l.label_map(
+            lambda t: any(t.has_label(fast, time_derivative)),
+            replace_subject(self.dq),
+            drop
+        )
+        return l.form
+
+    @property
+    def rhs(self):
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt*t)
+
+        r = r.label_map(
+            lambda t: any(t.has_label(slow, time_derivative)),
+            replace_subject(self.q1.split()),
+            drop
+        )
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            lambda t: -1*t
+        )
+        return r.form
+
+    @cached_property
+    def solver(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs + self.rhs, self.dq, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
 
     def apply(self, x_in, x_out):
         self.q1.assign(x_in)
