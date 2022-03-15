@@ -1,11 +1,14 @@
 from firedrake import (PeriodicIntervalMesh, FunctionSpace, MixedFunctionSpace,
                        TestFunctions, Function, dx, Constant, split,
                        SpatialCoordinate, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, File, exp, cos)
+                       NonlinearVariationalSolver, File, exp, cos, assemble)
 from gusto import State, PrognosticEquation, OutputParameters, IMEX_Euler, Timestepper
-from gusto.fml.form_manipulation_labelling import Label, drop
+from gusto.fml.form_manipulation_labelling import Label, drop, all_terms
 from gusto.labels import time_derivative, subject, replace_subject, fast, slow
 import numpy as np
+import scipy
+from scipy.special import legendre
+
 
 class AcousticEquation(PrognosticEquation):
 
@@ -34,77 +37,100 @@ class AcousticEquation(PrognosticEquation):
 
 class IMEX_SDC(object):
 
-    def __init__(self, M, dt, equation):
+    def __init__(self, state, M, maxk):
+
+        self.state = state
+        self.dt = Constant(state.dt)
         self.M = M
+        self.maxk = maxk
+        self.IMEX = IMEX_Euler(state)
+
+        self.rnw_r(state.dt)
+        self.Qmatrix()
+        self.Smatrix()
+        self.dtau = np.diff(np.append(0, self.nodes))
+
+    def setup(self, equation, uadv=None):
+
+        self.IMEX.setup(equation, uadv)
 
         # set up SDC form and solver
         W = equation.function_space
-        U_SDC = Function(W)
-        U01 = Function(W)
-        Q = Function(W)
-        u11, p11 = split(U_SDC)
+        dt = self.dt
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(M+1)]
+        self.Unodes1 = [Function(W) for _ in range(M+1)]
+        self.fUnodes = [Function(W) for _ in range(M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.U01 = Function(W)
+        self.Un = Function(W)
+        self.Q = Function(W)
+
         F = equation.residual.label_map(lambda t: t.has_label(time_derivative),
                                         map_if_false=lambda t: dt*t)
         F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, fast)),
-                            replace_subject(U_SDC),
+                            replace_subject(self.U_SDC),
                             drop)
 
         F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, slow)),
-                            replace_subject(un.split()),
+                            replace_subject(self.Un.split()),
                             drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
         F01 = F.label_map(lambda t: t.has_label(fast),
-                          replace_subject(U01.split()),
+                          replace_subject(self.U01.split()),
                           drop)
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
         
         F0 = F.label_map(lambda t: t.has_label(slow),
-                          replace_subject(U0.split()),
+                          replace_subject(self.U0.split()),
                           drop)
         F0 = F0.label_map(all_terms, lambda t: -1*t)
         Q = F.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(Q),
+                        replace_subject(self.Q),
                         drop)
 
         F_SDC = F_imp + F_exp + F01 + F0 + Q
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, U_SDC)
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC)
         self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
 
         # set up RHS evaluation
-        Urhs = Function(W)
-        Uin = Function(W)
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
         a = equation.residual.label_map(lambda t: t.has_label(time_derivative),
-                                        replace_subject(Urhs),
+                                        replace_subject(self.Urhs),
                                         drop)
         L = equation.residual.label_map(lambda t: t.has_label(time_derivative),
                                         drop,
-                                        replace_subject(Uin.split()))
+                                        replace_subject(self.Uin.split()))
         Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, Urhs)
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs)
         self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
 
-    def rnw_r(n, a, b, A=-1, B=1):
+    def rnw_r(self, b, A=-1, B=1):
         # nodes and weights for gauss - radau IIA quadrature
         # See Abramowitz & Stegun p 888
-        nodes = np.zeros(n)
+        M = self.M
+        a = 0
+        nodes = np.zeros(M)
         nodes[0] = A
         p = np.poly1d([1, 1])
-        pn = legendre(n)
-        pn1 = legendre(n-1)
+        pn = legendre(M)
+        pn1 = legendre(M-1)
         poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
         nodes[1:] = np.sort(poly.roots)
-        weights = 1/n**2 * (1-nodes[1:])/(pn1(nodes[1:]))**2
-        weights = np.append(2/n**2, weights)
+        weights = 1/M**2 * (1-nodes[1:])/(pn1(nodes[1:]))**2
+        weights = np.append(2/M**2, weights)
         nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
         weights = (b - a)/(B - A)*weights
         self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
         self.weights = weights[::-1]  # reverse weights
 
-
-    def NewtonVM(t):
+    def NewtonVM(self, t):
         """
         t: array or list containing nodes.
         returns: array Newton Vandermode Matrix. Entries are in the lower
@@ -122,8 +148,7 @@ class IMEX_SDC(object):
 
         return VM
 
-
-    def Horner_newton(weights, xi, x):
+    def Horner_newton(self, weights, xi, x):
         """
         Horner scheme to evaluate polynomials based on newton basis
         """
@@ -133,62 +158,111 @@ class IMEX_SDC(object):
 
         return y
 
-
-    def gauss_legendre(n, a, b, A=-1, B=1):
+    def gauss_legendre(self, n, b, A=-1, B=1):
         # nodes and weights for gauss legendre quadrature
-        from scipy.special import legendre
+        a = 0
         poly = legendre(n)
         polyd = poly.deriv()
         nodes= poly.roots
         nodes = np.sort(nodes)
         weights = 2/((1-nodes**2)*(np.polyval(polyd,nodes))**2)
-        self.gl_nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        self.gl_weights=(b-a)/(B-A)*weights
+        gl_nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
+        gl_weights=(b-a)/(B-A)*weights
+        return gl_nodes, gl_weights
 
-
-    def get_weights(n, a, b, nodes):
+    def get_weights(self):
         # This calculates for equation 2.4 FWSW - called from Q
         # integrates lagrange polynomials to the points [nodes]
-        nodes_m, weights_m=nodes_weights(np.ceil(n/2), a, b)  # use gauss-legendre quadrature to integrate polynomials
-        weights = np.zeros(n)
-        for j in np.arange(n):
-            coeff = np.zeros(n)
+        M = self.M
+        b = self.state.dt
+        nodes_m, weights_m=self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
+        weights = np.zeros(M)
+        for j in np.arange(M):
+            coeff = np.zeros(M)
             coeff[j] = 1.0  # is unity because it needs to be scaled with y_j for interpolation we have  sum y_j*l_j
-            poly_coeffs = scipy.linalg.solve_triangular(NewtonVM(nodes), coeff, lower=True)
-            eval_newt_poly = self.Horner_newton(poly_coeffs, nodes, self.gl_nodes)
-            weights[j] = np.dot(self.gl_weights, eval_newt_poly)
+            poly_coeffs = scipy.linalg.solve_triangular(self.NewtonVM(self.nodes), coeff, lower=True)
+            eval_newt_poly = self.Horner_newton(poly_coeffs, self.nodes, nodes_m)
+            weights[j] = np.dot(weights_m, eval_newt_poly)
         return weights
 
-
-    def Qmatrix(nodes, a):
+    def Qmatrix(self):
         """
         Integration Matrix 
         """
-        M = len(nodes)
-        Q = np.zeros([M, M])
+        M = self.M
+        self.Q = np.zeros([M, M])
 
         # for all nodes, get weights for the interval [tleft,node]
         for m in np.arange(M):
-            w = get_weights(M, a, nodes[m],nodes)
-            Q[m, 0:] = w
+            w = self.get_weights()
+            self.Q[m, 0:] = w
 
-        return Q
-
-
-    def Smatrix(Q):
+    def Smatrix(self):
         """
         Integration matrix based on Q: sum(S@vector) returns integration
         """
         from copy import deepcopy
-        M = len(Q)
-        S = np.zeros([M, M])
+        M = self.M
+        self.S = np.zeros([M, M])
 
-        S[0, :] = deepcopy(Q[0, :])
+        self.S[0, :] = deepcopy(self.Q[0, :])
         for m in np.arange(1, M):
-            S[m, :] = Q[m, :] - Q[m - 1, :]
+            self.S[m, :] = self.Q[m, :] - self.Q[m - 1, :]
 
-        return S
+    def matmul_UFL(self, a, b):
+        # b is nx1 array!
+        n = np.shape(a)[0]
+        result = [float(0)]*n
+        print(n)
+        print(type(a))
+        print(type(b))
+        for j in range(n):
+            for k in range(n):
+                result[j] += float(a[j,k])*b[k]
+                print(j, k, type(result[j]))
+            print(type(result[j]))
+            result[j] = assemble(result[j])
+        return result
 
+
+    def apply(self, xin, xout):
+        self.Un.assign(xin)
+
+        self.Unodes[0].assign(self.Un)
+        for m in range(self.M):
+            self.IMEX.dt.assign(self.dtau[m])
+            self.IMEX.apply(self.Unodes[m], self.Unodes[m+1])
+
+        k = 0
+        while k < self.maxk:
+            k += 1
+
+            fUnodes = []
+            for m in range(1, M+1):
+                self.Uin.assign(self.Unodes[m])
+                self.solver_rhs.solve()
+                UU = Function(self.W).assign(self.Urhs)
+                print(m, UU.split()[0].dat.data.max())
+                fUnodes.append(UU)
+
+            quad = self.matmul_UFL(self.S, fUnodes)
+        
+            #quad = dot(as_matrix(S),
+            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, M+1):
+                self.dt.assign(self.dtau[m-1])
+                self.U0.assign(self.Unodes[m-1])
+                self.U01.assign(self.Unodes[m])
+                self.Un.assign(self.Unodes1[m-1])
+                self.Q_.assign(quad[m-1])
+                self.solve_SDC.solve()
+                self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
 
 a = 0                           # time of start
 b = 3                           # time of end
@@ -222,7 +296,9 @@ def p_init(x, p0=p_0, p1=p_1, x0=x0, x1=x1, coeff=1.):
 x = SpatialCoordinate(mesh)[0]
 p0.interpolate(p_init(x))
 
-scheme = IMEX_Euler(state)
+M = 3
+maxk = 2
+scheme = IMEX_SDC(state, M, maxk)
 timestepper = Timestepper(state, ((eqn, scheme),))
 timestepper.run(a, b)
 
@@ -230,6 +306,8 @@ timestepper.run(a, b)
 # To Do:
 # DONE1. Make IMEX_Euler class based on above
 # DONE2. Check that Timestepper class will do IMEX_Euler
-# 3. Instantiate SDC class with all the right parts
+# DONE3. Instantiate SDC class with all the right parts
 # DONE4. Create form for SDC solve
-# 5. Make SDC class and try with Timestepper class
+# DOING5. Make SDC class and try with Timestepper class
+
+# breaks when doing matmul_UFL - seems to have zeros in result[j] for j>0 so cannot assemble.
