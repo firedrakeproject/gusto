@@ -66,7 +66,7 @@ class IMEX_SDC(object):
         self.U0 = Function(W)
         self.U01 = Function(W)
         self.Un = Function(W)
-        self.Q = Function(W)
+        self.Q_ = Function(W)
 
         F = equation.residual.label_map(lambda t: t.has_label(time_derivative),
                                         map_if_false=lambda t: dt*t)
@@ -91,7 +91,7 @@ class IMEX_SDC(object):
                           drop)
         F0 = F0.label_map(all_terms, lambda t: -1*t)
         Q = F.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.Q),
+                        replace_subject(self.Q_),
                         drop)
 
         F_SDC = F_imp + F_exp + F01 + F0 + Q
@@ -170,11 +170,10 @@ class IMEX_SDC(object):
         gl_weights=(b-a)/(B-A)*weights
         return gl_nodes, gl_weights
 
-    def get_weights(self):
+    def get_weights(self, b):
         # This calculates for equation 2.4 FWSW - called from Q
         # integrates lagrange polynomials to the points [nodes]
         M = self.M
-        b = self.state.dt
         nodes_m, weights_m=self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
         weights = np.zeros(M)
         for j in np.arange(M):
@@ -194,7 +193,7 @@ class IMEX_SDC(object):
 
         # for all nodes, get weights for the interval [tleft,node]
         for m in np.arange(M):
-            w = self.get_weights()
+            w = self.get_weights(self.nodes[m])
             self.Q[m, 0:] = w
 
     def Smatrix(self):
@@ -213,14 +212,9 @@ class IMEX_SDC(object):
         # b is nx1 array!
         n = np.shape(a)[0]
         result = [float(0)]*n
-        print(n)
-        print(type(a))
-        print(type(b))
         for j in range(n):
             for k in range(n):
                 result[j] += float(a[j,k])*b[k]
-                print(j, k, type(result[j]))
-            print(type(result[j]))
             result[j] = assemble(result[j])
         return result
 
@@ -242,7 +236,6 @@ class IMEX_SDC(object):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
                 UU = Function(self.W).assign(self.Urhs)
-                print(m, UU.split()[0].dat.data.max())
                 fUnodes.append(UU)
 
             quad = self.matmul_UFL(self.S, fUnodes)
@@ -257,12 +250,13 @@ class IMEX_SDC(object):
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(quad[m-1])
-                self.solve_SDC.solve()
+                self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
+        xout.assign(self.Un)
 
 a = 0                           # time of start
 b = 3                           # time of end
