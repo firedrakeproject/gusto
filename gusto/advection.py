@@ -76,7 +76,7 @@ class Advection(object, metaclass=ABCMeta):
         self.state = state
         self.field_name = field_name
 
-        self.dt = self.state.dt
+        self.dt = Constant(self.state.dt)
 
         self.limiter = limiter
 
