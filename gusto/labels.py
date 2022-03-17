@@ -37,9 +37,9 @@ def replace_subject(new, idx=None):
                         replace_dict[k] = v
                 else:
                     try:
-                        replace_dict[subj.split()[idx]] = new.split()[idx]
+                        replace_dict[split(subj)[idx]] = new.split()[idx]
                     except:
-                        replace_dict[subj.split()[idx]] = new
+                        replace_dict[split(subj)[idx]] = new
 
         else:
             if subj.ufl_shape == new.ufl_shape:
@@ -61,5 +61,5 @@ subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) == LabelledForm)
 name = Label("name", validator=lambda value: type(value) == str)
-fast = Label("fast")
-slow = Label("slow")
+implicit = Label("implicit")
+explicit = Label("explicit")

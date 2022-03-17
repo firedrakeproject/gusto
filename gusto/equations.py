@@ -3,11 +3,11 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector)
+                       as_vector, split)
 from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
-                          name)
+                          name, implicit)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
@@ -170,7 +170,7 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = state.spaces("HDiv")
-        if no_normal_flow_bc_ids is not None:
+        if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         for id in no_normal_flow_bc_ids:
@@ -182,7 +182,8 @@ class ShallowWaterEquations(PrognosticEquation):
         w, phi = TestFunctions(W)
         trials = TrialFunctions(W)
         X = Function(W)
-        u, D = X.split()
+        u, D = split(X)
+        self.ubar = u
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -243,6 +244,14 @@ class ShallowWaterEquations(PrognosticEquation):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
             self.residual += topography_form
 
+        def label_implicit(t):
+            new_t = implicit(t)
+            return new_t
+
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: label_implicit(t))
+
 
 class CompressibleEulerEquations(PrognosticEquation):
 
@@ -260,7 +269,7 @@ class CompressibleEulerEquations(PrognosticEquation):
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = state.spaces("HDiv")
+        Vu = W.sub(0)
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
