@@ -6,7 +6,7 @@ day = 24.*60.*60.
 tmax = 0.5*day
 
 ref_level = 3
-dt = 900.
+dt = 400.
 
 # setup shallow water parameters
 R = 6371220.
@@ -22,10 +22,10 @@ x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
 output = OutputParameters(dirname=dirname,
-                          dumplist_latlon=['D'],
+                          steady_state_error_fields=["D"],
                           dumpfreq=1)
 
-diagnostic_fields = [Sum('D', 'topography')]
+diagnostic_fields = [CourantNumber(), Sum('D', 'topography')]
 
 state = State(mesh,
               dt=dt,
@@ -60,7 +60,7 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 
 M = 3
-maxk = 3
+maxk = 2
 scheme = IMEX_SDC(state, M, maxk)
 #scheme = IMEX_Euler(state)
 timestepper = Timestepper(state, ((eqns, scheme),))
