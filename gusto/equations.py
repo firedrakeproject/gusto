@@ -7,7 +7,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
 from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
-                          name, implicit)
+                          name, implicit, explicit)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_equation import (advection_form, continuity_form,
                                       vector_invariant_form,
@@ -244,13 +244,13 @@ class ShallowWaterEquations(PrognosticEquation):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
             self.residual += topography_form
 
-        def label_implicit(t):
-            new_t = implicit(t)
-            return new_t
+        self.residual = self.residual.label_map(
+            lambda t: any(t.has_label(time_derivative, advection)),
+            map_if_false=lambda t: implicit(t))
 
         self.residual = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: label_implicit(t))
+            lambda t: t.has_label(advection),
+            lambda t: explicit(t))
 
 
 class CompressibleEulerEquations(PrognosticEquation):
@@ -287,9 +287,10 @@ class CompressibleEulerEquations(PrognosticEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         self.X = X
-        u, rho, theta = X.split()[0:3]
-        rhobar = state.fields("rhobar", space=rho.function_space(), dump=False)
-        thetabar = state.fields("thetabar", space=theta.function_space(), dump=False)
+        u, rho, theta = split(X)[0:3]
+        self.ubar = u
+        rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
+        thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         pi = Pi(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
