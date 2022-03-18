@@ -9,7 +9,8 @@ from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.labels import (time_derivative, advecting_velocity, prognostic,
-                          replace_subject, replace_test_function, implicit, explicit)
+                          replace_subject, replace_test_function, implicit,
+                          explicit, advection)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 import numpy as np
@@ -99,9 +100,12 @@ class Advection(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, *active_labels):
+    def setup(self, equation, uadv=None, residual=None, *active_labels):
 
-        self.residual = equation.residual
+        if residual is None:
+            self.residual = equation.residual
+        else:
+            self.residual = residual
 
         if self.field_name is not None:
             self.idx = equation.field_names.index(self.field_name)
@@ -592,9 +596,28 @@ class IMEX_SDC(object):
     def setup(self, equation, uadv=None):
 
         self.residual = equation.residual
+
+        self.residual = self.residual.label_map(
+            lambda t: any(t.has_label(time_derivative, advection)),
+            map_if_false=lambda t: explicit(t))
+
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(advection),
+            lambda t: explicit(t))
+
+        fake_term = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            lambda t: implicit(Constant(0)*t),
+            drop)
+
+        self.residual += fake_term
+
+        for t in self.residual:
+            print(t.labels.keys())
+
         self.replace_advecting_velocity(equation.ubar)
 
-        self.IMEX.setup(equation, uadv)
+        self.IMEX.setup(equation, equation.ubar, self.residual)
 
         # set up SDC form and solver
         W = equation.function_space
@@ -612,11 +635,12 @@ class IMEX_SDC(object):
 
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: dt*t)
+
         F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
                             replace_subject(self.U_SDC),
                             drop)
 
-        F_exp = F.label_map(lambda t: t.has_label(time_derivative),
+        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, explicit)),
                             replace_subject(self.Un.split()),
                             drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
@@ -628,17 +652,18 @@ class IMEX_SDC(object):
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
         
-        #F0 = F.label_map(lambda t: t.has_label(explicit),
-        #                  replace_subject(self.U0.split()),
-        #                  drop)
-        #F0 = F0.label_map(all_terms, lambda t: -1*t)
+        F0 = F.label_map(lambda t: t.has_label(explicit),
+                          replace_subject(self.U0.split()),
+                          drop)
+        F0 = F0.label_map(all_terms, lambda t: -1*t)
         Q = F.label_map(lambda t: t.has_label(time_derivative),
                         replace_subject(self.Q_),
                         drop)
 
-        #F_SDC = F_imp + F_exp + F01 + F0 + Q
-        F_SDC = F_imp + F_exp + F01 + Q
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC)
+        F_SDC = F_imp + F_exp + F01 + F0 + Q
+
+        bcs = equation.bcs['u']
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
         self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
 
         # set up RHS evaluation
@@ -651,7 +676,7 @@ class IMEX_SDC(object):
                                         drop,
                                         replace_subject(self.Uin.split()))
         Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs)
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
         self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
 
     def rnw_r(self, b, A=-1, B=1):
@@ -810,4 +835,7 @@ class IMEX_SDC(object):
 
             self.Un.assign(self.Unodes1[-1])
             print(k, self.Un.split()[1].dat.data.max())
-        xout.assign(self.Un)
+        if self.maxk > 0:
+            xout.assign(self.Un)
+        else:
+            xout.assign(self.Unodes[-1])
