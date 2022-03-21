@@ -14,8 +14,8 @@ nx = int(Lx/delta)
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
-dt = 800
-tau = 800 
+dt = 400
+tau = 400
 H = 30.
 g = 10
 f = 2e-11
@@ -33,22 +33,27 @@ parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
                                          nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
                                          lamda_r=lamda_r)
 
-dirname="VP_moist_sw"
+dirname="VP_moist_sw_gamma=5"
 x, y, = SpatialCoordinate(mesh)
 
-output = OutputParameters(dirname=dirname)
+output = OutputParameters(dirname=dirname, dumpfreq=50)
 
-state = State(mesh, dt=dt, output=output, parameters=parameters)
+diagnostic_fields =  [CourantNumber()]
+
+state = State(mesh,
+              dt=dt,
+              output=output,
+              diagnostic_fields = diagnostic_fields,
+              parameters=parameters)
 
 diffusion_options = [
     ("u", DiffusionParameters(kappa=nu_u, mu=10./delta)),
     ("D", DiffusionParameters(kappa=nu_D, mu=10./delta)),
     ("Q", DiffusionParameters(kappa=nu_Q, mu=10./delta))]
 
-
 eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f),
                                   diffusion_options=diffusion_options,
-                                  no_normal_flow_bc_ids=[1,2])
+                                  sponge=None, no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
 u0 = state.fields("u")
@@ -61,7 +66,8 @@ E = Function(VD)
 C = Function(VD)
 
 # Gaussian initial condition in the moisture field
-Q0.interpolate(3*exp(-((x-0.5*Lx)**2/5e11 + (y-0.5*Ly)**2/5e11)))
+gaussian = 3*exp(-((x-0.5*Lx)**2/5e11 + (y-0.5*Ly)**2/5e11))
+Q0.interpolate(gaussian)
 D0.interpolate(Constant(H))
 
 # we will have to do something here if we want a different timestepper
@@ -74,4 +80,4 @@ D0.interpolate(Constant(H))
 stepper = Timestepper(state, ((eqns, SSPRK3(state)),),)
 
 
-stepper.run(t=0, tmax=10*dt)
+stepper.run(t=0, tmax=10000*dt)
