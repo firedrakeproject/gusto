@@ -27,16 +27,15 @@ alpha = 2
 gamma = 5 # 0 if humidity is a passive tracer
 nu_u = 1e4
 nu_D = 1e4
-nu_Q = 2e4
+nu_Q = 1e5
 parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
                                          tau=tau, q_0=q_0, q_g=q_g, alpha=alpha,
                                          nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
                                          lamda_r=lamda_r)
 
-dirname="VP_moist_sw_gamma=5"
-x, y, = SpatialCoordinate(mesh)
+dirname="VP_moist_sw_gamma5_sponge"
 
-output = OutputParameters(dirname=dirname, dumpfreq=50)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 
 diagnostic_fields =  [CourantNumber()]
 
@@ -51,9 +50,27 @@ diffusion_options = [
     ("D", DiffusionParameters(kappa=nu_D, mu=10./delta)),
     ("Q", DiffusionParameters(kappa=nu_Q, mu=10./delta))]
 
+x, y, = SpatialCoordinate(mesh)
+Ly = 10000e3
+sponge_wall_1 = 300e3
+sponge_wall_2 = 9700e3
+sponge_expr = 10e-5 * (  # 10e-5
+    exp(-140*((0.5*Ly-(y-Ly/2))/(Ly)))
+    + exp(-140*((y-Ly/2+0.5*Ly)/(Ly))))
+sponge_function = conditional(
+    y < sponge_wall_2, conditional(
+        y > sponge_wall_1, 0, sponge_expr), sponge_expr)
+
+W_DG = FunctionSpace(state.mesh, "DG", 2)
+mu = Function(W_DG).interpolate(sponge_function)
+from firedrake import File
+outfile = File("sponge.pvd")
+outfile.write(mu)
+
 eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f),
+                                  sponge=sponge_function,
                                   diffusion_options=diffusion_options,
-                                  sponge=None, no_normal_flow_bc_ids=[1,2])
+                                  no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
 u0 = state.fields("u")

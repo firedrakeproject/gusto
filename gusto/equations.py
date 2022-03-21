@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector, exp, File)
+                       as_vector, exp)
 from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
@@ -266,8 +266,9 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
     field_names = ["u", "D", "Q"]
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 sponge=None,
                  u_advection_option="vector_invariant_form",
-                 diffusion_options=None, sponge=None,
+                 diffusion_options=None,
                  no_normal_flow_bc_ids=None):
 
         if diffusion_options is not None:
@@ -284,16 +285,16 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids)
 
         W = self.function_space
-        _, phi, gamma = TestFunctions(W)
+        w, phi, gamma = TestFunctions(W)
         X = self.X
-        _, D, Q = X.split()
+        u, D, Q = X.split()
 
         # add moisture evolution equation
         self.residual += (
             subject(
                 prognostic(
                     time_derivative(inner(gamma, Q)*dx)
-                    + advection(continuity_form(state, gamma, Q)),
+                    + advection(advection_form(state, gamma, Q)),
                     "Q"),
                 X)
         )
@@ -346,28 +347,9 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
                         prognostic(interior_penalty_diffusion_form(
                             state, test, fn, diffusion), field), X)
 
-        #if sponge is not None:
-        x, y = SpatialCoordinate(state.mesh)
-        Ly = 10000e3
-        u, _, _ = X.split()[0:3]
-        w, _, _ = TestFunctions(W)
-        sponge_wall_1 = 300e3
-        sponge_wall_2 = 9700e3
-        sponge_expr = 10e-1 * (  # 10e-5
-            exp(-140*((0.5*Ly-(y-Ly/2))/(Ly)))
-            + exp(-140*((y-Ly/2+0.5*Ly)/(Ly))))
-        sponge_function = conditional(
-            y < sponge_wall_2, conditional(
-                y > sponge_wall_1, inner(u, state.k), sponge_expr), sponge_expr)
-
-        # visualise in ParaView to check if the function looks okay
-        #plot_function = Function(W[1], name='sponge_function')
-        #plot_function.interpolate(sponge_function)
-        #output = File("sponge_function_out.pvd")
-        #output.write(plot_function)
-
-        sponge_form = sponge_function*inner(w, state.k)*inner(u, state.k)*dx
-        #self.residual -= subject(prognostic(sponge_form, "u"), X)
+        if sponge is not None:
+            sponge_form = sponge*inner(w, state.k)*inner(u, state.k)*dx
+            self.residual += subject(prognostic(sponge_form, "u"), X)
 
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
