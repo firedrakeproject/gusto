@@ -4,7 +4,7 @@ from firedrake import (PeriodicIntervalMesh, FunctionSpace, MixedFunctionSpace,
                        NonlinearVariationalSolver, File, exp, cos, assemble)
 from gusto import State, PrognosticEquation, OutputParameters, IMEX_Euler, Timestepper, IMEX_SDC
 from gusto.fml.form_manipulation_labelling import Label, drop, all_terms
-from gusto.labels import time_derivative, subject, replace_subject, implicit, explicit
+from gusto.labels import time_derivative, subject, replace_subject, implicit, explicit, advection, advecting_velocity
 import numpy as np
 import scipy
 from scipy.special import legendre
@@ -28,11 +28,12 @@ class AcousticEquation(PrognosticEquation):
 
         c_s = Constant(1)                   # speed of sound
         u_mean = Constant(0.05)                  # mean flow
+        self.ubar = Function(Vu).assign(u_mean)
 
         mass_form = time_derivative(subject(w * u * dx + phi * p * dx, X))
-        implicit_form = implicit(subject(c_s * (w * p.dx(0) + phi * u.dx(0)) * dx, X))
-        explicit_form = implicit(subject(u_mean * (w * u.dx(0) + phi * p.dx(0)) * dx, X))
-        self.residual = mass_form + implicit_form + explicit_form
+        fast_form = subject(c_s * (w * p.dx(0) + phi * u.dx(0)) * dx, X)
+        slow_form = advection(subject(self.ubar * (w * u.dx(0) + phi * p.dx(0)) * dx, X))
+        self.residual = mass_form + fast_form + advecting_velocity(slow_form, self.ubar)
 
 
 

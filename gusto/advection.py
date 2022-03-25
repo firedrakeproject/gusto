@@ -599,18 +599,11 @@ class IMEX_SDC(object):
 
         self.residual = self.residual.label_map(
             lambda t: any(t.has_label(time_derivative, advection)),
-            map_if_false=lambda t: explicit(t))
+            map_if_false=lambda t: implicit(t))
 
         self.residual = self.residual.label_map(
             lambda t: t.has_label(advection),
             lambda t: explicit(t))
-
-        fake_term = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            lambda t: implicit(Constant(0)*t),
-            drop)
-
-        self.residual += fake_term
 
         for t in self.residual:
             print(t.labels.keys())
