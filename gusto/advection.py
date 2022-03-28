@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TrialFunction, TrialFunctions,
                        NonlinearVariationalProblem, assemble,
                        NonlinearVariationalSolver, Projector, Interpolator,
-                       BrokenElement, VectorElement, FunctionSpace,
+                       BrokenElement, VectorElement, FunctionSpace, split,
                        TestFunction, action, Constant, dot, grad, as_ufl)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
@@ -10,7 +10,7 @@ import ufl
 from gusto.configuration import logger, DEBUG
 from gusto.labels import (time_derivative, advecting_velocity, prognostic,
                           replace_subject, replace_test_function, implicit,
-                          explicit, advection)
+                          explicit, advection, subject)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 import numpy as np
@@ -608,7 +608,7 @@ class IMEX_SDC(object):
         for t in self.residual:
             print(t.labels.keys())
 
-        self.replace_advecting_velocity(equation.ubar)
+        self.replace_advecting_velocity()
 
         self.IMEX.setup(equation, equation.ubar, self.residual)
 
@@ -779,16 +779,15 @@ class IMEX_SDC(object):
             result[j] = assemble(result[j])
         return result
 
-    def replace_advecting_velocity(self, uadv):
+    def replace_advecting_velocity(self):
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.residual]):
-            assert uadv is not None
             self.residual = self.residual.label_map(
                 lambda t: t.has_label(advecting_velocity),
                 map_if_true=lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): uadv}), t.labels)
+                    t.form, {t.get(advecting_velocity): split(t.get(subject))[0]}), t.labels)
             )
-            self.residual = advecting_velocity.update_value(self.residual, uadv)
+            #self.residual = advecting_velocity.update_value(self.residual, uadv)
 
     def apply(self, xin, xout):
         self.Un.assign(xin)
