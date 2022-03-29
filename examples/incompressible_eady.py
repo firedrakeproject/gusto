@@ -66,7 +66,7 @@ p0 = state.fields("p")
 
 # spaces
 Vu = state.spaces("HDiv")
-Vb = state.spaces("HDiv_v")
+Vb = state.spaces("theta")
 Vp = state.spaces("DG")
 
 # parameters

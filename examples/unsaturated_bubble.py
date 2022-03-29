@@ -75,7 +75,7 @@ moisture = ["water_v", "water_c", "rain"]
 
 # spaces
 Vu = state.spaces("HDiv")
-Vt = state.spaces("HDiv_v")
+Vt = state.spaces("theta")
 Vr = state.spaces("DG")
 Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 x, z = SpatialCoordinate(mesh)

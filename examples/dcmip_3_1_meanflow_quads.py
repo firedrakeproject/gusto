@@ -76,7 +76,7 @@ rho0 = state.fields.rho
 
 # spaces
 Vu = state.spaces("HDiv")
-Vt = state.spaces("HDiv_v")
+Vt = state.spaces("theta")
 Vr = state.spaces("DG")
 
 # Initial conditions with u0

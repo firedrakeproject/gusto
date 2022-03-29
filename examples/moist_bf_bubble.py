@@ -77,7 +77,7 @@ moisture = ["water_v", "water_c"]
 
 # spaces
 Vu = state.spaces("HDiv")
-Vt = state.spaces("HDiv_v")
+Vt = state.spaces("theta")
 Vr = state.spaces("DG")
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
