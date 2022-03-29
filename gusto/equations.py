@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector)
+                       as_vector, split)
 from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
@@ -182,7 +182,7 @@ class ShallowWaterEquations(PrognosticEquation):
         w, phi = TestFunctions(W)
         trials = TrialFunctions(W)
         X = Function(W)
-        u, D = X.split()
+        u, D = split(X)
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -278,9 +278,9 @@ class CompressibleEulerEquations(PrognosticEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         self.X = X
-        u, rho, theta = X.split()[0:3]
-        rhobar = state.fields("rhobar", space=rho.function_space(), dump=False)
-        thetabar = state.fields("thetabar", space=theta.function_space(), dump=False)
+        u, rho, theta = split(X)[0:3]
+        rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
+        thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         pi = Pi(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
@@ -368,7 +368,7 @@ class CompressibleEulerEquations(PrognosticEquation):
             for field, diffusion in diffusion_options:
                 idx = self.field_names.index(field)
                 test = tests[idx]
-                fn = X.split()[idx]
+                fn = split(X)[idx]
                 self.residual += subject(
                     prognostic(interior_penalty_diffusion_form(
                         state, test, fn, diffusion), field), X)
@@ -405,7 +405,7 @@ class MoistCompressibleEulerEquations(CompressibleEulerEquations):
         W = self.function_space
         w, _, gamma, p, q = TestFunctions(W)
         X = self.X
-        u, rho, theta, water_v, water_c = X.split()
+        u, rho, theta, water_v, water_c = split(X)
 
         self.residual += time_derivative(subject(prognostic(inner(water_v, p)*dx, "water_v") + prognostic(inner(water_c, q)*dx, "water_c"), X))
         self.residual += subject(prognostic(advection_form(state, p, water_v), "water_v") + prognostic(advection_form(state, q, water_c), "water_c"), X)
@@ -461,7 +461,7 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
         W = self.function_space
         w, _, gamma = TestFunctions(W)
         X = self.X
-        u, rho, theta = X.split()
+        u, rho, theta = split(X)
 
         pi = Pi(state.parameters, rho, theta)
 
@@ -501,9 +501,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         self.X = X
-        u, p, b = X.split()
-        bbar = state.fields("bbar", space=b.function_space(), dump=False)
-        bbar = state.fields("pbar", space=p.function_space(), dump=False)
+        u, p, b = split(X)
+        bbar = state.fields("bbar", space=state.spaces("theta"), dump=False)
+        bbar = state.fields("pbar", space=state.spaces("DG"), dump=False)
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -584,7 +584,7 @@ class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
         W = self.function_space
         w, _, gamma = TestFunctions(W)
         X = self.X
-        u, _, b = X.split()
+        u, _, b = split(X)
 
         self.residual += subject(prognostic(
             dbdy*eady_exp*inner(w, y_vec)*dx, "u"), X)

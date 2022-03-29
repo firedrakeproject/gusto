@@ -1,6 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TrialFunction, TrialFunctions,
-                       NonlinearVariationalProblem,
+from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, action, Constant, dot, grad, as_ufl)
@@ -215,10 +214,6 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
 
         # setup required functions
-        if len(self.fs) > 1:
-            self.trial = TrialFunctions(self.fs)
-        else:
-            self.trial = TrialFunction(self.fs)
         self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
 
@@ -262,7 +257,7 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.trial, self.idx),
+            map_if_true=replace_subject(self.dq, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -293,7 +288,7 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -445,7 +440,7 @@ class BackwardEuler(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial, self.idx))
+            map_if_true=replace_subject(self.dq, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -494,7 +489,7 @@ class ThetaMethod(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial, self.idx))
+            map_if_true=replace_subject(self.dq, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
