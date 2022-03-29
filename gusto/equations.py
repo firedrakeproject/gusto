@@ -170,7 +170,7 @@ class ShallowWaterEquations(PrognosticEquation):
         super().__init__(state, W, field_name)
 
         Vu = state.spaces("HDiv")
-        if no_normal_flow_bc_ids is not None:
+        if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
         for id in no_normal_flow_bc_ids:

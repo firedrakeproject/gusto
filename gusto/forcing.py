@@ -1,4 +1,4 @@
-from firedrake import (Function, TrialFunctions,
+from firedrake import (Function, TrialFunctions, DirichletBC,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
 from gusto.labels import (advection, diffusion, name, time_derivative,
@@ -47,7 +47,7 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
 
-        bcs = equation.bcs['u']
+        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
 
         explicit_forcing_problem = LinearVariationalProblem(
             a.form, L_explicit.form, self.xF, bcs=bcs

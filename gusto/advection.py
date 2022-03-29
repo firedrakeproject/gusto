@@ -96,7 +96,7 @@ class Advection(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, *active_labels):
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
 
         self.residual = equation.residual
 
@@ -109,15 +109,19 @@ class Advection(object, metaclass=ABCMeta):
                     split_form(t.form)[self.idx].form,
                     t.labels),
                 drop)
-            self.bcs = equation.bcs[self.field_name]
+            bcs = equation.bcs[self.field_name]
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             if len(self.fs) > 0:
-                self.bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
+                bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
             else:
-                self.bcs = equation.bcs[self.field_name]
+                bcs = equation.bcs[self.field_name]
             self.idx = None
+        if apply_bcs:
+            self.bcs = bcs
+        else:
+            self.bcs = None
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
