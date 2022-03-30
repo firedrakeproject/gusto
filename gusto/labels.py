@@ -42,7 +42,6 @@ def replace_subject(new, idx=None):
                         replace_dict[split(subj)[idx]] = new
 
         else:
-            print(type(new))
             if len(new.function_space()) > 1:
                 replace_dict[subj] = new[idx]
             else:
