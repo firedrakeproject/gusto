@@ -55,7 +55,7 @@ for delta, dt in res_dt.items():
 
     # spaces
     Vu = state.spaces("HDiv")
-    Vt = state.spaces("HDiv_v")
+    Vt = state.spaces("theta")
     Vr = state.spaces("DG")
 
     # Isentropic background state

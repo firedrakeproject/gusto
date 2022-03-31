@@ -44,7 +44,7 @@ theta0 = state.fields("theta")
 
 # spaces
 Vu = state.spaces("HDiv")
-Vt = state.spaces("HDiv_v")
+Vt = state.spaces("theta")
 Vr = state.spaces("DG")
 
 # Isentropic background state

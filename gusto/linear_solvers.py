@@ -457,12 +457,9 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        if len(self.state.bcs) == 0:
-            bcs = None
-        else:
-            # BCs are declared for the plain velocity space. As we need them in
-            # a mixed problem, we replicate the BCs but for subspace of M
-            bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+        # BCs are declared for the plain velocity space. As we need them in
+        # a mixed problem, we replicate the BCs but for subspace of M
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)

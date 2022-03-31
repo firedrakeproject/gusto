@@ -37,15 +37,15 @@ def replace_subject(new, idx=None):
                         replace_dict[k] = v
                 else:
                     try:
-                        replace_dict[split(subj)[idx]] = new.split()[idx]
+                        replace_dict[split(subj)[idx]] = split(new)[idx]
                     except:
                         replace_dict[split(subj)[idx]] = new
 
         else:
-            if subj.ufl_shape == new.ufl_shape:
-                replace_dict[subj] = new
-            else:
+            if len(new.function_space()) > 1:
                 replace_dict[subj] = new[idx]
+            else:
+                replace_dict[subj] = new
 
         new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)

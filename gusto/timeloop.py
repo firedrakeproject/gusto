@@ -49,7 +49,7 @@ class Timestepper(object):
     :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
-    def __init__(self, state, problem, physics_list=None):
+    def __init__(self, state, problem, apply_bcs=True, physics_list=None):
 
         self.state = state
 
@@ -60,7 +60,7 @@ class Timestepper(object):
         for eqn, method in problem:
             if type(method) is tuple:
                 for scheme, *active_labels in method:
-                    scheme.setup(eqn, self.advecting_velocity, *active_labels)
+                    scheme.setup(eqn, self.advecting_velocity, apply_bcs, *active_labels)
                     self.schemes.append((eqn.field_name, scheme))
             else:
                 scheme = method
@@ -74,7 +74,10 @@ class Timestepper(object):
 
     @property
     def advecting_velocity(self):
-        return self.x.n('u')
+        if hasattr(self.x.n, 'u'):
+            return self.x.n('u')
+        else:
+            return None
 
     def _apply_bcs(self):
         """
@@ -203,7 +206,8 @@ class CrankNicolson(Timestepper):
         else:
             self.auxiliary_schemes = []
 
-        super().__init__(state, problem, physics_list)
+        apply_bcs = False
+        super().__init__(state, problem, apply_bcs, physics_list)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
