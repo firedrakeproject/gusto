@@ -183,7 +183,6 @@ class ShallowWaterEquations(PrognosticEquation):
         trials = TrialFunctions(W)
         X = Function(W)
         u, D = split(X)
-        self.ubar = u
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
@@ -244,11 +243,6 @@ class ShallowWaterEquations(PrognosticEquation):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
             self.residual += topography_form
 
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(advecting_velocity),
-            lambda t: Term(ufl.replace(
-                t.form, {t.get(advecting_velocity): u}), t.labels))
-
 
 class CompressibleEulerEquations(PrognosticEquation):
 
@@ -266,7 +260,7 @@ class CompressibleEulerEquations(PrognosticEquation):
         field_name = "_".join(self.field_names)
         super().__init__(state, W, field_name)
 
-        Vu = W.sub(0)
+        Vu = state.spaces("HDiv")
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
 
@@ -285,7 +279,6 @@ class CompressibleEulerEquations(PrognosticEquation):
         X = Function(W)
         self.X = X
         u, rho, theta = split(X)[0:3]
-        self.ubar = u
         rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
         thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         pi = Pi(state.parameters, rho, theta)

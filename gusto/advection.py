@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, assemble,
+from firedrake import (Function, assemble, DirichletBC,
                        NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace, split,
-                       TestFunction, action, Constant, dot, grad, as_ufl)
+                       TestFunction, Constant, dot, grad, as_ufl)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
@@ -100,11 +100,11 @@ class Advection(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, apply_bcs=True, residual=None, *active_labels):
-        if residual is None:
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels, **kwargs):
+        if "residual" not in kwargs.keys():
             self.residual = equation.residual
         else:
-            self.residual = residual
+            self.residual = kwargs.get("residual")
 
         if self.field_name is not None:
             self.idx = equation.field_names.index(self.field_name)
@@ -119,8 +119,10 @@ class Advection(object, metaclass=ABCMeta):
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
-            if len(self.fs) > 0:
-                bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
+            if len(self.fs) > 1:
+                for k, v in equation.bcs.items():
+                    idx = equation.field_names.index(k)
+                    bcs = [DirichletBC(self.fs.sub(idx), bc.function_arg, bc.sub_domain) for bc in v]
             else:
                 bcs = equation.bcs[self.field_name]
             self.idx = None
@@ -136,7 +138,7 @@ class Advection(object, metaclass=ABCMeta):
 
         options = self.options
 
-        self.replace_advecting_velocity(equation.ubar)
+        self.replace_advecting_velocity(uadv)
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
@@ -281,16 +283,26 @@ class Advection(object, metaclass=ABCMeta):
 
         return r.form
 
-    def replace_advecting_velocity(self, uadv):
+    def replace_advecting_velocity(self, uadv=None):
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.residual]):
-            assert uadv is not None
-            self.residual = self.residual.label_map(
-                lambda t: t.has_label(advecting_velocity),
-                map_if_true=lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): uadv}), t.labels)
-            )
-            self.residual = advecting_velocity.update_value(self.residual, uadv)
+            if uadv is not None:
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(advecting_velocity),
+                    map_if_true=lambda t: Term(ufl.replace(
+                        t.form, {t.get(advecting_velocity): uadv}), t.labels)
+                )
+                self.residual = advecting_velocity.update_value(self.residual, uadv)
+            else:
+                # assumes explicit
+                if any([t.has_label(advecting_velocity) for t in self.residual]):
+                    self.residual = self.residual.label_map(
+                        lambda t: t.has_label(advecting_velocity),
+                        map_if_true=lambda t: Term(ufl.replace(
+                            t.form, {t.get(advecting_velocity):
+                                     split(t.get(subject))[0]}), t.labels)
+                    )
+                    advecting_velocity.remove(self.residual)
 
     @cached_property
     def solver(self):
@@ -577,6 +589,7 @@ class ImplicitMidpoint(ThetaMethod):
                          solver_parameters=solver_parameters,
                          options=options)
 
+
 class IMEX_SDC(object):
 
     def __init__(self, state, M, maxk):
@@ -594,22 +607,18 @@ class IMEX_SDC(object):
 
     def setup(self, equation, uadv=None):
 
-        self.residual = equation.residual
+        residual = equation.residual
 
-        self.residual = self.residual.label_map(
+        residual = residual.label_map(
             lambda t: any(t.has_label(time_derivative, advection)),
             map_if_false=lambda t: implicit(t))
 
-        self.residual = self.residual.label_map(
+        residual = residual.label_map(
             lambda t: t.has_label(advection),
             lambda t: explicit(t))
 
-        for t in self.residual:
-            print(t.labels.keys())
-
-        self.replace_advecting_velocity()
-
-        self.IMEX.setup(equation, equation.ubar, self.residual)
+        self.IMEX.setup(equation, residual=residual)
+        self.residual = self.IMEX.residual
 
         # set up SDC form and solver
         W = equation.function_space
@@ -643,10 +652,10 @@ class IMEX_SDC(object):
                           drop)
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
-        
+
         F0 = F.label_map(lambda t: t.has_label(explicit),
-                          replace_subject(self.U0.split()),
-                          drop)
+                         replace_subject(self.U0.split()),
+                         drop)
         F0 = F0.label_map(all_terms, lambda t: -1*t)
         Q = F.label_map(lambda t: t.has_label(time_derivative),
                         replace_subject(self.Q_),
@@ -661,12 +670,12 @@ class IMEX_SDC(object):
         # set up RHS evaluation
         self.Urhs = Function(W)
         self.Uin = Function(W)
-        a = equation.residual.label_map(lambda t: t.has_label(time_derivative),
-                                        replace_subject(self.Urhs),
-                                        drop)
-        L = equation.residual.label_map(lambda t: t.has_label(time_derivative),
-                                        drop,
-                                        replace_subject(self.Uin.split()))
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin.split()))
         Frhs = a - L
         prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
         self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
@@ -723,18 +732,18 @@ class IMEX_SDC(object):
         a = 0
         poly = legendre(n)
         polyd = poly.deriv()
-        nodes= poly.roots
+        nodes = poly.roots
         nodes = np.sort(nodes)
-        weights = 2/((1-nodes**2)*(np.polyval(polyd,nodes))**2)
+        weights = 2/((1-nodes**2)*(np.polyval(polyd, nodes))**2)
         gl_nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        gl_weights=(b-a)/(B-A)*weights
+        gl_weights = (b-a)/(B-A)*weights
         return gl_nodes, gl_weights
 
     def get_weights(self, b):
         # This calculates for equation 2.4 FWSW - called from Q
         # integrates lagrange polynomials to the points [nodes]
         M = self.M
-        nodes_m, weights_m=self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
+        nodes_m, weights_m = self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
         weights = np.zeros(M)
         for j in np.arange(M):
             coeff = np.zeros(M)
@@ -746,7 +755,7 @@ class IMEX_SDC(object):
 
     def Qmatrix(self):
         """
-        Integration Matrix 
+        Integration Matrix
         """
         M = self.M
         self.Q = np.zeros([M, M])
@@ -774,19 +783,9 @@ class IMEX_SDC(object):
         result = [float(0)]*n
         for j in range(n):
             for k in range(n):
-                result[j] += float(a[j,k])*b[k]
+                result[j] += float(a[j, k])*b[k]
             result[j] = assemble(result[j])
         return result
-
-    def replace_advecting_velocity(self):
-        # replace the advecting velocity in any terms that contain it
-        if any([t.has_label(advecting_velocity) for t in self.residual]):
-            self.residual = self.residual.label_map(
-                lambda t: t.has_label(advecting_velocity),
-                map_if_true=lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): split(t.get(subject))[0]}), t.labels)
-            )
-            #self.residual = advecting_velocity.update_value(self.residual, uadv)
 
     def apply(self, xin, xout):
         self.Un.assign(xin)
@@ -808,8 +807,7 @@ class IMEX_SDC(object):
                 fUnodes.append(UU)
 
             quad = self.matmul_UFL(self.S, fUnodes)
-        
-            #quad = dot(as_matrix(S),
+            # quad = dot(as_matrix(S),
             #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
 
             self.Unodes1[0].assign(self.Unodes[0])

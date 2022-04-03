@@ -5,7 +5,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
-                       FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
+                       FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
