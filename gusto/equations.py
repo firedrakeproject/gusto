@@ -312,7 +312,7 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         self.residual -= (
             subject(
                 prognostic(
-                    evaporation(gamma, Q, D, state.parameters),
+                    evaporation(gamma, Q, state.parameters),
                     "Q"),
                 X)
         )
@@ -331,7 +331,7 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         self.residual += (
             subject(
                 prognostic(
-                    state.parameters.lamda_r * phi * D * dx,
+                    state.parameters.lamda_r * phi * (D-state.parameters.H) * dx,
                     "D"),
                 X)
         )
