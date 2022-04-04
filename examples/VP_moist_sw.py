@@ -3,7 +3,7 @@ PETSc.Sys.popErrorHandler()
 
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, conditional, TestFunction,
-                       TrialFunction, exp, Constant)
+                       TrialFunction, exp, Constant, sqrt)
 
 # set up mesh
 Lx = 10000e3
@@ -18,24 +18,25 @@ dt = 400
 tau = 400
 H = 30.
 g = 10
-f = 2e-11
+f0 = 0 #1e-4
+beta = 0 #2e-11
 lamda_r = 1.1e-5
 tau_e = 1e6
 q_0 = 3
 q_g = 3
-alpha = 2
+alpha = 60
 gamma = 5 # 0 if humidity is a passive tracer
-nu_u = 1e4
-nu_D = 1e4
-nu_Q = 1e5
+nu_u = (1.5e4)/4 #1e4 100
+nu_D = (1e4)/4 #1e4 150
+nu_Q = (2e4)/4 #1e5 Constant(0)
 parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
                                          tau=tau, q_0=q_0, q_g=q_g, alpha=alpha,
                                          nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
                                          lamda_r=lamda_r)
 
-dirname="VP_moist_sw_gamma5_sponge"
+dirname="VP_moist_sw_GICs"
 
-output = OutputParameters(dirname=dirname, dumpfreq=1)
+output = OutputParameters(dirname=dirname, dumpfreq=10)
 
 diagnostic_fields =  [CourantNumber()]
 
@@ -67,7 +68,9 @@ from firedrake import File
 outfile = File("sponge.pvd")
 outfile.write(mu)
 
-eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f),
+fexpr = Constant(f0) + beta * y
+
+eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                                   sponge=sponge_function,
                                   diffusion_options=diffusion_options,
                                   no_normal_flow_bc_ids=[1,2])
@@ -83,9 +86,10 @@ E = Function(VD)
 C = Function(VD)
 
 # Gaussian initial condition in the moisture field
-gaussian = 3*exp(-((x-0.5*Lx)**2/5e11 + (y-0.5*Ly)**2/5e11))
-Q0.interpolate(gaussian)
-D0.interpolate(Constant(H))
+gaussian = 0.01*exp(-((x-0.5*Lx)**2/5e9 + (y-0.5*Ly)**2/5e9))
+lump = 10 * exp(-(sqrt(((x-0.5*Lx)+1e6)**2 + ((y-0.5*Ly)+3e6)**2)/0.05*Ly)**2)
+Q0.interpolate(q_g * Constant(1 - 1e-4))
+D0.interpolate(Constant(H) - 0.01 * lump)
 
 # we will have to do something here if we want a different timestepper
 
@@ -94,7 +98,7 @@ D0.interpolate(Constant(H))
 #advected_fields.append((SSPRK3(state, "D")))
 #advected_fields.append((SSPRK3(state, "Q")))
 
-stepper = Timestepper(state, ((eqns, SSPRK3(state)),),)
+stepper = Timestepper(state, ((eqns, ImplicitMidpoint(state)),),)
 
 
-stepper.run(t=0, tmax=10000*dt)
+stepper.run(t=0, tmax=5400*dt) # 25 days
