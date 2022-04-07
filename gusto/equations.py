@@ -163,6 +163,7 @@ class ShallowWaterEquations(PrognosticEquation):
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
+		 sponge=None,
                  no_normal_flow_bc_ids=None):
 
         spaces = self._build_spaces(state, family, degree)
@@ -256,6 +257,13 @@ class ShallowWaterEquations(PrognosticEquation):
                     prognostic(interior_penalty_diffusion_form(
                         state, test, fn, diffusion), field), X)
 
+        if sponge is not None:
+            #sponge_form = sponge*inner(w, state.k)*inner(u, state.k)*dx
+            sponge_form_u = sponge * w[0] * u[0] * dx
+            sponge_form_v = sponge * w[1] * u[1] * dx
+            self.residual += subject(prognostic(sponge_form_u, "u"), X)
+            self.residual += subject(prognostic(sponge_form_v, "u"), X)
+
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
         return Vu, VD
@@ -290,50 +298,50 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
         u, D, Q = X.split()
 
         # add moisture evolution equation
-#        self.residual += (
-#            subject(
-#                prognostic(
-#                    time_derivative(inner(gamma, Q)*dx)
-#                    + advection(advection_form(state, gamma, Q)),
-#                    "Q"),
-#                X)
-#        )
+        self.residual += (
+            subject(
+                prognostic(
+                    time_derivative(inner(gamma, Q)*dx)
+                    + advection(advection_form(state, gamma, Q)),
+                    "Q"),
+                X)
+        )
 
         # add weak form of condensation to moisture evolution equation
-#        self.residual += (
-#            subject(prognostic(
-#                    condensation(gamma, Q, D, state.parameters),
-#                    "Q"),
-#                X)
-#        )
+        self.residual += (
+            subject(prognostic(
+                    condensation(gamma, Q, D, state.parameters),
+                    "Q"),
+                X)
+        )
 
         # add weak form of evaporation to moisture evolution equation (add -E)
-#        self.residual -= (
-#            subject(
-#                prognostic(
-#                    evaporation(gamma, Q, state.parameters),
-#                    "Q"),
-#                X)
-#        )
+        self.residual -= (
+            subject(
+                prognostic(
+                    evaporation(gamma, Q, state.parameters),
+                    "Q"),
+                X)
+        )
 
         # add weak form of condensation forcing to depth equation
-#        self.residual += (
-#            subject(
-#                prognostic(
-#                    state.parameters.gamma * condensation(
-#                        phi, Q, D, state.parameters),
-#                    "D"),
-#                X)
-#        )
+        self.residual += (
+            subject(
+                prognostic(
+                    state.parameters.gamma * condensation(
+                        phi, Q, D, state.parameters),
+                    "D"),
+                X)
+        )
 
         # add weak form of the radiative relaxation term to the D equation
-#        self.residual += (
-#            subject(
-#                prognostic(
-#                    state.parameters.lamda_r * phi * (D-state.parameters.H) * dx,
-#                    "D"),
-#                X)
-#        )
+        self.residual += (
+            subject(
+                prognostic(
+                    state.parameters.lamda_r * phi * (D-state.parameters.H) * dx,
+                    "D"),
+                X)
+        )
 
         if diffusion_options is not None:
             tests = TestFunctions(W)
