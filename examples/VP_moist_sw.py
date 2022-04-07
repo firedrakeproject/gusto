@@ -25,7 +25,7 @@ tau_e = 1e6
 q_0 = 3
 q_g = 3
 alpha = 60
-gamma = 5 # 0 if humidity is a passive tracer
+gamma = 0 # 5 0 if humidity is a passive tracer
 nu_u = (1.5e4)/4 #1e4 100
 nu_D = (1e4)/4 #1e4 150
 nu_Q = (2e4)/4 #1e5 Constant(0)
@@ -34,7 +34,7 @@ parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
                                          nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
                                          lamda_r=lamda_r)
 
-dirname="VP_moist_sw_GICs"
+dirname="VP_dry_sw_usponge_gaussian"
 
 output = OutputParameters(dirname=dirname, dumpfreq=10)
 
@@ -86,10 +86,10 @@ E = Function(VD)
 C = Function(VD)
 
 # Gaussian initial condition in the moisture field
-gaussian = 0.01*exp(-((x-0.5*Lx)**2/5e9 + (y-0.5*Ly)**2/5e9))
-lump = 10 * exp(-(sqrt(((x-0.5*Lx)+1e6)**2 + ((y-0.5*Ly)+3e6)**2)/0.05*Ly)**2)
-Q0.interpolate(q_g * Constant(1 - 1e-4))
-D0.interpolate(Constant(H) - 0.01 * lump)
+gaussian = 10*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
+lump = 10 * exp(-(sqrt(((x-0.5*Lx)+1e6)**2 + ((y-0.5*Ly)+1e6)**2)/0.05*Ly)**2)
+#Q0.interpolate(q_g * Constant(1 - 1e-4))
+D0.interpolate(Constant(H) - 0.01 * gaussian)
 
 # we will have to do something here if we want a different timestepper
 
