@@ -463,6 +463,7 @@ class RK4(ExplicitAdvection):
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
             map_if_false=lambda t: -1*t)
 
         return r.form
