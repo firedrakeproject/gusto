@@ -42,7 +42,11 @@ def replace_subject(new, idx=None):
                         replace_dict[split(subj)[idx]] = new
 
         else:
-            if len(new.function_space()) > 1:
+            if isinstance(new, Function):
+                sub = len(new.function_space())
+            elif type(new) == tuple:
+                sub = len(new)
+            if sub > 1:
                 replace_dict[subj] = new[idx]
             else:
                 replace_dict[subj] = new

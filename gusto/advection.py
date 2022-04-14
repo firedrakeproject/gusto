@@ -302,7 +302,7 @@ class Advection(object, metaclass=ABCMeta):
                             t.form, {t.get(advecting_velocity):
                                      split(t.get(subject))[0]}), t.labels)
                     )
-                    advecting_velocity.remove(self.residual)
+                    self.residual = advecting_velocity.remove(self.residual)
 
     @cached_property
     def solver(self):
