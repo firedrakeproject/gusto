@@ -437,22 +437,33 @@ class SSPRK3(ExplicitAdvection):
 class RK4(ExplicitAdvection):
     """
     Class to implement the 4-stage Runge-Kutta timestepping method:
-    k1 = L(y_n) - x_in
-    k2 = L(k1) - (x_in + 1/2*dt*k1)
-    k3 = L(k2) - (x_in + 1/2*dt*k2)
-    k4 = L(k3) - (x_in + 1/2*dt*k3)
-    y_(n+1) = y_n + (1/6) * (k1 + 2*k2 + 2*k3 + k4)
+    k1 = L(y_n)
+    k2 = L(y_n + 1/2*dt*k1)
+    k3 = L(y_n + 1/2*dt*k2)
+    k4 = L(y_n + dt*k3)
+    y_(n+1) = y_n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
     where subscripts indicate the timelevel, superscripts indicate the stage
-    number and L is the advection operator.
+    number and L is the RHS.
     """
 
-    @cached_property
     def lhs(self):
-         return super(RK4, self).lhs
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.trial, self.idx),
+            map_if_false=drop)
 
-    @cached_property
+        return l.form
+
     def rhs(self):
-        return super(RK4, self).rhs
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.q1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -t)
+
+        return r.form
 
     def solve_stage(self, x_in, stage):
 
@@ -463,23 +474,23 @@ class RK4(ExplicitAdvection):
 
         if stage == 0:
             self.solver.solve()
-            self.k1.assign(self.dq - x_in)
+            self.k1.assign(self.dq)
             self.q1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
             self.solver.solve()
-            self.k2.assign(self.dq - (x_in + 0.5*self.dt*self.k1))
+            self.k2.assign(self.dq)
             self.q1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
             self.solver.solve()
-            self.k3.assign(self.dq - (x_in + 0.5*self.dt*self.k2))
+            self.k3.assign(self.dq)
             self.q1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
             self.solver.solve()
-            self.k4.assign(self.dq - (x_in + self.dt*self.k3))
-            self.q1.assign(x_in + 1/6 * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+            self.k4.assign(self.dq)
+            self.q1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
     def apply_cycle(self, x_in, x_out):
 
