@@ -470,11 +470,6 @@ class RK4(ExplicitAdvection):
 
     def solve_stage(self, x_in, stage):
 
-        self.k1 = Function(self.fs)
-        self.k2 = Function(self.fs)
-        self.k3 = Function(self.fs)
-        self.k4 = Function(self.fs)
-
         if stage == 0:
             self.solver.solve()
             self.k1.assign(self.dq)
@@ -501,6 +496,10 @@ class RK4(ExplicitAdvection):
             self.limiter.apply(x_in)
 
         self.q1.assign(x_in)
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
         for i in range(4):
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
