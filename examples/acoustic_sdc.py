@@ -28,12 +28,16 @@ class AcousticEquation(PrognosticEquation):
 
         c_s = Constant(1)                   # speed of sound
         u_mean = Constant(0.05)                  # mean flow
-        self.ubar = Function(Vu).assign(u_mean)
+        ubar = Function(Vu).assign(u_mean)
 
         mass_form = time_derivative(subject(w * u * dx + phi * p * dx, X))
         fast_form = subject(c_s * (w * p.dx(0) + phi * u.dx(0)) * dx, X)
-        slow_form = advection(subject(self.ubar * (w * u.dx(0) + phi * p.dx(0)) * dx, X))
-        self.residual = mass_form + fast_form + advecting_velocity(slow_form, self.ubar)
+        slow_form = advection(subject(ubar * (w * u.dx(0) + phi * p.dx(0)) * dx, X))
+        nonlinear = False
+        if nonlinear:
+            self.residual = mass_form + fast_form + advecting_velocity(slow_form, ubar)
+        else:
+            self.residual = mass_form + fast_form + slow_form
 
 
 
