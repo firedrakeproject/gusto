@@ -31,9 +31,9 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
     elif scheme == "implicit_midpoint":
         advection_scheme = [(eqn, ImplicitMidpoint(state))]
     elif scheme == "RK4":
-         advection_scheme = [(eqn, RK4(state))]
+        advection_scheme = [(eqn, RK4(state))]
     elif scheme == "Heun":
-         advection_scheme = [(eqn, Heun(state))]
+        advection_scheme = [(eqn, Heun(state))]
     assert run(state, advection_scheme, setup.tmax, setup.f_end) < setup.tol
 
 
@@ -60,8 +60,8 @@ def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
     elif scheme == "implicit_midpoint":
         advection_schemes = [(eqn, ImplicitMidpoint(state))]
     elif scheme == "RK4":
-         advection_scheme = [(eqn, RK4(state))]
+        advection_schemes = [(eqn, RK4(state))]
     elif scheme == "Heun":
-         advection_scheme = [(eqn, Heun(state))]
+        advection_schemes = [(eqn, Heun(state))]
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
     assert run(state, advection_schemes, setup.tmax, f_end) < setup.tol
