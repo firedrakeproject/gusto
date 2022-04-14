@@ -437,15 +437,16 @@ class SSPRK3(ExplicitAdvection):
 class RK4(ExplicitAdvection):
     """
     Class to implement the 4-stage Runge-Kutta timestepping method:
-    k1 = L(y_n)
-    k2 = L(y_n + 1/2*dt*k1)
-    k3 = L(y_n + 1/2*dt*k2)
-    k4 = L(y_n + dt*k3)
+    k1 = f(y_n)
+    k2 = f(y_n + 1/2*dt*k1)
+    k3 = f(y_n + 1/2*dt*k2)
+    k4 = f(y_n + dt*k3)
     y_(n+1) = y_n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
     where subscripts indicate the timelevel, superscripts indicate the stage
-    number and L is the RHS.
+    number and f is the RHS.
     """
 
+    @cached_property
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
@@ -454,6 +455,7 @@ class RK4(ExplicitAdvection):
 
         return l.form
 
+    @cached_property
     def rhs(self):
         r = self.residual.label_map(
             all_terms,
@@ -461,7 +463,7 @@ class RK4(ExplicitAdvection):
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: -t)
+            map_if_false=lambda t: -1*t)
 
         return r.form
 

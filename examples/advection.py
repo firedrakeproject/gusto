@@ -10,10 +10,10 @@ mesh = IcosahedralSphereMesh(radius=1,
 x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
-dirname="advection_Heun"
+dirname="advection_RK4"
 
-dt = pi/3. * 0.02
-output = OutputParameters(dirname=dirname, dumpfreq=1)
+dt = pi/3. * 0.002
+output = OutputParameters(dirname=dirname, dumpfreq=10)
 diagnostic_fields = [CourantNumber()]
 state = State(mesh, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -28,6 +28,6 @@ eqn = AdvectionEquation(state, V, "f", "BDM", 1)
 state.fields("f").interpolate(f_init)
 state.fields("u").project(uexpr)
 
-advection_scheme = [(eqn, Heun(state))]
+advection_scheme = [(eqn, RK4(state))]
 timestepper = PrescribedAdvection(state, advection_scheme)
 timestepper.run(0, tmax)
