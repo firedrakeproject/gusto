@@ -7,8 +7,8 @@ from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
 import numpy as np
 import sys
 
-dt = 2.
-tmax = 3600.
+dt = 0.1
+tmax = 800.
 
 nlayers = 10  # horizontal layers
 columns = 150  # number of columns
@@ -81,7 +81,7 @@ state.set_reference_profiles([('rho', rho_b),
 # scheme = SSPRK3(state)
 M = 3
 maxk = 2
-scheme = IMEX_SDC(state, M, maxk)
+scheme = FE_SDC(state, M, maxk)
 stepper = Timestepper(state, ((eqns, scheme),))
 
 stepper.run(t=0, tmax=tmax)
