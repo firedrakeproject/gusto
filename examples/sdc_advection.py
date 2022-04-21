@@ -1,7 +1,6 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, as_vector,
-                       FunctionSpace, exp)
-from math import pi
+                       FunctionSpace, pi, cos, sin, sqrt, acos)
 
 # radius of sphere
 R = 6371220.
@@ -22,9 +21,9 @@ state = State(mesh,
 Vdg = FunctionSpace(mesh, "DG", 1)
 
 eqn = AdvectionEquation(state, Vdg, "tracer", "BDM", 1)
-eqn.residual = advecting_velocity.remove(eqn.residual)
-for t in eqn.residual:
-    print(t.labels.keys())
+# eqn.residual = advecting_velocity.remove(eqn.residual)
+# for t in eqn.residual:
+#     print(t.labels.keys())
 
 
 # interpolate initial conditions
@@ -35,11 +34,19 @@ uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
 u0.project(uexpr)
 
 q0 = state.fields("tracer")
-q0.interpolate(exp(-x[2]**2 - x[0]**2))
+theta, lamda = latlon_coords(mesh)
+R0 = R/3.
+R0sq = R0**2
+lamda_c = 3*pi/2.
+theta_c = 0.
+r = R*acos(cos(theta)*cos(lamda-lamda_c))
+qbar = 1000
+qexpr = qbar/2 * (1 + cos(pi*r/R0))
+q0.interpolate(conditional(r < R0, qexpr, 0))
 
 M = 3
 maxk = 2
-scheme = IMEX_SDC(state, M, maxk)
-timestepper = Timestepper(state, ((eqn, scheme),))
+scheme = BE_SDC(state, M, maxk)
+timestepper = PrescribedAdvection(state, ((eqn, scheme),))
 tmax = 12*day
 timestepper.run(0, tmax)

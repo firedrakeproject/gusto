@@ -18,7 +18,7 @@ import scipy
 from scipy.special import legendre
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint", "IMEX_SDC"]
+__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint", "FE_SDC", "BE_SDC", "IMEX_SDC"]
 
 
 def is_cg(V):
@@ -120,9 +120,10 @@ class Advection(object, metaclass=ABCMeta):
             self.field_name = equation.field_name
             self.fs = equation.function_space
             if len(self.fs) > 1:
+                bcs = []
                 for k, v in equation.bcs.items():
                     idx = equation.field_names.index(k)
-                    bcs = [DirichletBC(self.fs.sub(idx), bc.function_arg, bc.sub_domain) for bc in v]
+                    bcs += [DirichletBC(self.fs.sub(idx), bc.function_arg, bc.sub_domain) for bc in v]
             else:
                 bcs = equation.bcs[self.field_name]
             self.idx = None
@@ -284,6 +285,7 @@ class Advection(object, metaclass=ABCMeta):
         return r.form
 
     def replace_advecting_velocity(self, uadv=None):
+
         # replace the advecting velocity in any terms that contain it
         if any([t.has_label(advecting_velocity) for t in self.residual]):
             if uadv is not None:
@@ -344,9 +346,9 @@ class ExplicitAdvection(Advection):
 
         self.subcycles = subcycles
 
-    def setup(self, equation, uadv, *active_labels):
+    def setup(self, equation, uadv=None, *active_labels, **kwargs):
 
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, uadv, *active_labels, **kwargs)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -590,7 +592,7 @@ class ImplicitMidpoint(ThetaMethod):
                          options=options)
 
 
-class IMEX_SDC(object):
+class SDC(object, metaclass=ABCMeta):
 
     def __init__(self, state, M, maxk):
 
@@ -598,87 +600,15 @@ class IMEX_SDC(object):
         self.dt = Constant(state.dt)
         self.M = M
         self.maxk = maxk
-        self.IMEX = IMEX_Euler(state)
 
         self.rnw_r(state.dt)
         self.Qmatrix()
         self.Smatrix()
         self.dtau = np.diff(np.append(0, self.nodes))
 
+    @abstractmethod
     def setup(self, equation, uadv=None):
-
-        residual = equation.residual
-
-        residual = residual.label_map(
-            lambda t: any(t.has_label(time_derivative, advection)),
-            map_if_false=lambda t: implicit(t))
-
-        residual = residual.label_map(
-            lambda t: t.has_label(advection),
-            lambda t: explicit(t))
-
-        self.IMEX.setup(equation, residual=residual)
-        self.residual = self.IMEX.residual
-
-        # set up SDC form and solver
-        W = equation.function_space
-        dt = self.dt
-        self.W = W
-        self.Unodes = [Function(W) for _ in range(self.M+1)]
-        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
-        self.fUnodes = [Function(W) for _ in range(self.M+1)]
-
-        self.U_SDC = Function(W)
-        self.U0 = Function(W)
-        self.U01 = Function(W)
-        self.Un = Function(W)
-        self.Q_ = Function(W)
-
-        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: dt*t)
-
-        F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
-                            replace_subject(self.U_SDC),
-                            drop)
-
-        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, explicit)),
-                            replace_subject(self.Un.split()),
-                            drop)
-        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
-                                lambda t: -1*t)
-
-        F01 = F.label_map(lambda t: t.has_label(implicit),
-                          replace_subject(self.U01.split()),
-                          drop)
-
-        F01 = F01.label_map(all_terms, lambda t: -1*t)
-
-        F0 = F.label_map(lambda t: t.has_label(explicit),
-                         replace_subject(self.U0.split()),
-                         drop)
-        F0 = F0.label_map(all_terms, lambda t: -1*t)
-        Q = F.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.Q_),
-                        drop)
-
-        F_SDC = F_imp + F_exp + F01 + F0 + Q
-
-        bcs = equation.bcs['u']
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
-        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
-
-        # set up RHS evaluation
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
-                                    drop)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    drop,
-                                    replace_subject(self.Uin.split()))
-        Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
-        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+        pass
 
     def rnw_r(self, b, A=-1, B=1):
         # nodes and weights for gauss - radau IIA quadrature
@@ -786,6 +716,309 @@ class IMEX_SDC(object):
                 result[j] += float(a[j, k])*b[k]
             result[j] = assemble(result[j])
         return result
+
+    @abstractmethod
+    def apply(self, xin, xout):
+        pass
+
+
+class FE_SDC(SDC):
+
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        self.base = ForwardEuler(self.state)
+        self.base.setup(equation, residual=residual)
+        self.residual = self.base.residual
+
+        # set up SDC form and solver
+        W = equation.function_space
+        dt = self.dt
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: dt*t)
+
+        a = F.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_SDC),
+                        drop)
+
+        F_exp = F.label_map(all_terms, replace_subject(self.Un))
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        F0 = F.label_map(lambda t: t.has_label(time_derivative),
+                         drop,
+                         replace_subject(self.U0))
+        F0 = F0.label_map(all_terms,
+                          lambda t: -1*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_),
+                                    drop)
+
+        F_SDC = a + F_exp + F0 + Q
+
+        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
+        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin))
+        Frhs = a - L
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
+        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+
+    def apply(self, xin, xout):
+        self.Un.assign(xin)
+
+        self.Unodes[0].assign(self.Un)
+        for m in range(self.M):
+            self.base.dt.assign(self.dtau[m])
+            self.base.apply(self.Unodes[m], self.Unodes[m+1])
+
+        k = 0
+        while k < self.maxk:
+            k += 1
+
+            fUnodes = []
+            for m in range(1, self.M+1):
+                self.Uin.assign(self.Unodes[m])
+                self.solver_rhs.solve()
+                UU = Function(self.W).assign(self.Urhs)
+                fUnodes.append(UU)
+
+            quad = self.matmul_UFL(self.S, fUnodes)
+            # quad = dot(as_matrix(S),
+            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, self.M+1):
+                self.dt.assign(self.dtau[m-1])
+                self.U0.assign(self.Unodes[m-1])
+                self.Un.assign(self.Unodes1[m-1])
+                self.Q_.assign(quad[m-1])
+                self.solver_SDC.solve()
+                self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, self.M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
+            # print(k, self.Un.split()[1].dat.data.max())
+        if self.maxk > 0:
+            xout.assign(self.Un)
+        else:
+            xout.assign(self.Unodes[-1])
+
+
+class BE_SDC(SDC):
+
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        self.base = BackwardEuler(self.state)
+
+        uadv = self.state.fields("u")
+
+        self.base.setup(equation, uadv=uadv, residual=residual)
+        self.residual = self.base.residual
+
+        # set up SDC form and solver
+        W = equation.function_space
+        dt = self.dt
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.U01 = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: dt*t)
+
+        F_imp = F.label_map(all_terms,
+                            replace_subject(self.U_SDC))
+
+        F_exp = F.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un),
+                            drop)
+        F_exp = F_exp.label_map(all_terms,
+                                lambda t: -1*t)
+
+        F01 = F.label_map(lambda t: t.has_label(time_derivative),
+                          drop,
+                          replace_subject(self.U01))
+
+        F01 = F01.label_map(all_terms, lambda t: -1*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_),
+                                    drop)
+
+        F_SDC = F_imp + F_exp + F01 + Q
+
+        try:
+            bcs = equation.bcs['u']
+        except KeyError:
+            bcs = None
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
+        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin))
+        Frhs = a - L
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
+        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+
+    def apply(self, xin, xout):
+        self.Un.assign(xin)
+
+        self.Unodes[0].assign(self.Un)
+        for m in range(self.M):
+            self.base.dt.assign(self.dtau[m])
+            self.base.apply(self.Unodes[m], self.Unodes[m+1])
+
+        k = 0
+        while k < self.maxk:
+            k += 1
+
+            fUnodes = []
+            for m in range(1, self.M+1):
+                self.Uin.assign(self.Unodes[m])
+                self.solver_rhs.solve()
+                UU = Function(self.W).assign(self.Urhs)
+                fUnodes.append(UU)
+
+            quad = self.matmul_UFL(self.S, fUnodes)
+            # quad = dot(as_matrix(S),
+            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, self.M+1):
+                self.dt.assign(self.dtau[m-1])
+                self.U0.assign(self.Unodes[m-1])
+                self.U01.assign(self.Unodes[m])
+                self.Un.assign(self.Unodes1[m-1])
+                self.Q_.assign(quad[m-1])
+                self.solver_SDC.solve()
+                self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, self.M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
+            #print(k, self.Un.split()[1].dat.data.max())
+        if self.maxk > 0:
+            xout.assign(self.Un)
+        else:
+            xout.assign(self.Unodes[-1])
+
+
+class IMEX_SDC(SDC):
+
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        residual = residual.label_map(
+            lambda t: any(t.has_label(time_derivative, advection)),
+            map_if_false=lambda t: implicit(t))
+
+        residual = residual.label_map(
+            lambda t: t.has_label(advection),
+            lambda t: explicit(t))
+
+        self.IMEX = IMEX_Euler(self.state)
+        self.IMEX.setup(equation, residual=residual)
+        self.residual = self.IMEX.residual
+
+        # set up SDC form and solver
+        W = equation.function_space
+        dt = self.dt
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.U01 = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: dt*t)
+
+        F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
+                            replace_subject(self.U_SDC),
+                            drop)
+
+        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, explicit)),
+                            replace_subject(self.Un),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        F01 = F.label_map(lambda t: t.has_label(implicit),
+                          replace_subject(self.U01),
+                          drop)
+
+        F01 = F01.label_map(all_terms, lambda t: -1*t)
+
+        F0 = F.label_map(lambda t: t.has_label(explicit),
+                         replace_subject(self.U0),
+                         drop)
+        F0 = F0.label_map(all_terms, lambda t: -1*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_),
+                                    drop)
+
+        F_SDC = F_imp + F_exp + F01 + F0 + Q
+
+        bcs = equation.bcs['u']
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
+        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin.split()))
+        Frhs = a - L
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
+        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
 
     def apply(self, xin, xout):
         self.Un.assign(xin)
