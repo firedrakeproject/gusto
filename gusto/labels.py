@@ -38,7 +38,7 @@ def replace_subject(new, idx=None):
                 else:
                     try:
                         replace_dict[split(subj)[idx]] = split(new)[idx]
-                    except:
+                    except IndexError:
                         replace_dict[split(subj)[idx]] = new
 
         else:

@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, action, Constant, dot, grad, as_ufl)
+                       TestFunction, Constant, dot, grad, as_ufl)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl

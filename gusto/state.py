@@ -5,7 +5,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
-                       FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
+                       FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
@@ -27,7 +27,7 @@ class SpaceCreator(object):
         try:
             return getattr(self, name)
         except AttributeError:
-            if name == "HDiv" and family in ["BDM", "RT", "CG"]:
+            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)
@@ -80,7 +80,7 @@ class SpaceCreator(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement(family, cell, degree+1)
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
     def build_dg_space(self, degree):
         if self.extruded_mesh:
@@ -95,7 +95,7 @@ class SpaceCreator(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
 
     def build_theta_space(self, degree):
         assert self.extruded_mesh
@@ -105,10 +105,10 @@ class SpaceCreator(object):
             self.T0 = FiniteElement("CG", interval, degree+1,
                                     variant="equispaced")
         V_elt = TensorProductElement(self.S2, self.T0)
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name='Vtheta')
 
     def build_cg_space(self, degree):
-        return FunctionSpace(self.mesh, "CG", degree)
+        return FunctionSpace(self.mesh, "CG", degree, name=f'CG{degree}')
 
 
 class FieldCreator(object):
@@ -572,7 +572,17 @@ class State(object):
         :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
         for name, profile in reference_profiles:
-            ref = self.fields(name+'bar')
+            if name+'bar' in self.fields:
+                # For reference profiles already added to state, allow
+                # interpolation from expressions
+                ref = self.fields(name+'bar')
+            elif isinstance(profile, Function):
+                # Need to add reference profile to state so profile must be
+                # a Function
+                ref = self.fields(name+'bar', space=profile.function_space(), dump=False)
+            else:
+                raise ValueError(f'When initialising reference profile {name}'+
+                                 f' the passed profile must be a Function')
             ref.interpolate(profile)
 
 

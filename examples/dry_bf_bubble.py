@@ -62,7 +62,10 @@ if diffusion:
 else:
     diffusion_options = None
 
+u_advection_option = "vector_advection_form" if recovered else "vector_invariant_form"
+
 eqns = CompressibleEulerEquations(state, "CG", degree,
+                                  u_advection_option=u_advection_option,
                                   diffusion_options=diffusion_options,
                                   no_normal_flow_bc_ids=[1, 2])
 
@@ -114,7 +117,7 @@ state.set_reference_profiles([('rho', rho_b),
 
 # Set up advection schemes
 if recovered:
-    VDG1 = state.spaces("DG1")
+    VDG1 = state.spaces("DG1", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
     Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
     Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())

@@ -29,7 +29,7 @@ def setup_saturated(dirname, recovered):
     # default should be to use lowest order set of spaces
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'], perturbation_fields=['water_v'])
+    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'])
     parameters = CompressibleParameters()
     diagnostic_fields = [Theta_e()]
 
@@ -39,20 +39,22 @@ def setup_saturated(dirname, recovered):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
+    tracers = [WaterVapour(), CloudWater()]
+
     if recovered:
         u_advection_option = "vector_advection_form"
     else:
         u_advection_option = "vector_invariant_form"
-    eqns = MoistCompressibleEulerEquations(
-        state, "CG", degree, u_advection_option=u_advection_option)
+    eqns = CompressibleEulerEquations(
+        state, "CG", degree, u_advection_option=u_advection_option, tracers=tracers)
 
     # Initial conditions
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("water_v")
-    water_c0 = state.fields("water_c")
-    moisture = ['water_v', 'water_c']
+    water_v0 = state.fields("vapour_mixing_ratio")
+    water_c0 = state.fields("cloud_liquid_mixing_ratio")
+    moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
 
     # spaces
     Vu = u0.function_space()
@@ -70,8 +72,7 @@ def setup_saturated(dirname, recovered):
     water_c0.assign(water_t - water_v0)
 
     state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0),
-                                  ('water_v', water_v0)])
+                                  ('theta', theta0)])
 
     # Set up advection schemes
     if recovered:
@@ -107,8 +108,8 @@ def setup_saturated(dirname, recovered):
 
     advected_fields = [SSPRK3(state, 'rho', options=rho_opts),
                        SSPRK3(state, 'theta', options=theta_opts),
-                       SSPRK3(state, 'water_v', options=wv_opts),
-                       SSPRK3(state, 'water_c', options=wc_opts)]
+                       SSPRK3(state, 'vapour_mixing_ratio', options=wv_opts),
+                       SSPRK3(state, 'cloud_liquid_mixing_ratio', options=wc_opts)]
 
     if recovered:
         advected_fields.append(SSPRK3(state, 'u', options=u_opts))

@@ -27,7 +27,7 @@ def setup_unsaturated(dirname, recovered):
 
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1, perturbation_fields=['water_v'])
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
     parameters = CompressibleParameters()
     diagnostic_fields = [Theta_d(), RelativeHumidity()]
 
@@ -37,18 +37,20 @@ def setup_unsaturated(dirname, recovered):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
+    tracers = [WaterVapour(), CloudWater()]
+
     if recovered:
         u_advection_option = "vector_advection_form"
     else:
         u_advection_option = "vector_invariant_form"
-    eqns = MoistCompressibleEulerEquations(
-        state, "CG", degree, u_advection_option=u_advection_option)
+    eqns = CompressibleEulerEquations(
+        state, "CG", degree, u_advection_option=u_advection_option, tracers=tracers)
 
     # Initial conditions
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    moisture = ['water_v', 'water_c']
+    moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
 
     # spaces
     Vu = u0.function_space()
@@ -92,8 +94,8 @@ def setup_unsaturated(dirname, recovered):
 
     advected_fields = [SSPRK3(state, "rho", options=rho_opts),
                        SSPRK3(state, "theta", options=theta_opts),
-                       SSPRK3(state, "water_v"),
-                       SSPRK3(state, "water_c")]
+                       SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
+                       SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
     if recovered:
         advected_fields.append(SSPRK3(state, "u", options=u_opts))
     else:
