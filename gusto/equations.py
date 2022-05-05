@@ -277,7 +277,8 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
                  sponge=None,
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
-                 no_normal_flow_bc_ids=None):
+                 no_normal_flow_bc_ids=None,
+                 static_heating = None):
 
         if diffusion_options is not None:
             dry_diffusion_options = []
@@ -360,7 +361,12 @@ class MoistShallowWaterEquations(ShallowWaterEquations):
             sponge_form_u = sponge * w[0] * u[0] * dx
             sponge_form_v = sponge * w[1] * u[1] * dx
             self.residual += subject(prognostic(sponge_form_u, "u"), X)
+
             self.residual += subject(prognostic(sponge_form_v, "u"), X)
+
+        if static_heating is not None:
+            heating_form = static_heating * phi * dx
+            self.residual -= subject(prognostic(heating_form, "D"), X)
 
     def _build_spaces(self, state, family, degree):
         Vu, VD = state.spaces.build_compatible_spaces(family, degree)
