@@ -14,8 +14,9 @@ nx = int(Lx/delta)
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
-dt = 400
-tau = 400
+day = 24*60*60
+dt = 100
+tau = 100
 H = 30.
 g = 10
 f0 = 0 #1e-4
@@ -25,18 +26,20 @@ tau_e = 1e6
 q_0 = 3
 q_g = 3
 alpha = 60
-gamma = 0 # 5 0 if humidity is a passive tracer
+gamma = 5 # 5 0 if humidity is a passive tracer
 nu_u = (1.5e4)/4 #1e4 100
 nu_D = (1e4)/4 #1e4 150
 nu_Q = (2e4)/4 #1e5 Constant(0)
+L_d = sqrt(sqrt(g*H)/1e-20 + beta)
+
 parameters = MoistShallowWaterParameters(H=H, g=g, gamma=gamma, tau_e=tau_e,
                                          tau=tau, q_0=q_0, q_g=q_g, alpha=alpha,
                                          nu_u=nu_u, nu_D=nu_D, nu_Q=nu_Q,
                                          lamda_r=lamda_r)
 
-dirname="VP_dry_sw_usponge_gaussian"
+dirname="VP_sw_gaussian_withQ0"
 
-output = OutputParameters(dirname=dirname, dumpfreq=10)
+output = OutputParameters(dirname=dirname, dumpfreq=day/(dt*2)) # twice a day
 
 diagnostic_fields =  [CourantNumber()]
 
@@ -68,7 +71,9 @@ from firedrake import File
 outfile = File("sponge.pvd")
 outfile.write(mu)
 
-fexpr = Constant(f0) + beta * y
+fexpr = Constant(f0) + beta * (y-Ly/2)
+
+static_heating = exp(-(((x-Lx/2)**2 + (y-Ly/2)**2)/L_d**2/2))
 
 eqns = MoistShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                                   sponge=sponge_function,
@@ -88,7 +93,7 @@ C = Function(VD)
 # Gaussian initial condition in the moisture field
 gaussian = 10*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
 lump = 10 * exp(-(sqrt(((x-0.5*Lx)+1e6)**2 + ((y-0.5*Ly)+1e6)**2)/0.05*Ly)**2)
-#Q0.interpolate(q_g * Constant(1 - 1e-4))
+Q0.interpolate(q_g * Constant(1 - 1e-4))
 D0.interpolate(Constant(H) - 0.01 * gaussian)
 
 # we will have to do something here if we want a different timestepper
@@ -98,7 +103,6 @@ D0.interpolate(Constant(H) - 0.01 * gaussian)
 #advected_fields.append((SSPRK3(state, "D")))
 #advected_fields.append((SSPRK3(state, "Q")))
 
-stepper = Timestepper(state, ((eqns, ImplicitMidpoint(state)),),)
+stepper = Timestepper(state, ((eqns, RK4(state)),),)
 
-
-stepper.run(t=0, tmax=5400*dt) # 25 days
+stepper.run(t=0, tmax=25*day)
