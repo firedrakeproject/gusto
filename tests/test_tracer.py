@@ -1,9 +1,9 @@
 """
-Tests various Gusto Tracer objects.
+Tests various Gusto ActiveTracer objects.
 """
 
-from gusto import (Tracer, PassiveTracer, ActiveTracer,
-                   TransportEquationForm, TracerVariableType, Phases)
+from gusto import (ActiveTracer, TransportEquationForm,
+                   TracerVariableType, Phases)
 import pytest
 
 def test_tracer_classes():
@@ -18,20 +18,7 @@ def test_tracer_classes():
     for name, space, transport_flag, transport_eqn in \
         zip(names, spaces, transport_flags, transport_eqns):
 
-        # Test Tracer base class
-        tracer = Tracer(name, space, transport_flag, transport_eqn)
-        assert tracer.name == name
-        assert tracer.space == space
-        assert tracer.transport_flag == transport_flag
-        assert tracer.transport_eqn == transport_eqn
-
-        # Test PassiveTracer base class
-        tracer = PassiveTracer(name, space, transport_flag, transport_eqn)
-        assert tracer.name == name
-        assert tracer.space == space
-        assert tracer.transport_flag == transport_flag
-        assert tracer.transport_eqn == transport_eqn
-
+        # Test active tracer class
         for variable_type in variable_types:
             tracer = ActiveTracer(name, space, variable_type,
                                   transport_flag, transport_eqn)

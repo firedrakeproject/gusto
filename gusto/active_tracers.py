@@ -1,11 +1,18 @@
+"""
+This file contains the ActiveTracer class, which contains the metadata to
+augment equation sets with additional active tracer variables. Some specific
+commonly used tracers are also provided.
+
+Enumerators are also defined to encode different aspects of the tracers (e.g.
+what type of variable the tracer is, what phase it is, etc).
+"""
+
 from enum import Enum
 
 __all__ = ["TransportEquationForm", "TracerVariableType", "Phases",
-           "Tracer", "PassiveTracer", "ActiveTracer", "WaterVapour",
-           "CloudWater", "Rain"]
+           "ActiveTracer", "WaterVapour", "CloudWater", "Rain"]
 
 
-# TODO: Move this to somewhere else
 class TransportEquationForm(Enum):
     """
     An Enum object which stores the forms of the transport equation. For
@@ -47,50 +54,12 @@ class Phases(Enum):
     plasma = 2000  # Why not!
 
 
-class Tracer(object):
+class ActiveTracer(object):
     """
-    Base class for declaring the metadata for a tracer variable.
-
-    :arg name:           A string naming the tracer field.
-    :arg space:          A string indicating the function space for the variable.
-    :arg transport_flag: A Boolean indicating if the variable is transported.
-    :arg transport_eqn:  A TransportEquationForm Enum indicating the form of
-                         the transport equation to be used.
-    """
-    def __init__(self, name, space, transport_flag,
-                 transport_eqn=TransportEquationForm.no_transport):
-
-        if transport_flag and transport_eqn == TransportEquationForm.no_transport:
-            raise ValueError('If tracer is to be transported, transport_eqn must be specified')
-        elif not transport_flag and transport_eqn != TransportEquationForm.no_transport:
-            raise ValueError('If tracer is not to be transported, transport_eqn must be no_transport')
-
-        self.name = name
-        self.space = space
-        self.transport_flag = transport_flag
-        self.transport_eqn = transport_eqn
-
-
-class PassiveTracer(Tracer):
-    """
-    A class containing the metadata for a passive tracer variable. This
-    variable does not feed back onto the prognostic variables.
-
-    :arg name:           A string naming the tracer field.
-    :arg space:          A string indicating the function space for the variable.
-    :arg transport_flag: A Boolean indicating if the variable is transported.
-    :arg transport_eqn:  A TransportEquationForm Enum indicating the form of
-                         the transport equation to be used.
-    """
-    def __init__(self, name, space, transport_flag=True,
-                 transport_eqn=TransportEquationForm.advective):
-        super().__init__(name, space, transport_flag, transport_eqn)
-
-
-class ActiveTracer(Tracer):
-    """
-    A class containing the metadata for an active tracer variable, which
-    interacts with the other variables.
+    A class containing the metadata to describe how an active tracer variable
+    is used within an equation set, being added as a component within the
+    MixedFunctionSpace as these variables interact strongly with the other
+    prognostic variables.
 
     :arg name:           A string naming the tracer field.
     :arg space:          A string indicating the function space for the variable.
@@ -105,8 +74,16 @@ class ActiveTracer(Tracer):
     def __init__(self, name, space, variable_type, transport_flag=True,
                  transport_eqn=TransportEquationForm.advective,
                  phase=Phases.gas, is_moisture=False):
-        super().__init__(name, space, transport_flag, transport_eqn)
 
+        if transport_flag and transport_eqn == TransportEquationForm.no_transport:
+            raise ValueError('If tracer is to be transported, transport_eqn must be specified')
+        elif not transport_flag and transport_eqn != TransportEquationForm.no_transport:
+            raise ValueError('If tracer is not to be transported, transport_eqn must be no_transport')
+
+        self.name = name
+        self.space = space
+        self.transport_flag = transport_flag
+        self.transport_eqn = transport_eqn
         self.variable_type = variable_type
         self.phase = phase
         self.is_moisture = is_moisture
@@ -115,7 +92,9 @@ class ActiveTracer(Tracer):
 
 
 class WaterVapour(ActiveTracer):
-
+    """
+    An object encoding the details of water vapour as a tracer.
+    """
     def __init__(self, name='vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,
@@ -125,7 +104,9 @@ class WaterVapour(ActiveTracer):
 
 
 class CloudWater(ActiveTracer):
-
+    """
+    An object encoding the details of cloud water as a tracer.
+    """
     def __init__(self, name='cloud_liquid', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,
@@ -135,7 +116,9 @@ class CloudWater(ActiveTracer):
 
 
 class Rain(ActiveTracer):
-
+    """
+    An object encoding the details of rain as a tracer.
+    """
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,

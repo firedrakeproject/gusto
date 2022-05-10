@@ -17,8 +17,8 @@ from gusto.transport_equation import (advection_form, continuity_form,
                                       linear_continuity_form,
                                       linear_advection_form, IntegrateByParts)
 from gusto.diffusion import interior_penalty_diffusion_form
-from gusto.tracers import (ActiveTracer, Phases, TransportEquationForm,
-                           TracerVariableType)
+from gusto.active_tracers import (ActiveTracer, Phases, TransportEquationForm,
+                                  TracerVariableType)
 import ufl
 
 
@@ -161,13 +161,13 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, tracers=None):
+                 no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = ["u", "D"]
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
 
-        if tracers is not None:
+        if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for shallow water equations')
 
         W = MixedFunctionSpace(spaces)
@@ -258,28 +258,16 @@ class CompressibleEulerEquations(PrognosticEquation):
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
-                 tracers=None):
+                 active_tracers=None):
 
         self.field_names = ['u', 'rho', 'theta']
 
         # Construct spaces for the core set of prognostic variables
         spaces = [space for space in self._build_spaces(state, family, degree)]
 
-        # We will want to loop through tracers / active tracers
-        active_tracers = []
-        if tracers is None:
-            tracers = []
-        # Loop through tracer fields and add field names and spaces
-        for tracer in tracers:
-            if isinstance(tracer, ActiveTracer):
-                active_tracers.append(tracer)
-                if tracer.name not in self.field_names:
-                    self.field_names.append(tracer.name)
-                else:
-                    raise ValueError(f'There is already a field named {tracer.name}')
-                spaces.append(state.spaces(tracer.space))
-            else:
-                raise NotImplementedError('Only active tracers are currently implemented')
+        if active_tracers is None:
+            active_tracers = []
+        add_tracers_to_prognostics(state, self.field_names, spaces, active_tracers)
 
         W = MixedFunctionSpace(spaces)
 
@@ -327,14 +315,7 @@ class CompressibleEulerEquations(PrognosticEquation):
         theta_mass = linearisation(theta_mass, linear_theta_mass)
 
         mass_form = time_derivative(u_mass + rho_mass + theta_mass)
-
-        # Add mass forms for tracers
-        for tracer in active_tracers:
-            idx = self.field_names.index(tracer.name)
-            tracer_prog = split(X)[idx]
-            tracer_test = tests[idx]
-            tracer_mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, tracer.name), X)
-            mass_form += time_derivative(tracer_mass)
+        mass_form += tracer_mass_forms(X, tests, self.field_names, active_tracers)
 
         # define velocity advection form
         if u_advection_option == "vector_invariant_form":
@@ -370,21 +351,8 @@ class CompressibleEulerEquations(PrognosticEquation):
         theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
+        adv_form += tracer_transport_forms(state, X, tests, self.field_names, active_tracers)
 
-        # Add advection terms for tracers
-        for tracer in active_tracers:
-            if tracer.transport_flag:
-                idx = self.field_names.index(tracer.name)
-                tracer_prog = split(X)[idx]
-                tracer_test = tests[idx]
-                if tracer.transport_eqn == TransportEquationForm.advective:
-                    # TODO: should the ibp twice be here?
-                    tracer_adv = prognostic(advection_form(state, tracer_test, tracer_prog), tracer.name)
-                elif tracer.transport_eqn == TransportEquationForm.conservative:
-                    tracer_adv = prognostic(continuity_form(state, tracer_test, tracer_prog), tracer.name)
-                else:
-                    raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
-                adv_form += subject(tracer_adv, X)
 
         # define pressure gradient form and its linearisation
         tracer_mr_total = zero_expr
@@ -480,14 +448,14 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
                  u_advection_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
-                 tracers=None):
+                 active_tracers=None):
 
         super().__init__(state, family, degree,
                          Omega=Omega, sponge=sponge,
                          u_advection_option=u_advection_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         tracers=tracers)
+                         active_tracers=active_tracers)
 
         dthetady = state.parameters.dthetady
         Pi0 = state.parameters.Pi0
@@ -513,7 +481,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
     def __init__(self, state, family, degree, Omega=None,
                  u_advection_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
-                 tracers=None):
+                 active_tracers=None):
 
         self.field_names = ['u', 'p', 'b']
 
@@ -610,13 +578,13 @@ class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
     def __init__(self, state, family, degree, Omega=None,
                  u_advection_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
-                 tracers=None):
+                 active_tracers=None):
 
         super().__init__(state, family, degree,
                          Omega=Omega,
                          u_advection_option=u_advection_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         tracers=tracers)
+                         active_tracers=active_tracers)
 
         dbdy = state.parameters.dbdy
         H = state.parameters.H
@@ -634,3 +602,92 @@ class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
 
         self.residual += subject(prognostic(
             gamma*dbdy*inner(u, y_vec)*dx, "b"), X)
+
+
+# ============================================================================ #
+# Active Tracer Routines
+# ============================================================================ #
+
+# These should eventually be moved to be routines belonging to the
+# PrognosticEquation class
+# For now they are here so that equation sets above are kept tidy
+
+def add_tracers_to_prognostics(state, field_names, spaces, active_tracers):
+    """
+    This routine adds the active tracers to the equation sets.
+
+    :arg state:          The `State` object.
+    :arg field_names:    The list of field names.
+    :arg spaces:         The list of `FunctionSpace` objects to form the
+                         `MixedFunctionSpace`.
+    :arg active_tracers: A list of `ActiveTracer` objects that encode the
+                         metadata for the active tracers.
+    """
+
+    # Loop through tracer fields and add field names and spaces
+    for tracer in active_tracers:
+        if isinstance(tracer, ActiveTracer):
+            if tracer.name not in field_names:
+                field_names.append(tracer.name)
+            else:
+                raise ValueError(f'There is already a field named {tracer.name}')
+            spaces.append(state.spaces(tracer.space))
+        else:
+            raise ValueError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
+
+
+def tracer_mass_forms(X, tests, field_names, active_tracers):
+    """
+    Adds the mass forms for the active tracers to the equation.
+
+    :arg X:              The prognostic variables on the `MixedFunctionSpace`.
+    :arg tests:          `TestFunctions` for the prognostic variables.
+    :arg field_names:    The list of field names.
+    :arg active_tracers: A list of `ActiveTracer` objects that encode the
+                         metadata for the active tracers.
+    """
+
+    for i, tracer in enumerate(active_tracers):
+        idx = field_names.index(tracer.name)
+        tracer_prog = split(X)[idx]
+        tracer_test = tests[idx]
+        tracer_mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, tracer.name), X)
+        if i == 0:
+            mass_form = time_derivative(tracer_mass)
+        else:
+            mass_form += time_derivative(tracer_mass)
+
+    return mass_form
+
+
+def tracer_transport_forms(state, X, tests, field_names, active_tracers):
+    """
+    Adds the transport forms for the active tracers to the equation.
+
+    :arg state:          The `State` object.
+    :arg X:              The prognostic variables on the `MixedFunctionSpace`.
+    :arg tests:          `TestFunctions` for the prognostic variables.
+    :arg field_names:    The list of field names.
+    :arg active_tracers: A list of `ActiveTracer` objects that encode the
+                         metadata for the active tracers.
+    """
+
+    for i, tracer in enumerate(active_tracers):
+        if tracer.transport_flag:
+            idx = field_names.index(tracer.name)
+            tracer_prog = split(X)[idx]
+            tracer_test = tests[idx]
+            if tracer.transport_eqn == TransportEquationForm.advective:
+                # TODO: should the ibp twice be here?
+                tracer_adv = prognostic(advection_form(state, tracer_test, tracer_prog), tracer.name)
+            elif tracer.transport_eqn == TransportEquationForm.conservative:
+                tracer_adv = prognostic(continuity_form(state, tracer_test, tracer_prog), tracer.name)
+            else:
+                raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
+
+            if i == 0:
+                adv_form = subject(tracer_adv, X)
+            else:
+                adv_form += subject(tracer_adv, X)
+
+    return adv_form

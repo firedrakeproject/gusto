@@ -44,7 +44,7 @@ def setup_unsaturated(dirname, recovered):
     else:
         u_advection_option = "vector_invariant_form"
     eqns = CompressibleEulerEquations(
-        state, "CG", degree, u_advection_option=u_advection_option, tracers=tracers)
+        state, "CG", degree, u_advection_option=u_advection_option, active_tracers=tracers)
 
     # Initial conditions
     u0 = state.fields("u")

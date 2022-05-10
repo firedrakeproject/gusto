@@ -16,4 +16,4 @@ from gusto.state import *                            # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_equation import *               # noqa
 from gusto.fml import *                              # noqa
-from gusto.tracers import *                          # noqa
+from gusto.active_tracers import *                   # noqa

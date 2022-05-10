@@ -64,7 +64,7 @@ else:
 
 eqns = CompressibleEulerEquations(state, "CG", degree,
                                   diffusion_options=diffusion_options,
-                                  tracers=tracers)
+                                  active_tracers=tracers)
 
 # Initial conditions
 u0 = state.fields("u")

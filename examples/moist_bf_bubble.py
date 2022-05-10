@@ -66,7 +66,7 @@ state = State(mesh,
               parameters=params,
               diagnostic_fields=diagnostic_fields)
 
-eqns = CompressibleEulerEquations(state, "CG", degree, tracers=tracers)
+eqns = CompressibleEulerEquations(state, "CG", degree, active_tracers=tracers)
 
 # Initial conditions
 u0 = state.fields("u")
