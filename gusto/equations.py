@@ -315,7 +315,8 @@ class CompressibleEulerEquations(PrognosticEquation):
         theta_mass = linearisation(theta_mass, linear_theta_mass)
 
         mass_form = time_derivative(u_mass + rho_mass + theta_mass)
-        mass_form += tracer_mass_forms(X, tests, self.field_names, active_tracers)
+        if len(active_tracers) > 0:
+            mass_form += tracer_mass_forms(X, tests, self.field_names, active_tracers)
 
         # define velocity advection form
         if u_advection_option == "vector_invariant_form":
@@ -351,8 +352,8 @@ class CompressibleEulerEquations(PrognosticEquation):
         theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
-        adv_form += tracer_transport_forms(state, X, tests, self.field_names, active_tracers)
-
+        if len(active_tracers) > 0:
+            adv_form += tracer_transport_forms(state, X, tests, self.field_names, active_tracers)
 
         # define pressure gradient form and its linearisation
         tracer_mr_total = zero_expr
@@ -487,7 +488,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
 
         spaces = state.spaces.build_compatible_spaces(family, degree)
 
-        if tracers is not None:
+        if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for Boussinesq equations')
 
         W = MixedFunctionSpace(spaces)

@@ -581,8 +581,8 @@ class State(object):
                 # a Function
                 ref = self.fields(name+'bar', space=profile.function_space(), dump=False)
             else:
-                raise ValueError(f'When initialising reference profile {name}'+
-                                 f' the passed profile must be a Function')
+                raise ValueError(f'When initialising reference profile {name}'
+                                 + ' the passed profile must be a Function')
             ref.interpolate(profile)
 
 
