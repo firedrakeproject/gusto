@@ -58,6 +58,7 @@ output = OutputParameters(dirname=dirname,
 params = CompressibleParameters()
 diagnostic_fields = [Theta_e(), InternalEnergy(),
                      Perturbation('InternalEnergy'), PotentialEnergy()]
+tracers = [WaterVapour(), CloudWater()]
 
 state = State(mesh,
               dt=dt,
@@ -65,15 +66,15 @@ state = State(mesh,
               parameters=params,
               diagnostic_fields=diagnostic_fields)
 
-eqns = MoistCompressibleEulerEquations(state, "CG", degree)
+eqns = CompressibleEulerEquations(state, "CG", degree, active_tracers=tracers)
 
 # Initial conditions
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
-water_v0 = state.fields("water_v")
-water_c0 = state.fields("water_c")
-moisture = ["water_v", "water_c"]
+water_v0 = state.fields("vapour_mixing_ratio")
+water_c0 = state.fields("cloud_liquid_mixing_ratio")
+moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio"]
 
 # spaces
 Vu = state.spaces("HDiv")
@@ -153,11 +154,12 @@ water_c0.assign(water_t - water_v0)
 
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
-                              ('water_v', water_vb)])
+                              ('vapour_mixing_ratio', water_vb)])
 
 # set up limiter
 if limit:
     if recovered:
+        VDG1 = state.spaces("DG1", "DG", 1)
         limiter = VertexBasedLimiter(VDG1)
     else:
         limiter = ThetaLimiter(Vt)
@@ -167,7 +169,7 @@ else:
 
 # Set up advection schemes
 if recovered:
-    VDG1 = state.spaces("DG", "DG", 1)
+    VDG1 = state.spaces("DG1", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
     Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
     Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
@@ -184,17 +186,17 @@ if recovered:
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)
-    u_advection = SSPRK3(state, "u")
+    u_advection = SSPRK3(state, "u", options=u_opts)
 else:
     rho_opts = None
     theta_opts = EmbeddedDGOptions()
     u_advection = ImplicitMidpoint(state, "u")
 
-advected_fields = [u_advection,
-                   SSPRK3(state, "rho", options=rho_opts),
+advected_fields = [SSPRK3(state, "rho", options=rho_opts),
                    SSPRK3(state, "theta", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "water_v", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "water_c", options=theta_opts, limiter=limiter)]
+                   SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
+                   SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
+                   u_advection]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)

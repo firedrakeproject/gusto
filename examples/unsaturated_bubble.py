@@ -45,10 +45,11 @@ if diffusion:
     dirname += '_diffusion'
 
 output = OutputParameters(dirname=dirname, dumpfreq=20,
-                          perturbation_fields=['theta', 'water_v', 'rho'],
+                          perturbation_fields=['theta', 'vapour_mixing_ratio', 'rho'],
                           log_level='INFO')
 params = CompressibleParameters()
 diagnostic_fields = [RelativeHumidity(), Theta_e()]
+tracers = [WaterVapour(), CloudWater(), Rain()]
 
 state = State(mesh,
               dt=dt,
@@ -61,17 +62,18 @@ if diffusion:
 else:
     diffusion_options = None
 
-eqns = MoistCompressibleEulerEquations(state, "CG", 1,
-                                       diffusion_options=diffusion_options)
+eqns = CompressibleEulerEquations(state, "CG", degree,
+                                  diffusion_options=diffusion_options,
+                                  active_tracers=tracers)
 
 # Initial conditions
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
-water_v0 = state.fields("water_v")
-water_c0 = state.fields("water_c")
+water_v0 = state.fields("vapour_mixing_ratio")
+water_c0 = state.fields("cloud_liquid_mixing_ratio")
 rain0 = state.fields("rain", theta0.function_space())
-moisture = ["water_v", "water_c", "rain"]
+moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio", "rain_mixing_ratio"]
 
 # spaces
 Vu = state.spaces("HDiv")
@@ -84,7 +86,7 @@ dxp = dx(degree=(quadrature_degree))
 physics_boundary_method = None
 
 if recovered:
-    VDG1 = state.spaces("DG1")
+    VDG1 = state.spaces("DG1", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
     Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
     Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
@@ -99,8 +101,7 @@ if recovered:
                                 boundary_method=Boundary_Method.dynamics)
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
-                                  broken_space=Vt_brok,
-                                  boundary_method=Boundary_Method.dynamics)
+                                  broken_space=Vt_brok)
     physics_boundary_method = Boundary_Method.physics
 
 # Define constant theta_e and water_t
@@ -208,11 +209,11 @@ for i in range(max_outer_solve_count):
 # initialise fields
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
-                              ('water_v', water_vb)])
+                              ('vapour_mixing_ratio', water_vb)])
 
 # Set up advection schemes
 if recovered:
-    u_advection = SSPRK3(state, "u")
+    u_advection = SSPRK3(state, "u", options=u_opts)
     rho_opts = EmbeddedDGOptions()
     theta_opts = EmbeddedDGOptions()
     limiter = VertexBasedLimiter(VDG1)
@@ -226,9 +227,9 @@ else:
 advected_fields = [u_advection,
                    SSPRK3(state, "rho", options=rho_opts),
                    SSPRK3(state, "theta", options=theta_opts),
-                   SSPRK3(state, "water_v", limiter=limiter),
-                   SSPRK3(state, "water_c", limiter=limiter),
-                   SSPRK3(state, "rain", limiter=limiter)]
+                   SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
+                   SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
+                   SSPRK3(state, "rain_mixing_ratio", options=theta_opts, limiter=limiter)]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)

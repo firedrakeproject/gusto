@@ -36,7 +36,7 @@ def setup_condens(dirname):
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=[Sum('water_v', 'water_c')])
+                  diagnostic_fields=[Sum('vapour_mixing_ratio', 'cloud_liquid_mixing_ratio')])
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
@@ -46,14 +46,14 @@ def setup_condens(dirname):
     # set up equations
     rhoeqn = ContinuityEquation(state, Vr, "rho", ufamily="CG", udegree=1)
     thetaeqn = AdvectionEquation(state, Vt, "theta")
-    wveqn = AdvectionEquation(state, Vt, "water_v")
-    wceqn = AdvectionEquation(state, Vt, "water_c")
+    wveqn = AdvectionEquation(state, Vt, "vapour_mixing_ratio")
+    wceqn = AdvectionEquation(state, Vt, "cloud_liquid_mixing_ratio")
 
     # declare initial fields
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("water_v")
+    water_v0 = state.fields("vapour_mixing_ratio")
 
     # make a gradperp
     gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
@@ -122,7 +122,7 @@ def test_condens_setup(tmpdir):
     filename = path.join(dirname, "condens/diagnostics.nc")
     data = Dataset(filename, "r")
 
-    water = data.groups["water_v_plus_water_c"]
+    water = data.groups["vapour_mixing_ratio_plus_cloud_liquid_mixing_ratio"]
     total = water.variables["total"]
     water_t_0 = total[0]
     water_t_T = total[-1]

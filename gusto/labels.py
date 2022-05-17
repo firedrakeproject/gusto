@@ -1,5 +1,5 @@
 import ufl
-from firedrake import Function, split
+from firedrake import Function, split, VectorElement
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
 
 
@@ -35,10 +35,15 @@ def replace_subject(new, idx=None):
                 if idx is None:
                     for k, v in zip(split(subj), split(new)):
                         replace_dict[k] = v
+                # TODO: Could we do something better here?
+                elif isinstance(new.ufl_element(), VectorElement):
+                    replace_dict[split(subj)[idx]] = new
                 else:
                     try:
+                        # This needs to handle with MixedFunctionSpace and
+                        # VectorFunctionSpace differently
                         replace_dict[split(subj)[idx]] = split(new)[idx]
-                    except:
+                    except IndexError:
                         replace_dict[split(subj)[idx]] = new
 
         else:

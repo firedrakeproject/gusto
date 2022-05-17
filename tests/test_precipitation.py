@@ -28,7 +28,7 @@ def setup_fallout(dirname):
     dt = 0.1
     output = OutputParameters(dirname=dirname+"/fallout",
                               dumpfreq=10,
-                              dumplist=['rain'])
+                              dumplist=['rain_mixing_ratio'])
     parameters = CompressibleParameters()
     diagnostic_fields = [Precipitation()]
     state = State(mesh,
@@ -42,7 +42,7 @@ def setup_fallout(dirname):
     state.fields("rho").assign(1.)
 
     physics_list = [Fallout(state)]
-    rain0 = state.fields("rain")
+    rain0 = state.fields("rain_mixing_ratio")
 
     # set up rain
     xc = L / 2
@@ -77,7 +77,7 @@ def test_fallout_setup(tmpdir):
     filename = path.join(dirname, "fallout/diagnostics.nc")
     data = Dataset(filename, "r")
 
-    rain = data.groups["rain"]
+    rain = data.groups["rain_mixing_ratio"]
     final_rain = rain.variables["total"][-1]
     final_rms_rain = rain.variables["rms"][-1]
 
