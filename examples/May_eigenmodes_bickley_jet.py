@@ -36,17 +36,17 @@ u, v, eta = TrialFunction(Z)
 w, tau, phi = TestFunction(Z)
 
 # plot functions to check
-plot_u_bar = Function(V)
-plot_u_bar.interpolate(u_bar)
-plot(plot_u_bar)
+u_bar_function = Function(V)
+u_bar_function.interpolate(u_bar)
+plot(u_bar_function)
 plt.show()
-plot_eta_bar = Function(V)
-plot_eta_bar.interpolate(eta_bar)
-plot(plot_eta_bar)
+eta_bar_function = Function(V)
+eta_bar_function.interpolate(eta_bar)
+plot(eta_bar_function)
 plt.show()
 
-# boundary conditions: Dirichlet conditions enforcing u = 0 on both ends of the interval
-bc = DirichletBC(Z.sub(0), 0, "on_boundary")
+# boundary conditions: Dirichlet conditions enforcing v = 0 on both ends of the interval
+bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
 
 # set up arrays to store all k's, eigenvectors and eigenvalues
 k_list = []
@@ -55,26 +55,28 @@ eigenmode_list = []
 sigma_list = []
 
 # loop over range of k values
-for n in np.arange(0.001, 0.02, 0.001):
+for n in np.arange(0.0005, 0.02, 0.001):
     k = (2*pi*n*Ly)/L
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
-    a = w * u_bar * u * dx
-    - tau * 1/(Ro*k**2) * u * dx
-    + phi * (eta_bar + Bu/Ro) * u * dx
-    + w * (u_bar.dx(0)- 1/Ro) * v * dx
-    + tau * u_bar * v * dx
-    + phi * (eta_bar.dx(0) + eta_bar * v.dx(0) + Bu/Ro * v.dx(0)) * dx
-    + w * 1/Ro * eta * dx
-    - tau * 1/(Ro*k**2) * eta.dx(0) * dx
-    + phi * u_bar * eta * dx
+    a = (
+        w * u_bar_function * u * dx
+         - tau * 1/(Ro*k**2) * u * dx
+         + phi * (eta_bar_function + Bu/Ro) * u * dx
+         + w * (u_bar_function.dx(0) - 1/Ro) * v * dx
+         + tau * u_bar_function * v * dx
+         + phi * (eta_bar_function.dx(0) * v + eta_bar_function * v.dx(0) + Bu/Ro * v.dx(0)) * dx
+         + w * 1/Ro * eta * dx
+         - tau * 1/(Ro*k**2) * eta.dx(0) * dx
+         + phi * u_bar_function * eta * dx
+        )
 
     m = (u * w + v * tau + eta * phi) * dx
 
     petsc_a = assemble(a).M.handle
     petsc_m = assemble(m, bcs=bc).M.handle
-
+    
     num_eigenvalues = 1
 
     opts = PETSc.Options()
@@ -112,3 +114,16 @@ print("maximum growth rate: %f" %max_sigma)
 index = np.argmax(sigma_list)
 k_value = k_list[index]
 print("k value corresponding to the maximum growth rate: %f" %k_value)
+
+# Plot figures
+plt.scatter(k_list, np.real(eigenvalue_list))
+plt.xlabel('k')
+plt.ylabel('c_p')
+plt.show()
+#plt.savefig('cp_plot')
+
+plt.scatter(k_list, sigma_list)
+plt.xlabel('k')
+plt.ylabel('sigma')
+plt.show()
+#plt.savefig('growth_rate_plot')
