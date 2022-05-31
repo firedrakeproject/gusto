@@ -14,18 +14,20 @@ nx = int(Lx/delta)
 mesh = PeriodicRectangleMesh(nx, nx, Lx, Ly, direction="x")
 
 # set up parameters
-dt = 400
+dt = 200
 H = 30.
 g = 10
 fexpr = Constant(0)
 nu_u = (1.5e4)/4
 nu_D = (1e4)/4
 
+day = 24*60*60
+
 parameters=ShallowWaterParameters(H=H, g=g)
 
-dirname="dry_sw_gaussian"
+dirname="VP_dry_sw_gaussian_CN"
 
-output = OutputParameters(dirname=dirname, dumpfreq=10)
+output = OutputParameters(dirname=dirname, dumpfreq=100) # day/(dt*4)
 
 diagnostic_fields = [CourantNumber()]
 
@@ -60,6 +62,11 @@ D0 = state.fields("D")
 gaussian = 11*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
 D0.interpolate(Constant(H) - 0.01 * gaussian)
 
-stepper = Timestepper(state, ((eqns, SSPRK3(state)),),)
+advected_fields = [ImplicitMidpoint(state, "u"),
+                       SSPRK3(state, "D")]
 
-stepper.run(t=0, tmax=5400*dt) # 25 days
+stepper = CrankNicolson(state, eqns, advected_fields)
+
+#stepper = Timestepper(state, ((eqns, RK4(state)),),)
+
+stepper.run(t=0, tmax=10*day)
