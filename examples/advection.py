@@ -19,7 +19,7 @@ state = State(mesh, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
 
 uexpr = as_vector([-x[1], x[0], 0.0])
 
-tmax = pi/2
+tmax = pi
 f_init = exp(-x[2]**2 - x[0]**2)
 
 V = state.spaces("DG", "DG", 1)
