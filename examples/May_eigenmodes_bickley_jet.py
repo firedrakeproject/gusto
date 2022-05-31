@@ -26,9 +26,6 @@ y = SpatialCoordinate(mesh)[0]
 
 coordinate = (y - 0.5 * (Ly/Rd))/L
 
-u_bar = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
-eta_bar = H - d_eta * (sinh(coordinate)/cosh(coordinate))
-
 # set up spaces
 V = FunctionSpace(mesh, "CG", 2)
 Z = V*V*V
@@ -36,13 +33,12 @@ u, v, eta = TrialFunction(Z)
 w, tau, phi = TestFunction(Z)
 
 # plot functions to check
-u_bar_function = Function(Z.sub(0))
-u_bar_function.interpolate(u_bar)
-plot(u_bar_function)
+u_bar, _, eta_bar = Function(Z).split()
+u_bar.interpolate((g * d_eta)/(f*L) * (1/cosh(coordinate))**2)
+plot(u_bar)
 plt.show()
-eta_bar_function = Function(Z.sub(2))
-eta_bar_function.interpolate(eta_bar)
-plot(eta_bar_function)
+eta_bar.interpolate(H - d_eta * (sinh(coordinate)/cosh(coordinate)))
+plot(eta_bar)
 plt.show()
 
 # boundary conditions: Dirichlet conditions enforcing v = 0 on both ends of the interval
@@ -55,21 +51,21 @@ eigenmode_list = []
 sigma_list = []
 
 # loop over range of k values
-for n in np.arange(0.0005, 0.02, 0.001):
+for n in np.arange(0.0005, 0.02, 0.01):
     k = (2*pi*n*Ly)/L
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
     a = (
-        w * u_bar_function * u * dx
+        w * u_bar * u * dx
          - tau * 1/(Ro*k**2) * u * dx
-         + phi * (eta_bar_function + Bu/Ro) * u * dx
-         + w * (u_bar_function.dx(0) - 1/Ro) * v * dx
-         + tau * u_bar_function * v * dx
-         + phi * (eta_bar_function.dx(0) * v + eta_bar_function * v.dx(0) + Bu/Ro * v.dx(0)) * dx
+         + phi * (eta_bar + Bu/Ro) * u * dx
+         + w * (u_bar.dx(0) - 1/Ro) * v * dx
+         + tau * u_bar * v * dx
+         + phi * (eta_bar.dx(0) * v + eta_bar * v.dx(0) + Bu/Ro * v.dx(0)) * dx
          + w * 1/Ro * eta * dx
          - tau * 1/(Ro*k**2) * eta.dx(0) * dx
-         + phi * u_bar_function * eta * dx
+         + phi * u_bar * eta * dx
         )
 
     m = (u * w + v * tau + eta * phi) * dx
@@ -128,3 +124,30 @@ plt.xlabel('k')
 plt.ylabel('sigma')
 plt.show()
 #plt.savefig('growth_rate_plot')
+
+
+def interp(f1, f2):
+    def mydata(X):
+        Z = np.zeros_like(f2.dat.data[:])
+        for i in range(len(X)):
+            j = np.where(X1.dat.data_ro==X[i][1])
+            Z[i] = f1.dat.data[j]
+        return Z
+    return mydata
+
+
+# Get coordinates of interval mesh at degrees of freedom of profile
+m1 = V.ufl_domain()
+W1 = VectorFunctionSpace(m1, V.ufl_element())
+X1 = interpolate(m1.coordinates, W1)
+
+# create 2D mesh
+mesh = RectangleMesh(nx, nx, Ly/Rd, Ly/Rd)
+V2 = FunctionSpace(mesh, "CG", 2)
+W2 = VectorFunctionSpace(mesh, V2.ufl_element())
+X2 = interpolate(mesh.coordinates, W2)
+
+u2 = Function(V2)
+u2.dat.data[:] = interp(u_bar, u2)(X2.dat.data_ro)
+tricontourf(u2)
+plt.show()
