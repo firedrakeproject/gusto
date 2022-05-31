@@ -36,11 +36,11 @@ u, v, eta = TrialFunction(Z)
 w, tau, phi = TestFunction(Z)
 
 # plot functions to check
-u_bar_function = Function(V)
+u_bar_function = Function(Z.sub(0))
 u_bar_function.interpolate(u_bar)
 plot(u_bar_function)
 plt.show()
-eta_bar_function = Function(V)
+eta_bar_function = Function(Z.sub(2))
 eta_bar_function.interpolate(eta_bar)
 plot(eta_bar_function)
 plt.show()
@@ -82,6 +82,7 @@ for n in np.arange(0.0005, 0.02, 0.001):
     opts = PETSc.Options()
     opts.setValue("eps_gen_non_hermitian", None)
     opts.setValue("st_pc_factor_shift_type", "NONZERO")
+    opts.setValue("eps_type", "lapack")
     opts.setValue("eps_largest_imaginary", None)
     opts.setValue("eps_tol", 1e-10)
 
