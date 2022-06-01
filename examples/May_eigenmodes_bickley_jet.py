@@ -5,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # set up parameters
-f = 1
-g = 1
+f = 10
+g = 10
 L = 0.1
 Ro = 0.1
 Bu = 10
@@ -15,16 +15,18 @@ H = (f**2 * L**2 * Bu)/g
 d_eta = (f * L * U)/g
 
 # set up mesh
+Rd = sqrt(g * H)/f
 Ly = 2
 nx = 100
-Rd = sqrt(g * H)/f
 print(Rd)
 print(H)
-mesh = IntervalMesh(nx, Ly/Rd)
+mesh = IntervalMesh(nx, Ly)
+#mesh = IntervalMesh(nx, Ly/Rd)
 
 y = SpatialCoordinate(mesh)[0]
 
-coordinate = (y - 0.5 * (Ly/Rd))/L
+coordinate = (y - 0.5*Ly)/L
+#coordinate = (y - 0.5 * (Ly/Rd))/L
 
 # set up spaces
 V = FunctionSpace(mesh, "CG", 2)
@@ -37,7 +39,7 @@ u_bar, _, eta_bar = Function(Z).split()
 u_bar.interpolate((g * d_eta)/(f*L) * (1/cosh(coordinate))**2)
 plot(u_bar)
 plt.show()
-eta_bar.interpolate(H - d_eta * (sinh(coordinate)/cosh(coordinate)))
+eta_bar.interpolate(-d_eta * (sinh(coordinate)/cosh(coordinate)))
 plot(eta_bar)
 plt.show()
 
@@ -51,8 +53,8 @@ eigenmode_list = []
 sigma_list = []
 
 # loop over range of k values
-for n in np.arange(0.0005, 0.02, 0.01):
-    k = (2*pi*n*Ly)/L
+for n in np.arange(0.00008, 0.019, 0.002): # np.arange(0.005, 0.16, 0.005):  
+    k = (2*pi*n*2)/L
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
