@@ -6,11 +6,12 @@ from firedrake import (Function, NonlinearVariationalProblem,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import logger, DEBUG
-from gusto.labels import (time_derivative, advecting_velocity, prognostic,
-                          replace_subject, replace_test_function)
+from gusto.configuration import logger, DEBUG, TransportEquationType
+from gusto.labels import (time_derivative, advecting_velocity, prognostic, subject,
+                          advection, ibp_label, replace_subject, replace_test_function)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
+from gusto.transport_equation import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
@@ -129,6 +130,13 @@ class Advection(object, metaclass=ABCMeta):
 
         options = self.options
 
+        # TODO: this if statement is a hack for now to prevent errors being
+        # triggered if there are no terms with the "advection" label
+        # or indeed multiple terms (e.g. for mixed test functions)
+        # This is because the label_map routine throws an error when there
+        # are no terms satisfying the term_filter
+        if any([t.has_label(advection) for t in self.residual]) and hasattr(self.options, 'ibp'):
+            self.replace_transport_term()
         self.replace_advecting_velocity(uadv)
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
@@ -273,6 +281,47 @@ class Advection(object, metaclass=ABCMeta):
             map_if_false=lambda t: -self.dt*t)
 
         return r.form
+
+    def replace_transport_term(self):
+        """
+        This routine allows the default transport term to be replaced with a
+        different one, specified through the transport options.
+
+        This is necessary because when the prognostic equations are declared,
+        the whole transport
+        """
+        # TODO: go through this really carefully to see if this is the right way of doing things
+        # Extract transport term of equation
+        old_transport_term_list = self.residual.label_map(
+            lambda t: t.has_label(advection), map_if_false=drop)
+
+        # If there are more transport terms, extract only the one for this variable
+        if len(old_transport_term_list.terms) > 1:
+            raise NotImplementedError('Cannot replace transport terms when there are more than one')
+
+        # Then we should only have one transport term
+        old_transport_term = old_transport_term_list.terms[0]
+
+        # If the transport term has an ibp label, then it could be replaced
+        if old_transport_term.has_label(ibp_label) and hasattr(self.options, 'ibp'):
+            # Do the options specify a different ibp to the old transport term?
+            if old_transport_term.labels['ibp'] != self.options.ibp:
+                # Set up a new transport term
+                field = self.state.fields(self.field_name)
+                test = TestFunction(self.fs)
+
+                # Set up new transport term (depending on the type of transport equation)
+                if old_transport_term.labels['advection'] == TransportEquationType.advective:
+                    new_transport_term = advection_form(self.state, test, field, ibp=self.options.ibp)
+                elif old_transport_term.labels['advection'] == TransportEquationType.conservative:
+                    new_transport_term = continuity_form(self.state, test, field, ibp=self.options.ibp)
+                else:
+                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_terms.labels["advection"]}')
+
+                # Finally, drop the old transport term and add the new one
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(advection), map_if_true=drop)
+                self.residual += subject(new_transport_term, field)
 
     def replace_advecting_velocity(self, uadv):
         # replace the advecting velocity in any terms that contain it

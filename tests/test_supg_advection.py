@@ -25,14 +25,14 @@ def test_supg_advection_scalar(tmpdir, equation_form, scheme, space,
         V = state.spaces("theta", degree=1)
         ibp = IntegrateByParts.TWICE
 
-    opts = SUPGOptions()
+    opts = SUPGOptions(ibp=ibp)
 
     if equation_form == "advective":
         eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                                udegree=setup.degree, ibp=ibp)
+                                udegree=setup.degree)
     else:
         eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
-                                 udegree=setup.degree, ibp=ibp)
+                                 udegree=setup.degree)
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
@@ -61,14 +61,14 @@ def test_supg_advection_vector(tmpdir, equation_form, scheme, space,
         V = state.spaces("HDiv", setup.family, setup.degree)
         ibp = IntegrateByParts.TWICE
 
-    opts = SUPGOptions()
+    opts = SUPGOptions(ibp=ibp)
 
     if equation_form == "advective":
         eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                                udegree=setup.degree, ibp=ibp)
+                                udegree=setup.degree)
     else:
         eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
-                                 udegree=setup.degree, ibp=ibp)
+                                 udegree=setup.degree)
     f = state.fields("f")
     if space == "CG":
         f.interpolate(f_init)

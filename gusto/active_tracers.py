@@ -8,23 +8,10 @@ what type of variable the tracer is, what phase it is, etc).
 """
 
 from enum import Enum
+from gusto.configuration import TransportEquationType
 
-__all__ = ["TransportEquationForm", "TracerVariableType", "Phases",
-           "ActiveTracer", "WaterVapour", "CloudWater", "Rain"]
-
-
-class TransportEquationForm(Enum):
-    """
-    An Enum object which stores the forms of the transport equation. For
-    transporting velocity 'u' and transported quantity 'q', these equations are:
-
-    advective: dq / dt + dot(u, grad(q)) = 0
-    conservative: dq / dt + div(q*u) = 0
-    """
-
-    no_transport = 702
-    advective = 19
-    conservative = 291
+__all__ = ["TracerVariableType", "Phases", "ActiveTracer",
+           "WaterVapour", "CloudWater", "Rain"]
 
 
 class TracerVariableType(Enum):
@@ -66,18 +53,18 @@ class ActiveTracer(object):
     :arg variable_type:  A TracerVariableType Enum indicating the type of tracer
                          variable (e.g. mixing ratio or density).
     :arg transport_flag: A Boolean indicating if the variable is transported.
-    :arg transport_eqn:  A TransportEquationForm Enum indicating the form of
+    :arg transport_eqn:  A TransportEquationType Enum indicating the form of
                          the transport equation to be used.
     :arg phase:          A Phases Enum indicating the phase of the variable.
     :arg is_moisture:    A Boolean indicating whether the variable is moisture.
     """
     def __init__(self, name, space, variable_type, transport_flag=True,
-                 transport_eqn=TransportEquationForm.advective,
+                 transport_eqn=TransportEquationType.advective,
                  phase=Phases.gas, is_moisture=False):
 
-        if transport_flag and transport_eqn == TransportEquationForm.no_transport:
+        if transport_flag and transport_eqn == TransportEquationType.no_transport:
             raise ValueError('If tracer is to be transported, transport_eqn must be specified')
-        elif not transport_flag and transport_eqn != TransportEquationForm.no_transport:
+        elif not transport_flag and transport_eqn != TransportEquationType.no_transport:
             raise ValueError('If tracer is not to be transported, transport_eqn must be no_transport')
 
         self.name = name
@@ -98,7 +85,7 @@ class WaterVapour(ActiveTracer):
     def __init__(self, name='vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,
-                 transport_eqn=TransportEquationForm.advective):
+                 transport_eqn=TransportEquationType.advective):
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
                          transport_flag, phase=Phases.gas, is_moisture=True)
 
@@ -110,7 +97,7 @@ class CloudWater(ActiveTracer):
     def __init__(self, name='cloud_liquid', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,
-                 transport_eqn=TransportEquationForm.advective):
+                 transport_eqn=TransportEquationType.advective):
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
                          transport_flag, phase=Phases.liquid, is_moisture=True)
 
@@ -122,6 +109,6 @@ class Rain(ActiveTracer):
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_flag=True,
-                 transport_eqn=TransportEquationForm.advective):
+                 transport_eqn=TransportEquationType.advective):
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
                          transport_flag, phase=Phases.liquid, is_moisture=True)

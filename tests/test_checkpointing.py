@@ -23,7 +23,6 @@ def setup_sk(dirname):
     points = np.array([p for p in itertools.product(points_x, points_z)])
 
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumpfreq=5, dumplist=['u'], log_level=INFO, perturbation_fields=['theta', 'rho'],
-
                               point_data=[('rho', points), ('u', points)])
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]

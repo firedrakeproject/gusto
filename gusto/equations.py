@@ -15,10 +15,10 @@ from gusto.transport_equation import (advection_form, continuity_form,
                                       kinetic_energy_form,
                                       advection_equation_circulation_form,
                                       linear_continuity_form,
-                                      linear_advection_form, IntegrateByParts)
+                                      linear_advection_form)
 from gusto.diffusion import interior_penalty_diffusion_form
-from gusto.active_tracers import (ActiveTracer, Phases, TransportEquationForm,
-                                  TracerVariableType)
+from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
+from gusto.configuration import IntegrateByParts, TransportEquationType
 import ufl
 
 
@@ -343,8 +343,7 @@ class CompressibleEulerEquations(PrognosticEquation):
                 t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
         rho_adv = linearisation(rho_adv, linear_rho_adv)
 
-        # TODO: should the ibp twice be here?
-        theta_adv = prognostic(advection_form(state, gamma, theta, ibp=IntegrateByParts.TWICE), "theta")
+        theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
         linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
             lambda t: t.has_label(advecting_velocity),
             lambda t: Term(ufl.replace(
@@ -391,10 +390,10 @@ class CompressibleEulerEquations(PrognosticEquation):
             for tracer in active_tracers:
                 if tracer.is_moisture:
                     if tracer.variable_type == TracerVariableType.mixing_ratio:
+                        idx = self.field_names.index(tracer.name)
                         if tracer.phase == Phases.gas:
                             mr_v += split(X)[idx]
                         elif tracer.phase == Phases.liquid:
-                            idx = self.field_names.index(tracer.name)
                             mr_l += split(X)[idx]
                     else:
                         raise NotImplementedError('Only mixing ratio tracers are implemented')
@@ -551,7 +550,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
 
-        b_adv = prognostic(advection_form(state, gamma, b, ibp=IntegrateByParts.TWICE), "b")
+        b_adv = prognostic(advection_form(state, gamma, b), "b")
         linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
             lambda t: t.has_label(advecting_velocity),
             lambda t: Term(ufl.replace(
@@ -678,10 +677,9 @@ def tracer_transport_forms(state, X, tests, field_names, active_tracers):
             idx = field_names.index(tracer.name)
             tracer_prog = split(X)[idx]
             tracer_test = tests[idx]
-            if tracer.transport_eqn == TransportEquationForm.advective:
-                # TODO: should the ibp twice be here?
+            if tracer.transport_eqn == TransportEquationType.advective:
                 tracer_adv = prognostic(advection_form(state, tracer_test, tracer_prog), tracer.name)
-            elif tracer.transport_eqn == TransportEquationForm.conservative:
+            elif tracer.transport_eqn == TransportEquationType.conservative:
                 tracer_adv = prognostic(continuity_form(state, tracer_test, tracer_prog), tracer.name)
             else:
                 raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
