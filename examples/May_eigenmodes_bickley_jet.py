@@ -20,13 +20,14 @@ Ly = 2
 nx = 100
 print(Rd)
 print(H)
-mesh = IntervalMesh(nx, Ly)
-#mesh = IntervalMesh(nx, Ly/Rd)
+#mesh = IntervalMesh(nx, Ly)
+mesh = IntervalMesh(nx, Ly/Rd)
 
 y = SpatialCoordinate(mesh)[0]
 
-coordinate = (y - 0.5*Ly)/L
-#coordinate = (y - 0.5 * (Ly/Rd))/L
+#coordinate = (y - 0.5*Ly)/L
+coordinate = (y - 0.5 * (Ly/Rd))/L
+print(coordinate)
 
 # set up spaces
 V = FunctionSpace(mesh, "CG", 2)
@@ -53,7 +54,7 @@ eigenmode_list = []
 sigma_list = []
 
 # loop over range of k values
-for n in np.arange(0.00008, 0.019, 0.002): # np.arange(0.005, 0.16, 0.005):  
+for n in np.arange(0.005, 0.16, 0.005): # np.arange(0.00008, 0.019, 0.002):
     k = (2*pi*n*2)/L
     print(k)
     eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
