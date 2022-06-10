@@ -108,13 +108,13 @@ class LabelledForm(object):
         `map_if_true`; terms for which `term_filter` is false are
         transformed by map_is_false."""
 
-        # TODO: I think this should return an empty list if there are no
-        # terms obeying the term filter? Do we need a null term?
         return LabelledForm(
             functools.reduce(operator.add,
                              filter(lambda t: t is not None,
                                     (map_if_true(t) if term_filter(t) else
-                                     map_if_false(t) for t in self.terms))))
+                                     map_if_false(t) for t in self.terms)),
+                             # initialiser for if the list is empty
+                             None))
 
     @property
     def form(self):

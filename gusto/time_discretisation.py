@@ -133,12 +133,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Routines relating to transport
         # -------------------------------------------------------------------- #
 
-        # TODO: this if statement is a hack for now to prevent errors being
-        # triggered if there are no terms with the "transport" label
-        # or indeed multiple terms (e.g. for mixed test functions)
-        # This is because the label_map routine throws an error when there
-        # are no terms satisfying the term_filter
-        if any([t.has_label(transport) for t in self.residual]) and hasattr(self.options, 'ibp'):
+        if hasattr(self.options, 'ibp'):
             self.replace_transport_term()
         self.replace_transporting_velocity(uadv)
 
