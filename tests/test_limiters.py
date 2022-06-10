@@ -7,9 +7,9 @@ from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
 
 # This setup creates a sharp bubble of warm air in a vertical slice
-# This bubble is then advected by a prescribed advection scheme
-# If the limiter is working, the advection should have produced
-# no new maxima or minima. Advection is a solid body rotation.
+# This bubble is then transported by a prescribed transport scheme
+# If the limiter is working, the transport should have produced
+# no new maxima or minima. Transport is a solid body rotation.
 
 
 def setup_limiters(dirname):
@@ -87,7 +87,7 @@ def setup_limiters(dirname):
     moisture_higher.assign(moisture_higher + moist_h_pert_1 + moist_h_pert_2)
     moisture_lower.assign(moisture_lower + moist_l_pert_1 + moist_l_pert_2)
 
-    # set up solid body rotation for advection
+    # set up solid body rotation for transport
     # we do this slightly complicated stream function to make the velocity 0 at edges
     # thus we avoid odd effects at boundaries
     xc = Ld / 2
@@ -109,21 +109,20 @@ def setup_limiters(dirname):
     gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
     u.project(gradperp(psi))
 
-    # set up advection schemes
+    # set up transport schemes
     dg_opts = EmbeddedDGOptions()
     recovered_opts = RecoveredOptions(embedding_space=Vr,
                                       recovered_space=VCG1,
                                       broken_space=Vt0_brok,
                                       boundary_method=Boundary_Method.dynamics)
 
-    # build advection dictionary
-    advection_schemes = []
-    advection_schemes.append((chemeqn, SSPRK3(state, limiter=VertexBasedLimiter(Vr))))
-    advection_schemes.append((moisteqn_higher, SSPRK3(state, options=dg_opts, limiter=ThetaLimiter(Vt))))
-    advection_schemes.append((moisteqn_lower, SSPRK3(state, options=recovered_opts, limiter=VertexBasedLimiter(Vr))))
+    transport_schemes = []
+    transport_schemes.append((chemeqn, SSPRK3(state, limiter=VertexBasedLimiter(Vr))))
+    transport_schemes.append((moisteqn_higher, SSPRK3(state, options=dg_opts, limiter=ThetaLimiter(Vt))))
+    transport_schemes.append((moisteqn_lower, SSPRK3(state, options=recovered_opts, limiter=VertexBasedLimiter(Vr))))
 
     # build time stepper
-    stepper = PrescribedAdvection(state, advection_schemes)
+    stepper = PrescribedTransport(state, transport_schemes)
 
     return stepper, tmax
 

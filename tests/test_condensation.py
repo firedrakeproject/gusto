@@ -102,9 +102,9 @@ def setup_condens(dirname):
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = PrescribedAdvection(state, problem,
+    stepper = PrescribedTransport(state, problem,
                                   physics_list=physics_list,
-                                  prescribed_advecting_velocity=u_evaluation)
+                                  prescribed_transporting_velocity=u_evaluation)
 
     return stepper, tmax
 

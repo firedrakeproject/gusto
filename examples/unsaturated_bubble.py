@@ -211,25 +211,25 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
                               ('vapour_mixing_ratio', water_vb)])
 
-# Set up advection schemes
+# Set up transport schemes
 if recovered:
-    u_advection = SSPRK3(state, "u", options=u_opts)
+    u_transport = SSPRK3(state, "u", options=u_opts)
     rho_opts = EmbeddedDGOptions()
     theta_opts = EmbeddedDGOptions()
     limiter = VertexBasedLimiter(VDG1)
 else:
-    u_advection = ImplicitMidpoint(state, "u")
+    u_transport = ImplicitMidpoint(state, "u")
     rho_opts = None
     theta_opts = EmbeddedDGOptions()
 
     limiter = ThetaLimiter(Vt)
 
-advected_fields = [u_advection,
-                   SSPRK3(state, "rho", options=rho_opts),
-                   SSPRK3(state, "theta", options=theta_opts),
-                   SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "rain_mixing_ratio", options=theta_opts, limiter=limiter)]
+transported_fields = [u_transport,
+                      SSPRK3(state, "rho", options=rho_opts),
+                      SSPRK3(state, "theta", options=theta_opts),
+                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "rain_mixing_ratio", options=theta_opts, limiter=limiter)]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
@@ -244,7 +244,7 @@ physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
                 Condensation(state)]
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver,
                         physics_list=physics_list,
                         diffusion_schemes=diffusion_schemes)

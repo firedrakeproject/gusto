@@ -4,11 +4,11 @@ from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
                        Function, conditional, sqrt)
 
 # This setup creates a sharp bubble of warm air in a vertical slice
-# This bubble is then advected by a prescribed advection scheme
+# This bubble is then transported by a prescribed transport scheme
 
 
-def run(state, advection_scheme, tmax):
-    timestepper = PrescribedAdvection(state, advection_scheme)
+def run(state, transport_scheme, tmax):
+    timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
 
 
@@ -64,12 +64,12 @@ def test_recovered_space_setup(tmpdir):
                                                Constant(0.2),
                                                Constant(0.0)), Constant(0.0)))
 
-    # set up advection scheme
+    # set up transport scheme
     recovered_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
                                       boundary_method=Boundary_Method.dynamics)
 
-    advection_scheme = [(tracereqn, SSPRK3(state, options=recovered_opts))]
+    transport_scheme = [(tracereqn, SSPRK3(state, options=recovered_opts))]
 
-    run(state, advection_scheme, tmax=10)
+    run(state, transport_scheme, tmax=10)

@@ -60,9 +60,9 @@ def replace_subject(new, idx=None):
 
 
 time_derivative = Label("time_derivative")
-advection = Label("advection", validator=lambda value: type(value) == TransportEquationType)
+transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
-advecting_velocity = Label("advecting_velocity", validator=lambda value: type(value) == Function)
+transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) == LabelledForm)

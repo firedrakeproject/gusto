@@ -57,9 +57,9 @@ def setup_fallout(dirname):
         return as_vector((Constant(0.), Constant(0.)))
 
     # build time stepper
-    stepper = PrescribedAdvection(state, problem,
+    stepper = PrescribedTransport(state, problem,
                                   physics_list=physics_list,
-                                  prescribed_advecting_velocity=zero_u)
+                                  prescribed_transporting_velocity=zero_u)
 
     return stepper, 10.0
 
