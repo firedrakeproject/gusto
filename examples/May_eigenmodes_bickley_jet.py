@@ -100,14 +100,14 @@ for n in np.arange(1, 70, 5):
 
     nconv = es.getConverged()
     print("Number of converged eigenpairs for k = %f is %f" %(k, nconv))
-    outfile = File("eigenmode_%f.pvd"%k)
+    #outfile = File("eigenmode_%f.pvd"%k)
     if nconv > 0:
         with eigenmodes_real.dat.vec as vecr:
             with eigenmodes_imag.dat.vec as veci:
                 lam = es.getEigenpair(0, vecr, veci)
                 ur, vr, etar = eigenmodes_real.split()
                 ui, vi, etai = eigenmodes_imag.split()
-                outfile.write(ur, vr, etar, ui, vi, etai)
+                #outfile.write(ur, vr, etar, ui, vi, etai)
         ur_list.append(ur)
         ui_list.append(ui)
         vr_list.append(vr)
@@ -158,7 +158,6 @@ def interp(f1, f2):
         return Z
     return mydata
 
-
 # Get coordinates of interval mesh at degrees of freedom of profile
 m1 = V.ufl_domain()
 W1 = VectorFunctionSpace(m1, V.ufl_element())
@@ -205,6 +204,11 @@ v_real_expr = -k * vi2 * cos(k*x) - k * vr2 * sin(k*x)
 v_real = Function(V2)
 v_real.interpolate(v_real_expr)
 
+# Write this eigenmode to a file
+outfile = File("eigenmode_%f.pvd"%k)
+outfile.write(u_real, v_real, eta_real)
+
+# PLot the height field of this mode
 tricontourf(eta_real)
 plt.title("Re(eta)")
 plt.xlim(left=0, right=3)
