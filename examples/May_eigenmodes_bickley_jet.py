@@ -3,6 +3,7 @@ from firedrake.petsc import PETSc
 from slepc4py import SLEPc
 import numpy as np
 import matplotlib.pyplot as plt
+from gusto import *
 
 # set up parameters
 f = 10
@@ -208,11 +209,67 @@ v_real.interpolate(v_real_expr)
 outfile = File("eigenmode_%f.pvd"%k)
 outfile.write(u_real, v_real, eta_real)
 
-# PLot the height field of this mode
+# Plot the height field of this mode
 tricontourf(eta_real)
 plt.title("Re(eta)")
 plt.xlim(left=0, right=3)
 plt.ylim(bottom=1.5, top=4.5)
 plt.show()
 
+# Part 2 : Bickley jet with this mode superimposed
+new_mesh = PeriodicRectangleMesh(nx, nx, Ly/Rd, Ly/Rd, direction="x")
+parameters = ShallowWaterParameters(H=H, g=g)
+dt = 250
+
+dirname="June_bickley_jet"
+x, y = SpatialCoordinate(new_mesh)
+
+output = OutputParameters(dirname=dirname, dumpfreq=40)
+
+state = State(new_mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY()])
+
+eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
+
+u0 = state.fields("u")
+D0 = state.fields("D")
+
+coordinate = (y - 0.5 * (Ly/Rd))/L
+Dexpr = H - d_eta * (sinh(coordinate)/cosh(coordinate))
+VD = D0.function_space()
+Dbackground = Function(VD)
+Dbackground.interpolate(Dexpr)
+amp = Dbackground.at(Ly/2, Ly/2) # height in the jet
+
+# project unstable mode height on to D field and add it to the background height
+Dmode = project(eta_real,  VD)
+Dnoise = 0.001 * amp * Dmode
+length = Ly/Rd
+D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
+
+# project unstable mode velocity on to U field
+
+
+# Calculate initial velocity that is in geostrophic balance with the height
+Vpsi = FunctionSpace(new_mesh, "CG", 2)
+psi = Function(Vpsi)
+psi.interpolate((g/f)*Dbackground)
+
+Vu = u0.function_space()
+w = TestFunction(Vu)
+u_ = TrialFunction(Vu)
+
+ap = inner(w, u_)*dx
+Lp = inner(w, state.perp(grad(psi)))*dx
+prob = LinearVariationalProblem(ap, Lp, u0)
+solver = LinearVariationalSolver(prob)
+solver.solve()
+
+
+# Timestep the problem
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "D")]
+
+stepper = CrankNicolson(state, eqns, advected_fields)
+T_i = 1/f
+stepper.run(t=0, tmax=40*T_i)
 
