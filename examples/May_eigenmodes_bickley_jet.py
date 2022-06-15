@@ -172,8 +172,10 @@ X2 = interpolate(mesh.coordinates, W2)
 
 # Use interp function to get the correct shape for u, v, eta
 # u
+u_anom = Function(V)
+u_anom.interpolate(ur - u_bar)
 ur2 = Function(V2)
-ur2.dat.data[:] = interp(ur, ur2)(X2.dat.data_ro)
+ur2.dat.data[:] = interp(u_anom, ur2)(X2.dat.data_ro)
 ui2 = Function(V2)
 ui2.dat.data[:] = interp(ui, ui2)(X2.dat.data_ro)
 # v
@@ -192,29 +194,36 @@ x,y = SpatialCoordinate(mesh)
 # Non-dimensionalise x and y by dividing by Rd
 x = x/Rd
 y = y/Rd
-# eta
-eta_real_expr = etar2 * cos(k*x) - etai2 * sin(k*x)
-eta_real = Function(V2)
-eta_real.interpolate(eta_real_expr)
 # u
 u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x)
-u_real = Function(V2)
+u_real = Function(V2, name="Re(u)")
 u_real.interpolate(u_real_expr)
 # v
 v_real_expr = -k * vi2 * cos(k*x) - k * vr2 * sin(k*x)
-v_real = Function(V2)
+v_real = Function(V2, name="Re(v)")
 v_real.interpolate(v_real_expr)
+# eta
+eta_real_expr = (etar2 * cos(k*x) - etai2 * sin(k*x)) - H
+eta_real = Function(V2, name="Re(eta)")
+eta_real.interpolate(eta_real_expr)
 
 # Write this eigenmode to a file
 outfile = File("eigenmode_%f.pvd"%k)
 outfile.write(u_real, v_real, eta_real)
 
-# Plot the height field of this mode
-tricontourf(eta_real)
-plt.title("Re(eta)")
+# Plot this eigenmode
+# height as contour plot
+tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
+plt.colorbar(tcf)
 plt.xlim(left=0, right=3)
 plt.ylim(bottom=1.5, top=4.5)
+plt.xlabel("x/Rd")
+plt.ylabel("y/Rd")
+plt.title("Re(eta)")
 plt.show()
+
+# velcoity
+
 
 # Part 2 : Bickley jet with this mode superimposed
 new_mesh = PeriodicRectangleMesh(nx, nx, Ly/Rd, Ly/Rd, direction="x")
@@ -224,7 +233,7 @@ dt = 250
 dirname="June_bickley_jet"
 x, y = SpatialCoordinate(new_mesh)
 
-output = OutputParameters(dirname=dirname, dumpfreq=40)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 
 state = State(new_mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY()])
 
@@ -266,10 +275,10 @@ solver.solve()
 
 
 # Timestep the problem
-advected_fields = [ImplicitMidpoint(state, "u"),
-                   SSPRK3(state, "D")]
+# advected_fields = [ImplicitMidpoint(state, "u"),
+#                    SSPRK3(state, "D")]
 
-stepper = CrankNicolson(state, eqns, advected_fields)
-T_i = 1/f
-stepper.run(t=0, tmax=40*T_i)
+# stepper = CrankNicolson(state, eqns, advected_fields)
+# T_i = 1/f
+# stepper.run(t=0, tmax=10*dt)
 
