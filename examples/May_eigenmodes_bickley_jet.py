@@ -150,6 +150,9 @@ vi = vi_list[index]
 etar = etar_list[index]
 etai = etai_list[index]
 
+plot(etar)
+plt.show()
+
 def interp(f1, f2):
     def mydata(X):
         Z = np.zeros_like(f2.dat.data[:])
@@ -261,14 +264,10 @@ Dnoise = 0.001 * amp * Dmode
 length = Ly/Rd
 D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
 
-# project unstable mode velocity on to U field
-Vu = u0.function_space()
-# experiment 1
-velocity_mode = project(u_real, v_real, Vu)
-# experiment 2
-Vtest = VectorFunctionSpace(mesh, "CG", 2)
-velocity_mode_test = project(as_vector([u_real, v_real]), Vtest)
-velocity_mode = project(velocity_mode_test, Vu)
+
+# project unstable mode velocity on to u field
+velocity_mode = as_vector([u_real_expr, v_real_expr, 0.0])
+u0.project(velocity_mode)
 
 
 # Calculate initial velocity that is in geostrophic balance with the height
