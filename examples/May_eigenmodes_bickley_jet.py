@@ -263,9 +263,12 @@ D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackgr
 
 # project unstable mode velocity on to U field
 Vu = u0.function_space()
+# experiment 1
+velocity_mode = project(u_real, v_real, Vu)
+# experiment 2
 Vtest = VectorFunctionSpace(mesh, "CG", 2)
-u_mode_test = project(as_vector([u_real, v_real]), Vtest)
-u_mode = project(u_mode_test, Vu)
+velocity_mode_test = project(as_vector([u_real, v_real]), Vtest)
+velocity_mode = project(velocity_mode_test, Vu)
 
 
 # Calculate initial velocity that is in geostrophic balance with the height
