@@ -172,10 +172,8 @@ X2 = interpolate(mesh.coordinates, W2)
 
 # Use interp function to get the correct shape for u, v, eta
 # u
-u_anom = Function(V)
-u_anom.interpolate(ur - u_bar)
 ur2 = Function(V2)
-ur2.dat.data[:] = interp(u_anom, ur2)(X2.dat.data_ro)
+ur2.dat.data[:] = interp(ur, ur2)(X2.dat.data_ro)
 ui2 = Function(V2)
 ui2.dat.data[:] = interp(ui, ui2)(X2.dat.data_ro)
 # v
@@ -194,16 +192,17 @@ x,y = SpatialCoordinate(mesh)
 # Non-dimensionalise x and y by dividing by Rd
 x = x/Rd
 y = y/Rd
-# u
-u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x)
+coordinate = (y - 0.5 * (Ly/Rd))/L
+# u minus background jet
+u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x) - (((g * d_eta)/(f*L) * (1/cosh(coordinate))**2))
 u_real = Function(V2, name="Re(u)")
 u_real.interpolate(u_real_expr)
 # v
 v_real_expr = -k * vi2 * cos(k*x) - k * vr2 * sin(k*x)
 v_real = Function(V2, name="Re(v)")
 v_real.interpolate(v_real_expr)
-# eta
-eta_real_expr = (etar2 * cos(k*x) - etai2 * sin(k*x)) - H
+# eta minus background jet
+eta_real_expr = (etar2 * cos(k*x) - etai2 * sin(k*x)) - (- d_eta * (sinh(coordinate)/cosh(coordinate)))
 eta_real = Function(V2, name="Re(eta)")
 eta_real.interpolate(eta_real_expr)
 
@@ -215,7 +214,7 @@ outfile.write(u_real, v_real, eta_real)
 # height as contour plot
 tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
 plt.colorbar(tcf)
-plt.xlim(left=0, right=3)
+plt.xlim(left=1.5, right=4.5)
 plt.ylim(bottom=1.5, top=4.5)
 plt.xlabel("x/Rd")
 plt.ylabel("y/Rd")
@@ -223,6 +222,13 @@ plt.title("Re(eta)")
 plt.show()
 
 # velcoity
+x_array = np.arange(0, Ly/Rd, Ly/nx)
+y_array = np.arange(0, Ly/Rd, Ly/nx)
+X, Y = np.meshgrid(x_array, y_array)
+u_real_array = u_real.vector().array()
+v_real_array = v_real.vector().array()
+plt.quiver(u_real_array, v_real_array)
+plt.show()
 
 
 # Part 2 : Bickley jet with this mode superimposed
@@ -256,6 +262,10 @@ length = Ly/Rd
 D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
 
 # project unstable mode velocity on to U field
+Vu = u0.function_space()
+Vtest = VectorFunctionSpace(mesh, "CG", 2)
+u_mode_test = project(as_vector([u_real, v_real]), Vtest)
+u_mode = project(u_mode_test, Vu)
 
 
 # Calculate initial velocity that is in geostrophic balance with the height
