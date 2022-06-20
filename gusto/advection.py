@@ -1,9 +1,8 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TrialFunction, TrialFunctions,
-                       NonlinearVariationalProblem,
+from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, action, Constant, dot, grad, as_ufl)
+                       TestFunction, Constant, dot, grad, as_ufl)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
@@ -96,7 +95,7 @@ class Advection(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, *active_labels):
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
 
         self.residual = equation.residual
 
@@ -109,15 +108,19 @@ class Advection(object, metaclass=ABCMeta):
                     split_form(t.form)[self.idx].form,
                     t.labels),
                 drop)
-            self.bcs = equation.bcs[self.field_name]
+            bcs = equation.bcs[self.field_name]
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             if len(self.fs) > 0:
-                self.bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
+                bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
             else:
-                self.bcs = equation.bcs[self.field_name]
+                bcs = equation.bcs[self.field_name]
             self.idx = None
+        if apply_bcs:
+            self.bcs = bcs
+        else:
+            self.bcs = None
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
@@ -211,10 +214,6 @@ class Advection(object, metaclass=ABCMeta):
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
 
         # setup required functions
-        if len(self.fs) > 1:
-            self.trial = TrialFunctions(self.fs)
-        else:
-            self.trial = TrialFunction(self.fs)
         self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
 
@@ -258,7 +257,7 @@ class Advection(object, metaclass=ABCMeta):
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.trial, self.idx),
+            map_if_true=replace_subject(self.dq, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -289,7 +288,7 @@ class Advection(object, metaclass=ABCMeta):
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(action(self.lhs, self.dq)-self.rhs, self.dq, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -549,7 +548,7 @@ class BackwardEuler(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial, self.idx))
+            map_if_true=replace_subject(self.dq, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -598,7 +597,7 @@ class ThetaMethod(Advection):
     def lhs(self):
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.trial, self.idx))
+            map_if_true=replace_subject(self.dq, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 

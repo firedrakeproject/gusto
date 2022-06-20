@@ -1,5 +1,5 @@
 import ufl
-from firedrake import Function
+from firedrake import Function, split, VectorElement
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
 
 
@@ -29,23 +29,28 @@ def replace_subject(new, idx=None):
         if len(subj.function_space()) > 1:
             if type(new) == tuple:
                 assert len(new) == len(subj.function_space())
-                for k, v in zip(subj.split(), new):
+                for k, v in zip(split(subj), new):
                     replace_dict[k] = v
             else:
                 if idx is None:
-                    for k, v in zip(subj.split(), new.split()):
+                    for k, v in zip(split(subj), split(new)):
                         replace_dict[k] = v
+                # TODO: Could we do something better here?
+                elif isinstance(new.ufl_element(), VectorElement):
+                    replace_dict[split(subj)[idx]] = new
                 else:
                     try:
-                        replace_dict[subj.split()[idx]] = new.split()[idx]
-                    except:
-                        replace_dict[subj.split()[idx]] = new
+                        # This needs to handle with MixedFunctionSpace and
+                        # VectorFunctionSpace differently
+                        replace_dict[split(subj)[idx]] = split(new)[idx]
+                    except IndexError:
+                        replace_dict[split(subj)[idx]] = new
 
         else:
-            if subj.ufl_shape == new.ufl_shape:
-                replace_dict[subj] = new
-            else:
+            if len(new.function_space()) > 1:
                 replace_dict[subj] = new[idx]
+            else:
+                replace_dict[subj] = new
 
         new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)

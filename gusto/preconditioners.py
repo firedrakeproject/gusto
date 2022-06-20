@@ -51,8 +51,8 @@ class VerticalHybridizationPC(PCBase):
                                FiniteElement, TensorProductElement,
                                TrialFunction, TrialFunctions, TestFunction,
                                DirichletBC, interval, MixedElement, BrokenElement)
-        from firedrake.assemble import (allocate_matrix,
-                                        create_assembly_callable)
+        from firedrake.assemble import (allocate_matrix, OneFormAssembler,
+                                        TwoFormAssembler)
         from firedrake.formmanipulation import split_form
         from ufl.algorithms.replace import replace
         from ufl.cell import TensorProductCell
@@ -192,10 +192,10 @@ class VerticalHybridizationPC(PCBase):
 
         # Assemble the Schur complement operator and right-hand side
         self.schur_rhs = Function(Vv_tr)
-        self._assemble_Srhs = create_assembly_callable(
+        self._assemble_Srhs = OneFormAssembler(
             K * Atilde.inv * AssembledVector(self.broken_residual),
             tensor=self.schur_rhs,
-            form_compiler_parameters=self.ctx.fc_params)
+            form_compiler_parameters=self.ctx.fc_params).assemble
 
         mat_type = PETSc.Options().getString(prefix + "mat_type", "aij")
 
@@ -204,11 +204,10 @@ class VerticalHybridizationPC(PCBase):
                                  form_compiler_parameters=self.ctx.fc_params,
                                  mat_type=mat_type,
                                  options_prefix=prefix)
-        self._assemble_S = create_assembly_callable(schur_comp,
-                                                    tensor=self.S,
-                                                    bcs=trace_bcs,
-                                                    form_compiler_parameters=self.ctx.fc_params,
-                                                    mat_type=mat_type)
+        self._assemble_S = TwoFormAssembler(schur_comp,
+                                            tensor=self.S,
+                                            bcs=trace_bcs,
+                                            form_compiler_parameters=self.ctx.fc_params).assemble
 
         self._assemble_S()
         Smat = self.S.petscmat
@@ -242,7 +241,7 @@ class VerticalHybridizationPC(PCBase):
                              contribution in the hybridized mixed system.
         """
 
-        from firedrake.assemble import create_assembly_callable
+        from firedrake.assemble import OneFormAssembler
 
         # We always eliminate the velocity block first
         id0, id1 = (self.vidx, self.pidx)
@@ -270,15 +269,15 @@ class VerticalHybridizationPC(PCBase):
         R = K_1.T - C * A.inv * K_0.T
         u_rec = M.solve(f - C * A.inv * g - R * lambdar,
                         decomposition="PartialPivLU")
-        self._sub_unknown = create_assembly_callable(u_rec,
-                                                     tensor=u,
-                                                     form_compiler_parameters=self.ctx.fc_params)
+        self._sub_unknown = OneFormAssembler(u_rec,
+                                             tensor=u,
+                                             form_compiler_parameters=self.ctx.fc_params).assemble
 
         sigma_rec = A.solve(g - B * AssembledVector(u) - K_0.T * lambdar,
                             decomposition="PartialPivLU")
-        self._elim_unknown = create_assembly_callable(sigma_rec,
-                                                      tensor=sigma,
-                                                      form_compiler_parameters=self.ctx.fc_params)
+        self._elim_unknown = OneFormAssembler(sigma_rec,
+                                              tensor=sigma,
+                                              form_compiler_parameters=self.ctx.fc_params).assemble
 
     @timed_function("VertHybridRecon")
     def _reconstruct(self):

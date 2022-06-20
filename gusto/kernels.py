@@ -382,7 +382,7 @@ class PhysicsRecoveryTop():
                  args={"DG1": (v_DG1, WRITE),
                        "CG1": (v_CG1, READ)},
                  is_loopy_kernel=True,
-                 iterate=ON_TOP)
+                 iteration_region=ON_TOP)
 
 
 class PhysicsRecoveryBottom():
@@ -418,4 +418,4 @@ class PhysicsRecoveryBottom():
                  args={"DG1": (v_DG1, WRITE),
                        "CG1": (v_CG1, READ)},
                  is_loopy_kernel=True,
-                 iterate=ON_BOTTOM)
+                 iteration_region=ON_BOTTOM)

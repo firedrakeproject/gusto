@@ -54,11 +54,12 @@ class Condensation(Physics):
         self.iterations = iterations
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('water_v')
-        self.water_c = state.fields('water_c')
+        self.water_v = state.fields('vapour_mixing_ratio')
+        self.water_c = state.fields('cloud_liquid_mixing_ratio')
         rho = state.fields('rho')
         try:
-            rain = state.fields('rain')
+            # TODO: use the phase flag for the tracers here
+            rain = state.fields('rain_mixing_ratio')
             water_l = self.water_c + rain
         except NotImplementedError:
             water_l = self.water_c
@@ -186,8 +187,8 @@ class Fallout(Physics):
             advect_options = EmbeddedDGOptions()
 
         # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        advection_equation = AdvectionEquation(state, Vt, "rain", outflow=True)
-        self.rain = state.fields("rain")
+        advection_equation = AdvectionEquation(state, Vt, "rain_mixing_ratio", outflow=True)
+        self.rain = state.fields("rain_mixing_ratio")
 
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
@@ -275,8 +276,8 @@ class Coalescence(Physics):
         super().__init__(state)
 
         # obtain our fields
-        self.water_c = state.fields('water_c')
-        self.rain = state.fields('rain')
+        self.water_c = state.fields('cloud_liquid_mixing_ratio')
+        self.rain = state.fields('rain_mixing_ratio')
 
         # declare function space
         Vt = self.water_c.function_space()
@@ -338,11 +339,11 @@ class Evaporation(Physics):
 
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('water_v')
-        self.rain = state.fields('rain')
+        self.water_v = state.fields('vapour_mixing_ratio')
+        self.rain = state.fields('rain_mixing_ratio')
         rho = state.fields('rho')
         try:
-            water_c = state.fields('water_c')
+            water_c = state.fields('cloud_liquid_mixing_ratio')
             water_l = self.rain + water_c
         except NotImplementedError:
             water_l = self.rain

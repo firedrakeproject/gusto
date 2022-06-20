@@ -5,7 +5,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
 from firedrake import (FiniteElement, TensorProductElement, HDiv,
-                       FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
+                       FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
@@ -27,7 +27,7 @@ class SpaceCreator(object):
         try:
             return getattr(self, name)
         except AttributeError:
-            if name == "HDiv" and family in ["BDM", "RT", "CG"]:
+            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)
@@ -80,7 +80,7 @@ class SpaceCreator(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement(family, cell, degree+1)
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
     def build_dg_space(self, degree):
         if self.extruded_mesh:
@@ -95,7 +95,7 @@ class SpaceCreator(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
 
     def build_theta_space(self, degree):
         assert self.extruded_mesh
@@ -105,10 +105,10 @@ class SpaceCreator(object):
             self.T0 = FiniteElement("CG", interval, degree+1,
                                     variant="equispaced")
         V_elt = TensorProductElement(self.S2, self.T0)
-        return FunctionSpace(self.mesh, V_elt)
+        return FunctionSpace(self.mesh, V_elt, name='Vtheta')
 
     def build_cg_space(self, degree):
-        return FunctionSpace(self.mesh, "CG", degree)
+        return FunctionSpace(self.mesh, "CG", degree, name=f'CG{degree}')
 
 
 class FieldCreator(object):
@@ -331,6 +331,7 @@ class State(object):
         self.spaces = SpaceCreator(mesh)
 
         if self.output.dumplist is None:
+
             self.output.dumplist = []
 
         self.fields = StateFields(*self.output.dumplist)
@@ -449,7 +450,7 @@ class State(object):
             for name in self.output.dumplist_latlon:
                 f = self.fields(name)
                 field = Function(
-                    functionspaceimpl.WithGeometry(
+                    functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
                     val=f.topological, name=name+'_ll')
                 self.to_dump_latlon.append(field)
@@ -571,59 +572,18 @@ class State(object):
         :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
         for name, profile in reference_profiles:
-            ref = self.fields(name+'bar')
+            if name+'bar' in self.fields:
+                # For reference profiles already added to state, allow
+                # interpolation from expressions
+                ref = self.fields(name+'bar')
+            elif isinstance(profile, Function):
+                # Need to add reference profile to state so profile must be
+                # a Function
+                ref = self.fields(name+'bar', space=profile.function_space(), dump=False)
+            else:
+                raise ValueError(f'When initialising reference profile {name}'
+                                 + ' the passed profile must be a Function')
             ref.interpolate(profile)
-
-    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
-        """
-        Build:
-        velocity space self.V2,
-        pressure space self.V3,
-        temperature space self.Vt,
-        mixed function space self.W = (V2,V3,Vt)
-        """
-
-        if vertical_degree is not None:
-            # horizontal base spaces
-            cell = mesh._base_mesh.ufl_cell().cellname()
-            S1 = FiniteElement(family, cell, horizontal_degree+1)
-            S2 = FiniteElement("DG", cell, horizontal_degree, variant="equispaced")
-
-            # vertical base spaces
-            T0 = FiniteElement("CG", interval, vertical_degree+1, variant="equispaced")
-            T1 = FiniteElement("DG", interval, vertical_degree, variant="equispaced")
-
-            # build spaces V2, V3, Vt
-            V2h_elt = HDiv(TensorProductElement(S1, T1))
-            V2t_elt = TensorProductElement(S2, T0)
-            V3_elt = TensorProductElement(S2, T1)
-            V2v_elt = HDiv(V2t_elt)
-            V2_elt = V2h_elt + V2v_elt
-
-            V0 = self.spaces("HDiv", mesh, V2_elt)
-            V1 = self.spaces("DG", mesh, V3_elt)
-            V2 = self.spaces("HDiv_v", mesh, V2t_elt)
-
-            self.Vv = self.spaces("Vv", mesh, V2v_elt)
-
-            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-            DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-            self.DG1_space = self.spaces("DG1", mesh, DG1_elt)
-
-            self.W = MixedFunctionSpace((V0, V1, V2))
-
-        else:
-            cell = mesh.ufl_cell().cellname()
-            V1_elt = FiniteElement(family, cell, horizontal_degree+1)
-            DG_elt = FiniteElement("DG", cell, horizontal_degree, variant="equispaced")
-            DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-
-            V0 = self.spaces("HDiv", mesh, V1_elt)
-            V1 = self.spaces("DG", mesh, DG_elt)
-            self.DG1_space = self.spaces("DG1", mesh, DG1_elt)
-
-            self.W = MixedFunctionSpace((V0, V1))
 
 
 def get_latlon_mesh(mesh):

@@ -65,9 +65,9 @@ b0 = state.fields("b")
 p0 = state.fields("p")
 
 # spaces
-Vu = u0.function_space()
-Vb = b0.function_space()
-Vp = p0.function_space()
+Vu = state.spaces("HDiv")
+Vb = state.spaces("theta")
+Vp = state.spaces("DG")
 
 # parameters
 x, y, z = SpatialCoordinate(mesh)

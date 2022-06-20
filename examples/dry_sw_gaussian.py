@@ -25,7 +25,7 @@ day = 24*60*60
 
 parameters=ShallowWaterParameters(H=H, g=g)
 
-dirname="VP_dry_sw_gaussian_CN"
+dirname="VP_dry_sw_gaussian_SSPRK3"
 
 output = OutputParameters(dirname=dirname, dumpfreq=100) # day/(dt*4)
 
@@ -65,8 +65,8 @@ D0.interpolate(Constant(H) - 0.01 * gaussian)
 advected_fields = [ImplicitMidpoint(state, "u"),
                        SSPRK3(state, "D")]
 
-stepper = CrankNicolson(state, eqns, advected_fields)
+#stepper = CrankNicolson(state, eqns, advected_fields)
 
-#stepper = Timestepper(state, ((eqns, RK4(state)),),)
+stepper = Timestepper(state, ((eqns, SSPRK3(state)),),)
 
 stepper.run(t=0, tmax=10*day)

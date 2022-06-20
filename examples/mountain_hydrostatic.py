@@ -70,9 +70,9 @@ rho0 = state.fields("rho")
 theta0 = state.fields("theta")
 
 # spaces
-Vu = u0.function_space()
-Vt = theta0.function_space()
-Vr = rho0.function_space()
+Vu = state.spaces("HDiv")
+Vt = state.spaces("theta")
+Vr = state.spaces("DG")
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
