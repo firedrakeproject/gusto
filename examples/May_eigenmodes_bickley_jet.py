@@ -235,7 +235,7 @@ plt.show()
 
 
 # Part 2 : Bickley jet with this mode superimposed
-new_mesh = PeriodicRectangleMesh(nx, nx, Ly/Rd, Ly/Rd, direction="x")
+new_mesh = PeriodicRectangleMesh(nx, nx, Ly, Ly, direction="x")
 parameters = ShallowWaterParameters(H=H, g=g)
 dt = 250
 
@@ -251,7 +251,7 @@ eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_
 u0 = state.fields("u")
 D0 = state.fields("D")
 
-coordinate = (y - 0.5 * (Ly/Rd))/L
+coordinate = (y - 0.5 * Ly)/L
 Dexpr = H - d_eta * (sinh(coordinate)/cosh(coordinate))
 VD = D0.function_space()
 Dbackground = Function(VD)
@@ -260,14 +260,14 @@ amp = Dbackground.at(Ly/2, Ly/2) # height in the jet
 
 # project unstable mode height on to D field and add it to the background height
 Dmode = project(eta_real,  VD)
-Dnoise = 0.001 * amp * Dmode
-length = Ly/Rd
-D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
+Dnoise = 0.1 * amp * Dmode
+D0.interpolate(conditional(y<Ly/2+L, conditional(y>Ly/2, Dbackground+Dnoise, Dbackground), Dbackground))
+D0.interpolate(Dbackground + Dnoise)
 
 
 # project unstable mode velocity on to u field
-velocity_mode = as_vector([u_real_expr, v_real_expr, 0.0])
-u0.project(velocity_mode)
+# velocity_mode = as_vector([u_real_expr, v_real_expr])
+# u0.project(velocity_mode)
 
 
 # Calculate initial velocity that is in geostrophic balance with the height
