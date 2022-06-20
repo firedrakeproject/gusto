@@ -3,13 +3,8 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-<<<<<<< HEAD
-                       as_vector, exp)
-from gusto.fml.form_manipulation_labelling import drop, Term, all_terms
-=======
                        as_vector, split, Constant)
 from gusto.fml.form_manipulation_labelling import Term, all_terms
->>>>>>> origin/FML
 from gusto.labels import (subject, time_derivative, advection, prognostic,
                           advecting_velocity, replace_subject, linearisation,
                           name)
@@ -22,12 +17,9 @@ from gusto.transport_equation import (advection_form, continuity_form,
                                       linear_continuity_form,
                                       linear_advection_form, IntegrateByParts)
 from gusto.diffusion import interior_penalty_diffusion_form
-<<<<<<< HEAD
-from gusto.moisture import (condensation, evaporation)
-=======
 from gusto.active_tracers import (ActiveTracer, Phases, TransportEquationForm,
                                   TracerVariableType)
->>>>>>> origin/FML
+
 import ufl
 
 
@@ -170,13 +162,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
-<<<<<<< HEAD
-                 diffusion_options=None,
-		 sponge=None,
-                 no_normal_flow_bc_ids=None):
-
-        spaces = self._build_spaces(state, family, degree)
-=======
+                 diffusion_options=None, sponge=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = ["u", "D"]
@@ -186,7 +172,6 @@ class ShallowWaterEquations(PrognosticEquation):
         if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for shallow water equations')
 
->>>>>>> origin/FML
         W = MixedFunctionSpace(spaces)
 
         field_name = "_".join(self.field_names)
@@ -205,12 +190,7 @@ class ShallowWaterEquations(PrognosticEquation):
         w, phi = TestFunctions(W)[0:2]
         trials = TrialFunctions(W)
         X = Function(W)
-<<<<<<< HEAD
-        self.X = X
-        u, D = X.split()[0:2]
-=======
         u, D = split(X)
->>>>>>> origin/FML
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         linear_u_mass = u_mass.label_map(all_terms,
