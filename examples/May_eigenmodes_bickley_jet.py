@@ -21,13 +21,13 @@ Ly = 2
 nx = 100
 print(Rd)
 print(H)
-#mesh = IntervalMesh(nx, Ly)
-mesh = IntervalMesh(nx, Ly/Rd)
+mesh = IntervalMesh(nx, Ly)
+# mesh = IntervalMesh(nx, Ly/Rd)
 
 y = SpatialCoordinate(mesh)[0]
 
-#coordinate = (y - 0.5*Ly)/L
-coordinate = (y - 0.5 * (Ly/Rd))/L
+coordinate = (y - 0.5*Ly)/L
+# coordinate = (y - 0.5 * (Ly/Rd))/L
 
 # set up spaces
 V = FunctionSpace(mesh, "CG", 2)
@@ -38,11 +38,11 @@ w, tau, phi = TestFunction(Z)
 # plot functions to check
 u_bar, _, eta_bar = Function(Z).split()
 u_bar.interpolate((g * d_eta)/(f*L) * (1/cosh(coordinate))**2)
-plot(u_bar)
-plt.show()
+# plot(u_bar)
+# plt.show()
 eta_bar.interpolate(-d_eta * (sinh(coordinate)/cosh(coordinate)))
-plot(eta_bar)
-plt.show()
+# plot(eta_bar)
+# plt.show()
 
 # boundary conditions: Dirichlet conditions enforcing v = 0 on both ends of the interval
 bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
@@ -168,7 +168,7 @@ W1 = VectorFunctionSpace(m1, V.ufl_element())
 X1 = interpolate(m1.coordinates, W1)
 
 # create 2D mesh
-mesh = RectangleMesh(nx, nx, Ly/Rd, Ly/Rd)
+mesh = RectangleMesh(nx, nx, Ly, Ly)
 V2 = FunctionSpace(mesh, "CG", 2)
 W2 = VectorFunctionSpace(mesh, V2.ufl_element())
 X2 = interpolate(mesh.coordinates, W2)
@@ -192,10 +192,10 @@ etai2.dat.data[:] = interp(etai, etai2)(X2.dat.data_ro)
 
 # Multiply u, v, eta by the exponential term, retaining only the real part
 x,y = SpatialCoordinate(mesh)
-# Non-dimensionalise x and y by dividing by Rd
-x = x/Rd
-y = y/Rd
-coordinate = (y - 0.5 * (Ly/Rd))/L
+# Non-dimensionalise x and y by dividing by L
+x = x/L
+y = y/L
+coordinate = (y - 0.5 * Ly)/L
 # u minus background jet
 u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x) - (((g * d_eta)/(f*L) * (1/cosh(coordinate))**2))
 u_real = Function(V2, name="Re(u)")
@@ -216,28 +216,30 @@ outfile.write(u_real, v_real, eta_real)
 # Plot this eigenmode
 # height as contour plot
 tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
-plt.colorbar(tcf)
-plt.xlim(left=1.5, right=4.5)
-plt.ylim(bottom=1.5, top=4.5)
-plt.xlabel("x/Rd")
-plt.ylabel("y/Rd")
+cb = plt.colorbar(tcf)
+scaled_lim1 = Ly/2 - (1.5 * Rd)
+scaled_lim2 = Ly/2 + (1.5 * Rd)
+plt.xlim(left=scaled_lim1, right=scaled_lim2)
+plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
+plt.xlabel("x")
+plt.ylabel("y")
 plt.title("Re(eta)")
 plt.show()
 
-# velcoity
-x_array = np.arange(0, Ly/Rd, Ly/nx)
-y_array = np.arange(0, Ly/Rd, Ly/nx)
-X, Y = np.meshgrid(x_array, y_array)
-u_real_array = u_real.vector().array()
-v_real_array = v_real.vector().array()
-plt.quiver(u_real_array, v_real_array)
-plt.show()
+# # velcoity
+# x_array = np.arange(0, Ly/Rd, Ly/nx)
+# y_array = np.arange(0, Ly/Rd, Ly/nx)
+# X, Y = np.meshgrid(x_array, y_array)
+# u_real_array = u_real.vector().array()
+# v_real_array = v_real.vector().array()
+# plt.quiver(u_real_array, v_real_array)
+# plt.show()
 
 
 # Part 2 : Bickley jet with this mode superimposed
 new_mesh = PeriodicRectangleMesh(nx, nx, Ly, Ly, direction="x")
 parameters = ShallowWaterParameters(H=H, g=g)
-dt = 250
+dt = 1e-3
 
 dirname="June_bickley_jet"
 x, y = SpatialCoordinate(new_mesh)
@@ -287,10 +289,10 @@ solver.solve()
 
 
 # Timestep the problem
-# advected_fields = [ImplicitMidpoint(state, "u"),
-#                    SSPRK3(state, "D")]
+advected_fields = [ImplicitMidpoint(state, "u"),
+                   SSPRK3(state, "D")]
 
-# stepper = CrankNicolson(state, eqns, advected_fields)
-# T_i = 1/f
-# stepper.run(t=0, tmax=10*dt)
+stepper = CrankNicolson(state, eqns, advected_fields)
+T_i = 1/f
+stepper.run(t=0, tmax=5*dt)
 
