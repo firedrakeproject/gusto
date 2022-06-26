@@ -4,7 +4,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        as_vector, split, Constant)
-from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm
+from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
                           name, pressure_gradient)
@@ -198,9 +198,9 @@ class ShallowWaterEquations(PrognosticEquation):
         # -------------------------------------------------------------------- #
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
         # TODO: this linearised term should be removed and computed at end
-        linear_u_mass = u_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        u_mass = linearisation(u_mass, linear_u_mass)
+        # linear_u_mass = u_mass.label_map(all_terms,
+        #                                  replace_subject(trials))
+        # u_mass = linearisation(u_mass, linear_u_mass)
         D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
         # linear_D_mass = D_mass.label_map(all_terms,
         #                                  replace_subject(trials))
@@ -249,10 +249,10 @@ class ShallowWaterEquations(PrognosticEquation):
         pressure_gradient_form = pressure_gradient(
             subject(prognostic(-g*div(w)*D*dx, "u"), X))
         # TODO: this linearised term should be removed and computed at end
-        linear_pressure_gradient_form = pressure_gradient_form.label_map(
-            all_terms, replace_subject(trials))
-        pressure_gradient_form = linearisation(pressure_gradient_form,
-                                                linear_pressure_gradient_form)
+        # linear_pressure_gradient_form = pressure_gradient_form.label_map(
+        #     all_terms, replace_subject(trials))
+        # pressure_gradient_form = linearisation(pressure_gradient_form,
+        #                                         linear_pressure_gradient_form)
 
         residual = (mass_form + adv_form + pressure_gradient_form)
 
@@ -277,23 +277,45 @@ class ShallowWaterEquations(PrognosticEquation):
         # -------------------------------------------------------------------- #
         u, D = X.split()
         # Linearise about D = H
-        # TODO: add linearisation for u
+        # TODO: add linearisation state for u
         D.assign(Constant(H))
 
         self.residual = residual.label_map(
             # Extract all terms to be linearised that haven't already been
             lambda t: not t.has_label(linearisation) and any(t.has_label(*terms_to_linearise['all'])),
-            # Add linearisation based on UFL derivative
-            lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+            # TODO: for now just replace subject with trial but this should be better...
+            lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(trials))))
+            # TODO: Add linearisation based on UFL derivative
+            # lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
         # Loop through prognostic variables and linearise any specified terms
         for field in self.field_names:
             self.residual = self.residual.label_map(
                 # Extract all terms to be linearised for this field's equation that haven't already been
                 lambda t: not t.has_label(linearisation) and (t.get(prognostic) == field) \
                     and any(t.has_label(*terms_to_linearise[field])),
-                # Add linearisation based on UFL derivative
-                lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+                # TODO: for now just replace subject with trial but this should be better...
+                lambda t: linearisation(t, t.label_map(all_terms, replace_subject(trials))))
+                # TODO: Add linearisation based on UFL derivative
+                # lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
 
+class LinearShallowWaterEquations(ShallowWaterEquations):
+
+    def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 terms_to_linearise={'all':[time_derivative,pressure_gradient],
+                                     'D':[transport],
+                                     'u':[]},
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None, active_tracers=None):
+        
+        super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
+                         terms_to_linearise=terms_to_linearise,
+                         u_transport_option=u_transport_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+        
+        # Drop all terms without linearisation
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(linearisation), map_if_false=drop)
 
 
 class CompressibleEulerEquations(PrognosticEquation):

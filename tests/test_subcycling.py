@@ -24,12 +24,12 @@ def setup_gaussian(dirname):
     H = Constant(state.parameters.H)
     D0.interpolate(H + exp(-50*((x-0.5)**2 + (y-0.5)**2)))
 
-    advected_fields = []
-    advected_fields.append((SSPRK3(state, "u", options=EmbeddedDGOptions(), subcycles=2)))
-    advected_fields.append((SSPRK3(state, "D", subcycles=2)))
+   transported_fields = []
+   transported_fields.append((SSPRK3(state, "u", options=EmbeddedDGOptions(), subcycles=2)))
+   transported_fields.append((SSPRK3(state, "D", subcycles=2)))
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields)
+    stepper = CrankNicolson(state, eqns, transported_fields)
 
     return stepper
 

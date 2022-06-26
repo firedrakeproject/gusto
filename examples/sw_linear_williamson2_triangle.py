@@ -34,6 +34,7 @@ state = State(mesh,
 Omega = parameters.Omega
 x = SpatialCoordinate(mesh)
 fexpr = 2*Omega*x[2]/R
+eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
 
 # interpolate initial conditions
 # Initial/current conditions
@@ -46,11 +47,11 @@ Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 
-advected_fields = [ForwardEuler(state, "D")]
-
-linear_solver = ShallowWaterSolver(state)
+# TODO: should there be transport here or not?
+# transport_schemes = [ForwardEuler(state, "D")]
+transport_schemes = []
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver=linear_solver)
+stepper = CrankNicolson(state, eqns, transported_fields)
 
 stepper.run(t=0, tmax=tmax)

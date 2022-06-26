@@ -60,10 +60,10 @@ for ref_level, dt in ref_dt.items():
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    advected_fields = [ImplicitMidpoint(state, "u"),
-                       SSPRK3(state, "D", subcycles=2)]
+    transported_fields = [ImplicitMidpoint(state, "u"),
+                          SSPRK3(state, "D", subcycles=2)]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields)
+    stepper = CrankNicolson(state, eqns, transported_fields)
 
     stepper.run(t=0, tmax=tmax)

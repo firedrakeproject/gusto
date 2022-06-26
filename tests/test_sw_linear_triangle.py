@@ -30,7 +30,7 @@ def setup_sw(dirname):
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
 
-    eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr)
+    eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -43,7 +43,8 @@ def setup_sw(dirname):
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    transport_schemes = [ForwardEuler(state, "D")]
+    # transport_schemes = [ForwardEuler(state, "D")]
+    transport_schemes = []
 
     # build time stepper
     stepper = CrankNicolson(state, eqns, transport_schemes)
