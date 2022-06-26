@@ -1,5 +1,6 @@
 import ufl
 from firedrake import Function, split, VectorElement
+from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
 
 
@@ -59,10 +60,12 @@ def replace_subject(new, idx=None):
 
 
 time_derivative = Label("time_derivative")
-advection = Label("advection")
+transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
-advecting_velocity = Label("advecting_velocity", validator=lambda value: type(value) == Function)
+transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
+pressure_gradient = Label("pressure_gradient")
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 name = Label("name", validator=lambda value: type(value) == str)
+ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)

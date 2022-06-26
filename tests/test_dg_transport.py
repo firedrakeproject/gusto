@@ -3,8 +3,8 @@ from gusto import *
 import pytest
 
 
-def run(state, advection_scheme, tmax, f_end):
-    timestepper = PrescribedAdvection(state, advection_scheme)
+def run(state, transport_scheme, tmax, f_end):
+    timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -12,7 +12,7 @@ def run(state, advection_scheme, tmax, f_end):
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
-def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
+def test_dg_transport_scalar(tmpdir, geometry, equation_form, scheme,
                              tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
@@ -27,16 +27,16 @@ def test_dg_advection_scalar(tmpdir, geometry, equation_form, scheme,
     state.fields("u").project(setup.uexpr)
 
     if scheme == "ssprk":
-        advection_scheme = [(eqn, SSPRK3(state))]
+        transport_scheme = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
-        advection_scheme = [(eqn, ImplicitMidpoint(state))]
-    assert run(state, advection_scheme, setup.tmax, setup.f_end) < setup.tol
+        transport_scheme = [(eqn, ImplicitMidpoint(state))]
+    assert run(state, transport_scheme, setup.tmax, setup.f_end) < setup.tol
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
-def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
+def test_dg_transport_vector(tmpdir, geometry, equation_form, scheme,
                              tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
@@ -52,8 +52,8 @@ def test_dg_advection_vector(tmpdir, geometry, equation_form, scheme,
     state.fields("f").interpolate(f_init)
     state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
-        advection_schemes = [(eqn, SSPRK3(state))]
+        transport_schemes = [(eqn, SSPRK3(state))]
     elif scheme == "implicit_midpoint":
-        advection_schemes = [(eqn, ImplicitMidpoint(state))]
+        transport_schemes = [(eqn, ImplicitMidpoint(state))]
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
-    assert run(state, advection_schemes, setup.tmax, f_end) < setup.tol
+    assert run(state, transport_schemes, setup.tmax, f_end) < setup.tol

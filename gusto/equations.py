@@ -4,21 +4,21 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        as_vector, split, Constant)
-from gusto.fml.form_manipulation_labelling import Term, all_terms
-from gusto.labels import (subject, time_derivative, advection, prognostic,
-                          advecting_velocity, replace_subject, linearisation,
-                          name)
+from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm
+from gusto.labels import (subject, time_derivative, transport, prognostic,
+                          transporting_velocity, replace_subject, linearisation,
+                          name, pressure_gradient)
 from gusto.thermodynamics import pi as Pi
-from gusto.transport_equation import (advection_form, continuity_form,
-                                      vector_invariant_form,
-                                      vector_manifold_advection_form,
-                                      kinetic_energy_form,
-                                      advection_equation_circulation_form,
-                                      linear_continuity_form,
-                                      linear_advection_form, IntegrateByParts)
+from gusto.transport_forms import (advection_form, continuity_form,
+                                   vector_invariant_form,
+                                   vector_manifold_advection_form,
+                                   kinetic_energy_form,
+                                   advection_equation_circulation_form,
+                                   linear_continuity_form,
+                                   linear_advection_form)
 from gusto.diffusion import interior_penalty_diffusion_form
-from gusto.active_tracers import (ActiveTracer, Phases, TransportEquationForm,
-                                  TracerVariableType)
+from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
+from gusto.configuration import IntegrateByParts, TransportEquationType
 import ufl
 
 
@@ -106,12 +106,12 @@ class ContinuityEquation(PrognosticEquation):
 
 class DiffusionEquation(PrognosticEquation):
     """
-    Class defining the advection equation.
+    Class defining the diffusion equation.
 
     :arg state: :class:`.State` object
     :arg function_space: :class:`.FunctionSpace` object
     :arg field_name: name of the prognostic field
-    :kwargs: any kwargs to be passed on to the advection_form
+    :kwargs: any kwargs to be passed on to the diffusion form
     """
     def __init__(self, state, function_space, field_name,
                  diffusion_parameters):
@@ -160,8 +160,10 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 u_advection_option="vector_invariant_form",
-                 terms_to_linearise=['time_derivative'],
+                 terms_to_linearise={'all':[time_derivative,pressure_gradient],
+                                     'D':[transport],
+                                     'u':[]},
+                 u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = ["u", "D"]
@@ -191,83 +193,114 @@ class ShallowWaterEquations(PrognosticEquation):
         X = Function(W)
         u, D = split(X)
 
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        # # linear_u_mass = u_mass.label_map(all_terms,
-        # #                                  replace_subject(trials))
-        # # u_mass = linearisation(u_mass, linear_u_mass)
+        # TODO: this linearised term should be removed and computed at end
+        linear_u_mass = u_mass.label_map(all_terms,
+                                         replace_subject(trials))
+        u_mass = linearisation(u_mass, linear_u_mass)
         D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
-        # # linear_D_mass = D_mass.label_map(all_terms,
-        # #                                  replace_subject(trials))
-        # # D_mass = linearisation(D_mass, linear_D_mass)
+        # linear_D_mass = D_mass.label_map(all_terms,
+        #                                  replace_subject(trials))
+        # D_mass = linearisation(D_mass, linear_D_mass)
         mass_form = time_derivative(u_mass + D_mass)
 
-        # define velocity advection term
-        if u_advection_option == "vector_invariant_form":
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term -- depends on formulation
+        if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
-        elif u_advection_option == "vector_advection_form":
+        elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(state, w, u), "u")
-        elif u_advection_option == "vector_manifold_advection_form":
+        elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
-        elif u_advection_option == "circulation_form":
+        elif u_transport_option == "circulation_form":
             ke_form = kinetic_energy_form(state, w, u)
-            ke_form = advection.remove(ke_form)
+            ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
-                lambda t: t.has_label(advecting_velocity),
+                lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): u}), t.labels))
-            ke_form = advecting_velocity.remove(ke_form)
+                    t.form, {t.get(transporting_velocity): u}), t.labels))
+            ke_form = transporting_velocity.remove(ke_form)
             u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
-            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+        
+        # Depth transport term
         D_adv = prognostic(continuity_form(state, phi, D), "D")
-        # # linear_D_adv = linear_continuity_form(state, phi, H).label_map(
-        # #     lambda t: t.has_label(advecting_velocity),
-        # #     lambda t: Term(ufl.replace(
-        # #         t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
-        # # D_adv = linearisation(D_adv, linear_D_adv)
+        # Transport term needs special linearisation
+        if transport in terms_to_linearise['D']:
+            linear_D_adv = linear_continuity_form(state, phi, H).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
+            # Add linearisation to D_adv
+            D_adv = linearisation(D_adv, linear_D_adv)
 
         adv_form = subject(u_adv + D_adv, X)
 
+        # -------------------------------------------------------------------- #
+        # Pressure Gradient Term
+        # -------------------------------------------------------------------- #
         # define pressure gradient form and its linearisation
-        pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
-        # # linear_pressure_gradient_form = pressure_gradient_form.label_map(
-        # #     all_terms, replace_subject(trials))
-        # # pressure_gradient_form = linearisation(pressure_gradient_form,
-        # #                                         linear_pressure_gradient_form)
+        pressure_gradient_form = pressure_gradient(
+            subject(prognostic(-g*div(w)*D*dx, "u"), X))
+        # TODO: this linearised term should be removed and computed at end
+        linear_pressure_gradient_form = pressure_gradient_form.label_map(
+            all_terms, replace_subject(trials))
+        pressure_gradient_form = linearisation(pressure_gradient_form,
+                                                linear_pressure_gradient_form)
 
         residual = (mass_form + adv_form + pressure_gradient_form)
-        # # self.residual = (mass_form + adv_form + pressure_gradient_form)
 
-        # add on optional coriolis and topography forms
+        # -------------------------------------------------------------------- #
+        # Extra Terms (Coriolis and Topography)
+        # -------------------------------------------------------------------- #
         if fexpr is not None:
             V = FunctionSpace(state.mesh, "CG", 1)
             f = state.fields("coriolis", space=V)
             f.interpolate(fexpr)
             coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
-            # # self.residual += coriolis_form
             residual += coriolis_form
 
         if bexpr is not None:
             b = state.fields("topography", state.spaces("DG"))
             b.interpolate(bexpr)
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
-            # # self.residual += topography_form
             residual += topography_form
 
+        # -------------------------------------------------------------------- #
+        # Linearise equations
+        # -------------------------------------------------------------------- #
         u, D = X.split()
+        # Linearise about D = H
+        # TODO: add linearisation for u
         D.assign(Constant(H))
-        import pdb; pdb.set_trace()
-        self.residual = residual.label_map(
-            all_terms, lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
 
-        
+        self.residual = residual.label_map(
+            # Extract all terms to be linearised that haven't already been
+            lambda t: not t.has_label(linearisation) and any(t.has_label(*terms_to_linearise['all'])),
+            # Add linearisation based on UFL derivative
+            lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+        # Loop through prognostic variables and linearise any specified terms
+        for field in self.field_names:
+            self.residual = self.residual.label_map(
+                # Extract all terms to be linearised for this field's equation that haven't already been
+                lambda t: not t.has_label(linearisation) and (t.get(prognostic) == field) \
+                    and any(t.has_label(*terms_to_linearise[field])),
+                # Add linearisation based on UFL derivative
+                lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+
 
 
 class CompressibleEulerEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
-                 u_advection_option="vector_invariant_form",
+                 u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -330,37 +363,36 @@ class CompressibleEulerEquations(PrognosticEquation):
         if len(active_tracers) > 0:
             mass_form += tracer_mass_forms(X, tests, self.field_names, active_tracers)
 
-        # define velocity advection form
-        if u_advection_option == "vector_invariant_form":
+        # define velocity transport form
+        if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
-        elif u_advection_option == "vector_advection_form":
+        elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(state, w, u), "u")
-        elif u_advection_option == "vector_manifold_advection_form":
+        elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
-        elif u_advection_option == "circulation_form":
+        elif u_transport_option == "circulation_form":
             ke_form = kinetic_energy_form(state, w, u)
-            ke_form = advection.remove(ke_form)
+            ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
-                lambda t: t.has_label(advecting_velocity),
+                lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): u}), t.labels))
-            ke_form = advecting_velocity.remove(ke_form)
+                    t.form, {t.get(transporting_velocity): u}), t.labels))
+            ke_form = transporting_velocity.remove(ke_form)
             u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
-            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
         rho_adv = prognostic(continuity_form(state, phi, rho), "rho")
         linear_rho_adv = linear_continuity_form(state, phi, rhobar).label_map(
-            lambda t: t.has_label(advecting_velocity),
+            lambda t: t.has_label(transporting_velocity),
             lambda t: Term(ufl.replace(
-                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+                t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
         rho_adv = linearisation(rho_adv, linear_rho_adv)
 
-        # TODO: should the ibp twice be here?
-        theta_adv = prognostic(advection_form(state, gamma, theta, ibp=IntegrateByParts.TWICE), "theta")
+        theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
         linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
-            lambda t: t.has_label(advecting_velocity),
+            lambda t: t.has_label(transporting_velocity),
             lambda t: Term(ufl.replace(
-                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+                t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
         theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
@@ -403,10 +435,10 @@ class CompressibleEulerEquations(PrognosticEquation):
             for tracer in active_tracers:
                 if tracer.is_moisture:
                     if tracer.variable_type == TracerVariableType.mixing_ratio:
+                        idx = self.field_names.index(tracer.name)
                         if tracer.phase == Phases.gas:
                             mr_v += split(X)[idx]
                         elif tracer.phase == Phases.liquid:
-                            idx = self.field_names.index(tracer.name)
                             mr_l += split(X)[idx]
                     else:
                         raise NotImplementedError('Only mixing ratio tracers are implemented')
@@ -458,14 +490,14 @@ class CompressibleEulerEquations(PrognosticEquation):
 class CompressibleEadyEquations(CompressibleEulerEquations):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 u_advection_option="vector_invariant_form",
+                 u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
         super().__init__(state, family, degree,
                          Omega=Omega, sponge=sponge,
-                         u_advection_option=u_advection_option,
+                         u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
@@ -492,7 +524,7 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
 class IncompressibleBoussinesqEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, Omega=None,
-                 u_advection_option="vector_invariant_form",
+                 u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
@@ -544,30 +576,30 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
 
         mass_form = time_derivative(u_mass + p_mass + b_mass)
 
-        # define velocity advection term
-        if u_advection_option == "vector_invariant_form":
+        # define velocity transport term
+        if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
-        elif u_advection_option == "vector_advection_form":
+        elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(state, w, u), "u")
-        elif u_advection_option == "vector_manifold_advection_form":
+        elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
-        elif u_advection_option == "circulation_form":
+        elif u_transport_option == "circulation_form":
             ke_form = kinetic_energy_form(state, w, u)
-            ke_form = advection.remove(ke_form)
+            ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
-                lambda t: t.has_label(advecting_velocity),
+                lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): u}), t.labels))
-            ke_form = advecting_velocity.remove(ke_form)
+                    t.form, {t.get(transporting_velocity): u}), t.labels))
+            ke_form = transporting_velocity.remove(ke_form)
             u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
-            raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
+            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
-        b_adv = prognostic(advection_form(state, gamma, b, ibp=IntegrateByParts.TWICE), "b")
+        b_adv = prognostic(advection_form(state, gamma, b), "b")
         linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
-            lambda t: t.has_label(advecting_velocity),
+            lambda t: t.has_label(transporting_velocity),
             lambda t: Term(ufl.replace(
-                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+                t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
         b_adv = linearisation(b_adv, linear_b_adv)
 
         adv_form = subject(u_adv + b_adv, X)
@@ -589,13 +621,13 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
 
 class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
     def __init__(self, state, family, degree, Omega=None,
-                 u_advection_option="vector_invariant_form",
+                 u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
         super().__init__(state, family, degree,
                          Omega=Omega,
-                         u_advection_option=u_advection_option,
+                         u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
@@ -690,10 +722,9 @@ def tracer_transport_forms(state, X, tests, field_names, active_tracers):
             idx = field_names.index(tracer.name)
             tracer_prog = split(X)[idx]
             tracer_test = tests[idx]
-            if tracer.transport_eqn == TransportEquationForm.advective:
-                # TODO: should the ibp twice be here?
+            if tracer.transport_eqn == TransportEquationType.advective:
                 tracer_adv = prognostic(advection_form(state, tracer_test, tracer_prog), tracer.name)
-            elif tracer.transport_eqn == TransportEquationForm.conservative:
+            elif tracer.transport_eqn == TransportEquationType.conservative:
                 tracer_adv = prognostic(continuity_form(state, tracer_test, tracer_prog), tracer.name)
             else:
                 raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')

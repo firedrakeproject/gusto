@@ -3,8 +3,8 @@ from gusto import *
 import pytest
 
 
-def run(state, advection_schemes, tmax, f_end):
-    timestepper = PrescribedAdvection(state, advection_schemes)
+def run(state, transport_schemes, tmax, f_end):
+    timestepper = PrescribedTransport(state, transport_schemes)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end)
 
@@ -32,6 +32,6 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
 
-    advection_schemes = [(eqn, SSPRK3(state, options=opts))]
+    transport_schemes = [(eqn, SSPRK3(state, options=opts))]
 
-    assert run(state, advection_schemes, setup.tmax, setup.f_end) < setup.tol
+    assert run(state, transport_schemes, setup.tmax, setup.f_end) < setup.tol
