@@ -161,6 +161,7 @@ class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  u_advection_option="vector_invariant_form",
+                 terms_to_linearise=['time_derivative'],
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = ["u", "D"]
@@ -191,13 +192,13 @@ class ShallowWaterEquations(PrognosticEquation):
         u, D = split(X)
 
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        linear_u_mass = u_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        u_mass = linearisation(u_mass, linear_u_mass)
+        # # linear_u_mass = u_mass.label_map(all_terms,
+        # #                                  replace_subject(trials))
+        # # u_mass = linearisation(u_mass, linear_u_mass)
         D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
-        linear_D_mass = D_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        D_mass = linearisation(D_mass, linear_D_mass)
+        # # linear_D_mass = D_mass.label_map(all_terms,
+        # #                                  replace_subject(trials))
+        # # D_mass = linearisation(D_mass, linear_D_mass)
         mass_form = time_derivative(u_mass + D_mass)
 
         # define velocity advection term
@@ -219,22 +220,23 @@ class ShallowWaterEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_advection_option: %s" % u_advection_option)
         D_adv = prognostic(continuity_form(state, phi, D), "D")
-        linear_D_adv = linear_continuity_form(state, phi, H).label_map(
-            lambda t: t.has_label(advecting_velocity),
-            lambda t: Term(ufl.replace(
-                t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
-        D_adv = linearisation(D_adv, linear_D_adv)
+        # # linear_D_adv = linear_continuity_form(state, phi, H).label_map(
+        # #     lambda t: t.has_label(advecting_velocity),
+        # #     lambda t: Term(ufl.replace(
+        # #         t.form, {t.get(advecting_velocity): trials[0]}), t.labels))
+        # # D_adv = linearisation(D_adv, linear_D_adv)
 
         adv_form = subject(u_adv + D_adv, X)
 
         # define pressure gradient form and its linearisation
         pressure_gradient_form = subject(prognostic(-g*div(w)*D*dx, "u"), X)
-        linear_pressure_gradient_form = pressure_gradient_form.label_map(
-            all_terms, replace_subject(trials))
-        pressure_gradient_form = linearisation(pressure_gradient_form,
-                                               linear_pressure_gradient_form)
+        # # linear_pressure_gradient_form = pressure_gradient_form.label_map(
+        # #     all_terms, replace_subject(trials))
+        # # pressure_gradient_form = linearisation(pressure_gradient_form,
+        # #                                         linear_pressure_gradient_form)
 
-        self.residual = (mass_form + adv_form + pressure_gradient_form)
+        residual = (mass_form + adv_form + pressure_gradient_form)
+        # # self.residual = (mass_form + adv_form + pressure_gradient_form)
 
         # add on optional coriolis and topography forms
         if fexpr is not None:
@@ -242,13 +244,23 @@ class ShallowWaterEquations(PrognosticEquation):
             f = state.fields("coriolis", space=V)
             f.interpolate(fexpr)
             coriolis_form = subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X)
-            self.residual += coriolis_form
+            # # self.residual += coriolis_form
+            residual += coriolis_form
 
         if bexpr is not None:
             b = state.fields("topography", state.spaces("DG"))
             b.interpolate(bexpr)
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
-            self.residual += topography_form
+            # # self.residual += topography_form
+            residual += topography_form
+
+        u, D = X.split()
+        D.assign(Constant(H))
+        import pdb; pdb.set_trace()
+        self.residual = residual.label_map(
+            all_terms, lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+
+        
 
 
 class CompressibleEulerEquations(PrognosticEquation):
