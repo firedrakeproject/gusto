@@ -66,6 +66,7 @@ transporting_velocity = Label("transporting_velocity", validator=lambda value: t
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 pressure_gradient = Label("pressure_gradient")
+coriolis = Label("coriolis")
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 name = Label("name", validator=lambda value: type(value) == str)
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)

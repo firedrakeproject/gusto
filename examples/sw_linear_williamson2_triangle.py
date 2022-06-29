@@ -52,6 +52,6 @@ D0.interpolate(Dexpr)
 transport_schemes = []
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields)
+stepper = CrankNicolson(state, eqns, transport_schemes)
 
 stepper.run(t=0, tmax=tmax)
