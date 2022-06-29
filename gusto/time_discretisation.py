@@ -322,7 +322,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 elif old_transport_term.labels['transport'] == TransportEquationType.conservative:
                     new_transport_term = continuity_form(self.state, test, field, ibp=self.options.ibp)
                 else:
-                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_terms.labels["transport"]}')
+                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_term.labels["transport"]}')
 
                 # Finally, drop the old transport term and add the new one
                 self.residual = self.residual.label_map(
