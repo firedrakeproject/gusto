@@ -48,8 +48,7 @@ def replace_subject(new, idx=None):
         # Consider cases that subj is normal Function or MixedFunction
         # vs cases of new being Function vs MixedFunction vs tuple
         # Ideally catch all cases or fail gracefully
-        if (isinstance(subj.ufl_element(), MixedElement)
-            and not isinstance(subj.ufl_element(), VectorElement)):
+        if type(subj.ufl_element()) is MixedElement:
             if type(new) == tuple:
                 assert len(new) == len(subj.function_space())
                 for k, v in zip(split(subj), new):
@@ -60,8 +59,7 @@ def replace_subject(new, idx=None):
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
 
             # Now handle MixedElements separately as these need indexing
-            elif (isinstance(new.ufl_element(), MixedElement)
-              and not isinstance(new.ufl_element(), VectorElement)):
+            elif type(new.ufl_element()) is MixedElement:
                 assert len(new.function_space()) == len(subj.function_space())
                 # If idx specified, replace only that component
                 if idx is not None:
@@ -79,8 +77,7 @@ def replace_subject(new, idx=None):
         else:
             if not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
-            elif (isinstance(new.ufl_element(), MixedElement)
-                  and not isinstance(new.ufl_element(), VectorElement)):
+            elif type(new.ufl_element()) is MixedElement:
                 replace_dict[subj] = split(new)[idx]
             else:
                 replace_dict[subj] = new
