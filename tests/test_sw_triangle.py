@@ -12,7 +12,7 @@ day = 24.*60.*60.
 u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 
-def setup_sw(dirname, dt, u_advection_option):
+def setup_sw(dirname, dt, u_transport_option):
 
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -52,7 +52,7 @@ def setup_sw(dirname, dt, u_advection_option):
     fexpr = 2*Omega*x[2]/R
     eqns = ShallowWaterEquations(state, family="BDM", degree=1,
                                  fexpr=fexpr,
-                                 u_advection_option=u_advection_option)
+                                 u_transport_option=u_transport_option)
 
     # interpolate initial conditions
     u0 = state.fields("u")
@@ -124,32 +124,32 @@ def check_results(dirname):
     assert u_max * (1 - tolerance) < u_zonal["max"][0] < u_max * (1 + tolerance)
 
 
-@pytest.mark.parametrize("u_advection_option",
+@pytest.mark.parametrize("u_transport_option",
                          ["vector_invariant_form", "circulation_form",
                           "vector_advection_form"])
-def test_sw_setup(tmpdir, u_advection_option):
+def test_sw_setup(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
     dt = 1500
-    state, eqns = setup_sw(dirname, dt, u_advection_option)
+    state, eqns = setup_sw(dirname, dt, u_transport_option)
 
-    advected_fields = []
-    advected_fields.append((ImplicitMidpoint(state, "u")))
-    advected_fields.append((SSPRK3(state, "D")))
-    stepper = CrankNicolson(state, eqns, advected_fields)
+    transported_fields = []
+    transported_fields.append((ImplicitMidpoint(state, "u")))
+    transported_fields.append((SSPRK3(state, "D")))
+    stepper = CrankNicolson(state, eqns, transported_fields)
     stepper.run(t=0, tmax=0.25*day)
 
     check_results(dirname)
 
 
-@pytest.mark.parametrize("u_advection_option",
+@pytest.mark.parametrize("u_transport_option",
                          ["vector_invariant_form", "circulation_form",
                           "vector_advection_form"])
-def test_sw_ssprk3(tmpdir, u_advection_option):
+def test_sw_ssprk3(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
     dt = 100
-    state, eqns = setup_sw(dirname, dt, u_advection_option)
+    state, eqns = setup_sw(dirname, dt, u_transport_option)
 
     stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
     stepper.run(t=0, tmax=0.01*day)

@@ -70,8 +70,8 @@ def setup_tracer(dirname):
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    # set up advection schemes
-    advection_schemes = [ImplicitMidpoint(state, "u"),
+    # set up transport schemes
+    transport_schemes = [ImplicitMidpoint(state, "u"),
                          SSPRK3(state, "rho"),
                          SSPRK3(state, "theta", options=SUPGOptions())]
 
@@ -79,7 +79,7 @@ def setup_tracer(dirname):
     linear_solver = CompressibleSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advection_schemes,
+    stepper = CrankNicolson(state, eqns, transport_schemes,
                             auxiliary_equations_and_schemes=[(tracer_eqn, SSPRK3(state, options=SUPGOptions()))],
                             linear_solver=linear_solver)
 

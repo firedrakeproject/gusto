@@ -2,11 +2,11 @@ from firedrake import Function
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
-from gusto.labels import advection, diffusion
+from gusto.labels import transport, diffusion
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
-__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedAdvection"]
+__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedTransport"]
 
 
 class TimeLevelFields(object):
@@ -40,9 +40,9 @@ class Timestepper(object):
     Basic timestepping class for Gusto
 
     :arg state: a :class:`.State` object
-    :arg advection_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
+    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to transport, and the
+        :class:`~.TimeDiscretisation` to use.
     :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
@@ -60,11 +60,11 @@ class Timestepper(object):
         for eqn, method in problem:
             if type(method) is tuple:
                 for scheme, *active_labels in method:
-                    scheme.setup(eqn, self.advecting_velocity, apply_bcs, *active_labels)
+                    scheme.setup(eqn, self.transporting_velocity, apply_bcs, *active_labels)
                     self.schemes.append((eqn.field_name, scheme))
             else:
                 scheme = method
-                scheme.setup(eqn, self.advecting_velocity)
+                scheme.setup(eqn, self.transporting_velocity)
                 self.schemes.append((eqn.field_name, scheme))
 
         if physics_list is not None:
@@ -73,7 +73,7 @@ class Timestepper(object):
             self.physics_list = []
 
     @property
-    def advecting_velocity(self):
+    def transporting_velocity(self):
         if hasattr(self.x.n, 'u'):
             return self.x.n('u')
         else:
@@ -105,7 +105,7 @@ class Timestepper(object):
     def run(self, t, tmax, pickup=False):
         """
         This is the timeloop. After completing the semi implicit step
-        any passively advected fields are updated, implicit diffusion and
+        any passively transported fields are updated, implicit diffusion and
         physics updates are applied (if required).
         """
 
@@ -152,12 +152,12 @@ class Timestepper(object):
 class CrankNicolson(Timestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
-    splitting and auxilliary semi-Lagrangian advection.
+    splitting and auxilliary semi-Lagrangian transport.
 
     :arg state: a :class:`.State` object
-    :arg advection_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
+    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to transport, and the
+        :class:`~.TimeDiscretisation` to use.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
@@ -170,7 +170,7 @@ class CrankNicolson(Timestepper):
              iterations and alpha is the offcentering parameter
     """
 
-    def __init__(self, state, equation_set, advection_schemes,
+    def __init__(self, state, equation_set, transport_schemes,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -183,12 +183,12 @@ class CrankNicolson(Timestepper):
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
         schemes = []
-        self.advection_schemes = []
-        self.active_advection = []
-        for scheme in advection_schemes:
-            schemes.append((scheme, advection))
+        self.transport_schemes = []
+        self.active_transport = []
+        for scheme in transport_schemes:
+            schemes.append((scheme, transport))
             assert scheme.field_name in equation_set.field_names
-            self.active_advection.append((scheme.field_name, scheme))
+            self.active_transport.append((scheme.field_name, scheme))
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -221,7 +221,7 @@ class CrankNicolson(Timestepper):
         self.bcs = equation_set.bcs
 
     @property
-    def advecting_velocity(self):
+    def transporting_velocity(self):
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
@@ -244,9 +244,9 @@ class CrankNicolson(Timestepper):
 
         for k in range(self.maxk):
 
-            with timed_stage("Advection"):
-                for name, scheme in self.active_advection:
-                    # advects a field from xstar and puts result in xp
+            with timed_stage("Transport"):
+                for name, scheme in self.active_transport:
+                    # transports a field from xstar and puts result in xp
                     scheme.apply(xstar(name), xp(name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
@@ -267,7 +267,7 @@ class CrankNicolson(Timestepper):
             self._apply_bcs()
 
         for name, scheme in self.auxiliary_schemes:
-            # advects a field from xn and puts result in xnp1
+            # transports a field from xn and puts result in xnp1
             scheme.apply(xn(name), xnp1(name))
 
         with timed_stage("Diffusion"):
@@ -275,21 +275,21 @@ class CrankNicolson(Timestepper):
                 scheme.apply(xnp1(name), xnp1(name))
 
 
-class PrescribedAdvection(Timestepper):
+class PrescribedTransport(Timestepper):
 
     def __init__(self, state, problem, physics_list=None,
-                 prescribed_advecting_velocity=None):
+                 prescribed_transporting_velocity=None):
 
-        self.prescribed_advecting_velocity = prescribed_advecting_velocity
+        self.prescribed_transporting_velocity = prescribed_transporting_velocity
         super().__init__(state, problem,
                          physics_list=physics_list)
 
     @property
-    def advecting_velocity(self):
+    def transporting_velocity(self):
         return self.state.fields('u')
 
     def timestep(self):
-        if self.prescribed_advecting_velocity is not None:
-            self.state.fields('u').project(self.prescribed_advecting_velocity(self.state.t))
+        if self.prescribed_transporting_velocity is not None:
+            self.state.fields('u').project(self.prescribed_transporting_velocity(self.state.t))
 
         super().timestep()

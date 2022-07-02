@@ -2,7 +2,7 @@
 Tests various Gusto ActiveTracer objects.
 """
 
-from gusto import (ActiveTracer, TransportEquationForm,
+from gusto import (ActiveTracer, TransportEquationType,
                    TracerVariableType, Phases)
 import pytest
 
@@ -11,8 +11,8 @@ def test_tracer_classes():
     names = ['mr_v', 'big_blob']
     spaces = ['V', 'U']
     transport_flags = [True, False]
-    transport_eqns = [TransportEquationForm.advective,
-                      TransportEquationForm.no_transport]
+    transport_eqns = [TransportEquationType.advective,
+                      TransportEquationType.no_transport]
     variable_types = [TracerVariableType.mixing_ratio]
 
     for name, space, transport_flag, transport_eqn in \

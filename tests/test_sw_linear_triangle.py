@@ -43,10 +43,10 @@ def setup_sw(dirname):
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    advection_schemes = [ForwardEuler(state, "D")]
+    transport_schemes = [ForwardEuler(state, "D")]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advection_schemes)
+    stepper = CrankNicolson(state, eqns, transport_schemes)
 
     return stepper, 2*day
 
