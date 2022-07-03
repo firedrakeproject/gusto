@@ -75,9 +75,17 @@ def replace_subject(new, idx=None):
 
         # subj is a normal Function
         else:
-            if not isinstance(new, Function):
+            if type(new) is tuple:
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'+
+                                     ' when new is a tuple')
+                replace_dict[subj] = new[idx]
+            elif not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
-            elif type(new.ufl_element()) is MixedElement:
+            elif type(new.ufl_element()) == MixedElement:
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'+
+                                     ' when new is a tuple')
                 replace_dict[subj] = split(new)[idx]
             else:
                 replace_dict[subj] = new
