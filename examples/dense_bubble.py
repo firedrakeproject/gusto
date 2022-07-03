@@ -89,8 +89,8 @@ for delta, dt in res_dt.items():
     else:
         thetaeqn = EmbeddedDGOptions()
     transported_fields = [ImplicitMidpoint(state, "u"),
-                       SSPRK3(state, "rho"),
-                       SSPRK3(state, "theta", options=theta_opts)]
+                          SSPRK3(state, "rho"),
+                          SSPRK3(state, "theta", options=theta_opts)]
 
     # Set up linear solver
     linear_solver = CompressibleSolver(state, eqns)

@@ -4,7 +4,7 @@ Tests various Gusto ActiveTracer objects.
 
 from gusto import (ActiveTracer, TransportEquationType,
                    TracerVariableType, Phases)
-import pytest
+
 
 def test_tracer_classes():
 
@@ -16,7 +16,7 @@ def test_tracer_classes():
     variable_types = [TracerVariableType.mixing_ratio]
 
     for name, space, transport_flag, transport_eqn in \
-        zip(names, spaces, transport_flags, transport_eqns):
+            zip(names, spaces, transport_flags, transport_eqns):
 
         # Test active tracer class
         for variable_type in variable_types:

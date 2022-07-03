@@ -1,113 +1,170 @@
 """
-Tests FML's label objects.
+Tests FML's Term objects. A term contains a form and labels.
 """
 
-from firedrake import (IntervalMesh, Function, RectangleMesh, SpatialCoordinate,
-                       VectorFunctionSpace, FiniteElement)
-
-from gusto import kernels
-import numpy as np
+from firedrake import (IntervalMesh, FunctionSpace, Function,
+                       TestFunction, dx, Constant)
+from gusto.fml import Label, Term, LabelledForm
 import pytest
 
 
-@pytest.fixture
-def mesh(geometry):
+# Two methods of making a Term with Labels. Either pass them as a dict
+# at the initialisation of the Term, or apply them afterwards
+@pytest.mark.parametrize("initialise", ["from_dicts", "apply_labels"])
+def test_term(initialise):
 
+    # ------------------------------------------------------------------------ #
+    # Set up terms
+    # ------------------------------------------------------------------------ #
+
+    # Some basic labels
+    foo_label = Label("foo", validator=lambda value: type(value) == bool)
+    lorem_label = Label("lorem", validator=lambda value: type(value) == str)
+    ipsum_label = Label("ipsum", validator=lambda value: type(value) == int)
+
+    # Dict for matching the label names to the label objects
+    all_labels = [foo_label, lorem_label, ipsum_label]
+    all_label_dict = {label.label: label for label in all_labels}
+
+    # Create mesh, function space and forms
     L = 3.0
     n = 3
+    mesh = IntervalMesh(n, L)
+    V = FunctionSpace(mesh, "DG", 0)
+    f = Function(V)
+    g = Function(V)
+    h = Function(V)
+    test = TestFunction(V)
+    form = f*test*dx
 
-    if geometry == "1D":
-        m = IntervalMesh(n, L)
-    elif geometry == "2D":
-        m = RectangleMesh(n, n, L, L, quadrilateral=True)
+    # Declare what the labels will be
+    label_dict = {'foo': True, 'lorem': 'etc', 'ipsum': 1}
 
-    return m
+    # Make terms
+    if initialise == "from_dicts":
+        term = Term(form, label_dict)
+    else:
+        term = Term(form)
 
+        # Apply labels
+        for label_name, value in label_dict.items():
+            term = all_label_dict[label_name](term, value)
 
-def setup_values(geometry, DG0_field, weights):
+    # ------------------------------------------------------------------------ #
+    # Test Term.get routine
+    # ------------------------------------------------------------------------ #
 
-    x = SpatialCoordinate(weights.function_space().mesh())
-    coords_CG1 = Function(weights.function_space()).interpolate(x)
-    coords_DG0 = Function(DG0_field.function_space()).interpolate(x)
+    for label in all_labels:
+        if label.label in label_dict.keys():
+            # Check if label is attached to Term and it has correct value
+            assert term.get(label) == label_dict[label.label], \
+                f'term should have label {label.label} with value equal ' + \
+                f'to {label_dict[label.label]} and not {term.get(label)}'
+        else:
+            # Labelled shouldn't be attached to Term so this should return None
+            assert term.get(label) is None, 'term should not have ' + \
+                f'label {label.label} but term.get(label) returns ' + \
+                f'{term.get(label)}'
 
-    if geometry == "1D":
-        # Let us focus on the point at x = 1.0
-        # The test is if at CG_field[CG_index] we get the average of the corresponding DG_field values
-        CG_index = set_val_at_point(coords_CG1, 1.0)
-        set_val_at_point(coords_DG0, 0.5, DG0_field, 6.0)
-        set_val_at_point(coords_DG0, 1.5, DG0_field, -10.0)
-        set_val_at_point(coords_CG1, 1.0, weights, 2.0)
+    # ------------------------------------------------------------------------ #
+    # Test Term.has_label routine
+    # ------------------------------------------------------------------------ #
 
-        true_values = 0.5 * (6.0 - 10.0)
+    # Test has_label for each label one by one
+    for label in all_labels:
+        assert term.has_label(label) == (label.label in label_dict.keys()), \
+            f'term.has_label giving incorrect value for {label.label}'
 
-    elif geometry == "2D":
-        # Let us focus on the point at (1,1)
-        # The test is if at CG_field[CG_index] we get the average of the corresponding DG_field values
-        # We do it for both components of the vector field
+    # Test has_labels by passing all labels at once
+    has_labels = term.has_label(*all_labels, return_tuple=True)
+    for i, label in enumerate(all_labels):
+        assert has_labels[i] == (label.label in label_dict.keys()), \
+            f'has_label for label {label.label} returning wrong value'
 
-        CG_index = set_val_at_point(coords_CG1, [1.0, 1.0])
-        set_val_at_point(coords_CG1, [1.0, 1.0], weights, [4.0, 4.0])
-        set_val_at_point(coords_DG0, [0.5, 0.5], DG0_field, [6.0, -3.0])
-        set_val_at_point(coords_DG0, [1.5, 0.5], DG0_field, [-7.0, -6.0])
-        set_val_at_point(coords_DG0, [0.5, 1.5], DG0_field, [0.0, 3.0])
-        set_val_at_point(coords_DG0, [1.5, 1.5], DG0_field, [-9.0, -1.0])
+    # Check the return_tuple option is correct when only one label is passed
+    has_labels = term.has_label(*[foo_label], return_tuple=True)
+    assert len(has_labels) == 1, 'Length returned by has_label is ' + \
+        f'incorrect, it is {len(has_labels)} but should be 1'
+    assert has_labels[0] == (label.label in label_dict.keys()), \
+        f'has_label for label {label.label} returning wrong value'
 
-        true_values = [0.25 * (6.0 - 7.0 + 0.0 - 9.0),
-                       0.25 * (-3.0 - 6.0 + 3.0 - 1.0)]
+    # ------------------------------------------------------------------------ #
+    # Test Term addition and subtraction
+    # ------------------------------------------------------------------------ #
 
-    return DG0_field, weights, true_values, CG_index
+    form_2 = g*test*dx
+    term_2 = ipsum_label(Term(form_2), 2)
 
+    labelled_form_1 = term_2 + term
+    labelled_form_2 = term + term_2
 
-def set_val_at_point(coord_field, coords, field=None, new_value=None):
-    """
-    Finds the DoF of a field at a particular coordinate. If new_value is
-    provided then it also assigns the coefficient for the field there to be
-    new_value. Otherwise the DoF index is returned.
-    """
-    num_points = len(coord_field.dat.data[:])
-    point_found = False
+    # Adding two Terms should return a LabelledForm containing the Terms
+    assert type(labelled_form_1) is LabelledForm, 'The sum of two Terms ' + \
+        f'should be a LabelledForm, not {type(labelled_form_1)}'
+    assert type(labelled_form_2) is LabelledForm, 'The sum of two Terms ' + \
+        f'should be a LabelledForm, not {type(labelled_form_1)}'
 
-    for i in range(num_points):
-        # Do the coordinates at the ith point match our desired coords?
-        if np.allclose(coord_field.dat.data[i], coords, rtol=1e-14):
-            point_found = True
-            point_index = i
-            if field is not None and new_value is not None:
-                field.dat.data[i] = new_value
-            break
+    # Adding a LabelledForm to a Term should return a LabelledForm
+    labelled_form_3 = term + labelled_form_2
+    assert type(labelled_form_3) is LabelledForm, 'The sum of a Term and ' + \
+        f'Labelled Form should be a LabelledForm, not {type(labelled_form_3)}'
 
-    if not point_found:
-        raise ValueError('Your coordinates do not appear to match the coordinates of a DoF')
+    labelled_form_1 = term_2 - term
+    labelled_form_2 = term - term_2
 
-    if field is None or new_value is None:
-        return point_index
+    # Subtracting two Terms should return a LabelledForm containing the Terms
+    assert type(labelled_form_1) is LabelledForm, 'The difference of two ' + \
+        f'Terms should be a LabelledForm, not {type(labelled_form_1)}'
+    assert type(labelled_form_2) is LabelledForm, 'The difference of two ' + \
+        f'Terms should be a LabelledForm, not {type(labelled_form_1)}'
 
+    # Subtracting a LabelledForm from a Term should return a LabelledForm
+    labelled_form_3 = term - labelled_form_2
+    assert type(labelled_form_3) is LabelledForm, 'The differnce of a Term ' + \
+        f'and a Labelled Form should be a LabelledForm, not {type(labelled_form_3)}'
 
-@pytest.mark.parametrize("geometry", ["1D", "2D"])
-def test_average(geometry, mesh):
+    # Adding None to a Term should return the Term
+    new_term = term + None
+    assert term == new_term, 'Adding None to a Term should give the same Term'
 
-    cell = mesh.ufl_cell().cellname()
-    DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
-    vec_DG0 = VectorFunctionSpace(mesh, "DG", 0)
-    vec_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+    # ------------------------------------------------------------------------ #
+    # Test Term multiplication and division
+    # ------------------------------------------------------------------------ #
 
-    # We will fill DG1_field with values, and average them to CG_field
-    # First need to put the values into DG0 and then interpolate
-    DG0_field = Function(vec_DG0)
-    DG1_field = Function(vec_DG1)
-    CG_field = Function(vec_CG1)
-    weights = Function(vec_CG1)
+    # Multiplying a term by an integer should give a Term
+    new_term = term*3
+    assert type(new_term) is Term, 'Multiplying a Term by an integer ' + \
+        f'give a Term, not a {type(new_term)}'
 
-    DG0_field, weights, true_values, CG_index = setup_values(geometry, DG0_field, weights)
+    # Multiplying a term by a float should give a Term
+    new_term = term*19.0
+    assert type(new_term) is Term, 'Multiplying a Term by a float ' + \
+        f'give a Term, not a {type(new_term)}'
 
-    DG1_field.interpolate(DG0_field)
-    kernel = kernels.Average(vec_CG1)
-    kernel.apply(CG_field, weights, DG1_field)
+    # Multiplying a term by a Constant should give a Term
+    new_term = term*Constant(-4.0)
+    assert type(new_term) is Term, 'Multiplying a Term by a Constant ' + \
+        f'give a Term, not a {type(new_term)}'
 
-    tolerance = 1e-12
-    if geometry == "1D":
-        assert abs(CG_field.dat.data[CG_index] - true_values) < tolerance
-    elif geometry == "2D":
-        assert abs(CG_field.dat.data[CG_index][0] - true_values[0]) < tolerance
-        assert abs(CG_field.dat.data[CG_index][1] - true_values[1]) < tolerance
+    # Dividing a term by an integer should give a Term
+    new_term = term/3
+    assert type(new_term) is Term, 'Dividing a Term by an integer ' + \
+        f'give a Term, not a {type(new_term)}'
+
+    # Dividing a term by a float should give a Term
+    new_term = term/19.0
+    assert type(new_term) is Term, 'Dividing a Term by a float ' + \
+        f'give a Term, not a {type(new_term)}'
+
+    # Dividing a term by a Constant should give a Term
+    new_term = term/Constant(-4.0)
+    assert type(new_term) is Term, 'Dividing a Term by a Constant ' + \
+        f'give a Term, not a {type(new_term)}'
+
+    # Multiplying a term by a Function should fail
+    try:
+        new_term = term*h
+        # If we get here we have failed
+        assert False, 'Multiplying a Term by a Function should fail'
+    except TypeError:
+        pass

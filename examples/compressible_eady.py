@@ -131,8 +131,8 @@ state.set_reference_profiles([('rho', rho_b),
 
 # Set up transport schemes
 transported_fields = [SSPRK3(state, "u"),
-                   SSPRK3(state, "rho"),
-                   SSPRK3(state, "theta")]
+                      SSPRK3(state, "rho"),
+                      SSPRK3(state, "theta")]
 
 linear_solver = CompressibleSolver(state, eqns)
 
