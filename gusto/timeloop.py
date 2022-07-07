@@ -242,6 +242,8 @@ class CrankNicolson(Timestepper):
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
+        xp(self.field_name).assign(xstar(self.field_name))
+
         for k in range(self.maxk):
 
             with timed_stage("Transport"):

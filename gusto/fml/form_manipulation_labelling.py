@@ -25,8 +25,8 @@ class Term(object):
     def get(self, label, default=None):
         return self.labels.get(label.label)
 
-    def has_label(self, *labels):
-        if len(labels) == 1:
+    def has_label(self, *labels, return_tuple=False):
+        if len(labels) == 1 and not return_tuple:
             return labels[0].label in self.labels
         else:
             return tuple(self.has_label(l) for l in labels)

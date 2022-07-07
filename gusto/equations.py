@@ -197,14 +197,7 @@ class ShallowWaterEquations(PrognosticEquation):
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
         u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        # TODO: this linearised term should be removed and computed at end
-        # linear_u_mass = u_mass.label_map(all_terms,
-        #                                  replace_subject(trials))
-        # u_mass = linearisation(u_mass, linear_u_mass)
         D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
-        # linear_D_mass = D_mass.label_map(all_terms,
-        #                                  replace_subject(trials))
-        # D_mass = linearisation(D_mass, linear_D_mass)
         mass_form = time_derivative(u_mass + D_mass)
 
         # -------------------------------------------------------------------- #
@@ -228,9 +221,9 @@ class ShallowWaterEquations(PrognosticEquation):
             u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
-        
+
         # Depth transport term
-        D_adv = prognostic(continuity_form(state, phi, D), "D")
+        D_adv = prognostic(linear_continuity_form(state, phi, D), "D")
         # Transport term needs special linearisation
         if transport in terms_to_linearise['D']:
             linear_D_adv = linear_continuity_form(state, phi, H).label_map(
@@ -280,43 +273,47 @@ class ShallowWaterEquations(PrognosticEquation):
         # Linearise about D = H
         # TODO: add linearisation state for u
         D.assign(Constant(H))
+        u, D = split(X)
 
         self.residual = residual.label_map(
             # Extract all terms to be linearised that haven't already been
-            lambda t: not t.has_label(linearisation) and any(t.has_label(*terms_to_linearise['all'])),
+            lambda t: not t.has_label(linearisation) \
+                and any(t.has_label(*terms_to_linearise['all'], return_tuple=True)),
             # TODO: for now just replace subject with trial but this should be better...
-            lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(trials))))
+            lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(trials)).terms[0]))
             # TODO: Add linearisation based on UFL derivative
-            # lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+            # lambda t: linearisation(t, Term(ufl.derivative(t.form, X, trials), t.labels)))
         # Loop through prognostic variables and linearise any specified terms
         for field in self.field_names:
             self.residual = self.residual.label_map(
                 # Extract all terms to be linearised for this field's equation that haven't already been
                 lambda t: not t.has_label(linearisation) and (t.get(prognostic) == field) \
-                    and any(t.has_label(*terms_to_linearise[field])),
+                    and any(t.has_label(*terms_to_linearise[field], return_tuple=True)),
                 # TODO: for now just replace subject with trial but this should be better...
-                lambda t: linearisation(t, t.label_map(all_terms, replace_subject(trials))))
+                lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(trials)).terms[0]))
                 # TODO: Add linearisation based on UFL derivative
-                # lambda t: linearisation(t, Term(ufl.derivative(t.form, (u,D), trials), t.labels)))
+                # lambda t: linearisation(t, Term(ufl.derivative(t.form, X, trials), t.labels)))
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  terms_to_linearise={'all':[time_derivative,pressure_gradient],
                                      'D':[transport],
-                                     'u':[]},
+                                     'u':[coriolis]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
-        
+
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
                          terms_to_linearise=terms_to_linearise,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
-        
+
         # Drop all terms without linearisation
         self.residual = self.residual.label_map(
-            lambda t: t.has_label(linearisation), map_if_false=drop)
+            lambda t: t.has_label(linearisation),
+            # TODO: Replace all terms with their linearisation?
+            map_if_false=drop)
 
 
 class CompressibleEulerEquations(PrognosticEquation):
