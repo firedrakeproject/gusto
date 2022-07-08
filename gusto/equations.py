@@ -18,7 +18,7 @@ from gusto.transport_forms import (advection_form, continuity_form,
                                    linear_advection_form)
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
-from gusto.configuration import IntegrateByParts, TransportEquationType
+from gusto.configuration import TransportEquationType
 import ufl
 
 
