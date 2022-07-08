@@ -1,7 +1,7 @@
 from firedrake import (Function, TrialFunctions, DirichletBC,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
-from gusto.labels import (advection, diffusion, name, time_derivative,
+from gusto.labels import (transport, diffusion, name, time_derivative,
                           replace_subject)
 from gusto.fml.form_manipulation_labelling import drop
 
@@ -33,7 +33,7 @@ class Forcing(object):
         self.xF = Function(W)
 
         residual = equation.residual.label_map(
-            lambda t: t.has_label(advection), drop)
+            lambda t: t.has_label(transport), drop)
         residual = equation.residual.label_map(
             lambda t: t.has_label(diffusion), drop)
 

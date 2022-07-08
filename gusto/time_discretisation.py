@@ -6,11 +6,12 @@ from firedrake import (Function, NonlinearVariationalProblem,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import logger, DEBUG
-from gusto.labels import (time_derivative, advecting_velocity, prognostic,
-                          replace_subject, replace_test_function)
+from gusto.configuration import logger, DEBUG, TransportEquationType
+from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
+                          transport, ibp_label, replace_subject, replace_test_function)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
+from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
@@ -34,8 +35,7 @@ def is_cg(V):
 
 def embedded_dg(original_apply):
     """
-    Decorator to add interpolation and projection steps for embedded
-    DG advection.
+    Decorator to add interpolation and projection steps for embedded DG method.
     """
     def get_apply(self, x_in, x_out):
 
@@ -56,17 +56,17 @@ def embedded_dg(original_apply):
     return get_apply
 
 
-class Advection(object, metaclass=ABCMeta):
+class TimeDiscretisation(object, metaclass=ABCMeta):
     """
-    Base class for advection schemes.
+    Base class for time discretisation schemes.
 
     :arg state: :class:`.State` object.
-    :arg field: field to be advected
+    :arg field: field to be evolved
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg solver_parameters: solver_parameters
     :arg limiter: :class:`.Limiter` object.
-    :arg options: :class:`.AdvectionOptions` object
+    :arg options: :class:`.DiscretisationOptions` object
     """
 
     def __init__(self, state, field_name=None, solver_parameters=None,
@@ -129,7 +129,17 @@ class Advection(object, metaclass=ABCMeta):
 
         options = self.options
 
-        self.replace_advecting_velocity(uadv)
+        # -------------------------------------------------------------------- #
+        # Routines relating to transport
+        # -------------------------------------------------------------------- #
+
+        if hasattr(self.options, 'ibp'):
+            self.replace_transport_term()
+        self.replace_transporting_velocity(uadv)
+
+        # -------------------------------------------------------------------- #
+        # Wrappers for embedded / recovery methods
+        # -------------------------------------------------------------------- #
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
             # construct the embedding space if not specified
@@ -148,6 +158,10 @@ class Advection(object, metaclass=ABCMeta):
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
+
+        # -------------------------------------------------------------------- #
+        # Modify test function for SUPG methods
+        # -------------------------------------------------------------------- #
 
         if self.discretisation_option == "supg":
             # construct tau, if it is not specified
@@ -185,7 +199,7 @@ class Advection(object, metaclass=ABCMeta):
         if self.discretisation_option is not None:
             # replace the original test function with one defined on
             # the embedding space, as this is the space where the
-            # advection occurs
+            # the problem will be solved
             self.residual = self.residual.label_map(
                 all_terms,
                 map_if_true=replace_test_function(new_test))
@@ -219,9 +233,9 @@ class Advection(object, metaclass=ABCMeta):
 
     def pre_apply(self, x_in, discretisation_option):
         """
-        Extra steps to advection if using an embedded method,
+        Extra steps to discretisation if using an embedded method,
         which might be either the plain embedded method or the
-        recovered space advection scheme.
+        recovered space scheme.
 
         :arg x_in: the input set of prognostic fields.
         :arg discretisation option: string specifying which scheme to use.
@@ -241,7 +255,7 @@ class Advection(object, metaclass=ABCMeta):
     def post_apply(self, x_out, discretisation_option):
         """
         The projection steps, returning a field to its original space
-        for an embedded DG advection scheme. For the case of the
+        for an embedded DG scheme. For the case of the
         recovered scheme, there are two options dependent on whether
         the scheme is limited or not.
 
@@ -274,16 +288,57 @@ class Advection(object, metaclass=ABCMeta):
 
         return r.form
 
-    def replace_advecting_velocity(self, uadv):
-        # replace the advecting velocity in any terms that contain it
-        if any([t.has_label(advecting_velocity) for t in self.residual]):
+    def replace_transport_term(self):
+        """
+        This routine allows the default transport term to be replaced with a
+        different one, specified through the transport options.
+
+        This is necessary because when the prognostic equations are declared,
+        the whole transport
+        """
+
+        # Extract transport term of equation
+        old_transport_term_list = self.residual.label_map(
+            lambda t: t.has_label(transport), map_if_false=drop)
+
+        # If there are more transport terms, extract only the one for this variable
+        if len(old_transport_term_list.terms) > 1:
+            raise NotImplementedError('Cannot replace transport terms when there are more than one')
+
+        # Then we should only have one transport term
+        old_transport_term = old_transport_term_list.terms[0]
+
+        # If the transport term has an ibp label, then it could be replaced
+        if old_transport_term.has_label(ibp_label) and hasattr(self.options, 'ibp'):
+            # Do the options specify a different ibp to the old transport term?
+            if old_transport_term.labels['ibp'] != self.options.ibp:
+                # Set up a new transport term
+                field = self.state.fields(self.field_name)
+                test = TestFunction(self.fs)
+
+                # Set up new transport term (depending on the type of transport equation)
+                if old_transport_term.labels['transport'] == TransportEquationType.advective:
+                    new_transport_term = advection_form(self.state, test, field, ibp=self.options.ibp)
+                elif old_transport_term.labels['transport'] == TransportEquationType.conservative:
+                    new_transport_term = continuity_form(self.state, test, field, ibp=self.options.ibp)
+                else:
+                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_term.labels["transport"]}')
+
+                # Finally, drop the old transport term and add the new one
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(transport), map_if_true=drop)
+                self.residual += subject(new_transport_term, field)
+
+    def replace_transporting_velocity(self, uadv):
+        # replace the transporting velocity in any terms that contain it
+        if any([t.has_label(transporting_velocity) for t in self.residual]):
             assert uadv is not None
             self.residual = self.residual.label_map(
-                lambda t: t.has_label(advecting_velocity),
+                lambda t: t.has_label(transporting_velocity),
                 map_if_true=lambda t: Term(ufl.replace(
-                    t.form, {t.get(advecting_velocity): uadv}), t.labels)
+                    t.form, {t.get(transporting_velocity): uadv}), t.labels)
             )
-            self.residual = advecting_velocity.update_value(self.residual, uadv)
+            self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     @cached_property
     def solver(self):
@@ -304,12 +359,12 @@ class Advection(object, metaclass=ABCMeta):
         pass
 
 
-class ExplicitAdvection(Advection):
+class ExplicitTimeDiscretisation(TimeDiscretisation):
     """
-    Base class for explicit advection schemes.
+    Base class for explicit time discretisations.
 
     :arg state: :class:`.State` object.
-    :arg field: field to be advected
+    :arg field: field to be evolved
     :arg equation: :class:`.Equation` object, specifying the equation
     that field satisfies
     :arg subcycles: (optional) integer specifying number of subcycles to perform
@@ -366,11 +421,11 @@ class ExplicitAdvection(Advection):
         x_out.assign(self.x[self.ncycles-1])
 
 
-class ForwardEuler(ExplicitAdvection):
+class ForwardEuler(ExplicitTimeDiscretisation):
     """
     Class to implement the forward Euler timestepping scheme:
     y_(n+1) = y_n + dt*L(y_n)
-    where L is the advection operator
+    where L is the operator
     """
 
     @cached_property
@@ -387,15 +442,15 @@ class ForwardEuler(ExplicitAdvection):
         x_out.assign(self.dq)
 
 
-class SSPRK3(ExplicitAdvection):
+class SSPRK3(ExplicitTimeDiscretisation):
     """
     Class to implement the Strongly Structure Preserving Runge Kutta 3-stage
     timestepping method:
     y^1 = y_n + L(y_n)
     y^2 = (3/4)y_n + (1/4)(y^1 + L(y^1))
     y_(n+1) = (1/3)y_n + (2/3)(y^2 + L(y^2))
-    where subscripts indicate the timelevel, superscripts indicate the stage
-    number and L is the advection operator.
+    where subscripts indicate the time-level, superscripts indicate the stage
+    number and L is the operator.
     """
 
     @cached_property
@@ -434,7 +489,7 @@ class SSPRK3(ExplicitAdvection):
         x_out.assign(self.q1)
 
 
-class BackwardEuler(Advection):
+class BackwardEuler(TimeDiscretisation):
 
     @property
     def lhs(self):
@@ -462,10 +517,10 @@ class BackwardEuler(Advection):
         x_out.assign(self.dq)
 
 
-class ThetaMethod(Advection):
+class ThetaMethod(TimeDiscretisation):
     """
     Class to implement the theta timestepping method:
-    y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the advection operator.
+    y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the operator.
     """
     def __init__(self, state, field_name=None, theta=None,
                  solver_parameters=None, options=None):
@@ -516,7 +571,7 @@ class ImplicitMidpoint(ThetaMethod):
     Class to implement the implicit midpoint timestepping method, i.e. the
     theta method with theta=0.5:
     y_(n+1) = y_n + 0.5*dt*(L(y_n) + L(y_(n+1)))
-    where L is the advection operator.
+    where L is the operator.
     """
     def __init__(self, state, field_name=None, solver_parameters=None,
                  options=None):

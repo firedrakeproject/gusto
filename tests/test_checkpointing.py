@@ -23,7 +23,6 @@ def setup_sk(dirname):
     points = np.array([p for p in itertools.product(points_x, points_z)])
 
     output = OutputParameters(dirname=dirname+"/sk_nonlinear", dumpfreq=5, dumplist=['u'], log_level=INFO, perturbation_fields=['theta', 'rho'],
-
                               point_data=[('rho', points), ('u', points)])
     parameters = CompressibleParameters()
     diagnostic_fields = [CourantNumber()]
@@ -71,17 +70,17 @@ def setup_sk(dirname):
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    # Set up advection schemes
-    advected_fields = []
-    advected_fields.append(ImplicitMidpoint(state, "u"))
-    advected_fields.append(SSPRK3(state, "rho"))
-    advected_fields.append(SSPRK3(state, "theta", options=SUPGOptions()))
+    # Set up transport schemes
+    transported_fields = []
+    transported_fields.append(ImplicitMidpoint(state, "u"))
+    transported_fields.append(SSPRK3(state, "rho"))
+    transported_fields.append(SSPRK3(state, "theta", options=SUPGOptions()))
 
     # Set up linear solver
     linear_solver = CompressibleSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver=linear_solver)
+    stepper = CrankNicolson(state, eqns, transported_fields, linear_solver=linear_solver)
 
     return stepper, 2*dt
 

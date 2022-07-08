@@ -84,7 +84,7 @@ for delta, dt in res_dt.items():
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
-    # Set up advection schemes
+    # Set up transport schemes
     supg = True
     if supg:
         theta_opts = SUPGOptions()
@@ -92,7 +92,7 @@ for delta, dt in res_dt.items():
     else:
         theta_opts = EmbeddedDGOptions()
         water_opts = EmbeddedDGOptions()
-    advected_fields = [ImplicitMidpoint(state, "u"),
+    transported_fields = [ImplicitMidpoint(state, "u"),
                        SSPRK3(state, "rho"),
                        SSPRK3(state, "theta", options=theta_opts)]
 
@@ -105,7 +105,7 @@ for delta, dt in res_dt.items():
                          BackwardEuler(state, "theta")]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields,
+    stepper = CrankNicolson(state, eqns, transported_fields,
                             auxiliary_equations_and_schemes=[(watereqn, SSPRK3(state, options=water_opts))],
                             linear_solver=linear_solver,
                             diffusion_schemes=diffusion_schemes)

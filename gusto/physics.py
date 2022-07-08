@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from gusto.recovery import Recoverer, Boundary_Method
-from gusto.advection import SSPRK3
+from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
 from gusto.limiters import ThetaLimiter, NoLimiter

@@ -112,7 +112,9 @@ class LabelledForm(object):
             functools.reduce(operator.add,
                              filter(lambda t: t is not None,
                                     (map_if_true(t) if term_filter(t) else
-                                     map_if_false(t) for t in self.terms))))
+                                     map_if_false(t) for t in self.terms)),
+                             # initialiser for if the list is empty
+                             None))
 
     @property
     def form(self):

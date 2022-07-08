@@ -82,13 +82,13 @@ state.initialise([('u', u0),
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-# Set up advection schemes
-rhoeqn = LinearAdvection(state, Vr, qbar=rho_b, ibp=IntegrateByParts.ONCE, equation_form="continuity")
-thetaeqn = LinearAdvection(state, Vt, qbar=theta_b)
-advected_fields = []
-advected_fields.append(("u", NoAdvection(state, u0, None)))
-advected_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
-advected_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
+# Set up transport schemes
+rhoeqn = LinearTransport(state, Vr, qbar=rho_b, ibp=IntegrateByParts.ONCE, equation_form="continuity")
+thetaeqn = LinearTransport(state, Vt, qbar=theta_b)
+transported_fields = []
+transported_fields.append(("u", NoTransport(state, u0, None)))
+transported_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
+transported_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state)
@@ -97,7 +97,7 @@ linear_solver = CompressibleSolver(state)
 compressible_forcing = CompressibleForcing(state, linear=True)
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
+stepper = CrankNicolson(state, transported_fields, linear_solver,
                         compressible_forcing)
 
 stepper.run(t=0, tmax=tmax)

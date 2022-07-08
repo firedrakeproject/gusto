@@ -125,8 +125,8 @@ rho0.assign(rho_b)
 state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
-# Set up advection schemes
-advected_fields = [ImplicitMidpoint(state, "u"),
+# Set up transport schemes
+transported_fields = [ImplicitMidpoint(state, "u"),
                    SSPRK3(state, "rho", subcycles=2),
                    SSPRK3(state, "theta", options=SUPGOptions(), subcycles=2)]
 
@@ -134,7 +134,7 @@ advected_fields = [ImplicitMidpoint(state, "u"),
 linear_solver = CompressibleSolver(state, eqns)
 
 # Build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver)
 
 # Run!

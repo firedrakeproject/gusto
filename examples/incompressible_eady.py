@@ -121,17 +121,17 @@ u0.project(u_exp)
 state.set_reference_profiles([('p', p_b),
                               ('b', b_b)])
 
-# Set up advection schemes
+# Set up transport schemes
 supg = True
 if supg:
     b_opts = SUPGOptions()
 else:
     b_opts = EmbeddedDGOptions()
-advected_fields = [SSPRK3(state, "u"), SSPRK3(state, "b", options=b_opts)]
+transported_fields = [SSPRK3(state, "u"), SSPRK3(state, "b", options=b_opts)]
 
 linear_solver = IncompressibleSolver(state, eqns)
 
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)
