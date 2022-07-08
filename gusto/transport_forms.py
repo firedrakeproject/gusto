@@ -1,19 +1,13 @@
-from enum import Enum
 from firedrake import (Function, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
                        ds_v, ds_t, ds_b,
                        outer, sign, cross, CellNormal,
                        curl)
-from gusto.labels import advection, advecting_velocity
+from gusto.configuration import IntegrateByParts, TransportEquationType
+from gusto.labels import transport, transporting_velocity, ibp_label
 
 
-__all__ = ["IntegrateByParts", "advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form", "linear_continuity_form"]
-
-
-class IntegrateByParts(Enum):
-    NEVER = 0
-    ONCE = 1
-    TWICE = 2
+__all__ = ["advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form", "linear_continuity_form"]
 
 
 def linear_advection_form(state, test, qbar):
@@ -22,9 +16,9 @@ def linear_advection_form(state, test, qbar):
 
     L = test*dot(ubar, state.k)*dot(state.k, grad(qbar))*dx
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return transport(form, TransportEquationType.advective)
 
 
 def linear_continuity_form(state, test, qbar):
@@ -34,9 +28,9 @@ def linear_continuity_form(state, test, qbar):
 
     L = qbar*test*div(ubar)*dx
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return transport(form, TransportEquationType.conservative)
 
 
 def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
@@ -67,9 +61,9 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
         L += test*un*q*(ds_v + ds_t + ds_b)
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return ibp_label(transport(form, TransportEquationType.advective), ibp)
 
 
 def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
@@ -100,9 +94,9 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
         L += test*un*q*(ds_v + ds_t + ds_b)
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return ibp_label(transport(form, TransportEquationType.conservative), ibp)
 
 
 def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
@@ -132,9 +126,9 @@ def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, o
     L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
     L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return transport(form)
 
 
 def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
@@ -189,9 +183,9 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
 
     L -= 0.5*div(test)*inner(q, ubar)*dx
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return transport(form, TransportEquationType.vector_invariant)
 
 
 def kinetic_energy_form(state, test, q):
@@ -199,9 +193,9 @@ def kinetic_energy_form(state, test, q):
     ubar = Function(state.spaces("HDiv"))
     L = 0.5*div(test)*inner(q, ubar)*dx
 
-    form = advecting_velocity(L, ubar)
+    form = transporting_velocity(L, ubar)
 
-    return advection(form)
+    return transport(form, TransportEquationType.vector_invariant)
 
 
 def advection_equation_circulation_form(state, test, q,

@@ -73,20 +73,20 @@ u0.project(uinit)
 # set the background buoyancy
 state.set_reference_profiles([('b', b_b)])
 
-# Set up advection schemes
+# Set up transport schemes
 supg = True
 if supg:
     b_opts = SUPGOptions()
 else:
     b_opts = EmbeddedDGOptions()
-advected_fields = [ImplicitMidpoint(state, "u"),
+transported_fields = [ImplicitMidpoint(state, "u"),
                    SSPRK3(state, "b", options=b_opts)]
 
 # Set up linear solver for the timestepping scheme
 linear_solver = IncompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver)
 
 # Run!

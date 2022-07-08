@@ -1,5 +1,6 @@
 """
-The recovery operators used for lowest-order advection schemes.
+The recovery operators used for improving accuracy of lowest-order spatial
+discretisations.
 """
 from enum import Enum
 

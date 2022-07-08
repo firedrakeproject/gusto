@@ -47,16 +47,16 @@ def setup_balance(dirname):
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0)])
 
-    # Set up advection schemes
-    advected_fields = [ImplicitMidpoint(state, "u"),
-                       SSPRK3(state, "rho"),
-                       SSPRK3(state, "theta", options=EmbeddedDGOptions())]
+    # Set up transport schemes
+    transported_fields = [ImplicitMidpoint(state, "u"),
+                          SSPRK3(state, "rho"),
+                          SSPRK3(state, "theta", options=EmbeddedDGOptions())]
 
     # Set up linear solver
     linear_solver = CompressibleSolver(state, eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields, linear_solver=linear_solver)
+    stepper = CrankNicolson(state, eqns, transported_fields, linear_solver=linear_solver)
 
     return stepper, tmax
 

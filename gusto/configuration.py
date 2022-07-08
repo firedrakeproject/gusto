@@ -2,12 +2,13 @@
 Some simple tools for making model configuration nicer.
 """
 from abc import ABCMeta, abstractproperty
+from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -21,6 +22,27 @@ def set_log_handler(comm):
         logger.addHandler(handler)
     else:
         logger.addHandler(logging.NullHandler())
+
+
+class IntegrateByParts(Enum):
+    NEVER = 0
+    ONCE = 1
+    TWICE = 2
+
+
+class TransportEquationType(Enum):
+    """
+    An Enum object which stores the types of the transport equation. For
+    transporting velocity 'u' and transported quantity 'q', these equations are:
+
+    advective: dq / dt + dot(u, grad(q)) = 0
+    conservative: dq / dt + div(q*u) = 0
+    """
+
+    no_transport = 702
+    advective = 19
+    conservative = 291
+    vector_invariant = 9081
 
 
 class Configuration(object):
@@ -156,6 +178,7 @@ class SUPGOptions(AdvectionOptions):
     name = "supg"
     tau = None
     default = 1/sqrt(15)
+    ibp = IntegrateByParts.TWICE
 
 
 class SpongeLayerParameters(Configuration):
