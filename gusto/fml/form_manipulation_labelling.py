@@ -41,8 +41,10 @@ class Term(object):
         else:
             return NotImplemented
 
+    __radd__ = __add__
+
     def __sub__(self, other):
-        other = other * -1
+        other = other * Constant(-1.0)
         return self + other
 
     def __mul__(self, other):
@@ -52,14 +54,14 @@ class Term(object):
             return NotImplemented
         return Term(other*self.form, self.labels)
 
+    __rmul__ = __mul__
+
     def __truediv__(self, other):
         if type(other) in (float, int, Constant, ufl.algebra.Product):
             other = Constant(1.0 / other)
             return self * other
         else:
             return NotImplemented
-
-    __rmul__ = __mul__
 
 
 NullTerm = Term(None)
@@ -94,6 +96,8 @@ class LabelledForm(object):
             return self
         else:
             return NotImplemented
+
+    __radd__ = __add__
 
     def __sub__(self, other):
         if type(other) is Term:
@@ -155,7 +159,11 @@ class LabelledForm(object):
 
     @property
     def form(self):
-        return functools.reduce(operator.add, (t.form for t in self.terms))
+        # Throw an error if there is no form
+        if len(self.terms) == 0:
+            raise TypeError('The labelled form cannot return a form as it has no terms')
+        else:
+            return functools.reduce(operator.add, (t.form for t in self.terms))
 
 
 class Label(object):
