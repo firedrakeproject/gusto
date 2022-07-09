@@ -319,6 +319,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 'when there is a variable called "u" and none was found')
 
         Vu = state.spaces("HDiv")
+        if Vu.extruded:
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
+            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
@@ -469,6 +472,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         adv_form = subject(u_adv + D_adv, self.X)
 
+        if active_tracers is not None:
+            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
+
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
@@ -536,74 +542,81 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         )
 
 
-class CompressibleEulerEquations(PrognosticEquation):
+class CompressibleEulerEquations(PrognosticEquationSet):
+    """
+    Class for the compressible Euler equations, which evolve the velocity
+    'u', the dry density 'rho' and the (virtual dry) potential temperature,
+    'theta'.
+
+    :arg state:                 The :class:`State` object used for the run.
+    :arg family:                The finite element space family used for the
+                                velocity field. This determines the other finite
+                                element spaces used via the de Rham complex.
+    :arg degree:                The element degree used for the velocity space.
+    :arg Omega:                 (Optional) an expression for the planet's
+                                rotation vector. Default is `None`.
+    :arg sponge:                (Optional) an expression for a sponge layer.
+                                Default is `None`.
+    :arg extra_terms:           (Optional) any extra terms to include in the
+                                equation set.
+    :arg terms_to_linearise:    (Optional) a dictionary specifying which terms
+                                in the equation set to linearise.
+    :arg u_transport_option:    (Optional) specifies the transport equation used
+                                for the velocity. Supported options are:
+                                'vector_invariant_form';
+                                'vector_advection_form';
+                                'vector_manifold_advection_form';
+                                'circulation_form'.
+                                The default is 'vector_invariant_form'.
+    :arg diffusion_options:     (Optional) any options to specify for applying
+                                diffusion terms to variables.
+    :arg no_normal_flow_bc_ids: (Optional) a list of IDs of domain boundaries
+                                at which no normal flow will be enforced.
+    :arg active_tracers:        (Optional) a list of `ActiveTracer` objects that
+                                encode the metadata for any active tracers to
+                                be included in the equations.
+    """
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
+                 terms_to_linearise={'all':[time_derivative, pressure_gradient],
+                                     'u':[],
+                                     'rho':[transport],
+                                     'theta':[transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
-        self.field_names = ['u', 'rho', 'theta']
+        field_names = ['u', 'rho', 'theta']
 
-        # Construct spaces for the core set of prognostic variables
-        spaces = [space for space in self._build_spaces(state, family, degree)]
+        if active_tracers is not None:
+            raise NotImplementedError('Tracers not implemented for shallow water equations')
 
-        if active_tracers is None:
-            active_tracers = []
-        add_tracers_to_prognostics(state, self.field_names, spaces, active_tracers)
-
-        W = MixedFunctionSpace(spaces)
-
-        field_name = "_".join(self.field_names)
-        super().__init__(state, W, field_name)
-
-        Vu = state.spaces("HDiv")
-        if no_normal_flow_bc_ids is None:
-            no_normal_flow_bc_ids = []
-
-        if Vu.extruded:
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
-        for id in no_normal_flow_bc_ids:
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
+        super().__init__(field_names, state, family, degree,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
 
         g = state.parameters.g
         cp = state.parameters.cp
 
-        tests = TestFunctions(W)
-        w, phi, gamma = tests[0:3]
-        trials = TrialFunctions(W)
-        X = Function(W)
-        self.X = X
-        u, rho, theta = split(X)[0:3]
+        w, phi, gamma = self.tests[0:3]
+        u, rho, theta = split(self.X)[0:3]
         rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
         thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         zero_expr = Constant(0.0)*theta
         pi = Pi(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
-        u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        linear_u_mass = u_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        u_mass = linearisation(u_mass, linear_u_mass)
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
+        mass_form = self.generate_mass_terms()
 
-        rho_mass = subject(prognostic(inner(rho, phi)*dx, "rho"), X)
-        linear_rho_mass = rho_mass.label_map(all_terms,
-                                             replace_subject(trials))
-        rho_mass = linearisation(rho_mass, linear_rho_mass)
-
-        theta_mass = subject(prognostic(inner(theta, gamma)*dx, "theta"), X)
-        linear_theta_mass = theta_mass.label_map(all_terms,
-                                                 replace_subject(trials))
-        theta_mass = linearisation(theta_mass, linear_theta_mass)
-
-        mass_form = time_derivative(u_mass + rho_mass + theta_mass)
-        if len(active_tracers) > 0:
-            mass_form += tracer_mass_forms(X, tests, self.field_names, active_tracers)
-
-        # define velocity transport form
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
         elif u_transport_option == "vector_advection_form":
@@ -621,13 +634,18 @@ class CompressibleEulerEquations(PrognosticEquation):
             u_adv = advection_equation_circulation_form(state, w, u) + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
-        rho_adv = prognostic(continuity_form(state, phi, rho), "rho")
-        linear_rho_adv = linear_continuity_form(state, phi, rhobar).label_map(
-            lambda t: t.has_label(transporting_velocity),
-            lambda t: Term(ufl.replace(
-                t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
-        rho_adv = linearisation(rho_adv, linear_rho_adv)
 
+        # Density transport (conservative form)
+        rho_adv = prognostic(continuity_form(state, phi, rho), "rho")
+        # Transport term needs special linearisation
+        if transport in terms_to_linearise['rho']:
+            linear_rho_adv = linear_continuity_form(state, phi, rhobar).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): self.trials[0]}), t.labels))
+            rho_adv = linearisation(rho_adv, linear_rho_adv)
+
+        # Potential temperature transport
         theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
         linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
             lambda t: t.has_label(transporting_velocity),
@@ -636,8 +654,9 @@ class CompressibleEulerEquations(PrognosticEquation):
         theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, X)
-        if len(active_tracers) > 0:
-            adv_form += tracer_transport_forms(state, X, tests, self.field_names, active_tracers)
+
+        if active_tracers is not None:
+            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
 
         # define pressure gradient form and its linearisation
         tracer_mr_total = zero_expr
