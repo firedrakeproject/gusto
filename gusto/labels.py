@@ -21,6 +21,25 @@ def replace_test_function(new_test):
     return repl
 
 
+def replace_trial_function(new):
+    """
+    :arg new: a :func:`Function` or `TrialFunction`
+
+    Returns a function that takes in t, a :class:`Term`, and returns
+    a new :class:`Term` containing a form with the trial function replaced
+    labels=t.labels
+    """
+
+    def repl(t):
+        if len(t.form.arguments()) != 2:
+            raise TypeError('Trying to replace trial function of a form that is not linear')
+        trial = t.form.arguments()[1]
+        new_form = ufl.replace(t.form, {trial: new})
+        return Term(new_form, t.labels)
+
+    return repl
+
+
 def replace_subject(new, idx=None):
     """
     Returns a function that takes a :class:`Term` and returns a new

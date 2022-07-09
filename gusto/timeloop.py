@@ -241,7 +241,6 @@ class CrankNicolson(Timestepper):
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
-            import pdb; pdb.set_trace()
 
         xp(self.field_name).assign(xstar(self.field_name))
 
@@ -251,7 +250,6 @@ class CrankNicolson(Timestepper):
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xstar(name), xp(name))
-                    import pdb; pdb.set_trace()
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
@@ -259,17 +257,14 @@ class CrankNicolson(Timestepper):
 
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
-                    import pdb; pdb.set_trace()
 
                 xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
-                    import pdb; pdb.set_trace()
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
-                import pdb; pdb.set_trace()
 
             self._apply_bcs()
 

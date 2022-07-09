@@ -7,7 +7,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
 from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis)
+                          name, pressure_gradient, coriolis, replace_trial_function)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_forms import (advection_form, continuity_form,
                                    vector_invariant_form,
@@ -162,7 +162,7 @@ class ShallowWaterEquations(PrognosticEquation):
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  terms_to_linearise={'all':[time_derivative,pressure_gradient],
                                      'D':[transport],
-                                     'u':[coriolis]},
+                                     'u':[]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -306,25 +306,25 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Replace all terms with their linearisations
-        # Drop all terms without linearisation
+        # Replace all terms with their linearisations, drop terms without
         self.residual = self.residual.label_map(
             lambda t: t.has_label(linearisation),
-            # Replace trial functions with prognostics
-            map_if_true=lambda t: Term(action(t.get(linearisation).form, self.X), t.labels),
+            map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
             map_if_false=drop)
 
-        # D transport term is a special case
+        # Replace trial functions with the prognostics
+        self.residual = self.residual.label_map(
+            all_terms, replace_trial_function(self.X))
+
+        # D transport term is a special case -- add facet term
         _, D = split(self.X)
         _, phi = self.tests
-        D_adv = prognostic(linear_continuity_form(state, phi, D), "D")
-        old_adv_term = self.residual.terms[2]
-        new_adv_term = subject(Term(D_adv.form, old_adv_term.labels), self.X)
+        D_adv = prognostic(linear_continuity_form(state, phi, D, facet_term=True), "D")
         self.residual = self.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-            map_if_true=lambda t: new_adv_term
+            map_if_true=lambda t: Term(D_adv.form, t.labels)
         )
-        import pdb; pdb.set_trace()
+
 
 class CompressibleEulerEquations(PrognosticEquation):
 

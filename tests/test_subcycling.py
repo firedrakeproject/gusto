@@ -18,7 +18,6 @@ def setup_gaussian(dirname):
 
     eqns = ShallowWaterEquations(state, family="BDM", degree=1,
                                  fexpr=Constant(1.))
-
     D0 = state.fields("D")
     x, y = SpatialCoordinate(mesh)
     H = Constant(state.parameters.H)
