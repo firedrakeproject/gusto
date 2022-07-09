@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector, split, Constant)
+                       as_vector, split, Constant, action)
 from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
@@ -188,16 +188,17 @@ class ShallowWaterEquations(PrognosticEquation):
         g = state.parameters.g
         H = state.parameters.H
 
-        w, phi = TestFunctions(W)
         trials = TrialFunctions(W)
-        X = Function(W)
-        u, D = split(X)
+        self.X = Function(W)
+        self.tests = TestFunctions(W)
+        w, phi = self.tests
+        u, D = split(self.X)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
-        u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        D_mass = subject(prognostic(inner(D, phi)*dx, "D"), X)
+        u_mass = subject(prognostic(inner(u, w)*dx, "u"), self.X)
+        D_mass = subject(prognostic(inner(D, phi)*dx, "D"), self.X)
         mass_form = time_derivative(u_mass + D_mass)
 
         # -------------------------------------------------------------------- #
@@ -223,7 +224,7 @@ class ShallowWaterEquations(PrognosticEquation):
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Depth transport term
-        D_adv = prognostic(linear_continuity_form(state, phi, D), "D")
+        D_adv = prognostic(continuity_form(state, phi, D), "D")
         # Transport term needs special linearisation
         if transport in terms_to_linearise['D']:
             linear_D_adv = linear_continuity_form(state, phi, H).label_map(
@@ -233,19 +234,14 @@ class ShallowWaterEquations(PrognosticEquation):
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
-        adv_form = subject(u_adv + D_adv, X)
+        adv_form = subject(u_adv + D_adv, self.X)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
         # define pressure gradient form and its linearisation
         pressure_gradient_form = pressure_gradient(
-            subject(prognostic(-g*div(w)*D*dx, "u"), X))
-        # TODO: this linearised term should be removed and computed at end
-        # linear_pressure_gradient_form = pressure_gradient_form.label_map(
-        #     all_terms, replace_subject(trials))
-        # pressure_gradient_form = linearisation(pressure_gradient_form,
-        #                                         linear_pressure_gradient_form)
+            subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 
         residual = (mass_form + adv_form + pressure_gradient_form)
 
@@ -257,23 +253,23 @@ class ShallowWaterEquations(PrognosticEquation):
             f = state.fields("coriolis", space=V)
             f.interpolate(fexpr)
             coriolis_form = coriolis(
-                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), X))
+                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
             residual += coriolis_form
 
         if bexpr is not None:
             b = state.fields("topography", state.spaces("DG"))
             b.interpolate(bexpr)
-            topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), X)
+            topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
             residual += topography_form
 
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u, D = X.split()
+        u, D = self.X.split()
         # Linearise about D = H
         # TODO: add linearisation state for u
         D.assign(Constant(H))
-        u, D = split(X)
+        u, D = split(self.X)
 
         self.residual = residual.label_map(
             # Extract all terms to be linearised that haven't already been
@@ -294,6 +290,7 @@ class ShallowWaterEquations(PrognosticEquation):
                 # TODO: Add linearisation based on UFL derivative
                 # lambda t: linearisation(t, Term(ufl.derivative(t.form, X, trials), t.labels)))
 
+
 class LinearShallowWaterEquations(ShallowWaterEquations):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
@@ -309,12 +306,25 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
+        # Replace all terms with their linearisations
         # Drop all terms without linearisation
         self.residual = self.residual.label_map(
             lambda t: t.has_label(linearisation),
-            # TODO: Replace all terms with their linearisation?
+            # Replace trial functions with prognostics
+            map_if_true=lambda t: Term(action(t.get(linearisation).form, self.X), t.labels),
             map_if_false=drop)
 
+        # D transport term is a special case
+        _, D = split(self.X)
+        _, phi = self.tests
+        D_adv = prognostic(linear_continuity_form(state, phi, D), "D")
+        old_adv_term = self.residual.terms[2]
+        new_adv_term = subject(Term(D_adv.form, old_adv_term.labels), self.X)
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
+            map_if_true=lambda t: new_adv_term
+        )
+        import pdb; pdb.set_trace()
 
 class CompressibleEulerEquations(PrognosticEquation):
 
