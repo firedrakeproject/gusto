@@ -317,9 +317,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                                   which no normal flow will be enforced.
         """
 
-        if len(no_normal_flow_bc_ids) == 0:
-            return
-
         if 'u' not in self.field_names:
             raise NotImplementedError(
                 'No-normal-flow boundary conditions can only be applied ' +
@@ -529,7 +526,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
+    """
+    The linear version of the shallow water equations.
 
+    # TODO: add documentation
+    """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  terms_to_linearise={'all':[time_derivative,pressure_gradient],
                                      'D':[transport],
@@ -558,9 +559,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
 class CompressibleEulerEquations(PrognosticEquationSet):
     """
-    Class for the compressible Euler equations, which evolve the velocity
-    'u', the dry density 'rho' and the (virtual dry) potential temperature,
-    'theta'.
+    Class for the compressible Euler equations, which evolve the velocity 'u',
+    the dry density 'rho' and the (virtual dry) potential temperature 'theta'.
 
     :arg state:                 The :class:`State` object used for the run.
     :arg family:                The finite element space family used for the
@@ -812,62 +812,124 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
             gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
 
 
-class IncompressibleBoussinesqEquations(PrognosticEquation):
+class LinearCompressibleEulerEquations(CompressibleEulerEquations):
+    """
+    The linear version of the compressible Euler equations.
+
+    # TODO: add documentation
+    """
+
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 extra_terms=None,
+                 terms_to_linearise={'all':[time_derivative],
+                                     'u':[],
+                                     'rho':[transport],
+                                     'theta':[transport]},
+                 u_transport_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+
+        if active_tracers is not None:
+            raise NotImplementedError('Tracers not implemented for linear Compressible Euler equations')
+
+        super().__init__(state, family, degree, Omega=Omega, sponge=sponge,
+                         extra_terms=extra_terms,
+                         terms_to_linearise=terms_to_linearise,
+                         u_transport_option=u_transport_option,
+                         diffusion_options=diffusion_options,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        # Use the underlying routine to do a first linearisation of the equations
+        # TODO: should call linearise routine here but not yet implemented!
+        # self.linearise_equation_set()
+
+        # rho and theta transport terms are special cases
+        rho_b = state.fields('rhobar')
+        theta_b = state.fields('thetabar')
+        phi, gamma = self.tests[1:3]
+
+        # Replace rho transport with linear version
+        rho_adv = prognostic(linear_continuity_form(state, phi, rho_b, facet_term=True), "rho")
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == "rho",
+            map_if_true=lambda t: Term(rho_adv.form, t.labels)
+        )
+
+        # Replace theta transport with linear version
+        theta_adv = prognostic(linear_advection_form(state, gamma, theta_b), "theta")
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == "theta",
+            map_if_true=lambda t: Term(theta_adv.form, t.labels)
+        )
+
+
+class IncompressibleBoussinesqEquations(PrognosticEquationSet):
+
+    """
+    Class for the incompressible Boussinesq equations, which evolve the velocity
+    'u', the pressure 'p' and the buoyancy 'b'.
+
+    :arg state:                 The :class:`State` object used for the run.
+    :arg family:                The finite element space family used for the
+                                velocity field. This determines the other finite
+                                element spaces used via the de Rham complex.
+    :arg degree:                The element degree used for the velocity space.
+    :arg Omega:                 (Optional) an expression for the planet's
+                                rotation vector. Default is `None`.
+    :arg terms_to_linearise:    (Optional) a dictionary specifying which terms
+                                in the equation set to linearise.
+    :arg u_transport_option:    (Optional) specifies the transport equation used
+                                for the velocity. Supported options are:
+                                'vector_invariant_form';
+                                'vector_advection_form';
+                                'vector_manifold_advection_form';
+                                'circulation_form'.
+                                The default is 'vector_invariant_form'.
+    :arg no_normal_flow_bc_ids: (Optional) a list of IDs of domain boundaries
+                                at which no normal flow will be enforced.
+    :arg active_tracers:        (Optional) a list of `ActiveTracer` objects that
+                                encode the metadata for any active tracers to
+                                be included in the equations.
+    """
 
     def __init__(self, state, family, degree, Omega=None,
+                 terms_to_linearise={'all':[time_derivative],
+                                     'u':[],
+                                     'p':[],
+                                     'b':[transport]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
-        self.field_names = ['u', 'p', 'b']
-
-        spaces = state.spaces.build_compatible_spaces(family, degree)
+        field_names = ['u', 'p', 'b']
 
         if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for Boussinesq equations')
 
-        W = MixedFunctionSpace(spaces)
+        if active_tracers is None:
+            active_tracers = []
 
-        field_name = "_".join(self.field_names)
-        super().__init__(state, W, field_name)
+        super().__init__(field_names, state, family, degree,
+                         terms_to_linearise=terms_to_linearise,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
 
-        Vu = state.spaces("HDiv")
-        if no_normal_flow_bc_ids is None:
-            no_normal_flow_bc_ids = []
-
-        if Vu.extruded:
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
-        for id in no_normal_flow_bc_ids:
-            self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
-
-        tests = TestFunctions(W)
-        w, phi, gamma = tests[0:3]
-        trials = TrialFunctions(W)
-        X = Function(W)
-        self.X = X
-        u, p, b = split(X)
+        w, phi, gamma = self.tests[0:3]
+        u, p, b = split(self.X)
         bbar = state.fields("bbar", space=state.spaces("theta"), dump=False)
         bbar = state.fields("pbar", space=state.spaces("DG"), dump=False)
 
-        u_mass = subject(prognostic(inner(u, w)*dx, "u"), X)
-        linear_u_mass = u_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        u_mass = linearisation(u_mass, linear_u_mass)
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
+        mass_form = self.generate_mass_terms()
 
-        p_mass = subject(prognostic(inner(p, phi)*dx, "p"), X)
-        linear_p_mass = p_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        p_mass = linearisation(p_mass, linear_p_mass)
-
-        b_mass = subject(prognostic(inner(b, gamma)*dx, "b"), X)
-        linear_b_mass = b_mass.label_map(all_terms,
-                                         replace_subject(trials))
-        b_mass = linearisation(b_mass, linear_b_mass)
-
-        mass_form = time_derivative(u_mass + p_mass + b_mass)
-
-        # define velocity transport term
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(state, w, u), "u")
         elif u_transport_option == "vector_advection_form":
@@ -886,28 +948,52 @@ class IncompressibleBoussinesqEquations(PrognosticEquation):
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
+        # Buoyancy transport
         b_adv = prognostic(advection_form(state, gamma, b), "b")
         linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
             lambda t: t.has_label(transporting_velocity),
             lambda t: Term(ufl.replace(
-                t.form, {t.get(transporting_velocity): trials[0]}), t.labels))
+                t.form, {t.get(transporting_velocity): self.trials[0]}), t.labels))
         b_adv = linearisation(b_adv, linear_b_adv)
 
-        adv_form = subject(u_adv + b_adv, X)
+        adv_form = subject(u_adv + b_adv, self.X)
 
-        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), X)
+        # Add transport of tracers
+        if len(active_tracers) > 0:
+            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
 
-        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), X)
+        # -------------------------------------------------------------------- #
+        # Pressure Gradient Term
+        # -------------------------------------------------------------------- #
+        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), self.X)
 
-        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), X),
+        # -------------------------------------------------------------------- #
+        # Gravitational Term
+        # -------------------------------------------------------------------- #
+        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), self.X)
+
+        # -------------------------------------------------------------------- #
+        # Divergence Term
+        # -------------------------------------------------------------------- #
+        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), self.X),
                                "divergence_form")
 
-        self.residual = (mass_form + adv_form + divergence_form
-                         + pressure_gradient_form + gravity_form)
+        residual = (mass_form + adv_form + divergence_form
+                    + pressure_gradient_form + gravity_form)
 
+        # -------------------------------------------------------------------- #
+        # Extra Terms (Coriolis)
+        # -------------------------------------------------------------------- #
         if Omega is not None:
-            self.residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), X)
+            residual += subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), self.X)
+
+        # -------------------------------------------------------------------- #
+        # Linearise equations
+        # -------------------------------------------------------------------- #
+        # TODO: add linearisation states for variables
+        # Add linearisations to equations
+        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
 
 
 class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):

@@ -31,12 +31,12 @@ output = OutputParameters(dirname=dirname,
 
 parameters = CompressibleParameters()
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="CG",
+state = State(mesh,
               dt=dt,
               output=output,
-              parameters=parameters,
-              fieldlist=fieldlist)
+              parameters=parameters)
+
+eqns = LinearCompressibleEulerEquations(state, "CG", 1)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -83,21 +83,13 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up transport schemes
-rhoeqn = LinearTransport(state, Vr, qbar=rho_b, ibp=IntegrateByParts.ONCE, equation_form="continuity")
-thetaeqn = LinearTransport(state, Vt, qbar=theta_b)
-transported_fields = []
-transported_fields.append(("u", NoTransport(state, u0, None)))
-transported_fields.append(("rho", ForwardEuler(state, rho0, rhoeqn)))
-transported_fields.append(("theta", ForwardEuler(state, theta0, thetaeqn)))
+transported_fields = [ForwardEuler(state, "rho"), ForwardEuler(state, "theta")]
 
 # Set up linear solver
-linear_solver = CompressibleSolver(state)
-
-# Set up forcing
-compressible_forcing = CompressibleForcing(state, linear=True)
+linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, transported_fields, linear_solver,
-                        compressible_forcing)
+stepper = CrankNicolson(state, eqns, transported_fields,
+                        linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)
