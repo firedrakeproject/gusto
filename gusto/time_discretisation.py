@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, NonlinearVariationalProblem,
+from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, Constant, dot, grad, as_ufl)
@@ -333,11 +333,18 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # replace the transporting velocity in any terms that contain it
         if any([t.has_label(transporting_velocity) for t in self.residual]):
             assert uadv is not None
-            self.residual = self.residual.label_map(
-                lambda t: t.has_label(transporting_velocity),
-                map_if_true=lambda t: Term(ufl.replace(
-                    t.form, {t.get(transporting_velocity): uadv}), t.labels)
-            )
+            if uadv is "prognostic":
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(transporting_velocity),
+                    map_if_true=lambda t: Term(ufl.replace(
+                        t.form, {t.get(transporting_velocity): split(t.get(subject))[0]}), t.labels)
+                )
+            else:
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(transporting_velocity),
+                    map_if_true=lambda t: Term(ufl.replace(
+                        t.form, {t.get(transporting_velocity): uadv}), t.labels)
+                )
             self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     @cached_property
