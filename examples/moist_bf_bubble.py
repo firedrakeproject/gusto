@@ -167,7 +167,7 @@ else:
     limiter = None
 
 
-# Set up advection schemes
+# Set up transport schemes
 if recovered:
     VDG1 = state.spaces("DG1", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
@@ -186,17 +186,17 @@ if recovered:
     theta_opts = RecoveredOptions(embedding_space=VDG1,
                                   recovered_space=VCG1,
                                   broken_space=Vt_brok)
-    u_advection = SSPRK3(state, "u", options=u_opts)
+    u_transport = SSPRK3(state, "u", options=u_opts)
 else:
     rho_opts = None
     theta_opts = EmbeddedDGOptions()
-    u_advection = ImplicitMidpoint(state, "u")
+    u_transport = ImplicitMidpoint(state, "u")
 
-advected_fields = [SSPRK3(state, "rho", options=rho_opts),
-                   SSPRK3(state, "theta", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
-                   SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
-                   u_advection]
+transported_fields = [SSPRK3(state, "rho", options=rho_opts),
+                      SSPRK3(state, "theta", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
+                      u_transport]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
@@ -216,7 +216,7 @@ if diffusion:
 physics_list = [Condensation(state)]
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver,
                         physics_list=physics_list,
                         diffusion_schemes=diffusion_schemes)

@@ -40,11 +40,11 @@ def setup_unsaturated(dirname, recovered):
     tracers = [WaterVapour(), CloudWater()]
 
     if recovered:
-        u_advection_option = "vector_advection_form"
+        u_transport_option = "vector_advection_form"
     else:
-        u_advection_option = "vector_invariant_form"
+        u_transport_option = "vector_invariant_form"
     eqns = CompressibleEulerEquations(
-        state, "CG", degree, u_advection_option=u_advection_option, active_tracers=tracers)
+        state, "CG", degree, u_transport_option=u_transport_option, active_tracers=tracers)
 
     # Initial conditions
     u0 = state.fields("u")
@@ -69,7 +69,7 @@ def setup_unsaturated(dirname, recovered):
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0)])
 
-    # Set up advection schemes
+    # Set up transport schemes
     if recovered:
         VDG1 = state.spaces("DG1", "DG", 1)
         VCG1 = FunctionSpace(mesh, "CG", 1)
@@ -92,14 +92,14 @@ def setup_unsaturated(dirname, recovered):
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
 
-    advected_fields = [SSPRK3(state, "rho", options=rho_opts),
-                       SSPRK3(state, "theta", options=theta_opts),
-                       SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
-                       SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
+    transported_fields = [SSPRK3(state, "rho", options=rho_opts),
+                          SSPRK3(state, "theta", options=theta_opts),
+                          SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
+                          SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
     if recovered:
-        advected_fields.append(SSPRK3(state, "u", options=u_opts))
+        transported_fields.append(SSPRK3(state, "u", options=u_opts))
     else:
-        advected_fields.append(ImplicitMidpoint(state, "u"))
+        transported_fields.append(ImplicitMidpoint(state, "u"))
 
     linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
@@ -107,7 +107,7 @@ def setup_unsaturated(dirname, recovered):
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, advected_fields,
+    stepper = CrankNicolson(state, eqns, transported_fields,
                             linear_solver=linear_solver,
                             physics_list=physics_list)
 

@@ -62,10 +62,10 @@ if diffusion:
 else:
     diffusion_options = None
 
-u_advection_option = "vector_advection_form" if recovered else "vector_invariant_form"
+u_transport_option = "vector_advection_form" if recovered else "vector_invariant_form"
 
 eqns = CompressibleEulerEquations(state, "CG", degree,
-                                  u_advection_option=u_advection_option,
+                                  u_transport_option=u_transport_option,
                                   diffusion_options=diffusion_options,
                                   no_normal_flow_bc_ids=[1, 2])
 
@@ -115,7 +115,7 @@ rho_solver.solve()
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-# Set up advection schemes
+# Set up transport schemes
 if recovered:
     VDG1 = state.spaces("DG1", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
@@ -148,12 +148,12 @@ if limit:
 else:
     limiter = None
 
-advected_fields = [SSPRK3(state, "rho", options=rho_opts),
+transported_fields = [SSPRK3(state, "rho", options=rho_opts),
                    SSPRK3(state, "theta", options=theta_opts, limiter=limiter)]
 if recovered:
-    advected_fields.append(SSPRK3(state, "u", options=u_opts))
+    transported_fields.append(SSPRK3(state, "u", options=u_opts))
 else:
-    advected_fields.append(ImplicitMidpoint(state, "u"))
+    transported_fields.append(ImplicitMidpoint(state, "u"))
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns)
@@ -163,7 +163,7 @@ if diffusion:
     diffusion_schemes.append(BackwardEuler(state, "u"))
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver,
                         diffusion_schemes=diffusion_schemes)
 

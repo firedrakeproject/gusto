@@ -69,21 +69,21 @@ rho0.interpolate(rho_b)
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-# Set up advection schemes
+# Set up transport schemes
 supg = True
 if supg:
     theta_opts = SUPGOptions()
 else:
     theta_opts = EmbeddedDGOptions()
-advected_fields = []
-advected_fields.append(ImplicitMidpoint(state, "u"))
-advected_fields.append(SSPRK3(state, "rho"))
-advected_fields.append(SSPRK3(state, "theta", options=theta_opts))
+transported_fields = []
+transported_fields.append(ImplicitMidpoint(state, "u"))
+transported_fields.append(SSPRK3(state, "rho"))
+transported_fields.append(SSPRK3(state, "theta", options=theta_opts))
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields, linear_solver=linear_solver)
+stepper = CrankNicolson(state, eqns, transported_fields, linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

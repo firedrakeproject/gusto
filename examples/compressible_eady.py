@@ -129,14 +129,14 @@ u0.project(u_exp)
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-# Set up advection schemes
-advected_fields = [SSPRK3(state, "u"),
+# Set up transport schemes
+transported_fields = [SSPRK3(state, "u"),
                    SSPRK3(state, "rho"),
                    SSPRK3(state, "theta")]
 
 linear_solver = CompressibleSolver(state, eqns)
 
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

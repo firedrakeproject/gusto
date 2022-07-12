@@ -94,13 +94,13 @@ u0.project(as_vector([20.0, 0.0]))
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
-# Set up advection schemes
+# Set up transport schemes
 supg = True
 if supg:
     theta_opts = SUPGOptions()
 else:
     theta_opts = EmbeddedDGOptions()
-advected_fields = [ImplicitMidpoint(state, "u"),
+transported_fields = [ImplicitMidpoint(state, "u"),
                    SSPRK3(state, "rho"),
                    SSPRK3(state, "theta", options=theta_opts)]
 
@@ -108,7 +108,7 @@ advected_fields = [ImplicitMidpoint(state, "u"),
 linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, advected_fields,
+stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

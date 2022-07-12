@@ -13,12 +13,12 @@ def run(setup):
     equation = AdvectionDiffusionEquation(state, V, "f", ufamily=setup.family,
                                           udegree=setup.degree,
                                           diffusion_parameters=diffusion_params)
-    problem = [(equation, ((SSPRK3(state), advection),
+    problem = [(equation, ((SSPRK3(state), transport),
                            (BackwardEuler(state), diffusion)))]
     state.fields("f").interpolate(f_init)
     state.fields("u").project(as_vector([10, 0.]))
 
-    timestepper = PrescribedAdvection(state, problem)
+    timestepper = PrescribedTransport(state, problem)
 
     timestepper.run(0, tmax=tmax)
 
