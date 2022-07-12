@@ -495,7 +495,7 @@ class SSPRK3(ExplicitTimeDiscretisation):
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
 
-class RK4(ExplicitAdvection):
+class RK4(ExplicitTimeDiscretisation):
     """
     Class to implement the 4-stage Runge-Kutta timestepping method:
     k1 = f(y_n)
@@ -566,7 +566,7 @@ class RK4(ExplicitAdvection):
         x_out.assign(self.q1)
 
 
-class Heun(ExplicitAdvection):
+class Heun(ExplicitTimeDiscretisation):
     """
     Class to implement Heun's timestepping method:
     y^1 = L(y_n)
