@@ -44,7 +44,6 @@ def test_vector_recovered_space_setup(tmpdir):
     # build elements
     u_element = HDiv(TensorProductElement(u_hori, u_vert))
     w_element = HDiv(TensorProductElement(w_hori, w_vert))
-    theta_element = TensorProductElement(w_hori, w_vert)
     v_element = u_element + w_element
 
     # spaces

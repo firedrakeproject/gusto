@@ -3,7 +3,7 @@ from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector, split, Constant, action)
+                       as_vector, split, Constant)
 from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
@@ -178,7 +178,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     """
 
     def __init__(self, field_names, state, family, degree,
-                 terms_to_linearise={'all':[]},
+                 terms_to_linearise={'all': []},
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = field_names
@@ -209,7 +209,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
         self.set_no_normal_flow_bcs(state, no_normal_flow_bc_ids)
-
 
     def _build_spaces(self, state, family, degree):
         return state.spaces.build_compatible_spaces(family, degree)
@@ -264,23 +263,17 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # Apply linearisation to terms in the 'all' part of the dict
         new_residual = residual.label_map(
             # Extract all terms to be linearised that haven't already been
-            lambda t: not t.has_label(linearisation) \
-                and any(t.has_label(*terms_to_linearise['all'], return_tuple=True)),
-            # TODO: for now just replace subject with trial but this should be better...
+            lambda t: (not t.has_label(linearisation)
+                       and any(t.has_label(*terms_to_linearise['all']), return_tuple=True)),
             lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(self.trials)).terms[0]))
-            # TODO: Add linearisation based on UFL derivative
-            # lambda t: linearisation(t, Term(ufl.derivative(t.form, X, trials), t.labels)))
 
         # Loop through prognostic variables and linearise any specified terms
         for field in self.field_names:
             new_residual = new_residual.label_map(
                 # Extract all terms to be linearised for this field's equation that haven't already been
-                lambda t: not t.has_label(linearisation) and (t.get(prognostic) == field) \
-                    and any(t.has_label(*terms_to_linearise[field], return_tuple=True)),
-                # TODO: for now just replace subject with trial but this should be better...
+                lambda t: (not t.has_label(linearisation) and (t.get(prognostic) == field)
+                           and any(t.has_label(*terms_to_linearise[field], return_tuple=True))),
                 lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(self.trials)).terms[0]))
-                # TODO: Add linearisation based on UFL derivative
-                # lambda t: linearisation(t, Term(ufl.derivative(t.form, X, trials), t.labels)))
 
         return new_residual
 
@@ -319,8 +312,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         if 'u' not in self.field_names:
             raise NotImplementedError(
-                'No-normal-flow boundary conditions can only be applied ' +
-                'when there is a variable called "u" and none was found')
+                'No-normal-flow boundary conditions can only be applied '
+                + 'when there is a variable called "u" and none was found')
 
         Vu = state.spaces("HDiv")
         if Vu.extruded:
@@ -384,6 +377,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return adv_form
 
+
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
@@ -418,9 +412,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                 be included in the equations.
     """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'all':[time_derivative,pressure_gradient],
-                                     'D':[transport],
-                                     'u':[]},
+                 terms_to_linearise={'all': [time_derivative, pressure_gradient],
+                                     'D': [transport],
+                                     'u': []},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -532,9 +526,9 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     # TODO: add documentation
     """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'all':[time_derivative,pressure_gradient],
-                                     'D':[transport],
-                                     'u':[coriolis]},
+                 terms_to_linearise={'all': [time_derivative, pressure_gradient],
+                                     'D': [transport],
+                                     'u': [coriolis]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -593,10 +587,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
-                 terms_to_linearise={'all':[time_derivative],
-                                     'u':[],
-                                     'rho':[transport],
-                                     'theta':[transport]},
+                 terms_to_linearise={'all': [time_derivative],
+                                     'u': [],
+                                     'rho': [transport],
+                                     'theta': [transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -730,8 +724,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             c_pml = cp + mr_v * c_pv + mr_l * c_pl
             R_m = R_d + mr_v * R_v
 
-            residual -= subject(prognostic(gamma * theta * div(u) *
-                (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx, "theta"), self.X)
+            residual -= subject(prognostic(
+                gamma * theta * div(u)
+                * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx, "theta"), self.X)
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
@@ -821,10 +816,10 @@ class LinearCompressibleEulerEquations(CompressibleEulerEquations):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
-                 terms_to_linearise={'all':[time_derivative],
-                                     'u':[],
-                                     'rho':[transport],
-                                     'theta':[transport]},
+                 terms_to_linearise={'all': [time_derivative],
+                                     'u': [],
+                                     'rho': [transport],
+                                     'theta': [transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -895,10 +890,10 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'all':[time_derivative],
-                                     'u':[],
-                                     'p':[],
-                                     'b':[transport]},
+                 terms_to_linearise={'all': [time_derivative],
+                                     'u': [],
+                                     'p': [],
+                                     'b': [transport]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -1024,5 +1019,3 @@ class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
 
         self.residual += subject(prognostic(
             gamma*dbdy*inner(u, y_vec)*dx, "b"), X)
-
-

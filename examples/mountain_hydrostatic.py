@@ -147,8 +147,8 @@ if supg:
 else:
     theta_opts = EmbeddedDGOptions()
 transported_fields = [ImplicitMidpoint(state, "u"),
-                   SSPRK3(state, "rho"),
-                   SSPRK3(state, "theta", options=theta_opts)]
+                      SSPRK3(state, "rho"),
+                      SSPRK3(state, "theta", options=theta_opts)]
 
 # Set up linear solver
 params = {'mat_type': 'matfree',

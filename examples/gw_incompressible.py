@@ -80,7 +80,7 @@ if supg:
 else:
     b_opts = EmbeddedDGOptions()
 transported_fields = [ImplicitMidpoint(state, "u"),
-                   SSPRK3(state, "b", options=b_opts)]
+                      SSPRK3(state, "b", options=b_opts)]
 
 # Set up linear solver for the timestepping scheme
 linear_solver = IncompressibleSolver(state, eqns)

@@ -5,7 +5,7 @@ Tests the replace_subject routine from labels.py
 from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
                        VectorFunctionSpace, MixedFunctionSpace, dx, inner,
                        TrialFunctions)
-from gusto.fml import Label, all_terms
+from gusto.fml import Label
 from gusto import subject, replace_subject
 import pytest
 
@@ -95,7 +95,7 @@ def test_replace_subject(subject_type, replacement_type):
     # Test replace_subject
     # ------------------------------------------------------------------------ #
 
-    new_labelled_form = labelled_form.label_map(
+    labelled_form = labelled_form.label_map(
         lambda t: t.has_label(subject),
         map_if_true=replace_subject(the_replacement, idx=idx)
     )
