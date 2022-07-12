@@ -74,10 +74,7 @@ class Timestepper(object):
 
     @property
     def transporting_velocity(self):
-        if hasattr(self.x.n, 'u'):
-            return self.x.n('u')
-        else:
-            return None
+        return "prognostic"
 
     def _apply_bcs(self):
         """
