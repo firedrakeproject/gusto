@@ -511,7 +511,7 @@ class RK4(ExplicitTimeDiscretisation):
     def lhs(self):
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.trial, self.idx),
+            map_if_true=replace_subject(self.dq, self.idx),
             map_if_false=drop)
 
         return l.form
