@@ -333,7 +333,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # replace the transporting velocity in any terms that contain it
         if any([t.has_label(transporting_velocity) for t in self.residual]):
             assert uadv is not None
-            if uadv is "prognostic":
+            if uadv == "prognostic":
                 self.residual = self.residual.label_map(
                     lambda t: t.has_label(transporting_velocity),
                     map_if_true=lambda t: Term(ufl.replace(

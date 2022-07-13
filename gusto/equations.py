@@ -264,7 +264,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         new_residual = residual.label_map(
             # Extract all terms to be linearised that haven't already been
             lambda t: (not t.has_label(linearisation)
-                       and any(t.has_label(*terms_to_linearise['all']), return_tuple=True)),
+                       and any(t.has_label(*terms_to_linearise['all'], return_tuple=True))),
             lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(self.trials)).terms[0]))
 
         # Loop through prognostic variables and linearise any specified terms
