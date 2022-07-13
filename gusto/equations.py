@@ -160,6 +160,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
 class ShallowWaterEquations(PrognosticEquation):
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 diffusion_options=None, sponge=None,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
