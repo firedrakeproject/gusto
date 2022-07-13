@@ -63,7 +63,7 @@ plt.show()
 
 bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
 
-k = 9.738937226128359
+k = 9.42477796076938  # 9.738937226128359
 eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
 a = (
@@ -111,8 +111,8 @@ with eigenmodes_real.dat.vec as vecr:
 k = k*L
 c_p = np.real(lam)/U
 
-plot(etar)
-plt.show()
+# plot(etar)
+# plt.show()
 
 def interp(f1, f2):
     def mydata(X):
@@ -153,11 +153,12 @@ etai2.dat.data[:] = interp(etai, etai2)(X2.dat.data_ro)
 
 # Multiply u, v, eta by the exponential term, retaining only the real part
 x,y = SpatialCoordinate(mesh)
-# Non-dimensionalise x and y by dividing by Rd
-# x = x/Rd
-# y = y/Rd
-x = (x - 0.5 * Ly)/Rd
-coordinate = ((y - 0.5 * Ly)/Rd)/L
+# Non-dimensionalise x and y by dividing by L
+x = x/L
+y = y/L
+# x = (x - 0.5 * Ly)
+# k*(x-Ly/2)/L
+coordinate = (y - 0.5 * Ly)
 # u minus background jet
 u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x) - (((g * d_eta)/(f*L) * (1/cosh(coordinate))**2))
 u_real = Function(V2, name="Re(u)")
@@ -173,17 +174,20 @@ eta_real.interpolate(eta_real_expr)
 
 # Plot this eigenmode
 # plots are not yet on the same figure
-x_array = np.arange(0, Ly, Ly/nx)
-y_array = np.arange(0, Ly, Ly/nx)
+x_array = (np.arange(0, Ly, Ly/nx))
+y_array = (np.arange(0, Ly, Ly/nx))
 X, Y = np.meshgrid(x_array, y_array)
 u_real_array = u_real.vector().array()
 v_real_array = v_real.vector().array()
 skip = (slice(None, None, 100))
 plt.quiver(u_real_array[skip], v_real_array[skip])
+
 tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
 cb = plt.colorbar(tcf)
-# plt.xlim(left=1.5, right=4.5)
-# plt.ylim(bottom=1.5, top=4.5)
+scaled_lim1 = Ly/2 - (1.5 * Rd)
+scaled_lim2 = Ly/2 + (1.5 * Rd)
+plt.xlim(left=scaled_lim1, right=scaled_lim2)
+plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
 # plt.xlabel("x/Rd")
 # plt.ylabel("y/Rd")
 plt.title("Re(eta)")
@@ -195,61 +199,79 @@ outfile.write(u_real, v_real, eta_real)
 
 
 # Part 2 : Bickley jet with this mode superimposed
-new_mesh = PeriodicRectangleMesh(nx, nx, Ly/Rd, Ly/Rd, direction="x")
-parameters = ShallowWaterParameters(H=H, g=g)
-dt = 250
+# new_mesh = PeriodicRectangleMesh(nx, nx, Ly, Ly, direction="x")
+# parameters = ShallowWaterParameters(H=H, g=g)
+# dt = 1e-3
 
-dirname="June_bickley_jet"
-x, y = SpatialCoordinate(new_mesh)
+# dirname="June_bickley_jet"
+# x, y = SpatialCoordinate(new_mesh)
 
-output = OutputParameters(dirname=dirname, dumpfreq=40)
+# output = OutputParameters(dirname=dirname, dumpfreq=1)
 
-state = State(new_mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY()])
+# state = State(new_mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY(), RelativeVorticity()])
 
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
+# eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1,2])
 
-u0 = state.fields("u")
-D0 = state.fields("D")
+# u0 = state.fields("u")
+# D0 = state.fields("D")
 
-coordinate = (y - 0.5 * (Ly/Rd))/L
-Dexpr = H - d_eta * (sinh(coordinate)/cosh(coordinate))
-VD = D0.function_space()
-Dbackground = Function(VD)
-Dbackground.interpolate(Dexpr)
-amp = Dbackground.at(Ly/2, Ly/2) # height in the jet
+# coordinate = (y - 0.5 * Ly)/L
+# Dexpr = H - d_eta * (sinh(coordinate)/cosh(coordinate))
+# VD = D0.function_space()
+# Dbackground = Function(VD)
+# Dbackground.interpolate(Dexpr)
+# amp = Dbackground.at(Ly/2, Ly/2) # height in the jet
 
-# project unstable mode height on to D field and add it to the background height
-Dmode = project(eta_real,  VD)
-Dnoise = 0.001 * amp * Dmode
-length = Ly/Rd
-D0.interpolate(conditional(y<length/2+L/10, conditional(y>length/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
+# # project unstable mode height on to D field and add it to the background height
+# Dmode = project(eta_real,  VD)
+# Dnoise = 0.1 * amp * Dmode
+# length = Ly/Rd
+# # D0.interpolate(Dbackground)
+# D0.interpolate(conditional(y<Ly/2+L/10, conditional(y>Ly/2-L/10, Dbackground+Dnoise, Dbackground), Dbackground))
 
-# project unstable mode velocity on to U field
-velocity_mode = as_vector([u_real_expr, v_real_expr])
-print(type(velocity_mode))
-u0.project(velocity_mode)
-
-
-# Calculate initial velocity that is in geostrophic balance with the height
-Vpsi = FunctionSpace(new_mesh, "CG", 2)
-psi = Function(Vpsi)
-psi.interpolate((g/f)*Dbackground)
-
-Vu = u0.function_space()
-w = TestFunction(Vu)
-u_ = TrialFunction(Vu)
-
-ap = inner(w, u_)*dx
-Lp = inner(w, state.perp(grad(psi)))*dx
-prob = LinearVariationalProblem(ap, Lp, u0)
-solver = LinearVariationalSolver(prob)
-solver.solve()
+# # project unstable mode velocity on to U field
+# # velocity_mode = as_vector(([u_real_expr, v_real_expr]))
+# # print(type(as_vector([u_real_expr, v_real_expr])))
+# # print(type(as_vector(([u_real_expr, v_real_expr]))))
+# # u0.project(velocity_mode)
 
 
-# Timestep the problem
+# # Calculate initial velocity that is in geostrophic balance with the height
+# Vpsi = FunctionSpace(new_mesh, "CG", 2)
+# psi = Function(Vpsi)
+# psi.interpolate((g/f)*D0)
+
+# Vu = u0.function_space()
+# w = TestFunction(Vu)
+# u_ = TrialFunction(Vu)
+
+# ap = inner(w, u_)*dx
+# Lp = inner(w, state.perp(grad(psi)))*dx
+# prob = LinearVariationalProblem(ap, Lp, u0)
+# solver = LinearVariationalSolver(prob)
+# solver.solve()
+
+
+# # Timestep the problem
 # advected_fields = [ImplicitMidpoint(state, "u"),
 #                    SSPRK3(state, "D")]
 
 # stepper = CrankNicolson(state, eqns, advected_fields)
 # T_i = 1/f
-# stepper.run(t=0, tmax=40*T_i)
+# stepper.run(t=0, tmax=5*dt)
+
+
+
+
+
+# Rough Work
+# import matplotlib.tri as tri
+# triang = tri.Triangulation(X.flatten(), Y.flatten())
+# print("this is eta_real")
+# print(type(eta_real))
+# plotting_eta_real = Function(V2)
+# plot_eta_real = plotting_eta_real.interpolate(eta_real).vector()
+# print(len(X.flatten()))
+# print(X.flatten())
+# print(len(plot_eta_real))
+# tcf = plt.tricontourf(triang, plot_eta_real, levels=14, cmap="RdBu_r")

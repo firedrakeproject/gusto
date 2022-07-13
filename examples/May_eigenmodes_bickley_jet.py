@@ -3,6 +3,7 @@ from firedrake.petsc import PETSc
 from slepc4py import SLEPc
 import numpy as np
 from gusto import *
+import matplotlib.pyplot as plt
 
 # set up parameters
 f = 10
@@ -22,7 +23,7 @@ mesh = IntervalMesh(nx, Ly)
 
 y = SpatialCoordinate(mesh)[0]
 
-coordinate = (y - 0.5*Ly)/Ly
+coordinate = (y - 0.5*Ly)/L
 
 # set up spaces
 V = FunctionSpace(mesh, "CG", 2)
@@ -36,6 +37,30 @@ u_bar_expr = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
 u_bar.interpolate(u_bar_expr)
 eta_bar_expr = -d_eta * (sinh(coordinate)/cosh(coordinate))
 eta_bar.interpolate(eta_bar_expr)
+
+# plot functions to check
+u_bar, _, eta_bar = Function(Z).split()
+# shift axis so that perturbation is at 0
+plotting_y = Function(V)
+plot_y = plotting_y.interpolate((y - 0.5 * Ly)/Rd).vector()
+# u_bar, divided by U
+u_bar.interpolate((g * d_eta)/(f*L) * (1/cosh(coordinate))**2)
+plotting_u_bar = Function(V)
+plot_u_bar = plotting_u_bar.interpolate(u_bar_expr/U).vector()
+plt.plot(plot_y, plot_u_bar)
+plt.xlim(left=-1.5, right=1.5)
+plt.xlabel("y/Rd")
+plt.ylabel("u_bar/U")
+plt.show()
+# eta_bar, divided by d_eta
+eta_bar.interpolate(-d_eta * (sinh(coordinate)/cosh(coordinate)))
+plotting_eta_bar = Function(V)
+plot_eta_bar = plotting_eta_bar.interpolate(eta_bar_expr/d_eta).vector()
+plt.plot(plot_y, plot_eta_bar)
+plt.xlim(left=-1.5, right=1.5)
+plt.xlabel("y/Rd")
+plt.ylabel("eta_bar/d_eta")
+plt.show()
 
 # boundary conditions: Dirichlet conditions enforcing v = 0 on both ends of the interval
 bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
@@ -54,8 +79,10 @@ etai_list = []
 cp_list = []
 
 # loop over range of k values
-for n in np.arange(1, 70, 5):
+for n in np.arange(1, 61, 1):
     k = (2*pi*n*L)/Ly
+    print(n)
+    print(k)
     eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
     a = (
@@ -105,24 +132,25 @@ for n in np.arange(1, 70, 5):
         etai_list.append(etai)
         eigenvalue_list.append(lam)
         sigma_list.append(k*np.imag(lam))  # dimensionless already
-        k_list.append(k * L)  # non-dimensional k
-        cp_list.append(np.real(lam)/U)  # non-dimensional phase speed
+        k_list.append(k)  # dimensional k
+        cp_list.append(np.real(lam))  # dimensional phase speed
 
 # Extract k-value corresponding to the largest growth rate
 max_sigma = max(sigma_list)
 index = np.argmax(sigma_list)
 k = k_list[index]
+print(k)
 
 # Plot figures
-# plt.scatter(k_list, cp_list)
-# plt.xlabel('k')
-# plt.ylabel('c_p')
-# plt.show()
+plt.scatter(k_list, cp_list)
+plt.xlabel('k')
+plt.ylabel('c_p')
+plt.show()
 
-# plt.scatter(k_list, sigma_list)
-# plt.xlabel('k')
-# plt.ylabel('sigma')
-# plt.show()
+plt.scatter(k_list, sigma_list)
+plt.xlabel('k')
+plt.ylabel('sigma')
+plt.show()
 
 # Extract fastest-growing eigenmode
 ur = ur_list[index]
@@ -199,13 +227,13 @@ with CheckpointFile("eigenmode.h5", 'w') as afile:
 
 # Plot this eigenmode
 # height as contour plot
-# tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
-# cb = plt.colorbar(tcf)
-# scaled_lim1 = Ly/2 - (1.5 * Rd)
-# scaled_lim2 = Ly/2 + (1.5 * Rd)
-# plt.xlim(left=scaled_lim1, right=scaled_lim2)
-# plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
-# plt.xlabel("x")
-# plt.ylabel("y")
-# plt.title("Re(eta)")
-# plt.show()
+tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
+cb = plt.colorbar(tcf)
+scaled_lim1 = Ly/2 - (1.5 * Rd)
+scaled_lim2 = Ly/2 + (1.5 * Rd)
+plt.xlim(left=scaled_lim1, right=scaled_lim2)
+plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("Re(eta)")
+plt.show()

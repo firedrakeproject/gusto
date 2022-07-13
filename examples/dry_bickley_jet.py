@@ -8,7 +8,7 @@ L = 0.1
 Ro = 0.1
 Bu = 10
 U = f * L * Ro
-H = (f**2 * L**2 * Bu)/g
+H = (f**2 * L**2 * Bu)/g  # 1
 d_eta = (f * L * U)/g
 Rd = sqrt(g * H)/f
 
@@ -20,7 +20,7 @@ mesh = PeriodicRectangleMesh(nx, nx, Ly, Ly, direction="x")
 parameters = ShallowWaterParameters(H=H, g=g)
 dt = 1e-3
 
-dirname = "dry_bickley_jet"
+dirname = "balanced_bickley_jet_dirichletbcs"
 
 x, y = SpatialCoordinate(mesh)
 
@@ -28,7 +28,7 @@ output = OutputParameters(dirname=dirname, dumpfreq=1)
 
 state = State(mesh, dt=dt, output=output, parameters=parameters, diagnostic_fields=[VelocityX(), VelocityY(), RelativeVorticity()])
 
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids=[1, 2])
+eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=Constant(f), no_normal_flow_bc_ids = [1, 2])
 
 u0 = state.fields("u")
 D0 = state.fields("D")
@@ -65,6 +65,12 @@ Lp = inner(w, state.perp(grad(psi)))*dx
 prob = LinearVariationalProblem(ap, Lp, u0)
 solver = LinearVariationalSolver(prob)
 solver.solve()
+
+# output the height perturbation
+outfile = File("height.pvd")
+eta_pert = Function(VD, name="height perturbation")
+eta_pert.interpolate(state.fields("D") - Dbackground)
+outfile.write(eta_pert, Dmode)
 
 # Timestep the problem
 advected_fields = [ImplicitMidpoint(state, "u"),
