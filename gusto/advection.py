@@ -797,14 +797,12 @@ class FE_SDC(SDC):
         while k < self.maxk:
             k += 1
 
-            fUnodes = []
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
-                UU = Function(self.W).assign(self.Urhs)
-                fUnodes.append(UU)
+                self.fUnodes[m-1].assign(self.Urhs)
 
-            quad = self.matmul_UFL(self.S, fUnodes)
+            quad = self.matmul_UFL(self.S, self.fUnodes)
             # quad = dot(as_matrix(S),
             #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
 
