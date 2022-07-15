@@ -25,9 +25,11 @@ dt = 1.0
 if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 240.
+    tdump = tmax
 else:
     deltax = 20. if recovered else 40.
     tmax = 600.
+    tdump = 100.
 
 L = 3600.
 h = 2400.
@@ -44,7 +46,7 @@ if recovered:
 if diffusion:
     dirname += '_diffusion'
 
-output = OutputParameters(dirname=dirname, dumpfreq=20,
+output = OutputParameters(dirname=dirname, dumpfreq=tdump,
                           perturbation_fields=['theta', 'vapour_mixing_ratio', 'rho'],
                           log_level='INFO')
 params = CompressibleParameters()

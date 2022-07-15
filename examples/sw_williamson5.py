@@ -7,10 +7,12 @@ day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     ref_dt = {3: 3000.}
     tmax = 3000.
+    dumpfreq = 1
 else:
     # setup resolution and timestepping parameters for convergence test
     ref_dt = {3: 900., 4: 450., 5: 225., 6: 112.5}
     tmax = 50*day
+    dumpfreq = int(tmax / (5*dt))
 
 # setup shallow water parameters
 R = 6371220.
@@ -29,7 +31,7 @@ for ref_level, dt in ref_dt.items():
 
     output = OutputParameters(dirname=dirname,
                               dumplist_latlon=['D'],
-                              dumpfreq=100,
+                              dumpfreq=dumpfreq,
                               log_level='INFO')
 
     diagnostic_fields = [Sum('D', 'topography')]

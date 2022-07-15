@@ -45,7 +45,7 @@ if limit:
     dirname += '_limit'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20,
+                          dumpfreq=int(tmax / (5*dt)),
                           dumplist=['u'],
                           perturbation_fields=['theta'],
                           log_level='INFO')

@@ -9,9 +9,11 @@ dt = 5.0
 if '--running-tests' in sys.argv:
     tmax = dt
     res = 1
+    dumpfreq = 1
 else:
     tmax = 15000.
     res = 10
+    dumpfreq = int(tmax / (5*dt))
 
 
 nlayers = res*20  # horizontal layers
@@ -44,7 +46,7 @@ new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=30,
+                          dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')

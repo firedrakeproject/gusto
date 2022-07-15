@@ -7,8 +7,10 @@ dt = 3600.
 day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 5*day
+    dumpfreq = int(tmax / (5*dt))
 
 refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -21,6 +23,7 @@ x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
 output = OutputParameters(dirname='sw_linear_w2',
+                          dumpfreq=dumpfreq,
                           steady_state_error_fields=['u', 'D'],
                           log_level='INFO')
 parameters = ShallowWaterParameters(H=H)

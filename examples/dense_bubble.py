@@ -7,9 +7,11 @@ import sys
 if '--running-tests' in sys.argv:
     res_dt = {800.: 4.}
     tmax = 4.
+    dumpfreq = 1
 else:
     res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
+    dumpfreq = int(tmax / (4*dt))
 
 
 L = 51200.
@@ -27,7 +29,7 @@ for delta, dt in res_dt.items():
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     output = OutputParameters(dirname=dirname,
-                              dumpfreq=5,
+                              dumpfreq=dumpfreq,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'],
                               log_level='INFO')

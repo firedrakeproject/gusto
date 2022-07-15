@@ -7,8 +7,10 @@ import sys
 dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 3600.
+    dumpfreq = int(tmax / (2*dt))
 
 # set up mesh
 columns = 300  # number of columns
@@ -21,7 +23,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # output parameters
 output = OutputParameters(dirname='gw_incompressible',
-                          dumpfreq=10,
+                          dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['b'],
                           log_level='INFO')

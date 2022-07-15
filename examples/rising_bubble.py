@@ -6,9 +6,10 @@ import sys
 dt = 1.
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 700.
-
+    dumpfreq = int(tmax / (7*dt))
 
 L = 1000.
 H = 1000.
@@ -21,7 +22,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 dirname = 'rb'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=10,
+                          dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')

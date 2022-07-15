@@ -10,8 +10,10 @@ import sys
 dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 3600.
+    dumpfreq = int(tmax / (2*dt))
 
 
 nlayers = 10  # horizontal layers
@@ -30,8 +32,8 @@ points = np.array([p for p in itertools.product(points_x, points_z)])
 dirname = 'sk_nonlinear'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
-                          pddumpfreq=10,
+                          dumpfreq=dumpfreq,
+                          pddumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           point_data=[('theta_perturbation', points)],
