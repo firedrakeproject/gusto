@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, assemble, DirichletBC,
+from firedrake import (Function, assemble, DirichletBC, as_matrix, as_vector,
                        NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace, split,
@@ -707,15 +707,11 @@ class SDC(object, metaclass=ABCMeta):
         for m in np.arange(1, M):
             self.S[m, :] = self.Q[m, :] - self.Q[m - 1, :]
 
-    def matmul_UFL(self, a, b):
-        # b is nx1 array!
-        n = np.shape(a)[0]
-        result = [float(0)]*n
-        for j in range(n):
-            for k in range(n):
-                result[j] += float(a[j, k])*b[k]
-            result[j] = assemble(result[j])
-        return result
+    def compute_quad(self):
+        for j in range(self.M):
+            self.quad[j].assign(0.)
+            for k in range(self.M):
+                self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
 
     @abstractmethod
     def apply(self, xin, xout):
@@ -739,6 +735,7 @@ class FE_SDC(SDC):
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
         self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
 
         self.U_SDC = Function(W)
         self.U0 = Function(W)
@@ -802,16 +799,14 @@ class FE_SDC(SDC):
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
 
-            quad = self.matmul_UFL(self.S, self.fUnodes)
-            # quad = dot(as_matrix(S),
-            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+            self.compute_quad()
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
                 self.dt.assign(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
-                self.Q_.assign(quad[m-1])
+                self.Q_.assign(self.quad[m-1])
                 self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
@@ -845,6 +840,7 @@ class BE_SDC(SDC):
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
         self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
 
         self.U_SDC = Function(W)
         self.U0 = Function(W)
@@ -914,9 +910,7 @@ class BE_SDC(SDC):
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
 
-            quad = self.matmul_UFL(self.S, self.fUnodes)
-            # quad = dot(as_matrix(S),
-            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+            self.compute_quad()
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
@@ -924,7 +918,7 @@ class BE_SDC(SDC):
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
-                self.Q_.assign(quad[m-1])
+                self.Q_.assign(self.quad[m-1])
                 self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
@@ -963,6 +957,7 @@ class IMEX_SDC(SDC):
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
         self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
 
         self.U_SDC = Function(W)
         self.U0 = Function(W)
@@ -1034,9 +1029,7 @@ class IMEX_SDC(SDC):
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
 
-            quad = self.matmul_UFL(self.S, self.fUnodes)
-            # quad = dot(as_matrix(S),
-            #            as_vector([f(Unodes[1]), f(Unodes[2]), f(Unodes[3])]))
+            self.compute_quad()
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
@@ -1044,7 +1037,7 @@ class IMEX_SDC(SDC):
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
-                self.Q_.assign(quad[m-1])
+                self.Q_.assign(self.quad[m-1])
                 self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
