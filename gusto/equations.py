@@ -178,12 +178,12 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     """
 
     def __init__(self, field_names, state, family, degree,
-                 terms_to_linearise={'all': []},
+                 terms_to_linearise=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
         self.field_names = field_names
         self.active_tracers = active_tracers
-        self.terms_to_linearise = terms_to_linearise
+        self.terms_to_linearise = {} if terms_to_linearise is None else terms_to_linearise
 
         # Build finite element spaces
         self.spaces = [space for space in self._build_spaces(state, family, degree)]
@@ -260,22 +260,15 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # TODO: Neaten up the `terms_to_linearise` variable. This should not be
         # a dictionary, it should be a filter of some sort
 
-        # Apply linearisation to terms in the 'all' part of the dict
-        new_residual = residual.label_map(
-            # Extract all terms to be linearised that haven't already been
-            lambda t: (not t.has_label(linearisation)
-                       and any(t.has_label(*terms_to_linearise['all'], return_tuple=True))),
-            lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(self.trials)).terms[0]))
-
         # Loop through prognostic variables and linearise any specified terms
         for field in self.field_names:
-            new_residual = new_residual.label_map(
+            residual = residual.label_map(
                 # Extract all terms to be linearised for this field's equation that haven't already been
                 lambda t: (not t.has_label(linearisation) and (t.get(prognostic) == field)
                            and any(t.has_label(*terms_to_linearise[field], return_tuple=True))),
                 lambda t: linearisation(t, LabelledForm(t).label_map(all_terms, replace_subject(self.trials)).terms[0]))
 
-        return new_residual
+        return residual
 
     def linearise_equation_set(self):
         """
@@ -412,9 +405,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                 be included in the equations.
     """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'all': [time_derivative, pressure_gradient],
-                                     'D': [transport],
-                                     'u': []},
+                 terms_to_linearise={'D': [time_derivative, transport],
+                                     'u': [time_derivative, pressure_gradient]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -526,9 +518,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     # TODO: add documentation
     """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'all': [time_derivative, pressure_gradient],
-                                     'D': [transport],
-                                     'u': [coriolis]},
+                 terms_to_linearise={'D': [time_derivative, transport],
+                                     'u': [time_derivative, pressure_gradient, coriolis]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -587,10 +578,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
-                 terms_to_linearise={'all': [time_derivative],
-                                     'u': [],
-                                     'rho': [transport],
-                                     'theta': [transport]},
+                 terms_to_linearise={'u': [time_derivative],
+                                     'rho': [time_derivative, transport],
+                                     'theta': [time_derivative, transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -776,12 +766,16 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 class CompressibleEadyEquations(CompressibleEulerEquations):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 terms_to_linearise={'u': [time_derivative],
+                                     'rho': [time_derivative, transport],
+                                     'theta': [time_derivative, transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
         super().__init__(state, family, degree,
+                         terms_to_linearise=terms_to_linearise,
                          Omega=Omega, sponge=sponge,
                          u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
@@ -816,10 +810,9 @@ class LinearCompressibleEulerEquations(CompressibleEulerEquations):
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
                  extra_terms=None,
-                 terms_to_linearise={'all': [time_derivative],
-                                     'u': [],
-                                     'rho': [transport],
-                                     'theta': [transport]},
+                 terms_to_linearise={'u': [time_derivative],
+                                     'rho': [time_derivative, transport],
+                                     'theta': [time_derivative, transport]},
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -890,10 +883,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'all': [time_derivative],
-                                     'u': [],
-                                     'p': [],
-                                     'b': [transport]},
+                 terms_to_linearise={'u': [time_derivative],
+                                     'p': [time_derivative],
+                                     'b': [time_derivative, transport]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -993,12 +985,16 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
 class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
     def __init__(self, state, family, degree, Omega=None,
+                 terms_to_linearise={'u': [time_derivative],
+                                     'p': [time_derivative],
+                                     'b': [time_derivative, transport]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
         super().__init__(state, family, degree,
                          Omega=Omega,
+                         terms_to_linearise=terms_to_linearise,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)

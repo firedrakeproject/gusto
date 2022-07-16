@@ -2,7 +2,8 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, Constant, dot, grad, as_ufl)
+                       TestFunction, Constant, dot, grad, as_ufl, MixedElement,
+                       DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
@@ -109,18 +110,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     t.labels),
                 drop)
             bcs = equation.bcs[self.field_name]
+
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
-            if len(self.fs) > 0:
+            self.idx = None
+            if type(self.fs.ufl_element()) is MixedElement:
                 bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
             else:
                 bcs = equation.bcs[self.field_name]
-            self.idx = None
-        if apply_bcs:
-            self.bcs = bcs
-        else:
-            self.bcs = None
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
@@ -158,6 +156,18 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
                           'sub_pc_type': 'ilu'}
+
+        # -------------------------------------------------------------------- #
+        # Make boundary conditions
+        # -------------------------------------------------------------------- #
+
+        if not apply_bcs:
+            self.bcs = None
+        elif self.discretisation_option in ["embedded_dg", "recovered"]:
+            # Transfer boundary conditions onto test function space
+            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain) for bc in bcs]
+        else:
+            self.bcs = bcs
 
         # -------------------------------------------------------------------- #
         # Modify test function for SUPG methods

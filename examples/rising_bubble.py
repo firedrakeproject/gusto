@@ -8,8 +8,8 @@ if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
 else:
-    tmax = 700.
-    dumpfreq = int(tmax / (7*dt))
+    tmax = 600.
+    dumpfreq = int(tmax / (6*dt))
 
 L = 1000.
 H = 1000.
