@@ -34,7 +34,7 @@ m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
-diffusion = True
+diffusion = False
 degree = 0 if recovered else 1
 
 dirname = 'dry_bf_bubble'

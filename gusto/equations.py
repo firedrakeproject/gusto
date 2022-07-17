@@ -351,6 +351,10 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                              metadata for the active tracers.
         """
 
+        # By default return None if no tracers are to be transported
+        adv_form = None
+        no_tracer_transported = True
+
         for i, tracer in enumerate(active_tracers):
             if tracer.transport_flag:
                 idx = self.field_names.index(tracer.name)
@@ -363,8 +367,10 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
-                if i == 0:
+                if no_tracer_transported:
+                    # We arrive here for the first tracer to be transported
                     adv_form = subject(tracer_adv, self.X)
+                    no_tracer_transported = False
                 else:
                     adv_form += subject(tracer_adv, self.X)
 

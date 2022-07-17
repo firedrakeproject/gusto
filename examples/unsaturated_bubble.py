@@ -74,7 +74,7 @@ rho0 = state.fields("rho")
 theta0 = state.fields("theta")
 water_v0 = state.fields("vapour_mixing_ratio")
 water_c0 = state.fields("cloud_liquid_mixing_ratio")
-rain0 = state.fields("rain", theta0.function_space())
+rain0 = state.fields("rain_mixing_ratio", theta0.function_space())
 moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio", "rain_mixing_ratio"]
 
 # spaces
