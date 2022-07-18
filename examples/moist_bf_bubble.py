@@ -28,7 +28,7 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100. if recovered else 400
+    deltax = 100. if recovered else 200
     tmax = 1000.
 
 L = 10000.
@@ -50,7 +50,7 @@ if diffusion:
     dirname += '_diffusion'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tmax / (10*dt)),
+                          dumpfreq=int(tmax / (5*dt)),
                           dumplist=['u'],
                           perturbation_fields=[],
                           log_level='INFO')
