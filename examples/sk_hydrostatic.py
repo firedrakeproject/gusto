@@ -9,10 +9,12 @@ if '--running-tests' in sys.argv:
     nlayers = 5  # horizontal layers
     columns = 50  # number of columns
     tmax = dt
+    dumpfreq = 1
 else:
     nlayers = 10  # horizontal layers
     columns = 150  # number of columns
     tmax = 60000.0
+    dumpfreq = int(tmax / (2*dt))
 
 
 L = 6.0e6
@@ -25,7 +27,7 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 dirname = 'sk_hydrostatic'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=50,
+                          dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')

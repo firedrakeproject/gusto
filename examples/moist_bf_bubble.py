@@ -50,7 +50,7 @@ if diffusion:
     dirname += '_diffusion'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20,
+                          dumpfreq=int(tmax / (5*dt)),
                           dumplist=['u'],
                           perturbation_fields=[],
                           log_level='INFO')

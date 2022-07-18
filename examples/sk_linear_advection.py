@@ -7,8 +7,10 @@ import sys
 dt = 10.
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 3600.
+    dumpfreq = int(tmax / (2*dt))
 
 
 nlayers = 50  # horizontal layers
@@ -25,6 +27,7 @@ fieldlist = ['u', 'rho', 'theta']
 dirname = 'sk_linear'
 
 output = OutputParameters(dirname=dirname,
+                          dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')

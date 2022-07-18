@@ -12,8 +12,10 @@ dt = 100.0             # Time-step size (s)
 
 if '--running-tests' in sys.argv:
     tmax = dt
+    dumpfreq = 1
 else:
     tmax = 3600.0
+    dumpfreq = int(tmax / (4*dt))
 
 
 parameters = CompressibleParameters()
@@ -58,7 +60,7 @@ lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 dirname = 'meanflow_ref_hybridization'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=10,
+                          dumpfreq=dumpfreq,
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
 

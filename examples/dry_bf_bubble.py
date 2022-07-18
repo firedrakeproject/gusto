@@ -34,7 +34,7 @@ m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # options
-diffusion = True
+diffusion = False
 degree = 0 if recovered else 1
 
 dirname = 'dry_bf_bubble'
@@ -45,7 +45,7 @@ if limit:
     dirname += '_limit'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20,
+                          dumpfreq=int(tmax / (5*dt)),
                           dumplist=['u'],
                           perturbation_fields=['theta'],
                           log_level='INFO')

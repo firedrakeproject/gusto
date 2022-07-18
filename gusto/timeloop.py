@@ -2,7 +2,9 @@ from firedrake import Function
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
-from gusto.labels import transport, diffusion
+from gusto.fml.form_manipulation_labelling import drop
+from gusto.labels import (transport, diffusion, time_derivative,
+                          linearisation, prognostic)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
@@ -203,7 +205,18 @@ class CrankNicolson(Timestepper):
         else:
             self.auxiliary_schemes = []
 
-        apply_bcs = False
+        self.tracers_to_copy = []
+        for name in equation_set.field_names:
+            # Extract time derivative for that prognostic
+            mass_form = equation_set.residual.label_map(
+                lambda t: (t.has_label(time_derivative) and t.get(prognostic) == name),
+                map_if_false=drop)
+            # Copy over field if the time derivative term has no linearisation
+            if not mass_form.terms[0].has_label(linearisation):
+                self.tracers_to_copy.append(name)
+
+        # TODO: why was this False? Should this be an argument?
+        apply_bcs = True
         super().__init__(state, problem, apply_bcs, physics_list)
 
         self.field_name = equation_set.field_name
@@ -228,6 +241,19 @@ class CrankNicolson(Timestepper):
         self.x = TimeLevelFields(self.state, self.equations,
                                  time_levels=("star", "p"))
 
+    def copy_active_tracers(self, x_in, x_out):
+        """
+        Copies active tracers from one set of fields to another, if those fields
+        are not included in the linear solver. This is determined by whether the
+        time derivative term for that tracer has a linearisation.
+
+        :arg x_in:  The input set of fields
+        :arg x_out: The output set of fields
+        """
+
+        for name in self.tracers_to_copy:
+            x_out(name).assign(x_in(name))
+
     def timestep(self):
         xn = self.x.n
         xnp1 = self.x.np1
@@ -250,6 +276,10 @@ class CrankNicolson(Timestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
+            # Update xnp1 values for active tracers not included in the linear solve
+            # TODO: should this actually be after forcing is applied?
+            self.copy_active_tracers(xp, xnp1)
+
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
@@ -260,6 +290,7 @@ class CrankNicolson(Timestepper):
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
 
+                # TODO: I am confused by these lines
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 

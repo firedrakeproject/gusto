@@ -543,10 +543,12 @@ class LinearTimesteppingSolver(object):
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(W)
 
-        aeqn = residual.label_map(lambda t: t.has_label(time_derivative),
-                                  map_if_false=lambda t: beta*t)
-        Leqn = residual.label_map(lambda t: t.has_label(time_derivative),
-                                  map_if_false=drop)
+        aeqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=lambda t: beta*t)
+        Leqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=drop)
 
         # Place to put result of solver
         self.dy = Function(W)

@@ -7,10 +7,11 @@ import sys
 if '--running-tests' in sys.argv:
     res_dt = {800.: 4.}
     tmax = 4.
+    ndumps = 1
 else:
     res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
     tmax = 15.*60.
-
+    ndumps = 4
 
 L = 51200.
 
@@ -26,8 +27,9 @@ for delta, dt in res_dt.items():
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
+    dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(dirname=dirname,
-                              dumpfreq=5,
+                              dumpfreq=dumpfreq,
                               dumplist=['u'],
                               perturbation_fields=['theta', 'rho'],
                               log_level='INFO')

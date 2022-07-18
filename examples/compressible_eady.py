@@ -13,7 +13,7 @@ if '--running-tests' in sys.argv:
     tdump = dt
 else:
     tmax = 30*day
-    tdump = 2*hour
+    tdump = 5*day
 
 # set up mesh
 columns = 30  # number of columns

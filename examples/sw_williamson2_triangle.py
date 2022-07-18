@@ -7,10 +7,12 @@ day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     ref_dt = {3: 3000.}
     tmax = 3000.
+    ndumps = 1
 else:
     # setup resolution and timestepping parameters for convergence test
     ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
     tmax = 5*day
+    ndumps = 5
 
 # setup shallow water parameters
 R = 6371220.
@@ -28,7 +30,9 @@ for ref_level, dt in ref_dt.items():
     global_normal = x
     mesh.init_cell_orientations(x)
 
+    dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(dirname=dirname,
+                              dumpfreq=dumpfreq,
                               dumplist_latlon=['D', 'D_error'],
                               steady_state_error_fields=['D', 'u'],
                               log_level='INFO')
