@@ -21,6 +21,25 @@ def replace_test_function(new_test):
     return repl
 
 
+def replace_trial_function(new):
+    """
+    :arg new: a :func:`Function` or `TrialFunction`
+
+    Returns a function that takes in t, a :class:`Term`, and returns
+    a new :class:`Term` containing a form with the trial function replaced
+    labels=t.labels
+    """
+
+    def repl(t):
+        if len(t.form.arguments()) != 2:
+            raise TypeError('Trying to replace trial function of a form that is not linear')
+        trial = t.form.arguments()[1]
+        new_form = ufl.replace(t.form, {trial: new})
+        return Term(new_form, t.labels)
+
+    return repl
+
+
 def replace_subject(new, idx=None):
     """
     Returns a function that takes a :class:`Term` and returns a new
@@ -78,15 +97,15 @@ def replace_subject(new, idx=None):
         else:
             if type(new) is tuple:
                 if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'+
-                                     ' when new is a tuple')
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when new is a tuple')
                 replace_dict[subj] = new[idx]
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
             elif type(new.ufl_element()) == MixedElement:
                 if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'+
-                                     ' when new is a tuple')
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when new is a tuple')
                 replace_dict[subj] = split(new)[idx]
             else:
                 replace_dict[subj] = new
@@ -104,6 +123,8 @@ diffusion = Label("diffusion")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
-linearisation = Label("linearisation", validator=lambda value: type(value) == LabelledForm)
+pressure_gradient = Label("pressure_gradient")
+coriolis = Label("coriolis")
+linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 name = Label("name", validator=lambda value: type(value) == str)
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)

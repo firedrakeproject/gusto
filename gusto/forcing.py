@@ -33,14 +33,12 @@ class Forcing(object):
         self.xF = Function(W)
 
         residual = equation.residual.label_map(
-            lambda t: t.has_label(transport), drop)
-        residual = equation.residual.label_map(
-            lambda t: t.has_label(diffusion), drop)
+            lambda t: any(t.has_label(transport, diffusion, return_tuple=True)), drop)
 
         trials = TrialFunctions(W)
         a = residual.label_map(lambda t: t.has_label(time_derivative),
                                replace_subject(trials),
-                               drop)
+                               map_if_false=drop)
 
         L_explicit = -(1-alpha)*dt*residual.label_map(
             lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,

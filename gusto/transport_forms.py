@@ -21,12 +21,18 @@ def linear_advection_form(state, test, qbar):
     return transport(form, TransportEquationType.advective)
 
 
-def linear_continuity_form(state, test, qbar):
+def linear_continuity_form(state, test, qbar, facet_term=False):
 
     Vu = state.spaces("HDiv")
     ubar = Function(Vu)
 
     L = qbar*test*div(ubar)*dx
+
+    if facet_term:
+        n = FacetNormal(state.mesh)
+        Vu = state.spaces("HDiv")
+        dS_ = (dS_v + dS_h) if Vu.extruded else dS
+        L += jump(ubar*test, n)*avg(qbar)*dS_
 
     form = transporting_velocity(L, ubar)
 

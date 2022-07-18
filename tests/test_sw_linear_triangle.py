@@ -30,7 +30,7 @@ def setup_sw(dirname):
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
 
-    eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr)
+    eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
 
     # interpolate initial conditions
     # Initial/current conditions
@@ -39,7 +39,7 @@ def setup_sw(dirname):
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = parameters.g
-    Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
+    Dexpr = H-((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
