@@ -40,7 +40,7 @@ m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 degree = 0 if recovered else 1
 
-dirname = 'moist_bf_rightdiv'
+dirname = 'moist_bf'
 
 if recovered:
     dirname += '_recovered'
