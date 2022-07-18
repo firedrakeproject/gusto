@@ -1,5 +1,5 @@
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, sin, inner, dx, div, cross,
+from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
@@ -610,7 +610,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
         thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         zero_expr = Constant(0.0)*theta
-        pi = Pi(state.parameters, rho, theta)
+        exner_pi = Pi(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
         # -------------------------------------------------------------------- #
@@ -680,8 +680,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = name(subject(prognostic(
-            cp*(-div(theta_v*w)*pi*dx
-                + jump(theta_v*w, n)*avg(pi)*dS_v), "u"), self.X), "pressure_gradient")
+            cp*(-div(theta_v*w)*exner_pi*dx
+                + jump(theta_v*w, n)*avg(exner_pi)*dS_v), "u"), self.X), "pressure_gradient")
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
@@ -737,11 +737,13 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             z = x[len(x)-1]
             H = sponge.H
             zc = sponge.z_level
+            assert zc < H, "you have set the sponge level above the height of your domain"
             mubar = sponge.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = Function(W_DG).interpolate(muexpr)
+
             residual += name(subject(prognostic(
                 self.mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), self.X), "sponge")
 
@@ -798,10 +800,10 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
         X = self.X
         u, rho, theta = split(X)
 
-        pi = Pi(state.parameters, rho, theta)
+        exner_pi = Pi(state.parameters, rho, theta)
 
         self.residual -= subject(prognostic(
-            cp*dthetady*(pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
+            cp*dthetady*(exner_pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
 
         self.residual += subject(prognostic(
             gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
