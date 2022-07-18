@@ -737,7 +737,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             z = x[len(x)-1]
             H = sponge.H
             zc = sponge.z_level
-            assert zc < H
+            assert zc < H, "you have set the sponge level above the height of your domain"
             mubar = sponge.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
