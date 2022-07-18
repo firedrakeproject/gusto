@@ -136,8 +136,13 @@ class Timestepper(object):
                 state.fields(field.name()).assign(field)
 
             with timed_stage("Physics"):
+
                 for physics in self.physics_list:
                     physics.apply()
+
+                # TODO: Hack to ensure that xnp1 fields are updated
+                for field in self.x.np1:
+                    field.assign(state.fields(field.name()))
 
             with timed_stage("Dump output"):
                 state.dump(t)
