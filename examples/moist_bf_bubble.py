@@ -28,7 +28,7 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     deltax = 1000.
 else:
-    deltax = 100. if recovered else 200
+    deltax = 100. if recovered else 400
     tmax = 1000.
 
 L = 10000.
@@ -40,7 +40,7 @@ m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 degree = 0 if recovered else 1
 
-dirname = 'moist_bf'
+dirname = 'moist_bf_rightdiv'
 
 if recovered:
     dirname += '_recovered'
@@ -50,7 +50,7 @@ if diffusion:
     dirname += '_diffusion'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tmax / (5*dt)),
+                          dumpfreq=int(tmax / (10*dt)),
                           dumplist=['u'],
                           perturbation_fields=[],
                           log_level='INFO')
