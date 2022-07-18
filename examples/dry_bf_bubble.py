@@ -149,7 +149,7 @@ else:
     limiter = None
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                   SSPRK3(state, "theta", options=theta_opts, limiter=limiter)]
+                      SSPRK3(state, "theta", options=theta_opts, limiter=limiter)]
 if recovered:
     transported_fields.append(SSPRK3(state, "u", options=u_opts))
 else:
