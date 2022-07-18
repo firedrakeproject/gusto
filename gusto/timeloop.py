@@ -215,7 +215,6 @@ class CrankNicolson(Timestepper):
             if not mass_form.terms[0].has_label(linearisation):
                 self.tracers_to_copy.append(name)
 
-
         # TODO: why was this False? Should this be an argument?
         apply_bcs = True
         super().__init__(state, problem, apply_bcs, physics_list)
