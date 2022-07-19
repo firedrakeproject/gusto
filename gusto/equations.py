@@ -960,17 +960,17 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), self.X)
+        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), self.X)
+        gravity_form = subject(prognostic(-b*inner(w, state.k)*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), self.X),
+        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, "p"), self.X),
                                "divergence_form")
 
         residual = (mass_form + adv_form + divergence_form
