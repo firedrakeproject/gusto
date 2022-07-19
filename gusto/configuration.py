@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractproperty
 from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
-from firedrake import sqrt
+from firedrake import sqrt, Constant
 
 
 __all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
@@ -56,7 +56,13 @@ class Configuration(object):
         """Cause setting an unknown attribute to be an error"""
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
-        object.__setattr__(self, name, value)
+
+        # Almost all parameters should be Constants -- but there are some
+        # specific exceptions which should be kept as integers
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+            object.__setattr__(self, name, Constant(value))
+        else:
+            object.__setattr__(self, name, value)
 
 
 class OutputParameters(Configuration):
