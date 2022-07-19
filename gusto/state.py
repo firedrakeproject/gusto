@@ -308,7 +308,7 @@ class State(object):
                  diagnostics=None,
                  diagnostic_fields=None):
 
-        self.dt = dt
+        self.dt = Constant(dt)
         self.hydrostatic = hydrostatic
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")

@@ -3,7 +3,7 @@ from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, Constant, dot, grad, as_ufl, MixedElement,
-                       DirichletBC)
+                       DirichletBC, error_norm)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
@@ -700,3 +700,109 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+      
+    
+class RKF45(ExplicitTimeDiscretisation):
+    """
+    Class to implement the adaptive 4/5 Runge-Kutta timestepping method.
+    """
+    def __init__(self, state, tol, dt_min, dt_max, field_name=None, subcycles=None,
+                 solver_parameters=None, limiter=None, options=None):
+        super().__init__(state, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        
+        self.tol = tol
+        self.dt_min = dt_min
+        self.dt_max = dt_max
+        
+    def setup(self, equation, uadv, *activate_labels)
+        
+        #Functions to save the 4th and 5th order estimations
+        self.q4 = Function(self.fs)
+        self.q5 = Function(self.fs)
+        
+        #Intermediate gradient evaluations
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
+        self.k5 = Function(self.fs)
+        self.k6 = Function(self.fs)
+        
+    
+    @cached_property
+    def lhs(self):
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_false=drop)
+
+        return l.form
+
+    @cached_property
+    def rhs(self):
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.q1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=lambda t: -1*t)
+
+        return r.form
+
+    def solve_stage(self, x_in, stage):
+
+        if stage == 0:
+            self.solver.solve()
+            self.k1.assign(self.dq)
+            self.q1.assign(x_in + self.dt*(1./4.)*self.k1)
+
+        elif stage == 1:
+            self.solver.solve()
+            self.k2.assign(self.dq)
+            self.q1.assign(x_in + self.dt*((3./32.)*self.k1 + (9./32.)*self.k2))
+
+        elif stage == 2:
+            self.solver.solve()
+            self.k3.assign(self.dq)
+            self.q1.assign(x_in + self.dt*((1932./2197.)*self.k1 + (-7200./2197.)*self.k2 + (7296./2197.)*self.k3))
+
+        elif stage == 3:
+            self.solver.solve()
+            self.k4.assign(self.dq)
+            self.q1.assign(x_in + self.dt*((439./216.)*self.k1 + (-8.)*self.k2 + (3680./513.)*self.k3 + (-845./4104.)*self.k4))
+            
+        elif stage == 4:
+            self.solver.solve()
+            self.k4.assign(self.dq)
+            self.q1.assign(x_in + self.dt*((-8./27.)*self.k1 + (2.)*self.k2 + (-3544./2565.)*self.k3 + (1859./4104.)*self.k4 + (-11/40)*self.k5))
+            
+        elif stage == 5:
+            self.solver.solve()
+            self.k4.assign(self.dq)
+            self.q4.assign(x_in + self.dt*((25./216.)self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
+            self.q5.assign(x_in + self_dt*((16./135.)self.k1 + (6656./12825.)*self.k3 + (28561./56430.)*self.k4 + (-9./50.)*self.k5 + (2./55.)*self.k6))
+
+
+    def apply_cycle(self, x_in, x_out):
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.q1.assign(x_in)
+        
+        for i in range(6):
+            self.solve_stage(x_in, i)
+            
+        diff = error_norm(self.q4-self.q5)    
+        new_dt = 0.9*self.dt*((err_tol/diff)**0.2)
+        
+        self.dt.assign(new_dt)
+        
+        if diff > err_tol:
+            apply_cycle.()
+        
+        x_out.assign(self.q1)
+      
