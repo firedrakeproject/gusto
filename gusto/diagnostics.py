@@ -17,7 +17,7 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
 
 
 class Diagnostics(object):
@@ -194,6 +194,18 @@ class Gradient(DiagnosticField):
     def compute(self, state):
         self.solver.solve()
         return self.field
+
+class Divergence(DiagnosticField):
+    name = "Divergence"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("DG1", "DG", 1)
+            super(Divergence, self).setup(state, space=space)
+
+    def compute(self, state):
+        u = state.fields("u")
+        return self.field.interpolate(div(u))
 
 
 class SphericalComponent(DiagnosticField):

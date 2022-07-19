@@ -867,6 +867,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
 
+    The pressure features as a Lagrange multiplier to enforce the
+    incompressibility of the equations.
+
     :arg state:                 The :class:`State` object used for the run.
     :arg family:                The finite element space family used for the
                                 velocity field. This determines the other finite
@@ -970,8 +973,12 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
+        # This enforces that div(u) = 0
+        # The p features here so that the div(u) evaluated in the "forcing" step
+        # replaces the whole pressure field, rather than merely providing an
+        # increment to it.
         divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, "p"), self.X),
-                               "divergence_form")
+                               "incompressibility")
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
