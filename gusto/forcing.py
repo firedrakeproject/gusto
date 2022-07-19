@@ -26,7 +26,7 @@ class Forcing(object):
     def __init__(self, equation, dt, alpha):
 
         self.field_name = equation.field_name
-        implicit_terms = ["divergence_form", "sponge"]
+        implicit_terms = ["incompressibility", "sponge"]
 
         W = equation.function_space
         self.x0 = Function(W)

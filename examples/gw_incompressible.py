@@ -16,7 +16,6 @@ else:
 columns = 300  # number of columns
 L = 3.0e5
 m = PeriodicIntervalMesh(columns, L)
-
 nlayers = 10  # horizontal layers
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
@@ -32,7 +31,7 @@ output = OutputParameters(dirname='gw_incompressible',
 parameters = CompressibleParameters()
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), Divergence()]
 
 # setup state
 state = State(mesh,

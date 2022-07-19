@@ -867,6 +867,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
 
+    The pressure features as a Lagrange multiplier to enforce the
+    incompressibility of the equations.
+
     :arg state:                 The :class:`State` object used for the run.
     :arg family:                The finite element space family used for the
                                 velocity field. This determines the other finite
@@ -960,18 +963,22 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), self.X)
+        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), self.X)
+        gravity_form = subject(prognostic(-b*inner(w, state.k)*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), self.X),
-                               "divergence_form")
+        # This enforces that div(u) = 0
+        # The p features here so that the div(u) evaluated in the "forcing" step
+        # replaces the whole pressure field, rather than merely providing an
+        # increment to it.
+        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, "p"), self.X),
+                               "incompressibility")
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
