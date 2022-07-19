@@ -195,6 +195,7 @@ class Gradient(DiagnosticField):
         self.solver.solve()
         return self.field
 
+
 class Divergence(DiagnosticField):
     name = "Divergence"
 
