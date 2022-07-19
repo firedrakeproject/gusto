@@ -720,7 +720,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             c_pml = cp + mr_v * c_pv + mr_l * c_pl
             R_m = R_d + mr_v * R_v
 
-            residual -= subject(prognostic(
+            residual += subject(prognostic(
                 gamma * theta * div(u)
                 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx, "theta"), self.X)
 
