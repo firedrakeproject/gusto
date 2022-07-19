@@ -1,3 +1,10 @@
+"""
+This tests three limiter options for different transport schemes.
+A sharp bubble of warm air is generated in a vertical slice and then transported
+by a prescribed transport scheme. If the limiter is working, the transport
+should have produced no new maxima or minima.
+"""
+
 from os import path
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, interval, FiniteElement, pi,
@@ -5,11 +12,6 @@ from firedrake import (as_vector, PeriodicIntervalMesh, interval, FiniteElement,
                        conditional, sqrt, BrokenElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from netCDF4 import Dataset
-
-# This setup creates a sharp bubble of warm air in a vertical slice
-# This bubble is then transported by a prescribed transport scheme
-# If the limiter is working, the transport should have produced
-# no new maxima or minima. Transport is a solid body rotation.
 
 
 def setup_limiters(dirname):

@@ -1,3 +1,9 @@
+"""
+This tests transport using the subcycling option.
+
+THOUGHTS: this doesn't check that the transport is correct
+"""
+
 from gusto import *
 from firedrake import PeriodicSquareMesh, exp, SpatialCoordinate, Constant
 

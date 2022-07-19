@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    name: "Build Gusto"  
+    name: "Build Gusto"
     # The type of runner that the job will run on
     runs-on: self-hosted
     # The docker container to use.
@@ -35,11 +35,16 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           python -m pip install -r requirements.txt
           python -m pip install -e .
-      - name: Test Gusto
+      - name: Gusto unit-tests
         run: |
           . /home/firedrake/firedrake/bin/activate
           python $(which firedrake-clean)
-          python -m pytest -n 12 -v tests
+          python -m pytest -n 12 -v unit-tests
+      - name: Gusto integration-tests
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          python $(which firedrake-clean)
+          python -m pytest -n 12 -v integration-tests
       - name: Lint
         if: ${{ always() }}
         run: |

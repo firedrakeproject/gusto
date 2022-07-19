@@ -1,3 +1,12 @@
+"""
+This tests the shallow water equations, with various combinations of settings.
+The test uses the initial conditions of the Williamson 2 test and checks the
+errors in the fields.
+
+THOUGHTS: there's a lot of diagnostics! This seems like what we want for testing
+the examples.
+"""
+
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,

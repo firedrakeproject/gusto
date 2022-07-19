@@ -1,3 +1,14 @@
+"""
+# This tests the Condensation routine. It creates a bubble of water vapour that
+# is advected by a prescribed velocity. The test passes if the integral
+# of the water mixing ratio is conserved.
+
+
+THOUGHTS: this should just be a prescribed advection test and not using
+compressible balance. It should test that condensation happens, as well as
+the amount of water being conserved.
+"""
+
 from os import path
 from gusto import *
 from firedrake import (as_vector, Constant, sin, PeriodicIntervalMesh,
@@ -5,10 +16,6 @@ from firedrake import (as_vector, Constant, sin, PeriodicIntervalMesh,
                        Function, sqrt, conditional, cos)
 from netCDF4 import Dataset
 from math import pi
-
-# This setup creates a bubble of water vapour that is advected
-# by a prescribed velocity. The test passes if the integral
-# of the water mixing ratio is conserved.
 
 
 def setup_condens(dirname):

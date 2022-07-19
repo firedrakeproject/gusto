@@ -1,11 +1,13 @@
+"""
+This tests the dry compressible hydrostatic balance, by setting up a vertical
+slice with the appropriate initialisation procedure, before taking a few time
+steps and ensuring that the resulting velocities are very small.
+"""
+
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant
 from os import path
 from netCDF4 import Dataset
-
-# this tests the dry compressible hydrostatic balance, by setting up a vertical slice
-# with this initial procedure, before taking a few time steps and ensuring that
-# the resulting velocities are very small
 
 
 def setup_balance(dirname):

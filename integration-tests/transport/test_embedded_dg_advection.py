@@ -1,3 +1,8 @@
+"""
+Tests the embedded DG transport scheme, checking that the field is transported
+to the right place.
+"""
+
 from firedrake import norm
 from gusto import *
 import pytest

@@ -1,3 +1,7 @@
+"""
+This provides standard configurations for transport tests.
+"""
+
 from firedrake import (IcosahedralSphereMesh, PeriodicIntervalMesh,
                        ExtrudedMesh, SpatialCoordinate, as_vector,
                        sin, exp, pi)

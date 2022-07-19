@@ -1,3 +1,11 @@
+"""
+This tests the linear shallow water equations.
+The test uses the initial conditions of the Williamson 2 test and checks the
+errors in the fields.
+
+THOUGHTS: This seems like what we want for testing the examples.
+"""
+
 from os import path
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector

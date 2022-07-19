@@ -1,3 +1,9 @@
+"""
+This tests the precipitation scheme. The test uses a cloud of rain that falls at
+its terminal velocity, which is prescribed in the fallout method in physics.py.
+The test passes if there is no rain remaining at the end of the test.
+"""
+
 from os import path
 from gusto import *
 from firedrake import PeriodicIntervalMesh, Constant, \
@@ -5,11 +11,6 @@ from firedrake import PeriodicIntervalMesh, Constant, \
     conditional, cos, as_vector
 from netCDF4 import Dataset
 from math import pi
-
-# This setup creates a cloud of rain that falls at its
-# terminal velocity, which is prescribed in the fallout
-# method in physics.py. The test passes if there is no
-# rain remaining at the end of the test.
 
 
 def setup_fallout(dirname):

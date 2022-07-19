@@ -1,3 +1,8 @@
+"""
+Tests discretisations of the advection-diffusion equation. This checks the
+errornorm for the resulting field to ensure that the result is reasonable.
+"""
+
 from firedrake import as_vector
 from gusto import *
 

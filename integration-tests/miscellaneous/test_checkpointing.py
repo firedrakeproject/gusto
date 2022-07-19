@@ -1,3 +1,10 @@
+"""
+Runs a compressible Euler test that uses checkpointing. The test runs for two
+timesteps, checkpoints and then starts a new run from the checkpoint file.
+
+THOUGHTS: I'm not sure the time is right for the pick up run
+"""
+
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, exp, sin, Function, as_vector)

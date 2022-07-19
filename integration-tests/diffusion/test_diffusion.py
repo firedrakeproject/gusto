@@ -1,3 +1,8 @@
+"""
+Tests discretisations of the diffusion equation. This checks the errornorm for
+the resulting field to ensure that the result is reasonable.
+"""
+
 from gusto import *
 from firedrake import (VectorFunctionSpace, Constant, as_vector, errornorm)
 import pytest

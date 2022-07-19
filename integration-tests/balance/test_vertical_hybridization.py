@@ -1,3 +1,10 @@
+"""
+This test creates a compressible hydrostatic balance problem which is solved
+using a vertical hybridisation technique.
+
+THOUGHTS: this doesn't use any gusto routines, so we can delete it.
+"""
+
 from gusto import *
 from firedrake import *
 

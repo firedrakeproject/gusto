@@ -1,3 +1,10 @@
+"""
+This runs an incompressible example and checks that no vertical velocity has
+been created.
+
+THOUGHTS: this could be a useful test to use as an example.
+"""
+
 from gusto import *
 from firedrake import (SpatialCoordinate, PeriodicRectangleMesh,
                        ExtrudedMesh, Function)

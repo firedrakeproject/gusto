@@ -1,3 +1,9 @@
+"""
+This tests the moist unsaturated hydrostatic balance, by setting up a vertical
+slice with the appropriate initialisation procedure, before taking a few time
+steps and ensuring that the resulting velocities are very small.
+"""
+
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Constant, Function,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
@@ -5,17 +11,13 @@ from os import path
 from netCDF4 import Dataset
 import pytest
 
-# this tests the moist-saturated hydrostatic balance, by setting up a vertical slice
-# with this initial procedure, before taking a few time steps and ensuring that
-# the resulting velocities are very small
 
-
-def setup_saturated(dirname, recovered):
+def setup_unsaturated(dirname, recovered):
 
     # set up grid and time stepping parameters
     dt = 1.
     tmax = 3.
-    deltax = 400.
+    deltax = 400
     L = 2000.
     H = 10000.
 
@@ -25,13 +27,11 @@ def setup_saturated(dirname, recovered):
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-    # option to easily change between recovered and not if necessary
-    # default should be to use lowest order set of spaces
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'])
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
     parameters = CompressibleParameters()
-    diagnostic_fields = [Theta_e()]
+    diagnostic_fields = [Theta_d(), RelativeHumidity()]
 
     state = State(mesh,
                   dt=dt,
@@ -52,8 +52,6 @@ def setup_saturated(dirname, recovered):
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("vapour_mixing_ratio")
-    water_c0 = state.fields("cloud_liquid_mixing_ratio")
     moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
 
     # spaces
@@ -63,13 +61,12 @@ def setup_saturated(dirname, recovered):
 
     # Isentropic background state
     Tsurf = Constant(300.)
-    total_water = Constant(0.02)
-    theta_e = Function(Vt).interpolate(Tsurf)
-    water_t = Function(Vt).interpolate(total_water)
+    humidity = Constant(0.5)
+    theta_d = Function(Vt).interpolate(Tsurf)
+    RH = Function(Vt).interpolate(humidity)
 
     # Calculate hydrostatic Pi
-    saturated_hydrostatic_balance(state, theta_e, water_t)
-    water_c0.assign(water_t - water_v0)
+    unsaturated_hydrostatic_balance(state, theta_d, RH)
 
     state.set_reference_profiles([('rho', rho0),
                                   ('theta', theta0)])
@@ -93,32 +90,22 @@ def setup_saturated(dirname, recovered):
         theta_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=Vt_brok)
-        wv_opts = RecoveredOptions(embedding_space=VDG1,
-                                   recovered_space=VCG1,
-                                   broken_space=Vt_brok)
-        wc_opts = RecoveredOptions(embedding_space=VDG1,
-                                   recovered_space=VCG1,
-                                   broken_space=Vt_brok)
     else:
-
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
-        wv_opts = EmbeddedDGOptions()
-        wc_opts = EmbeddedDGOptions()
 
-    transported_fields = [SSPRK3(state, 'rho', options=rho_opts),
-                          SSPRK3(state, 'theta', options=theta_opts),
-                          SSPRK3(state, 'vapour_mixing_ratio', options=wv_opts),
-                          SSPRK3(state, 'cloud_liquid_mixing_ratio', options=wc_opts)]
-
+    transported_fields = [SSPRK3(state, "rho", options=rho_opts),
+                          SSPRK3(state, "theta", options=theta_opts),
+                          SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
+                          SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
     if recovered:
-        transported_fields.append(SSPRK3(state, 'u', options=u_opts))
+        transported_fields.append(SSPRK3(state, "u", options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(state, 'u'))
+        transported_fields.append(ImplicitMidpoint(state, "u"))
 
     linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
-    # add physics
+    # Set up physics
     physics_list = [Condensation(state)]
 
     # build time stepper
@@ -129,20 +116,20 @@ def setup_saturated(dirname, recovered):
     return stepper, tmax
 
 
-def run_saturated(dirname, recovered):
+def run_unsaturated(dirname, recovered):
 
-    stepper, tmax = setup_saturated(dirname, recovered)
+    stepper, tmax = setup_unsaturated(dirname, recovered)
     stepper.run(t=0, tmax=tmax)
 
 
 @pytest.mark.parametrize("recovered", [True, False])
-def test_saturated_setup(tmpdir, recovered):
+def test_unsaturated_setup(tmpdir, recovered):
 
     dirname = str(tmpdir)
-    run_saturated(dirname, recovered)
-    filename = path.join(dirname, "saturated_balance/diagnostics.nc")
+    run_unsaturated(dirname, recovered)
+    filename = path.join(dirname, "unsaturated_balance/diagnostics.nc")
     data = Dataset(filename, "r")
     u = data.groups['u']
     umax = u.variables['max']
 
-    assert umax[-1] < 1e-5
+    assert umax[-1] < 1e-8
