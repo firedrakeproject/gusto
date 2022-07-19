@@ -517,6 +517,16 @@ class RK4(ExplicitTimeDiscretisation):
     where subscripts indicate the timelevel, superscripts indicate the stage
     number and f is the RHS.
     """
+
+    def setup(self, equation, uadv, *active_labels):
+
+        super().setup(equation, uadv, *active_labels)
+
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
+
     @cached_property
     def lhs(self):
         l = self.residual.label_map(
@@ -566,10 +576,7 @@ class RK4(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.q1.assign(x_in)
-        self.k1 = Function(self.fs)
-        self.k2 = Function(self.fs)
-        self.k3 = Function(self.fs)
-        self.k4 = Function(self.fs)
+
         for i in range(4):
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
