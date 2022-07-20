@@ -7,7 +7,8 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
 from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis, replace_trial_function)
+                          name, pressure_gradient, coriolis,
+                          replace_trial_function, hydrostatic)
 from gusto.thermodynamics import pi as Pi
 from gusto.transport_forms import (advection_form, continuity_form,
                                    vector_invariant_form,
@@ -807,6 +808,56 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
 
         self.residual += subject(prognostic(
             gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
+
+
+class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
+    """
+    The hydrostatic version of the compressible Euler equations.
+
+    # TODO: add documentation
+    """
+
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 extra_terms=None,
+                 terms_to_linearise={'u': [time_derivative],
+                                     'rho': [time_derivative, transport],
+                                     'theta': [time_derivative, transport]},
+                 u_transport_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+
+        super().__init__(state, family, degree, Omega=Omega, sponge=sponge,
+                         extra_terms=extra_terms,
+                         terms_to_linearise=terms_to_linearise,
+                         u_transport_option=u_transport_option,
+                         diffusion_options=diffusion_options,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=lambda t: hydrostatic(t, self.hydrostatic_projection(t))
+        )
+
+        k = self.state.k
+        u = split(self.X)[0]
+        self.residual -= name(
+            subject(
+                prognostic(
+                    inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
+                self.X),
+            "hydrostatic_form")
+
+    def hydrostatic_projection(self, t):
+
+        # TODO: make this more general, i.e. should work on the sphere
+        k = Constant((*self.state.k, 0, 0))
+        X = t.get(subject)
+        u = split(X)[0]
+
+        new_subj = X - k * inner(X, k)
+        return replace_subject(new_subj)(t)
 
 
 class LinearCompressibleEulerEquations(CompressibleEulerEquations):
