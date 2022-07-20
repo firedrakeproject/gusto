@@ -45,6 +45,11 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
 
+        L_explicit += residual.label_map(
+            lambda t: t.get(name) == "hydrostatic_form",
+            replace_subject(self.x0),
+            drop)
+
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
 
         explicit_forcing_problem = LinearVariationalProblem(
@@ -56,7 +61,7 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
         if any(t.get(name) in implicit_terms for t in residual):
-            L_implicit -= dt*residual.label_map(
+            L_implicit -= residual.label_map(
                 lambda t: t.get(name) in implicit_terms,
                 replace_subject(self.x0),
                 drop)
