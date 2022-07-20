@@ -101,7 +101,7 @@ class CompressibleParameters(Configuration):
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    cv = 717.  # SHC of dry air at const. volume (J/kg/K)
+    cv = 717.5  # SHC of dry air at const. volume (J/kg/K)
     c_pl = 4186.  # SHC of liq. wat. at const. pressure (J/kg/K)
     c_pv = 1885.  # SHC of wat. vap. at const. pressure (J/kg/K)
     c_vv = 1424.  # SHC of wat. vap. at const. pressure (J/kg/K)
