@@ -374,7 +374,7 @@ class State(object):
         set_log_handler(mesh.comm)
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(parameters).items()))
 
     def setup_diagnostics(self):
         """
