@@ -18,7 +18,7 @@ def tracer_sphere(tmpdir):
     mesh.init_cell_orientations(x)
 
     dt = pi/3. * 0.02
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=15, log_level='INFO')
     state = State(mesh, dt=dt, output=output)
 
     uexpr = as_vector([-x[1], x[0], 0.0])

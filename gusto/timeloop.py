@@ -101,7 +101,7 @@ class Timestepper(object):
             scheme.apply(xn(name), xnp1(name))
             xn(name).assign(xnp1(name))
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t0, tmax, pickup=False):
         """
         This is the timeloop. After completing the semi implicit step
         any passively transported fields are updated, implicit diffusion and
@@ -110,22 +110,26 @@ class Timestepper(object):
 
         state = self.state
 
+        t = state.t
+        t.assign(t0)
+        
         if pickup:
-            t = state.pickup_from_checkpoint()
+            t.assign(state.pickup_from_checkpoint())
 
         state.setup_diagnostics()
 
         with timed_stage("Dump output"):
-            state.setup_dump(t, tmax, pickup)
+            state.setup_dump(float(t), tmax, pickup)
 
+        
         dt = state.dt
 
         self.x.initialise(state)
 
-        while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
+        while float(t) < tmax - 0.5*float(dt):
+            logger.info("at start of timestep, t=%s, dt=%s" % (float(t), float(dt)))
 
-            t += dt
+            t.assign(t+dt)
             state.t.assign(t)
 
             self.x.update()
@@ -145,12 +149,12 @@ class Timestepper(object):
                     field.assign(state.fields(field.name()))
 
             with timed_stage("Dump output"):
-                state.dump(t)
+                state.dump(float(t))
 
         if state.output.checkpoint:
             state.chkpt.close()
 
-        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
+        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (float(t), tmax))
 
 
 class CrankNicolson(Timestepper):

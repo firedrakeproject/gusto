@@ -3,7 +3,7 @@ from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
                        TestFunction, Constant, dot, grad, as_ufl, MixedElement,
-                       DirichletBC, error_norm)
+                       DirichletBC, errornorm)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
@@ -15,7 +15,7 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun", "ThetaMethod", "ImplicitMidpoint", "RKF45"]
 
 
 def is_cg(V):
@@ -550,7 +550,7 @@ class RK4(ExplicitTimeDiscretisation):
         return r.form
 
     def solve_stage(self, x_in, stage):
-
+        #print(float(self.dt))
         if stage == 0:
             self.solver.solve()
             self.k1.assign(self.dq)
@@ -723,7 +723,9 @@ class RKF45(ExplicitTimeDiscretisation):
         self.dt_min = dt_min
         self.dt_max = dt_max
         
-    def setup(self, equation, uadv, *activate_labels)
+    def setup(self, equation, uadv, *active_labels):
+        
+        super().setup(equation, uadv, *active_labels)
         
         #Functions to save the 4th and 5th order estimations
         self.q4 = Function(self.fs)
@@ -784,14 +786,15 @@ class RKF45(ExplicitTimeDiscretisation):
             
         elif stage == 4:
             self.solver.solve()
-            self.k4.assign(self.dq)
+            self.k5.assign(self.dq)
             self.q1.assign(x_in + self.dt*((-8./27.)*self.k1 + (2.)*self.k2 + (-3544./2565.)*self.k3 + (1859./4104.)*self.k4 + (-11/40)*self.k5))
             
         elif stage == 5:
             self.solver.solve()
-            self.k4.assign(self.dq)
-            self.q4.assign(x_in + self.dt*((25./216.)self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
-            self.q5.assign(x_in + self_dt*((16./135.)self.k1 + (6656./12825.)*self.k3 + (28561./56430.)*self.k4 + (-9./50.)*self.k5 + (2./55.)*self.k6))
+            self.k6.assign(self.dq)
+            self.q1.assign(x_in + self.dt*((25./216.)*self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
+            self.q4.assign(x_in + self.dt*((25./216.)*self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
+            self.q5.assign(x_in + self.dt*((16./135.)*self.k1 + (6656./12825.)*self.k3 + (28561./56430.)*self.k4 + (-9./50.)*self.k5 + (2./55.)*self.k6))
 
 
     def apply_cycle(self, x_in, x_out):
@@ -803,13 +806,23 @@ class RKF45(ExplicitTimeDiscretisation):
         for i in range(6):
             self.solve_stage(x_in, i)
             
-        diff = error_norm(self.q4-self.q5)    
-        new_dt = 0.9*self.dt*((err_tol/diff)**0.2)
+        diff = errornorm(self.q4,self.q5)    
+        new_dt = 0.9*float(self.dt)*((self.tol/diff)**0.2)
         
+        if new_dt < self.dt_min:
+            logger.info("Time step of %s is too small, using minimum value instead" % (float(new_dt)))
+            new_dt = self.dt_min
+        elif diff > self.tol:
+            logger.info("Time step of %s is above the error tolerance, recomputing ..." % (float(self.dt)))
+            self.dt.assign(new_dt)
+            self.apply_cycle(x_in, x_out)
+            logger.info("New dt is %s" % (float(new_dt)))
+        elif new_dt > self.dt_max:
+            logger.info("Time step of %s is too large, using maximum value instead" % (float(new_dt)))
+            new_dt = self.dt_max
+            
         self.dt.assign(new_dt)
         
-        if diff > err_tol:
-            apply_cycle.()
         
         x_out.assign(self.q1)
       
