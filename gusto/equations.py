@@ -842,10 +842,10 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.state.k
         u = split(self.X)[0]
-        self.residual -= name(
+        self.residual += name(
             subject(
                 prognostic(
-                    inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
+                    -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
                 self.X),
             "hydrostatic_form")
 
