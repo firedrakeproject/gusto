@@ -123,7 +123,7 @@ class Timestepper(object):
         self.x.initialise(state)
 
         while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
+            logger.info("at start of timestep, t=%s, dt=%s" % (float(t), float(dt)))
 
             t += dt
             state.t.assign(t)
