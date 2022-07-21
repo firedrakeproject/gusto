@@ -58,7 +58,7 @@ scp:
 	scp -r build/html/* 'o3ce6600@146.255.44.1:html/gusto/'
 
 livehtml: html
-	python server.py
+	python -m http.server --directory build/html --bind 127.0.0.1
 
 serve: html
 	cd $(BUILDDIR)/html; python -m SimpleHTTPServer $(PORT)

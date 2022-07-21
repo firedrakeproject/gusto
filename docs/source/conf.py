@@ -258,3 +258,5 @@ intersphinx_mapping = {
     'h5py': ('http://docs.h5py.org/en/latest/', None),
     'python':('https://docs.python.org/2.7/', None),
 }
+
+bibtex_bibfiles = ['_static/bibliography.bib']
