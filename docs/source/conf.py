@@ -99,7 +99,8 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'gusto'
+#html_theme = 'gusto'
+html_theme = 'agogo'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -149,13 +150,13 @@ html_use_smartypants = True
 #html_domain_indices = True
 
 # If false, no index is generated.
-#html_use_index = True
+html_use_index = False 
 
 # If true, the index is split into individual pages for each letter.
 #html_split_index = False
 
 # If true, links to the reST sources are added to the pages.
-#html_show_sourcelink = True
+html_show_sourcelink = False 
 
 # If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
 html_show_sphinx = False
@@ -260,3 +261,8 @@ intersphinx_mapping = {
 }
 
 bibtex_bibfiles = ['_static/bibliography.bib']
+
+html_theme_options = {
+    'prev_next_buttons_location': None
+}
+

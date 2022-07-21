@@ -1,7 +1,7 @@
 .. title:: Gusto: The Firedrake dynamical core toolkit
 
 .. only:: html
-
+..
    .. sidebar:: Latest commits to the Gusto master branch on Github
 
       .. raw:: html
@@ -27,5 +27,6 @@ generation library. Gusto is a core Firedrake application package.
 .. only:: latex
 
   .. toctree::
- 
-     teamgrid
+     documentation
+     download
+     team
