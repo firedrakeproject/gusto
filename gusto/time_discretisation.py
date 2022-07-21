@@ -817,6 +817,7 @@ class RKF45(ExplicitTimeDiscretisation):
             self.dt.assign(new_dt)
             self.apply_cycle(x_in, x_out)
             logger.info("New dt is %s" % (float(new_dt)))
+            self.dt.assign(new_dt)
         elif new_dt > self.dt_max:
             logger.info("Time step of %s is too large, using maximum value instead" % (float(new_dt)))
             new_dt = self.dt_max
