@@ -852,9 +852,9 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     def hydrostatic_projection(self, t):
 
         # TODO: make this more general, i.e. should work on the sphere
+        assert not self.state.on_sphere, "the hydrostatic projection is not yet implemented for spherical geometry"
         k = Constant((*self.state.k, 0, 0))
         X = t.get(subject)
-        u = split(X)[0]
 
         new_subj = X - k * inner(X, k)
         return replace_subject(new_subj)(t)
