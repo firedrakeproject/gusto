@@ -48,13 +48,13 @@ class Forcing(object):
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
 
         # the implicit forms are multiplied by alpha and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
 
