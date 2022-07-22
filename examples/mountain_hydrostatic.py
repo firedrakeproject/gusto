@@ -56,7 +56,6 @@ diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance()]
 
 state = State(mesh,
               dt=dt,
-              hydrostatic=True,
               output=output,
               parameters=parameters,
               diagnostic_fields=diagnostic_fields)
