@@ -1,8 +1,6 @@
 """
 Runs a compressible Euler test that uses checkpointing. The test runs for two
 timesteps, checkpoints and then starts a new run from the checkpoint file.
-
-THOUGHTS: I'm not sure the time is right for the pick up run
 """
 
 from gusto import *
@@ -98,4 +96,4 @@ def test_checkpointing(tmpdir):
     stepper, tmax = setup_sk(dirname)
     stepper.run(t=0., tmax=tmax)
     dt = stepper.state.dt
-    stepper.run(t=0, tmax=2*tmax+dt, pickup=True)
+    stepper.run(t=tmax, tmax=2*tmax+dt, pickup=True)

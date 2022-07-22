@@ -4,7 +4,7 @@
 # of the water mixing ratio is conserved.
 
 
-THOUGHTS: this should just be a prescribed advection test and not using
+TODO: this should just be a prescribed advection test and not using
 compressible balance. It should test that condensation happens, as well as
 the amount of water being conserved.
 """

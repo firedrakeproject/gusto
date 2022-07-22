@@ -2,7 +2,8 @@
 This runs an incompressible example and checks that no vertical velocity has
 been created.
 
-THOUGHTS: this could be a useful test to use as an example.
+TODO: this should apply a perturbation, and check the example against a
+known good checkpointed answer. The mesh should be a vertical slice.
 """
 
 from gusto import *
@@ -36,7 +37,7 @@ def setup_gw(dirname):
     b0 = state.fields("b")
 
     # z.grad(bref) = N**2
-    x, y, z = SpatialCoordinate(mesh)
+    _, _, z = SpatialCoordinate(mesh)
     N = parameters.N
     bref = z*(N**2)
 

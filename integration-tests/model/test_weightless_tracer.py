@@ -2,7 +2,7 @@
 This tests the 'auxiliary_equations_and_schemes' option of the timeloop,
 by transporting a passive tracer alongside the dynamical core.
 
-THOUGHTS: Don't need to test this with the whole compressible Euler equations.
+TODO: Don't need to test this with the whole compressible Euler equations.
 Doesn't necessarily test that the tracer has moved to the correct place?
 """
 
