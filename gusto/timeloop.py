@@ -1,69 +1,112 @@
-from abc import ABCMeta, abstractmethod, abstractproperty
+from firedrake import Function
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
-from gusto.linear_solvers import IncompressibleSolver
+from gusto.forcing import Forcing
+from gusto.fml.form_manipulation_labelling import drop
+from gusto.labels import (transport, diffusion, time_derivative,
+                          linearisation, prognostic)
+from gusto.linear_solvers import LinearTimesteppingSolver
+from gusto.state import FieldCreator
 
-__all__ = ["CrankNicolson", "AdvectionDiffusion"]
+__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedTransport"]
 
 
-class BaseTimestepper(object, metaclass=ABCMeta):
+class TimeLevelFields(object):
+
+    def __init__(self, state, equations, time_levels=None):
+        default_time_levels = ("nm1", "n", "np1")
+        if time_levels is not None:
+            time_levels = tuple(time_levels) + default_time_levels
+        else:
+            time_levels = default_time_levels
+
+        for level in time_levels:
+            setattr(self, level, FieldCreator(equations))
+
+    def initialise(self, state):
+        for field in self.n:
+            field.assign(state.fields(field.name()))
+            self.np1(field.name()).assign(field)
+
+    def update(self):
+        for field in self.n:
+            self.nm1(field.name()).assign(field)
+            field.assign(self.np1(field.name()))
+
+
+class Timestepper(object):
     """
-    Base timestepping class for Gusto
+    Basic timestepping class for Gusto
 
     :arg state: a :class:`.State` object
-    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
-    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to transport, and the
+        :class:`~.TimeDiscretisation` to use.
+    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a
-         function that returns the field as a function of time.
     """
 
-    def __init__(self, state, advected_fields=None, diffused_fields=None,
-                 physics_list=None, prescribed_fields=None):
+    def __init__(self, state, problem, apply_bcs=True, physics_list=None):
 
         self.state = state
-        if advected_fields is None:
-            self.advected_fields = ()
-        else:
-            self.advected_fields = tuple(advected_fields)
-        if diffused_fields is None:
-            self.diffused_fields = ()
-        else:
-            self.diffused_fields = tuple(diffused_fields)
+
+        self.equations = []
+        self.schemes = []
+        self.equations = [eqn for (eqn, _) in problem]
+        self.setup_timeloop()
+        for eqn, method in problem:
+            if type(method) is tuple:
+                for scheme, *active_labels in method:
+                    scheme.setup(eqn, self.transporting_velocity, apply_bcs, *active_labels)
+                    self.schemes.append((eqn.field_name, scheme))
+            else:
+                scheme = method
+                scheme.setup(eqn, self.transporting_velocity)
+                self.schemes.append((eqn.field_name, scheme))
+
         if physics_list is not None:
             self.physics_list = physics_list
         else:
             self.physics_list = []
-        if prescribed_fields is not None:
-            self.prescribed_fields = prescribed_fields
-        else:
-            self.prescribed_fields = []
 
-    @abstractproperty
-    def passive_advection(self):
-        """list of fields that are passively advected (and possibly diffused)"""
-        pass
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
 
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
         """
-        unp1 = self.state.xnp1.split()[0]
+        unp1 = self.x.np1("u")
 
-        bcs = self.state.bcs
-
-        for bc in bcs:
+        for bc in self.bcs['u']:
             bc.apply(unp1)
 
-    def setup_timeloop(self, state, t, tmax, pickup):
+    def setup_timeloop(self):
+        self.x = TimeLevelFields(self.state, self.equations)
+
+    def timestep(self):
         """
-        Setup the timeloop by setting up diagnostics, dumping the fields and
-        picking up from a previous run, if required
+        Implement the timestep
         """
+        xn = self.x.n
+        xnp1 = self.x.np1
+
+        for name, scheme in self.schemes:
+            scheme.apply(xn(name), xnp1(name))
+            xn(name).assign(xnp1(name))
+
+    def run(self, t, tmax, pickup=False):
+        """
+        This is the timeloop. After completing the semi implicit step
+        any passively transported fields are updated, implicit diffusion and
+        physics updates are applied (if required).
+        """
+
+        state = self.state
+
         if pickup:
             t = state.pickup_from_checkpoint()
 
@@ -71,59 +114,32 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         with timed_stage("Dump output"):
             state.setup_dump(t, tmax, pickup)
-        return t
 
-    @abstractmethod
-    def semi_implicit_step(self):
-        """
-        Implement the semi implicit step for the timestepping scheme.
-        """
-        pass
+        dt = state.dt
 
-    def run(self, t, tmax, pickup=False):
-        """
-        This is the timeloop. After completing the semi implicit step
-        any passively advected fields are updated, implicit diffusion and
-        physics updates are applied (if required).
-        """
-
-        state = self.state
-
-        t = self.setup_timeloop(state, t, tmax, pickup)
-
-        dt = state.timestepping.dt
+        self.x.initialise(state)
 
         while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
+            logger.info("at start of timestep, t=%s, dt=%s" % (float(t), float(dt)))
 
             t += dt
             state.t.assign(t)
 
-            state.xnp1.assign(state.xn)
+            self.x.update()
 
-            for name, evaluation in self.prescribed_fields:
-                state.fields(name).project(evaluation(t))
+            self.timestep()
 
-            self.semi_implicit_step()
-
-            for name, advection in self.passive_advection:
-                field = getattr(state.fields, name)
-                # first computes ubar from state.xn and state.xnp1
-                advection.update_ubar(state.xn, state.xnp1, state.timestepping.alpha)
-                # advects a field from xn and puts result in xnp1
-                advection.apply(field, field)
-
-            state.xb.assign(state.xn)
-            state.xn.assign(state.xnp1)
-
-            with timed_stage("Diffusion"):
-                for name, diffusion in self.diffused_fields:
-                    field = getattr(state.fields, name)
-                    diffusion.apply(field, field)
+            for field in self.x.np1:
+                state.fields(field.name()).assign(field)
 
             with timed_stage("Physics"):
+
                 for physics in self.physics_list:
                     physics.apply()
+
+                # TODO: Hack to ensure that xnp1 fields are updated
+                for field in self.x.np1:
+                    field.assign(state.fields(field.name()))
 
             with timed_stage("Dump output"):
                 state.dump(t)
@@ -134,108 +150,178 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
 
 
-class CrankNicolson(BaseTimestepper):
+class CrankNicolson(Timestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
-    splitting and auxilliary semi-Lagrangian advection.
+    splitting and auxilliary semi-Lagrangian transport.
 
     :arg state: a :class:`.State` object
-    :arg advected_fields: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to advect, and the
-        :class:`~.Advection` to use.
+    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to transport, and the
+        :class:`~.TimeDiscretisation` to use.
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
-    :arg diffused_fields: optional iterable of ``(field_name, scheme)``
+    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an order list of tuples, pairing a field name with a
          function that returns the field as a function of time.
+    :kwargs: maxk is the number of outer iterations, maxi is the number of inner
+             iterations and alpha is the offcentering parameter
     """
 
-    def __init__(self, state, advected_fields, linear_solver, forcing,
-                 diffused_fields=None, physics_list=None, prescribed_fields=None):
+    def __init__(self, state, equation_set, transport_schemes,
+                 auxiliary_equations_and_schemes=None,
+                 linear_solver=None,
+                 diffusion_schemes=None,
+                 physics_list=None, **kwargs):
 
-        super().__init__(state, advected_fields, diffused_fields, physics_list, prescribed_fields)
-        self.linear_solver = linear_solver
-        self.forcing = forcing
+        self.maxk = kwargs.pop("maxk", 4)
+        self.maxi = kwargs.pop("maxi", 1)
+        self.alpha = kwargs.pop("alpha", 0.5)
+        if kwargs:
+            raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        if isinstance(self.linear_solver, IncompressibleSolver):
-            self.incompressible = True
+        schemes = []
+        self.transport_schemes = []
+        self.active_transport = []
+        for scheme in transport_schemes:
+            schemes.append((scheme, transport))
+            assert scheme.field_name in equation_set.field_names
+            self.active_transport.append((scheme.field_name, scheme))
+
+        self.diffusion_schemes = []
+        if diffusion_schemes is not None:
+            for scheme in diffusion_schemes:
+                assert scheme.field_name in equation_set.field_names
+                schemes.append((scheme, diffusion))
+                self.diffusion_schemes.append((scheme.field_name, scheme))
+
+        problem = [(equation_set, tuple(schemes))]
+        if auxiliary_equations_and_schemes is not None:
+            problem.append(*auxiliary_equations_and_schemes)
+            self.auxiliary_schemes = [
+                (eqn.field_name, scheme)
+                for eqn, scheme in auxiliary_equations_and_schemes]
         else:
-            self.incompressible = False
+            self.auxiliary_schemes = []
 
-        self.xstar_fields = {name: func for (name, func) in
-                             zip(state.fieldlist, state.xstar.split())}
-        self.xp_fields = {name: func for (name, func) in
-                          zip(state.fieldlist, state.xp.split())}
+        self.tracers_to_copy = []
+        for name in equation_set.field_names:
+            # Extract time derivative for that prognostic
+            mass_form = equation_set.residual.label_map(
+                lambda t: (t.has_label(time_derivative) and t.get(prognostic) == name),
+                map_if_false=drop)
+            # Copy over field if the time derivative term has no linearisation
+            if not mass_form.terms[0].has_label(linearisation):
+                self.tracers_to_copy.append(name)
 
-        # list of fields that are advected as part of the nonlinear iteration
-        self.active_advection = [(name, scheme) for name, scheme in advected_fields if name in state.fieldlist]
+        # TODO: why was this False? Should this be an argument?
+        apply_bcs = True
+        super().__init__(state, problem, apply_bcs, physics_list)
 
-        state.xb.assign(state.xn)
+        self.field_name = equation_set.field_name
+        W = equation_set.function_space
+        self.xrhs = Function(W)
+        self.dy = Function(W)
+        if linear_solver is None:
+            self.linear_solver = LinearTimesteppingSolver(equation_set, state.dt, self.alpha)
+        else:
+            self.linear_solver = linear_solver
+        self.forcing = Forcing(equation_set, state.dt, self.alpha)
+        self.bcs = equation_set.bcs
 
     @property
-    def passive_advection(self):
-        """
-        Advected fields that are not part of the semi implicit step are
-        passively advected
-        """
-        return [(name, scheme) for name, scheme in
-                self.advected_fields if name not in self.state.fieldlist]
+    def transporting_velocity(self):
+        xn = self.x.n
+        xnp1 = self.x.np1
+        # computes ubar from un and unp1
+        return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
-    def semi_implicit_step(self):
-        state = self.state
-        dt = state.timestepping.dt
-        alpha = state.timestepping.alpha
+    def setup_timeloop(self):
+        self.x = TimeLevelFields(self.state, self.equations,
+                                 time_levels=("star", "p"))
+
+    def copy_active_tracers(self, x_in, x_out):
+        """
+        Copies active tracers from one set of fields to another, if those fields
+        are not included in the linear solver. This is determined by whether the
+        time derivative term for that tracer has a linearisation.
+
+        :arg x_in:  The input set of fields
+        :arg x_out: The output set of fields
+        """
+
+        for name in self.tracers_to_copy:
+            x_out(name).assign(x_in(name))
+
+    def timestep(self):
+        xn = self.x.n
+        xnp1 = self.x.np1
+        xstar = self.x.star
+        xp = self.x.p
+        xrhs = self.xrhs
+        dy = self.dy
 
         with timed_stage("Apply forcing terms"):
-            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               state.xstar, implicit=False)
+            self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
-        for k in range(state.timestepping.maxk):
+        xp(self.field_name).assign(xstar(self.field_name))
 
-            with timed_stage("Advection"):
-                for name, advection in self.active_advection:
-                    # first computes ubar from state.xn and state.xnp1
-                    advection.update_ubar(state.xn, state.xnp1, alpha)
-                    # advects a field from xstar and puts result in xp
-                    advection.apply(self.xstar_fields[name], self.xp_fields[name])
+        for k in range(self.maxk):
 
-            state.xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+            with timed_stage("Transport"):
+                for name, scheme in self.active_transport:
+                    # transports a field from xstar and puts result in xp
+                    scheme.apply(xstar(name), xp(name))
 
-            for i in range(state.timestepping.maxi):
+            xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+
+            # Update xnp1 values for active tracers not included in the linear solve
+            # TODO: should this actually be after forcing is applied?
+            self.copy_active_tracers(xp, xnp1)
+
+            for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
-                    self.forcing.apply(alpha*dt, state.xp, state.xnp1,
-                                       state.xrhs, implicit=True,
-                                       incompressible=self.incompressible)
+                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
-                state.xrhs -= state.xnp1
+                xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
-                    self.linear_solver.solve()  # solves linear system and places result in state.dy
+                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
 
-                state.xnp1 += state.dy
+                # TODO: I am confused by these lines
+                xnp1X = xnp1(self.field_name)
+                xnp1X += dy
 
             self._apply_bcs()
 
+        for name, scheme in self.auxiliary_schemes:
+            # transports a field from xn and puts result in xnp1
+            scheme.apply(xn(name), xnp1(name))
 
-class AdvectionDiffusion(BaseTimestepper):
-    """
-    This class implements a timestepper for the advection-diffusion equations.
-    No semi implicit step is required.
-    """
+        with timed_stage("Diffusion"):
+            for name, scheme in self.diffusion_schemes:
+                scheme.apply(xnp1(name), xnp1(name))
+
+
+class PrescribedTransport(Timestepper):
+
+    def __init__(self, state, problem, physics_list=None,
+                 prescribed_transporting_velocity=None):
+
+        self.prescribed_transporting_velocity = prescribed_transporting_velocity
+        super().__init__(state, problem,
+                         physics_list=physics_list)
 
     @property
-    def passive_advection(self):
-        """
-        All advected fields are passively advected
-        """
-        if self.advected_fields is not None:
-            return self.advected_fields
-        else:
-            return []
+    def transporting_velocity(self):
+        return self.state.fields('u')
 
-    def semi_implicit_step(self):
-        pass
+    def timestep(self):
+        if self.prescribed_transporting_velocity is not None:
+            self.state.fields('u').project(self.prescribed_transporting_velocity(self.state.t))
+
+        super().timestep()

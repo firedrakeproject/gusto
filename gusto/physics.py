@@ -1,8 +1,8 @@
 from abc import ABCMeta, abstractmethod
-from gusto.transport_equation import EmbeddedDGAdvection
 from gusto.recovery import Recoverer, Boundary_Method
-from gusto.advection import SSPRK3
+from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
+from gusto.equations import AdvectionEquation
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function,
@@ -54,11 +54,12 @@ class Condensation(Physics):
         self.iterations = iterations
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('water_v')
-        self.water_c = state.fields('water_c')
+        self.water_v = state.fields('vapour_mixing_ratio')
+        self.water_c = state.fields('cloud_liquid_mixing_ratio')
         rho = state.fields('rho')
         try:
-            rain = state.fields('rain')
+            # TODO: use the phase flag for the tracers here
+            rain = state.fields('rain_mixing_ratio')
             water_l = self.water_c + rain
         except NotImplementedError:
             water_l = self.water_c
@@ -68,7 +69,9 @@ class Condensation(Physics):
 
         # make rho variables
         # we recover rho into theta space
-        if state.vertical_degree == 0 and state.horizontal_degree == 0:
+        h_deg = rho.function_space().ufl_element().degree()[0]
+        v_deg = rho.function_space().ufl_element().degree()[1]
+        if v_deg == 0 and h_deg == 0:
             boundary_method = Boundary_Method.physics
         else:
             boundary_method = None
@@ -77,7 +80,7 @@ class Condensation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv
@@ -157,15 +160,35 @@ class Fallout(Physics):
         super().__init__(state)
 
         # function spaces
-        Vt = state.fields('rain').function_space()
-        Vu = state.fields('u').function_space()
+        Vt = state.spaces("theta")
+        Vu = state.spaces("HDiv")
 
         # declare properties of class
         self.state = state
         self.moments = moments
-        self.rain = state.fields('rain')
         self.v = state.fields('rainfall_velocity', Vu)
         self.limit = limit
+
+        # determine whether to do recovered space advection scheme
+        # if horizontal and vertical degrees are 0 do recovered spac
+        Vrho = state.spaces("DG")
+        h_deg = Vrho.ufl_element().degree()[0]
+        v_deg = Vrho.ufl_element().degree()[1]
+        if v_deg == 0 and h_deg == 0:
+            VDG1 = state.spaces("DG1")
+            VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
+            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
+            boundary_method = Boundary_Method.dynamics
+            advect_options = RecoveredOptions(embedding_space=VDG1,
+                                              recovered_space=VCG1,
+                                              broken_space=Vbrok,
+                                              boundary_method=boundary_method)
+        else:
+            advect_options = EmbeddedDGOptions()
+
+        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
+        advection_equation = AdvectionEquation(state, Vt, "rain_mixing_ratio", outflow=True)
+        self.rain = state.fields("rain_mixing_ratio")
 
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
@@ -211,28 +234,11 @@ class Fallout(Physics):
             elif state.mesh.geometric_dimension() == 3:
                 self.determine_v = Projector(as_vector([0, 0, -v_expression]), self.v)
 
-        # determine whether to do recovered space advection scheme
-        # if horizontal and vertical degrees are 0 do recovered space
-        if state.horizontal_degree == 0 and state.vertical_degree == 0:
-            VDG1 = state.spaces("DG1")
-            VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
-            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            boundary_method = Boundary_Method.dynamics
-            advect_options = RecoveredOptions(embedding_space=VDG1,
-                                              recovered_space=VCG1,
-                                              broken_space=Vbrok,
-                                              boundary_method=boundary_method)
-        else:
-            advect_options = EmbeddedDGOptions()
-
-        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        advection_equation = EmbeddedDGAdvection(state, Vt, equation_form="advective", outflow=True, options=advect_options)
-
         # decide which limiter to use
         if self.limit:
-            if state.horizontal_degree == 0 and state.vertical_degree == 0:
+            if h_deg == 0 and v_deg == 0:
                 limiter = VertexBasedLimiter(VDG1)
-            elif state.horizontal_degree == 1 and state.vertical_degree == 1:
+            elif h_deg == 1 and v_deg == 1:
                 limiter = ThetaLimiter(Vt)
             else:
                 logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
@@ -241,12 +247,12 @@ class Fallout(Physics):
             limiter = None
 
         # sedimentation will happen using a full advection method
-        self.advection_method = SSPRK3(state, self.rain, advection_equation, limiter=limiter)
+        self.advection_method = SSPRK3(state, options=advect_options, limiter=limiter)
+        self.advection_method.setup(advection_equation, self.v)
 
     def apply(self):
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.update_ubar(self.v, self.v, 0)
         self.advection_method.apply(self.rain, self.rain)
 
 
@@ -270,14 +276,14 @@ class Coalescence(Physics):
         super().__init__(state)
 
         # obtain our fields
-        self.water_c = state.fields('water_c')
-        self.rain = state.fields('rain')
+        self.water_c = state.fields('cloud_liquid_mixing_ratio')
+        self.rain = state.fields('rain_mixing_ratio')
 
         # declare function space
         Vt = self.water_c.function_space()
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
         a = Constant(0.001)  # min cloud conc in kg/kg
@@ -333,11 +339,11 @@ class Evaporation(Physics):
 
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('water_v')
-        self.rain = state.fields('rain')
+        self.water_v = state.fields('vapour_mixing_ratio')
+        self.rain = state.fields('rain_mixing_ratio')
         rho = state.fields('rho')
         try:
-            water_c = state.fields('water_c')
+            water_c = state.fields('cloud_liquid_mixing_ratio')
             water_l = self.rain + water_c
         except NotImplementedError:
             water_l = self.rain
@@ -347,7 +353,9 @@ class Evaporation(Physics):
 
         # make rho variables
         # we recover rho into theta space
-        if state.vertical_degree == 0 and state.horizontal_degree == 0:
+        h_deg = rho.function_space().ufl_element().degree()[0]
+        v_deg = rho.function_space().ufl_element().degree()[1]
+        if v_deg == 0 and h_deg == 0:
             boundary_method = Boundary_Method.physics
         else:
             boundary_method = None
@@ -356,7 +364,7 @@ class Evaporation(Physics):
         self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
 
         # define some parameters as attributes
-        dt = state.timestepping.dt
+        dt = state.dt
         R_d = state.parameters.R_d
         cp = state.parameters.cp
         cv = state.parameters.cv

@@ -2,12 +2,16 @@
 Some simple tools for making model configuration nicer.
 """
 from abc import ABCMeta, abstractproperty
+from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
-from firedrake import sqrt
+from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "TimesteppingParameters", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions"]
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
+           "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
+           "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions",
+           "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -23,6 +27,27 @@ def set_log_handler(comm):
         logger.addHandler(logging.NullHandler())
 
 
+class IntegrateByParts(Enum):
+    NEVER = 0
+    ONCE = 1
+    TWICE = 2
+
+
+class TransportEquationType(Enum):
+    """
+    An Enum object which stores the types of the transport equation. For
+    transporting velocity 'u' and transported quantity 'q', these equations are:
+
+    advective: dq / dt + dot(u, grad(q)) = 0
+    conservative: dq / dt + div(q*u) = 0
+    """
+
+    no_transport = 702
+    advective = 19
+    conservative = 291
+    vector_invariant = 9081
+
+
 class Configuration(object):
 
     def __init__(self, **kwargs):
@@ -34,18 +59,13 @@ class Configuration(object):
         """Cause setting an unknown attribute to be an error"""
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
-        object.__setattr__(self, name, value)
 
-
-class TimesteppingParameters(Configuration):
-
-    """
-    Timestepping parameters for Gusto
-    """
-    dt = None
-    alpha = 0.5
-    maxk = 4
-    maxi = 1
+        # Almost all parameters should be Constants -- but there are some
+        # specific exceptions which should be kept as integers
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+            object.__setattr__(self, name, Constant(value))
+        else:
+            object.__setattr__(self, name, value)
 
 
 class OutputParameters(Configuration):
@@ -90,7 +110,7 @@ class CompressibleParameters(Configuration):
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    cv = 717.  # SHC of dry air at const. volume (J/kg/K)
+    cv = 717.5  # SHC of dry air at const. volume (J/kg/K)
     c_pl = 4186.  # SHC of liq. wat. at const. pressure (J/kg/K)
     c_pv = 1885.  # SHC of wat. vap. at const. pressure (J/kg/K)
     c_vv = 1424.  # SHC of wat. vap. at const. pressure (J/kg/K)
@@ -111,33 +131,6 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
-
-
-class EadyParameters(Configuration):
-
-    """
-    Physical parameters for Incompressible Eady
-    """
-    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-    dbdy = -1.0e-07
-    H = None
-    L = None
-    f = None
-    deltax = None
-    deltaz = None
-    fourthorder = False
-
-
-class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
-
-    """
-    Physical parameters for Compressible Eady
-    """
-    g = 10.
-    N = sqrt(EadyParameters.Nsq)
-    theta_surf = 300.
-    dthetady = theta_surf/g*EadyParameters.dbdy
-    Pi0 = 0.0
 
 
 class AdvectionOptions(Configuration, metaclass=ABCMeta):
@@ -167,3 +160,17 @@ class SUPGOptions(AdvectionOptions):
     name = "supg"
     tau = None
     default = 1/sqrt(15)
+    ibp = IntegrateByParts.TWICE
+
+
+class SpongeLayerParameters(Configuration):
+
+    H = None
+    z_level = None
+    mubar = None
+
+
+class DiffusionParameters(Configuration):
+
+    kappa = None
+    mu = None

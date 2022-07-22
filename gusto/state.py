@@ -4,8 +4,8 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
-from firedrake import (FiniteElement, TensorProductElement, HDiv, DirichletBC,
-                       FunctionSpace, MixedFunctionSpace, VectorFunctionSpace,
+from firedrake import (FiniteElement, TensorProductElement, HDiv,
+                       FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
@@ -18,40 +18,148 @@ __all__ = ["State"]
 
 class SpaceCreator(object):
 
-    def __call__(self, name, mesh=None, family=None, degree=None):
+    def __init__(self, mesh):
+        self.mesh = mesh
+        self.extruded_mesh = hasattr(mesh, "_base_mesh")
+        self._initialised_base_spaces = False
+
+    def __call__(self, name, family=None, degree=None):
         try:
             return getattr(self, name)
         except AttributeError:
-            value = FunctionSpace(mesh, family, degree)
+            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
+                value = self.build_hdiv_space(family, degree)
+            elif name == "theta":
+                value = self.build_theta_space(degree)
+            elif family == "DG":
+                value = self.build_dg_space(degree)
+            elif family == "CG":
+                value = self.build_cg_space(degree)
             setattr(self, name, value)
             return value
+
+    def build_compatible_spaces(self, family, degree):
+        if self.extruded_mesh and not self._initialised_base_spaces:
+            self.build_base_spaces(family, degree)
+            Vu = self.build_hdiv_space(family, degree)
+            setattr(self, "HDiv", Vu)
+            Vdg = self.build_dg_space(degree)
+            setattr(self, "DG", Vdg)
+            Vth = self.build_theta_space(degree)
+            setattr(self, "theta", Vth)
+            return Vu, Vdg, Vth
+        else:
+            Vu = self.build_hdiv_space(family, degree)
+            setattr(self, "HDiv", Vu)
+            Vdg = self.build_dg_space(degree)
+            setattr(self, "DG", Vdg)
+            return Vu, Vdg
+
+    def build_base_spaces(self, family, degree):
+
+        cell = self.mesh._base_mesh.ufl_cell().cellname()
+
+        # horizontal base spaces
+        self.S1 = FiniteElement(family, cell, degree+1, variant="equispaced")
+        self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+
+        # vertical base spaces
+        self.T0 = FiniteElement("CG", interval, degree+1, variant="equispaced")
+        self.T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+
+        self._initialised_base_spaces = True
+
+    def build_hdiv_space(self, family, degree):
+        if self.extruded_mesh:
+            if not self._initialised_base_spaces:
+                self.build_base_spaces(family, degree)
+            Vh_elt = HDiv(TensorProductElement(self.S1, self.T1))
+            Vt_elt = TensorProductElement(self.S2, self.T0)
+            Vv_elt = HDiv(Vt_elt)
+            V_elt = Vh_elt + Vv_elt
+        else:
+            cell = self.mesh.ufl_cell().cellname()
+            V_elt = FiniteElement(family, cell, degree+1)
+        return FunctionSpace(self.mesh, V_elt, name='HDiv')
+
+    def build_dg_space(self, degree):
+        if self.extruded_mesh:
+            if not self._initialised_base_spaces or self.T1.degree() != degree:
+                cell = self.mesh._base_mesh.ufl_cell().cellname()
+                S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+                T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+            else:
+                S2 = self.S2
+                T1 = self.T1
+            V_elt = TensorProductElement(S2, T1)
+        else:
+            cell = self.mesh.ufl_cell().cellname()
+            V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
+        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
+
+    def build_theta_space(self, degree):
+        assert self.extruded_mesh
+        if not self._initialised_base_spaces:
+            cell = self.mesh._base_mesh.ufl_cell().cellname()
+            self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+            self.T0 = FiniteElement("CG", interval, degree+1,
+                                    variant="equispaced")
+        V_elt = TensorProductElement(self.S2, self.T0)
+        return FunctionSpace(self.mesh, V_elt, name='Vtheta')
+
+    def build_cg_space(self, degree):
+        return FunctionSpace(self.mesh, "CG", degree, name=f'CG{degree}')
 
 
 class FieldCreator(object):
 
-    def __init__(self, fieldlist=None, xn=None, dumplist=None, pickup=True):
+    def __init__(self, equations):
         self.fields = []
-        if fieldlist is not None:
-            for name, func in zip(fieldlist, xn.split()):
-                setattr(self, name, func)
-                func.dump = name in dumplist
-                func.pickup = pickup
-                func.rename(name)
-                self.fields.append(func)
+        for eqn in equations:
+            subfield_names = eqn.field_names if hasattr(eqn, "field_names") else None
+            self.add_field(eqn.field_name, eqn.function_space, subfield_names)
 
-    def __call__(self, name, space=None, dump=True, pickup=True):
-        try:
-            return getattr(self, name)
-        except AttributeError:
-            value = Function(space, name=name)
-            setattr(self, name, value)
-            value.dump = dump
-            value.pickup = pickup
-            self.fields.append(value)
-            return value
+    def add_field(self, name, space, subfield_names=None):
+        value = Function(space, name=name)
+        setattr(self, name, value)
+        self.fields.append(value)
+
+        if len(space) > 1:
+            assert len(space) == len(subfield_names)
+            for field_name, field in zip(subfield_names, value.split()):
+                setattr(self, field_name, field)
+                field.rename(field_name)
+                self.fields.append(field)
+
+    def __call__(self, name):
+        return getattr(self, name)
 
     def __iter__(self):
         return iter(self.fields)
+
+
+class StateFields(FieldCreator):
+
+    def __init__(self, *fields_to_dump):
+        self.fields = []
+        self.output_specified = len(fields_to_dump) > 0
+        self.to_dump = set((fields_to_dump))
+        self.to_pickup = set(())
+
+    def __call__(self, name, space=None, subfield_names=None, dump=True,
+                 pickup=False):
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            self.add_field(name, space, subfield_names)
+            if dump:
+                if subfield_names is not None:
+                    self.to_dump.update(subfield_names)
+                else:
+                    self.to_dump.add(name)
+            if pickup:
+                self.to_pickup.add(name)
+            return getattr(self, name)
 
 
 class PointDataOutput(object):
@@ -185,91 +293,46 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
-    :arg vertical_degree: integer, required for vertically extruded meshes.
-    Specifies the degree for the pressure space in the vertical
-    (the degrees for other spaces are inferred). Defaults to None.
-    :arg horizontal_degree: integer, the degree for spaces in the horizontal
-    (specifies the degree for the pressure space, other spaces are inferred)
-    defaults to 1.
-    :arg family: string, specifies the velocity space family to use.
-    Options:
-    "RT": The Raviart-Thomas family (default, recommended for quads)
-    "BDM": The BDM family
-    "BDFM": The BDFM family
-    :arg Coriolis: (optional) Coriolis function.
     :arg sponge_function: (optional) Function specifying a sponge layer.
-    :arg timestepping: class containing timestepping parameters
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
-    :arg fieldlist: list of prognostic field names
     :arg diagnostic_fields: list of diagnostic field classes
-    :arg u_bc_ids: a list containing the ids of boundaries with no normal
-                   component of velocity. These ids are passed to `DirichletBC`s. For
-                   extruded meshes, top and bottom are added automatically.
     """
 
-    def __init__(self, mesh, vertical_degree=None, horizontal_degree=1,
-                 family="RT",
-                 Coriolis=None, sponge_function=None,
-                 hydrostatic=None,
-                 timestepping=None,
+    def __init__(self, mesh,
+                 dt=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
-                 fieldlist=None,
-                 diagnostic_fields=None,
-                 u_bc_ids=None):
+                 diagnostic_fields=None):
 
-        self.family = family
-        self.vertical_degree = vertical_degree
-        self.horizontal_degree = horizontal_degree
-        self.Omega = Coriolis
-        self.mu = sponge_function
-        self.hydrostatic = hydrostatic
-        self.timestepping = timestepping
+        self.dt = dt
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
             self.output = output
         self.parameters = parameters
-        if fieldlist is None:
-            raise RuntimeError("You must provide a fieldlist containing the names of the prognostic fields")
-        else:
-            self.fieldlist = fieldlist
+
         if diagnostics is not None:
             self.diagnostics = diagnostics
         else:
-            self.diagnostics = Diagnostics(*fieldlist)
+            self.diagnostics = Diagnostics()
         if diagnostic_fields is not None:
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
-        if u_bc_ids is not None:
-            self.u_bc_ids = u_bc_ids
-        else:
-            self.u_bc_ids = []
 
         # The mesh
         self.mesh = mesh
 
-        # Build the spaces
-        self._build_spaces(mesh, vertical_degree, horizontal_degree, family)
+        self.spaces = SpaceCreator(mesh)
 
-        # Allocate state
-        self._allocate_state()
         if self.output.dumplist is None:
-            self.output.dumplist = fieldlist
-        self.fields = FieldCreator(fieldlist, self.xn, self.output.dumplist)
 
-        # set up bcs
-        V = self.spaces("HDiv")
-        self.bcs = []
-        if V.extruded:
-            self.bcs.append(DirichletBC(V, 0.0, "bottom"))
-            self.bcs.append(DirichletBC(V, 0.0, "top"))
-        for id in self.u_bc_ids:
-            self.bcs.append(DirichletBC(V, 0.0, id))
+            self.output.dumplist = []
+
+        self.fields = StateFields(*self.output.dumplist)
 
         self.dumpfile = None
 
@@ -295,23 +358,15 @@ class State(object):
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
 
-        # project test function for hydrostatic case
-        if self.hydrostatic:
-            self.h_project = lambda u: u - self.k*inner(u, self.k)
-        else:
-            self.h_project = lambda u: u
-
         #  Constant to hold current time
         self.t = Constant(0.0)
 
         # setup logger
         logger.setLevel(output.log_level)
         set_log_handler(mesh.comm)
-        logger.info("Timestepping parameters that take non-default values:")
-        logger.info(", ".join("%s: %s" % item for item in vars(timestepping).items()))
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % item for item in vars(parameters).items()))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(parameters).items()))
 
     def setup_diagnostics(self):
         """
@@ -368,7 +423,7 @@ class State(object):
                 comm=self.mesh.comm)
 
             # make list of fields to dump
-            self.to_dump = [field for field in self.fields if field.dump]
+            self.to_dump = [f for f in self.fields if f.name() in self.fields.to_dump]
 
             # make dump counter
             self.dumpcount = itertools.count()
@@ -405,7 +460,7 @@ class State(object):
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
-            ndt = int(tmax/self.timestepping.dt)
+            ndt = int(tmax/self.dt)
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
@@ -429,7 +484,7 @@ class State(object):
                                         mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
-            self.to_pickup = [field for field in self.fields if field.pickup]
+            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
 
         # if we want to checkpoint then make a checkpoint counter
         if self.output.checkpoint:
@@ -509,75 +564,18 @@ class State(object):
         :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
         """
         for name, profile in reference_profiles:
-            field = getattr(self.fields, name)
-            ref = self.fields(name+'bar', field.function_space(), False)
+            if name+'bar' in self.fields:
+                # For reference profiles already added to state, allow
+                # interpolation from expressions
+                ref = self.fields(name+'bar')
+            elif isinstance(profile, Function):
+                # Need to add reference profile to state so profile must be
+                # a Function
+                ref = self.fields(name+'bar', space=profile.function_space(), dump=False)
+            else:
+                raise ValueError(f'When initialising reference profile {name}'
+                                 + ' the passed profile must be a Function')
             ref.interpolate(profile)
-
-    def _build_spaces(self, mesh, vertical_degree, horizontal_degree, family):
-        """
-        Build:
-        velocity space self.V2,
-        pressure space self.V3,
-        temperature space self.Vt,
-        mixed function space self.W = (V2,V3,Vt)
-        """
-
-        self.spaces = SpaceCreator()
-        if vertical_degree is not None:
-            # horizontal base spaces
-            cell = mesh._base_mesh.ufl_cell().cellname()
-            S1 = FiniteElement(family, cell, horizontal_degree+1)
-            S2 = FiniteElement("DG", cell, horizontal_degree, variant="equispaced")
-
-            # vertical base spaces
-            T0 = FiniteElement("CG", interval, vertical_degree+1, variant="equispaced")
-            T1 = FiniteElement("DG", interval, vertical_degree, variant="equispaced")
-
-            # build spaces V2, V3, Vt
-            V2h_elt = HDiv(TensorProductElement(S1, T1))
-            V2t_elt = TensorProductElement(S2, T0)
-            V3_elt = TensorProductElement(S2, T1)
-            V2v_elt = HDiv(V2t_elt)
-            V2_elt = V2h_elt + V2v_elt
-
-            V0 = self.spaces("HDiv", mesh, V2_elt)
-            V1 = self.spaces("DG", mesh, V3_elt)
-            V2 = self.spaces("HDiv_v", mesh, V2t_elt)
-
-            self.Vv = self.spaces("Vv", mesh, V2v_elt)
-
-            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-            DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-            self.DG1_space = self.spaces("DG1", mesh, DG1_elt)
-
-            self.W = MixedFunctionSpace((V0, V1, V2))
-
-        else:
-            cell = mesh.ufl_cell().cellname()
-            V1_elt = FiniteElement(family, cell, horizontal_degree+1)
-            DG_elt = FiniteElement("DG", cell, horizontal_degree, variant="equispaced")
-            DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-
-            V0 = self.spaces("HDiv", mesh, V1_elt)
-            V1 = self.spaces("DG", mesh, DG_elt)
-            self.DG1_space = self.spaces("DG1", mesh, DG1_elt)
-
-            self.W = MixedFunctionSpace((V0, V1))
-
-    def _allocate_state(self):
-        """
-        Construct Functions to store the state variables.
-        """
-
-        W = self.W
-        self.xn = Function(W)
-        self.xstar = Function(W)
-        self.xp = Function(W)
-        self.xnp1 = Function(W)
-        self.xrhs = Function(W)
-        self.xb = Function(W)  # store the old state for diagnostics
-        self.dy = Function(W)
 
 
 def get_latlon_mesh(mesh):

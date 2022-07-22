@@ -1,7 +1,7 @@
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner,
+                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner, action,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace, DirichletBC)
 from firedrake.petsc import flatten_parameters
@@ -9,11 +9,13 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
+from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
+from gusto.fml.form_manipulation_labelling import Term, drop
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "ShallowWaterSolver", "CompressibleSolver"]
+__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -29,10 +31,12 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
          the default solver parameters with the solver_parameters passed in.
     """
 
-    def __init__(self, state, solver_parameters=None,
+    def __init__(self, state, equations, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
 
         self.state = state
+        self.equations = equations
+        self.alpha = alpha
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -117,12 +121,11 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, state, quadrature_degree=None, solver_parameters=None,
+    def __init__(self, state, equations, alpha=0.5,
+                 quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
 
         self.moisture = moisture
-
-        self.state = state
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -142,20 +145,20 @@ class CompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
+        super().__init__(state, equations, alpha, solver_parameters,
+                         overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         import numpy as np
 
         state = self.state
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
+        Dt = state.dt
+        beta_ = Dt*self.alpha
         cp = state.parameters.cp
-        mu = state.mu
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
-        Vtheta = state.spaces("HDiv_v")
+        Vtheta = state.spaces("theta")
         Vrho = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
@@ -163,12 +166,13 @@ class CompressibleSolver(TimesteppingSolver):
         beta = Constant(beta_)
         beta_cp = Constant(beta_ * cp)
 
-        h_deg = state.horizontal_degree
-        v_deg = state.vertical_degree
+        h_deg = Vrho.ufl_element().degree()[0]
+        v_deg = Vrho.ufl_element().degree()[1]
         Vtrace = FunctionSpace(state.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
-        u_in, rho_in, theta_in = split(state.xrhs)
+        self.xrhs = Function(self.equations.function_space)
+        u_in, rho_in, theta_in = split(self.xrhs)[0:3]
 
         # Build the function space for "broken" u, rho, and pressure trace
         M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
@@ -198,6 +202,9 @@ class CompressibleSolver(TimesteppingSolver):
         # Vertical projection
         def V(u):
             return k*inner(u, k)
+
+        # hydrostatic projection
+        h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
@@ -252,9 +259,14 @@ class CompressibleSolver(TimesteppingSolver):
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
         # a periodic (or sphere) base mesh.
+        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in))*dx
+
         eqn = (
             # momentum equation
-            inner(w, (state.h_project(u) - u_in))*dx
+            u_mass
             - beta_cp*div(theta_w*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
@@ -278,8 +290,8 @@ class CompressibleSolver(TimesteppingSolver):
         )
 
         # contribution of the sponge term
-        if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+        if hasattr(self.equations, "mu"):
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -331,13 +343,15 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Store boundary conditions for the div-conforming velocity to apply
         # post-solve
-        self.bcs = self.state.bcs
+        self.bcs = self.equations.bcs['u']
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result dy.
         """
+
+        self.xrhs.assign(xrhs)
 
         # Solve the hybridized system
         self.hybridized_solver.solve()
@@ -359,7 +373,7 @@ class CompressibleSolver(TimesteppingSolver):
             bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
-        u, rho, theta = self.state.dy.split()
+        u, rho, theta = dy.split()[0:3]
         u.assign(u1)
         rho.assign(rho1)
 
@@ -402,18 +416,13 @@ class IncompressibleSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, state, solver_parameters=None,
-                 overwrite_solver_parameters=False):
-        super().__init__(state, solver_parameters, overwrite_solver_parameters)
-
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.timestepping.dt
-        beta_ = Dt*state.timestepping.alpha
-        mu = state.mu
+        Dt = state.dt
+        beta_ = Dt*self.alpha
         Vu = state.spaces("HDiv")
-        Vb = state.spaces("HDiv_v")
+        Vb = state.spaces("theta")
         Vp = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
@@ -421,7 +430,8 @@ class IncompressibleSolver(TimesteppingSolver):
         beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
-        u_in, p_in, b_in = split(state.xrhs)
+        self.xrhs = Function(self.equations.function_space)
+        u_in, p_in, b_in = split(self.xrhs)
 
         # Build the reduced function space for u,p
         M = MixedFunctionSpace((Vu, Vp))
@@ -446,8 +456,8 @@ class IncompressibleSolver(TimesteppingSolver):
             + phi*div(u)*dx
         )
 
-        if mu is not None:
-            eqn += dt*mu*inner(w, k)*inner(u, k)*dx
+        if hasattr(self.equations, "mu"):
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -455,12 +465,9 @@ class IncompressibleSolver(TimesteppingSolver):
         self.up = Function(M)
 
         # Boundary conditions (assumes extruded mesh)
-        if len(self.state.bcs) == 0:
-            bcs = None
-        else:
-            # BCs are declared for the plain velocity space. As we need them in
-            # a mixed problem, we replicate the BCs but for subspace of M
-            bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.state.bcs]
+        # BCs are declared for the plain velocity space. As we need them in
+        # a mixed problem, we replicate the BCs but for subspace of M
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, p
         up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
@@ -490,16 +497,17 @@ class IncompressibleSolver(TimesteppingSolver):
         self.b_solver = LinearVariationalSolver(b_problem)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result dy.
         """
+        self.xrhs.assign(xrhs)
 
         with timed_region("Gusto:VelocityPressureSolve"):
             self.up_solver.solve()
 
         u1, p1 = self.up.split()
-        u, p, b = self.state.dy.split()
+        u, p, b = dy.split()
         u.assign(u1)
         p.assign(p1)
 
@@ -509,7 +517,7 @@ class IncompressibleSolver(TimesteppingSolver):
         b.assign(self.b)
 
 
-class ShallowWaterSolver(TimesteppingSolver):
+class LinearTimesteppingSolver(object):
     """
     Timestepping linear solver object for the nonlinear shallow water
     equations with prognostic variables u and D. The linearized system
@@ -530,51 +538,45 @@ class ShallowWaterSolver(TimesteppingSolver):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self):
-        state = self.state
-        H_ = state.parameters.H
-        g_ = state.parameters.g
-        beta_ = state.timestepping.dt*state.timestepping.alpha
+    def __init__(self, equation, dt, alpha):
 
-        # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
-        H = Constant(H_)
-        g = Constant(g_)
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            lambda t: Term(t.get(linearisation).form, t.labels),
+            drop)
+
+        W = equation.function_space
+        beta = dt*alpha
 
         # Split up the rhs vector (symbolically)
-        u_in, D_in = split(state.xrhs)
+        self.xrhs = Function(W)
 
-        W = state.W
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        aeqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=lambda t: beta*t)
+        Leqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=drop)
 
-        eqn = (
-            inner(w, u) - beta*g*div(w)*D
-            - inner(w, u_in)
-            + phi*D + beta*H*phi*div(u)
-            - phi*D_in
-        )*dx
+        # Place to put result of solver
+        self.dy = Function(W)
 
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
+        # Solver
+        bcs = equation.bcs['u']
+        problem = LinearVariationalProblem(aeqn.form,
+                                           action(Leqn.form, self.xrhs),
+                                           self.dy, bcs=bcs)
 
-        # Place to put result of u rho solver
-        self.uD = Function(W)
-
-        # Solver for u, D
-        bcs = None if len(self.state.bcs) == 0 else self.state.bcs
-        uD_problem = LinearVariationalProblem(
-            aeqn, Leqn, self.state.dy, bcs=bcs)
-
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 options_prefix='SWimplicit')
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self):
+    def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs state.xrhs and result state.dy.
+        Apply the solver with rhs xrhs and result dy.
         """
 
-        self.uD_solver.solve()
+        self.xrhs.assign(xrhs)
+        self.solver.solve()
+        dy.assign(self.dy)

@@ -17,7 +17,7 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
 
 
 class Diagnostics(object):
@@ -86,7 +86,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
     def setup(self, state, space=None):
         if not self._initialised:
             if space is None:
-                space = state.spaces("DG0", state.mesh, "DG", 0)
+                space = state.spaces("DG0", "DG", 0)
             self.field = state.fields(self.name, space, pickup=False)
             self._initialised = True
 
@@ -113,7 +113,7 @@ class CourantNumber(DiagnosticField):
 
     def compute(self, state):
         u = state.fields("u")
-        dt = Constant(state.timestepping.dt)
+        dt = Constant(state.dt)
         return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
 
 
@@ -122,7 +122,7 @@ class VelocityX(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityX, self).setup(state, space=space)
 
     def compute(self, state):
@@ -136,7 +136,7 @@ class VelocityZ(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityZ, self).setup(state, space=space)
 
     def compute(self, state):
@@ -150,7 +150,7 @@ class VelocityY(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(VelocityY, self).setup(state, space=space)
 
     def compute(self, state):
@@ -194,6 +194,19 @@ class Gradient(DiagnosticField):
     def compute(self, state):
         self.solver.solve()
         return self.field
+
+
+class Divergence(DiagnosticField):
+    name = "Divergence"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("DG1", "DG", 1)
+            super(Divergence, self).setup(state, space=space)
+
+    def compute(self, state):
+        u = state.fields("u")
+        return self.field.interpolate(div(u))
 
 
 class SphericalComponent(DiagnosticField):
@@ -385,7 +398,7 @@ class ExnerPi(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("CG1", state.mesh, "CG", 1)
+            space = state.spaces("CG1", "CG", 1)
             super(ExnerPi, self).setup(state, space=space)
 
     def compute(self, state):
@@ -473,7 +486,9 @@ class ThermodynamicDiagnostic(DiagnosticField):
         if not self._initialised:
             space = state.fields("theta").function_space()
             broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
-            boundary_method = Boundary_Method.physics if (state.vertical_degree == 0 and state.horizontal_degree == 0) else None
+            h_deg = space.ufl_element().degree()[0]
+            v_deg = space.ufl_element().degree()[1]-1
+            boundary_method = Boundary_Method.physics if (v_deg == 0 and h_deg == 0) else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
@@ -483,15 +498,15 @@ class ThermodynamicDiagnostic(DiagnosticField):
             self.rho_averaged = Function(space)
             self.recoverer = Recoverer(self.rho, self.rho_averaged, VDG=broken_space, boundary_method=boundary_method)
             try:
-                self.r_v = state.fields("water_v")
+                self.r_v = state.fields("vapour_mixing_ratio")
             except NotImplementedError:
                 self.r_v = Constant(0.0)
             try:
-                self.r_c = state.fields("water_c")
+                self.r_c = state.fields("cloud_liquid_mixing_ratio")
             except NotImplementedError:
                 self.r_c = Constant(0.0)
             try:
-                self.rain = state.fields("rain")
+                self.rain = state.fields("rain_mixing_ratio")
             except NotImplementedError:
                 self.rain = Constant(0.0)
 
@@ -605,7 +620,8 @@ class HydrostaticImbalance(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("Vv")
+            Vu = state.spaces("HDiv")
+            space = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
             super().setup(state, space=space)
             rho = state.fields("rho")
             rhobar = state.fields("rhobar")
@@ -641,10 +657,10 @@ class Precipitation(DiagnosticField):
 
     def setup(self, state):
         if not self._initialised:
-            space = state.spaces("DG0", state.mesh, "DG", 0)
+            space = state.spaces("DG0", "DG", 0)
             super().setup(state, space=space)
 
-            rain = state.fields('rain')
+            rain = state.fields('rain_mixing_ratio')
             rho = state.fields('rho')
             v = state.fields('rainfall_velocity')
             self.phi = TestFunction(space)
@@ -685,7 +701,7 @@ class Vorticity(DiagnosticField):
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
-            except AttributeError:
+            except UnboundLocalError:
                 dgspace = state.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)
