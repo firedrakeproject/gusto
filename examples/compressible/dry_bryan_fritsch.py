@@ -1,29 +1,28 @@
+"""
+The dry rising bubble test from Bryan & Fritsch (2002).
+
+This uses the lowest-order function spaces, with the recovered methods for
+transporting the fields. The test also uses a non-periodic base mesh.
+"""
+
 from gusto import *
 from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
                        FunctionSpace, BrokenElement, VectorFunctionSpace)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
 dt = 1.0
 if '--running-tests' in sys.argv:
-    tmax = 10.
     deltax = 1000.
+    tmax = 5.
 else:
     deltax = 100.
     tmax = 1000.
 
-if '--recovered' in sys.argv:
-    recovered = True
-else:
-    recovered = False
-if '--limit' in sys.argv:
-    limit = True
-else:
-    limit = False
-
+degree = 0
+dirname = 'dry_bryan_fritsch'
 
 # make mesh
 L = 10000.
@@ -33,16 +32,6 @@ ncolumns = int(L/deltax)
 m = IntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-# options
-diffusion = False
-degree = 0 if recovered else 1
-
-dirname = 'dry_bf_bubble'
-
-if recovered:
-    dirname += '_recovered'
-if limit:
-    dirname += '_limit'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (5*dt)),
@@ -57,16 +46,10 @@ state = State(mesh,
               output=output,
               parameters=params)
 
-if diffusion:
-    diffusion_options = [('u', DiffusionParameters(kappa=60., mu=10./deltax))]
-else:
-    diffusion_options = None
-
-u_transport_option = "vector_advection_form" if recovered else "vector_invariant_form"
+u_transport_option = "vector_advection_form"
 
 eqns = CompressibleEulerEquations(state, "CG", degree,
                                   u_transport_option=u_transport_option,
-                                  diffusion_options=diffusion_options,
                                   no_normal_flow_bc_ids=[1, 2])
 
 # Initial conditions
@@ -116,55 +99,34 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up transport schemes
-if recovered:
-    VDG1 = state.spaces("DG1", "DG", 1)
-    VCG1 = FunctionSpace(mesh, "CG", 1)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-    Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-    Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
+VDG1 = state.spaces("DG1", "DG", 1)
+VCG1 = FunctionSpace(mesh, "CG", 1)
+Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
+Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
-    u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                              recovered_space=Vu_CG1,
-                              broken_space=Vu_brok,
-                              boundary_method=Boundary_Method.dynamics)
-    rho_opts = RecoveredOptions(embedding_space=VDG1,
+u_opts = RecoveredOptions(embedding_space=Vu_DG1,
+                            recovered_space=Vu_CG1,
+                            broken_space=Vu_brok,
+                            boundary_method=Boundary_Method.dynamics)
+rho_opts = RecoveredOptions(embedding_space=VDG1,
+                            recovered_space=VCG1,
+                            broken_space=Vr,
+                            boundary_method=Boundary_Method.dynamics)
+theta_opts = RecoveredOptions(embedding_space=VDG1,
                                 recovered_space=VCG1,
-                                broken_space=Vr,
-                                boundary_method=Boundary_Method.dynamics)
-    theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                  recovered_space=VCG1,
-                                  broken_space=Vt_brok)
-else:
-    rho_opts = None
-    theta_opts = EmbeddedDGOptions()
-
-# set up limiter
-if limit:
-    if recovered:
-        limiter = VertexBasedLimiter(VDG1)
-    else:
-        limiter = ThetaLimiter(Vt)
-else:
-    limiter = None
+                                broken_space=Vt_brok)
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                      SSPRK3(state, "theta", options=theta_opts, limiter=limiter)]
-if recovered:
-    transported_fields.append(SSPRK3(state, "u", options=u_opts))
-else:
-    transported_fields.append(ImplicitMidpoint(state, "u"))
+                      SSPRK3(state, "theta", options=theta_opts),
+                      SSPRK3(state, "u", options=u_opts)]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns)
 
-diffusion_schemes = []
-if diffusion:
-    diffusion_schemes.append(BackwardEuler(state, "u"))
-
 # build time stepper
 stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver,
-                        diffusion_schemes=diffusion_schemes)
+                        linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

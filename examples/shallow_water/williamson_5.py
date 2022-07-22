@@ -1,3 +1,10 @@
+"""
+The Williamson 5 shallow-water test case (flow over topography), solved with a
+discretisation of the non-linear shallow-water equations.
+
+This uses an icosahedral mesh of the sphere, and runs a series of resolutions.
+"""
+
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, Min)
@@ -23,7 +30,7 @@ parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
 
-    dirname = "sw_W5_ref%s_dt%s" % (ref_level, dt)
+    dirname = "williamson_5_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     x = SpatialCoordinate(mesh)

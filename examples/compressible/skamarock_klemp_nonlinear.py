@@ -1,20 +1,31 @@
+"""
+The non-linear gravity wave test case of Skamarock and Klemp (1994).
+
+Potential temperature is transported using SUPG.
+"""
+
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       SpatialCoordinate, exp, sin, Function, FunctionSpace)
+import itertools
+from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
+                       ExtrudedMesh, exp, sin, Function)
 import numpy as np
 import sys
 
-dt = 10.
+dt = 6.
 if '--running-tests' in sys.argv:
+    nlayers = 5
+    columns = 30
     tmax = dt
     dumpfreq = 1
 else:
+    nlayers = 10
+    columns = 150
     tmax = 3600.
     dumpfreq = int(tmax / (2*dt))
 
 
-nlayers = 50  # horizontal layers
-columns = 50  # number of columns
 L = 3.0e5
 m = PeriodicIntervalMesh(columns, L)
 
@@ -22,24 +33,35 @@ m = PeriodicIntervalMesh(columns, L)
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-fieldlist = ['u', 'rho', 'theta']
+points_x = np.linspace(0., L, 100)
+points_z = [H/2.]
+points = np.array([p for p in itertools.product(points_x, points_z)])
 
-dirname = 'sk_linear'
+dirname = 'skamarock_klemp_nonlinear'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
+                          pddumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
+                          point_data=[('theta_perturbation', points)],
                           log_level='INFO')
 
 parameters = CompressibleParameters()
+g = parameters.g
+Tsurf = 300.
+
+diagnostic_fields = [CourantNumber(), Gradient("u"),
+                     Gradient("theta_perturbation"),
+                     RichardsonNumber("theta", g/Tsurf), Gradient("theta")]
 
 state = State(mesh,
               dt=dt,
               output=output,
-              parameters=parameters)
+              parameters=parameters,
+              diagnostic_fields=diagnostic_fields)
 
-eqns = LinearCompressibleEulerEquations(state, "CG", 1)
+eqns = CompressibleEulerEquations(state, "CG", 1)
 
 # Initial conditions
 u0 = state.fields("u")
@@ -72,21 +94,21 @@ rho_b = Function(Vr)
 # Calculate hydrostatic Pi
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
-W_DG1 = FunctionSpace(mesh, "DG", 1)
 a = 5.0e3
 deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
+u0.project(as_vector([20.0, 0.0]))
 
-state.initialise([('u', u0),
-                  ('rho', rho0),
-                  ('theta', theta0)])
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up transport schemes
-transported_fields = [ForwardEuler(state, "rho"), ForwardEuler(state, "theta")]
+theta_opts = SUPGOptions()
+transported_fields = [ImplicitMidpoint(state, "u"),
+                      SSPRK3(state, "rho"),
+                      SSPRK3(state, "theta", options=theta_opts)]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns)

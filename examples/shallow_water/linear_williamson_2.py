@@ -1,3 +1,10 @@
+"""
+The Williamson 2 shallow-water test case (solid-body rotation), solved with a
+discretisation of the linear shallow-water equations.
+
+This uses an icosahedral mesh of the sphere.
+"""
+
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
@@ -22,7 +29,7 @@ mesh = IcosahedralSphereMesh(radius=R,
 x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
-output = OutputParameters(dirname='sw_linear_w2',
+output = OutputParameters(dirname='linear_williamson_2',
                           dumpfreq=dumpfreq,
                           steady_state_error_fields=['u', 'D'],
                           log_level='INFO')
@@ -50,9 +57,7 @@ Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 
-# TODO: should there be transport here or not?
-# transport_schemes = [ForwardEuler(state, "D")]
-transport_schemes = []
+transport_schemes = [ForwardEuler(state, "D")]
 
 # build time stepper
 stepper = CrankNicolson(state, eqns, transport_schemes)

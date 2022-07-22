@@ -1,3 +1,10 @@
+"""
+The non-orographic gravity wave test case (3-1) from the DCMIP test case
+document of Ullrich et al (2012).
+
+This uses a cubed-sphere mesh.
+"""
+
 from gusto import *
 from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
                        Function, SpatialCoordinate, as_vector)
@@ -57,7 +64,7 @@ lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
 lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 
-dirname = 'meanflow_ref_hybridization'
+dirname = 'dcmip_3_1_meanflow'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,

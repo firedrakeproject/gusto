@@ -5,12 +5,11 @@ import glob
 import sys
 
 
-cwd = abspath(dirname(__file__))
-examples_dir = join(cwd, "..", "..", "examples")
-example_files = glob.glob("%s/*.py" % examples_dir)
+examples_dir = abspath(dirname(__file__))
+example_files = glob.glob("%s/*/*.py" % examples_dir)
 
 
-@pytest.fixture(params=glob.glob("%s/*.py" % examples_dir),
+@pytest.fixture(params=glob.glob("%s/*/*.py" % examples_dir),
                 ids=lambda x: basename(x))
 def example_file(request):
     return abspath(request.param)

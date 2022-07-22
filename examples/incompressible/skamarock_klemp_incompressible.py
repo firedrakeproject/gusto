@@ -1,3 +1,10 @@
+"""
+The gravity wave test case of Skamarock and Klemp (1994), solved using the
+incompressible Boussinesq equations.
+
+Buoyancy is transported using SUPG.
+"""
+
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, ExtrudedMesh,
                        sin, SpatialCoordinate, Function)
@@ -8,21 +15,23 @@ dt = 6.
 if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
+    columns = 30  # number of columns
+    nlayers = 5  # horizontal layers
+
 else:
     tmax = 3600.
     dumpfreq = int(tmax / (2*dt))
+    columns = 300  # number of columns
+    nlayers = 10  # horizontal layers
 
 # set up mesh
-columns = 300  # number of columns
 L = 3.0e5
 m = PeriodicIntervalMesh(columns, L)
-
-nlayers = 10  # horizontal layers
 H = 1.0e4  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 # output parameters
-output = OutputParameters(dirname='gw_incompressible',
+output = OutputParameters(dirname='skamarock_klemp_incompressible',
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['b'],
@@ -76,11 +85,7 @@ u0.project(uinit)
 state.set_reference_profiles([('b', b_b)])
 
 # Set up transport schemes
-supg = True
-if supg:
-    b_opts = SUPGOptions()
-else:
-    b_opts = EmbeddedDGOptions()
+b_opts = SUPGOptions()
 transported_fields = [ImplicitMidpoint(state, "u"),
                       SSPRK3(state, "b", options=b_opts)]
 

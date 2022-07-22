@@ -1,3 +1,7 @@
+"""
+The Eady problem solved using the incompressible Boussinesq equations.
+"""
+
 from gusto import *
 from firedrake import (as_vector, SpatialCoordinate,
                        PeriodicRectangleMesh, ExtrudedMesh,
@@ -7,15 +11,18 @@ import sys
 day = 24.*60.*60.
 hour = 60.*60.
 dt = 100.
+
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
+    columns = 10
+    nlayers = 10
 else:
     tmax = 30*day
     tdump = 2*hour
+    columns = 30
+    nlayers = 30
 
-columns = 30
-nlayers = 30
 H = 10000.
 L = 1000000.
 f = 1.e-04
@@ -122,11 +129,7 @@ state.set_reference_profiles([('p', p_b),
                               ('b', b_b)])
 
 # Set up transport schemes
-supg = True
-if supg:
-    b_opts = SUPGOptions()
-else:
-    b_opts = EmbeddedDGOptions()
+b_opts = SUPGOptions()
 transported_fields = [SSPRK3(state, "u"), SSPRK3(state, "b", options=b_opts)]
 
 linear_solver = IncompressibleSolver(state, eqns)

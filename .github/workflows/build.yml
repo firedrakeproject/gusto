@@ -45,6 +45,11 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           python $(which firedrake-clean)
           python -m pytest -n 12 -v integration-tests
+      - name: Gusto examples
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          python $(which firedrake-clean)
+          python -m pytest -n 12 -v examples
       - name: Lint
         if: ${{ always() }}
         run: |

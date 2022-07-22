@@ -1,3 +1,11 @@
+"""
+The Williamson 2 shallow-water test case (solid-body rotation), solved with a
+discretisation of the non-linear shallow-water equations.
+
+This uses an icosahedral mesh of the sphere, and runs a series of resolutions
+to act as a convergence test.
+"""
+
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
 from math import pi
@@ -23,7 +31,7 @@ parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
 
-    dirname = "sw_W2_ref%s_dt%s" % (ref_level, dt)
+    dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=3)
     x = SpatialCoordinate(mesh)

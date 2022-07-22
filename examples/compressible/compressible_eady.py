@@ -1,3 +1,7 @@
+"""
+This solves the Eady problem using the compressible Euler equations.
+"""
+
 from gusto import *
 from gusto import thermodynamics
 from firedrake import (as_vector, SpatialCoordinate,
@@ -11,17 +15,19 @@ dt = 30.
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
+    columns = 10  # number of columns
+    nlayers = 5  # horizontal layers
 else:
     tmax = 30*day
     tdump = 5*day
+    columns = 30  # number of columns
+    nlayers = 30  # horizontal layers
 
 # set up mesh
-columns = 30  # number of columns
 L = 1000000.
 m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
 # build 2D mesh by extruding the base mesh
-nlayers = 30  # horizontal layers
 H = 10000.  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 

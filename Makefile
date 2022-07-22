@@ -12,7 +12,7 @@ lint:
 
 test:
 	@echo "    Running all tests"
-	@python3 -m pytest unit-tests integration-tests $(PYTEST_ARGS)
+	@python3 -m pytest unit-tests integration-tests examples $(PYTEST_ARGS)
 
 unit_test:
 	@echo "    Running all unit-tests"
@@ -21,3 +21,7 @@ unit_test:
 integration_test:
 	@echo "    Running all integration-tests"
 	@python3 -m pytest integration-tests $(PYTEST_ARGS)
+
+example:
+	@echo "    Running all examples"
+	@python3 -m pytest examples $(PYTEST_ARGS)

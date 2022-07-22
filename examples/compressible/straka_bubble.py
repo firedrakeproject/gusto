@@ -1,3 +1,9 @@
+"""
+The falling cold density current test of Straka et al (1993).
+
+This example runs at a series of resolutions with different time steps.
+"""
+
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        Constant, pi, cos, Function, sqrt,
@@ -21,7 +27,7 @@ H = 6400.  # Height position of the model top
 
 for delta, dt in res_dt.items():
 
-    dirname = "db_dx%s_dt%s" % (delta, dt)
+    dirname = "straka_dx%s_dt%s" % (delta, dt)
     nlayers = int(H/delta)  # horizontal layers
     columns = int(L/delta)  # number of columns
 

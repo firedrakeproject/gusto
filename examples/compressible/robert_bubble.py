@@ -1,25 +1,33 @@
+"""
+The dry rising bubble test case of Robert (1993).
+
+Potential temperature is transported using the embedded DG technique.
+"""
+
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        Constant, pi, cos, Function, sqrt, conditional)
 import sys
 
 dt = 1.
+L = 1000.
+H = 1000.
+
 if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
+    nlayers = int(H/50.)
+    ncolumns = int(L/50.)
 else:
     tmax = 600.
     dumpfreq = int(tmax / (6*dt))
-
-L = 1000.
-H = 1000.
-nlayers = int(H/10.)
-ncolumns = int(L/10.)
+    nlayers = int(H/10.)
+    ncolumns = int(L/10.)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
-dirname = 'rb'
+dirname = 'robert_bubble'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
@@ -71,11 +79,7 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up transport schemes
-supg = True
-if supg:
-    theta_opts = SUPGOptions()
-else:
-    theta_opts = EmbeddedDGOptions()
+theta_opts = EmbeddedDGOptions()
 transported_fields = []
 transported_fields.append(ImplicitMidpoint(state, "u"))
 transported_fields.append(SSPRK3(state, "rho"))

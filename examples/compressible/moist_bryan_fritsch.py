@@ -1,34 +1,27 @@
+"""
+The moist rising bubble test from Bryan & Fritsch (2002), in a cloudy
+atmosphere.
+
+The rise of the thermal is fueled by latent heating from condensation.
+"""
+
 from gusto import *
 from gusto import thermodynamics
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        NonlinearVariationalProblem,
                        NonlinearVariationalSolver, TestFunction, dx,
-                       TrialFunction, Constant, Function,
+                       TrialFunction, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       DirichletBC,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace)
+                       FunctionSpace, BrokenElement)
 import sys
-
-if '--recovered' in sys.argv:
-    recovered = True
-else:
-    recovered = False
-if '--limit' in sys.argv:
-    limit = True
-else:
-    limit = False
-if '--diffusion' in sys.argv:
-    diffusion = True
-else:
-    diffusion = False
 
 dt = 1.0
 if '--running-tests' in sys.argv:
-    tmax = 10.
     deltax = 1000.
+    tmax = 5.
 else:
-    deltax = 100. if recovered else 200
+    deltax = 200
     tmax = 1000.
 
 L = 10000.
@@ -38,16 +31,9 @@ ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-degree = 0 if recovered else 1
+degree = 1
 
-dirname = 'moist_bf'
-
-if recovered:
-    dirname += '_recovered'
-if limit:
-    dirname += '_limit'
-if diffusion:
-    dirname += '_diffusion'
+dirname = 'moist_bryan_fritsch'
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (5*dt)),
@@ -56,8 +42,7 @@ output = OutputParameters(dirname=dirname,
                           log_level='INFO')
 
 params = CompressibleParameters()
-diagnostic_fields = [Theta_e(), InternalEnergy(),
-                     Perturbation('InternalEnergy'), PotentialEnergy()]
+diagnostic_fields = [Theta_e()]
 tracers = [WaterVapour(), CloudWater()]
 
 state = State(mesh,
@@ -100,9 +85,6 @@ water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
 pibar = thermodynamics.pi(state.parameters, rho_b, theta_b)
 Tb = thermodynamics.T(state.parameters, theta_b, pibar, r_v=water_vb)
-Ibar = state.fields("InternalEnergybar", Vt, dump=False)
-Ibar.interpolate(thermodynamics.internal_energy(
-    state.parameters, rho_b, Tb, r_v=water_vb, r_l=water_cb))
 
 # define perturbation
 xc = L / 2
@@ -156,61 +138,18 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
                               ('vapour_mixing_ratio', water_vb)])
 
-# set up limiter
-if limit:
-    if recovered:
-        VDG1 = state.spaces("DG1", "DG", 1)
-        limiter = VertexBasedLimiter(VDG1)
-    else:
-        limiter = ThetaLimiter(Vt)
-else:
-    limiter = None
-
-
-# Set up transport schemes
-if recovered:
-    VDG1 = state.spaces("DG1", "DG", 1)
-    VCG1 = FunctionSpace(mesh, "CG", 1)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-    Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-    u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                              recovered_space=Vu_CG1,
-                              broken_space=Vu,
-                              boundary_method=Boundary_Method.dynamics)
-    rho_opts = RecoveredOptions(embedding_space=VDG1,
-                                recovered_space=VCG1,
-                                broken_space=Vr,
-                                boundary_method=Boundary_Method.dynamics)
-    theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                  recovered_space=VCG1,
-                                  broken_space=Vt_brok)
-    u_transport = SSPRK3(state, "u", options=u_opts)
-else:
-    rho_opts = None
-    theta_opts = EmbeddedDGOptions()
-    u_transport = ImplicitMidpoint(state, "u")
+rho_opts = None
+theta_opts = EmbeddedDGOptions()
+u_transport = ImplicitMidpoint(state, "u")
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                      SSPRK3(state, "theta", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "theta", options=theta_opts),
+                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
+                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts),
                       u_transport]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
-
-# diffusion
-bcs = [DirichletBC(Vu, 0.0, "bottom"),
-       DirichletBC(Vu, 0.0, "top")]
-
-diffusion_schemes = None
-
-if diffusion:
-    diffusion_schemes.append(('u', InteriorPenalty(
-        state, Vu, kappa=Constant(60.),
-        mu=Constant(10./deltax), bcs=bcs)))
 
 # define condensation
 physics_list = [Condensation(state)]
@@ -218,7 +157,6 @@ physics_list = [Condensation(state)]
 # build time stepper
 stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver,
-                        physics_list=physics_list,
-                        diffusion_schemes=diffusion_schemes)
+                        physics_list=physics_list)
 
 stepper.run(t=0, tmax=tmax)

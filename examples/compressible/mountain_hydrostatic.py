@@ -1,3 +1,8 @@
+"""
+The 1 metre high mountain test case. This is solved with the hydrostatic
+compressible Euler equations.
+"""
+
 from gusto import *
 from firedrake import (as_vector, VectorFunctionSpace,
                        PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
@@ -33,14 +38,9 @@ x, z = SpatialCoordinate(ext_mesh)
 hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
 
-smooth_z = True
-dirname = 'h_mountain'
-if smooth_z:
-    dirname += '_smootherz'
-    zh = 5000.
-    xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
-else:
-    xexpr = as_vector([x, z + ((H-z)/H)*zs])
+dirname = 'hydrostatic_mountain'
+zh = 5000.
+xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 
 new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
@@ -143,11 +143,7 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up transport schemes
-supg = True
-if supg:
-    theta_opts = SUPGOptions()
-else:
-    theta_opts = EmbeddedDGOptions()
+theta_opts = SUPGOptions()
 transported_fields = [ImplicitMidpoint(state, "u"),
                       SSPRK3(state, "rho"),
                       SSPRK3(state, "theta", options=theta_opts)]
