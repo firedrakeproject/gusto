@@ -16,7 +16,9 @@ from gusto.configuration import logger
 from gusto.recovery import Recoverer, Boundary_Method
 
 
-__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance", "compressible_hydrostatic_balance", "remove_initial_w", "eady_initial_v", "compressible_eady_initial_v", "calculate_Pi0", "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
+__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
+           "compressible_hydrostatic_balance", "remove_initial_w", "calculate_Pi0",
+           "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 
 def latlon_coords(mesh):
@@ -210,65 +212,6 @@ def remove_initial_w(u):
     ustar = Function(u.function_space()).project(uv)
     uin = Function(u.function_space()).assign(u - ustar)
     u.assign(uin)
-
-
-def eady_initial_v(state, p0, v):
-    f = state.parameters.f
-    x, y, z = SpatialCoordinate(state.mesh)
-
-    # get pressure gradient
-    Vu = state.spaces("HDiv")
-    g = TrialFunction(Vu)
-    wg = TestFunction(Vu)
-
-    n = FacetNormal(state.mesh)
-
-    a = inner(wg, g)*dx
-    L = -div(wg)*p0*dx + inner(wg, n)*p0*ds_tb
-    pgrad = Function(Vu)
-    solve(a == L, pgrad)
-
-    # get initial v
-    Vp = p0.function_space()
-    phi = TestFunction(Vp)
-    m = TrialFunction(Vp)
-
-    a = f*phi*m*dx
-    L = phi*pgrad[0]*dx
-    solve(a == L, v)
-
-    return v
-
-
-def compressible_eady_initial_v(state, theta0, rho0, v):
-    f = state.parameters.f
-    cp = state.parameters.cp
-
-    # exner function
-    Vr = rho0.function_space()
-    Pi = Function(Vr).interpolate(thermodynamics.pi(state.parameters, rho0, theta0))
-
-    # get Pi gradient
-    Vu = state.spaces("HDiv")
-    g = TrialFunction(Vu)
-    wg = TestFunction(Vu)
-
-    n = FacetNormal(state.mesh)
-
-    a = inner(wg, g)*dx
-    L = -div(wg)*Pi*dx + inner(wg, n)*Pi*ds_tb
-    pgrad = Function(Vu)
-    solve(a == L, pgrad)
-
-    # get initial v
-    m = TrialFunction(Vr)
-    phi = TestFunction(Vr)
-
-    a = phi*f*m*dx
-    L = phi*cp*theta0*pgrad[0]*dx
-    solve(a == L, v)
-
-    return v
 
 
 def calculate_Pi0(state, theta0, rho0):

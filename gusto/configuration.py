@@ -8,7 +8,10 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
+           "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
+           "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions",
+           "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -128,33 +131,6 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
-
-
-class EadyParameters(Configuration):
-
-    """
-    Physical parameters for Incompressible Eady
-    """
-    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-    dbdy = -1.0e-07
-    H = None
-    L = None
-    f = None
-    deltax = None
-    deltaz = None
-    fourthorder = False
-
-
-class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
-
-    """
-    Physical parameters for Compressible Eady
-    """
-    g = 10.
-    N = sqrt(EadyParameters.Nsq)
-    theta_surf = 300.
-    dthetady = theta_surf/g*EadyParameters.dbdy
-    Pi0 = 0.0
 
 
 class AdvectionOptions(Configuration, metaclass=ABCMeta):
