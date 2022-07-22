@@ -302,14 +302,12 @@ class State(object):
 
     def __init__(self, mesh,
                  dt=None,
-                 hydrostatic=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
 
         self.dt = dt
-        self.hydrostatic = hydrostatic
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
