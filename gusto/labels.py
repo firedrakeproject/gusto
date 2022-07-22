@@ -74,6 +74,9 @@ def replace_subject(new, idx=None):
                 for k, v in zip(split(subj), new):
                     replace_dict[k] = v
 
+            elif type(new) == ufl.algebra.Sum:
+                replace_dict[subj] = new
+
             # Otherwise fail if new is not a function
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
@@ -128,3 +131,4 @@ coriolis = Label("coriolis")
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 name = Label("name", validator=lambda value: type(value) == str)
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
+hydrostatic = Label("hydrostatic", validator=lambda value: type(value) in [LabelledForm, Term])

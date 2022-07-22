@@ -302,14 +302,12 @@ class State(object):
 
     def __init__(self, mesh,
                  dt=None,
-                 hydrostatic=None,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
 
         self.dt = dt
-        self.hydrostatic = hydrostatic
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
@@ -359,12 +357,6 @@ class State(object):
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
-
-        # project test function for hydrostatic case
-        if self.hydrostatic:
-            self.h_project = lambda u: u - self.k*inner(u, self.k)
-        else:
-            self.h_project = lambda u: u
 
         #  Constant to hold current time
         self.t = Constant(0.0)
