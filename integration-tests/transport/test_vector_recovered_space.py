@@ -1,7 +1,7 @@
 """
 This tests the transport of a vector-valued field using the recovery wrapper.
 
-THOUGHTS: This needs to explicitly check that the vector has been transported to
+TODO: This needs to explicitly check that the vector has been transported to
 the appropriate place. Use the tracer setup ...
 """
 

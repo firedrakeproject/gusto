@@ -1,7 +1,8 @@
 """
 This tests transport using the subcycling option.
 
-THOUGHTS: this doesn't check that the transport is correct
+TODO: this doesn't check that the transport is correct. Should use the
+existing config
 """
 
 from gusto import *
