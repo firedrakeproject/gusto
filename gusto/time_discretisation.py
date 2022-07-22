@@ -707,3 +707,43 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+        
+        
+        
+   
+class AB3(ExplicitTimeDiscretisation):        
+
+    """
+    Class to implement the explicit third order Adam-Bashforth time-stepping method.    
+    This uses gradient information from the current time step and two previous:
+    y_(n+1) = y_n + (1/12)*( 23*L(y_n) - 16*L(y_(n-1)) + 5*L(y_(n-2)) )
+    
+    For the first iteration we don't have enough info, so use AB1:
+    y_(n+1) = y_n + L(y_n)
+    
+    For the second iteration we don't have enough info, so use AB2:
+    y_(n+1) = y_n + (1/2)*( 3*L(y_n) - L(y_(n-1)) )
+    
+    """     
+   
+    @cached_property
+    def lhs(self):
+        return super(AB3, self).lhs
+
+    @cached_property
+    def rhs(self):
+        return super(AB3, self).rhs
+    
+    def apply(self, x_in, x_out):
+        self.q1.assign(x_in)
+        self.solver.solve()
+        
+        if self.first_it == True:
+            x_out.assign(x_in + self.dq)
+            self.first_it = False
+            self.second_it = True
+        elif self.second_it == True:
+            x_out.assign(x_in + (1./2.)*(3.*self.dq - self.dq1)
+            self.second_it = False
+        else:
+            x_out.assign(x_in + (1./12.)*(23.*self.dq - 16.*self.dq1 + 5.*self.dq2))

@@ -9,7 +9,7 @@ def run(state, transport_scheme, tmax, f_end):
     return norm(state.fields("f") - f_end)
 
 
-@pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
+@pytest.mark.parametrize("scheme", ["AB3", "ssprk", "implicit_midpoint",
                                     "RK4", "Heun"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     geometry = "sphere"
@@ -31,4 +31,6 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = [(eqn, RK4(state))]
     elif scheme == "Heun":
         transport_scheme = [(eqn, Heun(state))]
+    elif scheme == "AB3":
+        transport_scheme = [(eqn, AB3(state))]
     assert run(state, transport_scheme, setup.tmax, setup.f_end) < setup.tol
