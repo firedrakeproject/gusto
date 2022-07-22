@@ -15,7 +15,7 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun", "ThetaMethod", "ImplicitMidpoint"]
 
 
 def is_cg(V):
@@ -502,6 +502,118 @@ class SSPRK3(ExplicitTimeDiscretisation):
 
         self.q1.assign(x_in)
         for i in range(3):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.q1)
+
+
+class RK4(ExplicitTimeDiscretisation):
+    """
+    Class to implement the 4-stage Runge-Kutta timestepping method:
+    k1 = f(y_n)
+    k2 = f(y_n + 1/2*dt*k1)
+    k3 = f(y_n + 1/2*dt*k2)
+    k4 = f(y_n + dt*k3)
+    y_(n+1) = y_n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
+    where subscripts indicate the timelevel, superscripts indicate the stage
+    number and f is the RHS.
+    """
+
+    def setup(self, equation, uadv, *active_labels):
+
+        super().setup(equation, uadv, *active_labels)
+
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
+
+    @cached_property
+    def lhs(self):
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_false=drop)
+
+        return l.form
+
+    @cached_property
+    def rhs(self):
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.q1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=lambda t: -1*t)
+
+        return r.form
+
+    def solve_stage(self, x_in, stage):
+
+        if stage == 0:
+            self.solver.solve()
+            self.k1.assign(self.dq)
+            self.q1.assign(x_in + 0.5 * self.dt * self.k1)
+
+        elif stage == 1:
+            self.solver.solve()
+            self.k2.assign(self.dq)
+            self.q1.assign(x_in + 0.5 * self.dt * self.k2)
+
+        elif stage == 2:
+            self.solver.solve()
+            self.k3.assign(self.dq)
+            self.q1.assign(x_in + self.dt * self.k3)
+
+        elif stage == 3:
+            self.solver.solve()
+            self.k4.assign(self.dq)
+            self.q1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+
+    def apply_cycle(self, x_in, x_out):
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.q1.assign(x_in)
+
+        for i in range(4):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.q1)
+
+
+class Heun(ExplicitTimeDiscretisation):
+    """
+    Class to implement Heun's timestepping method:
+    y^1 = L(y_n)
+    y_(n+1) = (1/2)y_n + (1/2)Ly^1)
+    where subscripts indicate the timelevel, superscripts indicate the stage
+    number and L is the advection operator.
+    """
+    @cached_property
+    def lhs(self):
+        return super(Heun, self).lhs
+
+    @cached_property
+    def rhs(self):
+        return super(Heun, self).rhs
+
+    def solve_stage(self, x_in, stage):
+        if stage == 0:
+            self.solver.solve()
+            self.q1.assign(self.dq)
+
+        elif stage == 1:
+            self.solver.solve()
+            self.q1.assign(0.5 * x_in + 0.5 * (self.dq))
+
+    def apply_cycle(self, x_in, x_out):
+
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.q1.assign(x_in)
+        for i in range(2):
             self.solve_stage(x_in, i)
         x_out.assign(self.q1)
 

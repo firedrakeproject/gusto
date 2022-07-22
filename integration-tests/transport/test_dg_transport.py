@@ -16,9 +16,7 @@ def run(state, transport_scheme, tmax, f_end):
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
-def test_dg_transport_scalar(tmpdir, geometry, equation_form, scheme,
-                             tracer_setup):
+def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
     V = state.spaces("DG", "DG", 1)
@@ -31,18 +29,13 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, scheme,
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
 
-    if scheme == "ssprk":
-        transport_scheme = [(eqn, SSPRK3(state))]
-    elif scheme == "implicit_midpoint":
-        transport_scheme = [(eqn, ImplicitMidpoint(state))]
+    transport_scheme = [(eqn, SSPRK3(state))]
     assert run(state, transport_scheme, setup.tmax, setup.f_end) < setup.tol
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-@pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
-def test_dg_transport_vector(tmpdir, geometry, equation_form, scheme,
-                             tracer_setup):
+def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     state = setup.state
     gdim = state.mesh.geometric_dimension()
@@ -56,9 +49,6 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, scheme,
                                  udegree=setup.degree)
     state.fields("f").interpolate(f_init)
     state.fields("u").project(setup.uexpr)
-    if scheme == "ssprk":
-        transport_schemes = [(eqn, SSPRK3(state))]
-    elif scheme == "implicit_midpoint":
-        transport_schemes = [(eqn, ImplicitMidpoint(state))]
+    transport_schemes = [(eqn, SSPRK3(state))]
     f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
     assert run(state, transport_schemes, setup.tmax, f_end) < setup.tol

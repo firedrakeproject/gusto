@@ -720,7 +720,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             c_pml = cp + mr_v * c_pv + mr_l * c_pl
             R_m = R_d + mr_v * R_v
 
-            residual -= subject(prognostic(
+            residual += subject(prognostic(
                 gamma * theta * div(u)
                 * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx, "theta"), self.X)
 
@@ -737,7 +737,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             z = x[len(x)-1]
             H = sponge.H
             zc = sponge.z_level
-            assert zc < H, "you have set the sponge level above the height of your domain"
+            assert float(zc) < float(H), "you have set the sponge level above the height of your domain"
             mubar = sponge.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
@@ -867,6 +867,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
 
+    The pressure features as a Lagrange multiplier to enforce the
+    incompressibility of the equations.
+
     :arg state:                 The :class:`State` object used for the run.
     :arg family:                The finite element space family used for the
                                 velocity field. This determines the other finite
@@ -960,18 +963,22 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(div(w)*p*dx, "u"), self.X)
+        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(b*inner(w, state.k)*dx, "u"), self.X)
+        gravity_form = subject(prognostic(-b*inner(w, state.k)*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-        divergence_form = name(subject(prognostic(phi*div(u)*dx, "p"), self.X),
-                               "divergence_form")
+        # This enforces that div(u) = 0
+        # The p features here so that the div(u) evaluated in the "forcing" step
+        # replaces the whole pressure field, rather than merely providing an
+        # increment to it.
+        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, "p"), self.X),
+                               "incompressibility")
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)

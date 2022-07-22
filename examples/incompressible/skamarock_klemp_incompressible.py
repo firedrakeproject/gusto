@@ -41,7 +41,7 @@ output = OutputParameters(dirname='skamarock_klemp_incompressible',
 parameters = CompressibleParameters()
 
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), Divergence()]
 
 # setup state
 state = State(mesh,

@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractproperty
 from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
-from firedrake import sqrt
+from firedrake import sqrt, Constant
 
 
 __all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
@@ -56,7 +56,13 @@ class Configuration(object):
         """Cause setting an unknown attribute to be an error"""
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
-        object.__setattr__(self, name, value)
+
+        # Almost all parameters should be Constants -- but there are some
+        # specific exceptions which should be kept as integers
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+            object.__setattr__(self, name, Constant(value))
+        else:
+            object.__setattr__(self, name, value)
 
 
 class OutputParameters(Configuration):
@@ -101,7 +107,7 @@ class CompressibleParameters(Configuration):
     R_d = 287.  # Gas constant for dry air (J/kg/K)
     kappa = 2.0/7.0  # R_d/c_p
     p_0 = 1000.0*100.0  # reference pressure (Pa, not hPa)
-    cv = 717.  # SHC of dry air at const. volume (J/kg/K)
+    cv = 717.5  # SHC of dry air at const. volume (J/kg/K)
     c_pl = 4186.  # SHC of liq. wat. at const. pressure (J/kg/K)
     c_pv = 1885.  # SHC of wat. vap. at const. pressure (J/kg/K)
     c_vv = 1424.  # SHC of wat. vap. at const. pressure (J/kg/K)
