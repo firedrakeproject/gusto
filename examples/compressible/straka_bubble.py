@@ -72,31 +72,28 @@ for delta, dt in res_dt.items():
 
     theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
+    exner = Function(Vr)
 
     # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+    compressible_hydrostatic_balance(state, theta_b, rho_b, pi0=exner,
+                                     solve_for_rho=True)
 
     x = SpatialCoordinate(mesh)
     a = 5.0e3
-    deltaTheta = 1.0e-2
     xc = 0.5*L
     xr = 4000.
     zc = 3000.
     zr = 2000.
     r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
-    theta_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
-    theta0.interpolate(theta_b + theta_pert)
+    T_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
+    theta0.interpolate(theta_b + T_pert*exner)
     rho0.assign(rho_b)
 
     state.set_reference_profiles([('rho', rho_b),
                                   ('theta', theta_b)])
 
     # Set up transport schemes
-    supg = True
-    if supg:
-        theta_opts = SUPGOptions()
-    else:
-        thetaeqn = EmbeddedDGOptions()
+    theta_opts = SUPGOptions()
     transported_fields = [ImplicitMidpoint(state, "u"),
                           SSPRK3(state, "rho"),
                           SSPRK3(state, "theta", options=theta_opts)]

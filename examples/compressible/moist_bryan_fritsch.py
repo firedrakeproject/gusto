@@ -109,7 +109,7 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-physics_boundary_method = Boundary_Method.physics if recovered else None
+physics_boundary_method = None
 
 # find perturbed water_v
 w_v = Function(Vt)

@@ -72,18 +72,8 @@ VDG1 = state.spaces("DG1", "DG", 1)
 VCG1 = FunctionSpace(mesh, "CG", 1)
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                            recovered_space=Vu_CG1,
-                            broken_space=Vu,
-                            boundary_method=Boundary_Method.dynamics)
-rho_opts = RecoveredOptions(embedding_space=VDG1,
-                            recovered_space=VCG1,
-                            broken_space=Vr,
-                            boundary_method=Boundary_Method.dynamics)
-theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                recovered_space=VCG1,
-                                broken_space=Vt_brok)
+Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
+Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 physics_boundary_method = Boundary_Method.physics
 
 # Define constant theta_e and water_t
@@ -194,12 +184,20 @@ state.set_reference_profiles([('rho', rho_b),
                               ('vapour_mixing_ratio', water_vb)])
 
 # Set up transport schemes
-u_transport = SSPRK3(state, "u", options=u_opts)
-rho_opts = EmbeddedDGOptions()
-theta_opts = EmbeddedDGOptions()
+u_opts = RecoveredOptions(embedding_space=Vu_DG1,
+                          recovered_space=Vu_CG1,
+                          broken_space=Vu_brok,
+                          boundary_method=Boundary_Method.dynamics)
+rho_opts = RecoveredOptions(embedding_space=VDG1,
+                            recovered_space=VCG1,
+                            broken_space=Vr,
+                            boundary_method=Boundary_Method.dynamics)
+theta_opts = RecoveredOptions(embedding_space=VDG1,
+                              recovered_space=VCG1,
+                              broken_space=Vt_brok)
 limiter = VertexBasedLimiter(VDG1)
 
-transported_fields = [u_transport,
+transported_fields = [SSPRK3(state, "u", options=u_opts),
                       SSPRK3(state, "rho", options=rho_opts),
                       SSPRK3(state, "theta", options=theta_opts),
                       SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
