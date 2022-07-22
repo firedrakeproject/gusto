@@ -58,8 +58,9 @@ class Forcing(object):
             drop,
             replace_subject(self.x0))
 
+        # now add the terms that are always fully implicit
         if any(t.get(name) in implicit_terms for t in residual):
-            L_implicit -= alpha*dt*residual.label_map(
+            L_implicit -= dt*residual.label_map(
                 lambda t: t.get(name) in implicit_terms,
                 replace_subject(self.x0),
                 drop)
