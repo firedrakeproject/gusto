@@ -2,7 +2,7 @@ from firedrake import (Function, TrialFunctions, DirichletBC,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
 from gusto.labels import (transport, diffusion, name, time_derivative,
-                          replace_subject)
+                          replace_subject, hydrostatic)
 from gusto.fml.form_manipulation_labelling import drop
 
 
@@ -32,34 +32,56 @@ class Forcing(object):
         self.x0 = Function(W)
         self.xF = Function(W)
 
+        # set up boundary conditions on the u subspace of W
+        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+
+        # drop terms relating to transport and diffusion
         residual = equation.residual.label_map(
             lambda t: any(t.has_label(transport, diffusion, return_tuple=True)), drop)
 
+        # the lhs of both of the explicit and implicit solvers is just
+        # the time derivative form
         trials = TrialFunctions(W)
         a = residual.label_map(lambda t: t.has_label(time_derivative),
                                replace_subject(trials),
                                map_if_false=drop)
 
+        # the explicit forms are multiplied by (1-alpha) and moved to the rhs
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
 
-        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
-
-        explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs
-        )
-
+        # the implicit forms are multiplied by alpha and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms,
+            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
+
+        # now add the terms that are always fully implicit
         if any(t.get(name) in implicit_terms for t in residual):
             L_implicit -= dt*residual.label_map(
                 lambda t: t.get(name) in implicit_terms,
                 replace_subject(self.x0),
                 drop)
+
+        # the hydrostatic equations require some additional forms:
+        if any([t.has_label(hydrostatic) for t in residual]):
+
+            L_explicit += residual.label_map(
+                lambda t: t.get(name) == "hydrostatic_form",
+                replace_subject(self.x0),
+                drop)
+
+            L_implicit -= residual.label_map(
+                lambda t: t.get(name) == "hydrostatic_form",
+                replace_subject(self.x0),
+                drop)
+
+        # now we can set up the explicit and implicit problems
+        explicit_forcing_problem = LinearVariationalProblem(
+            a.form, L_explicit.form, self.xF, bcs=bcs
+        )
 
         implicit_forcing_problem = LinearVariationalProblem(
             a.form, L_implicit.form, self.xF, bcs=bcs

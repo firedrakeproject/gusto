@@ -9,7 +9,7 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-from gusto.labels import linearisation, time_derivative
+from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.fml.form_manipulation_labelling import Term, drop
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -203,6 +203,9 @@ class CompressibleSolver(TimesteppingSolver):
         def V(u):
             return k*inner(u, k)
 
+        # hydrostatic projection
+        h_project = lambda u: u - k*inner(u, k)
+
         # Specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
         dS_vp = dS_v(degree=(self.quadrature_degree))
@@ -256,9 +259,14 @@ class CompressibleSolver(TimesteppingSolver):
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
         # a periodic (or sphere) base mesh.
+        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in))*dx
+
         eqn = (
             # momentum equation
-            inner(w, (state.h_project(u) - u_in))*dx
+            u_mass
             - beta_cp*div(theta_w*V(w))*pibar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
