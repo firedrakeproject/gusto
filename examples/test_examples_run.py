@@ -1,5 +1,5 @@
 import pytest
-from os.path import abspath, basename, dirname, join
+from os.path import abspath, basename, dirname
 import subprocess
 import glob
 import sys

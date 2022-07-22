@@ -107,16 +107,16 @@ Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
 u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                            recovered_space=Vu_CG1,
-                            broken_space=Vu_brok,
-                            boundary_method=Boundary_Method.dynamics)
+                          recovered_space=Vu_CG1,
+                          broken_space=Vu_brok,
+                          boundary_method=Boundary_Method.dynamics)
 rho_opts = RecoveredOptions(embedding_space=VDG1,
                             recovered_space=VCG1,
                             broken_space=Vr,
                             boundary_method=Boundary_Method.dynamics)
 theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                recovered_space=VCG1,
-                                broken_space=Vt_brok)
+                              recovered_space=VCG1,
+                              broken_space=Vt_brok)
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
                       SSPRK3(state, "theta", options=theta_opts),
