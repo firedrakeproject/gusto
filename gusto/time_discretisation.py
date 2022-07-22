@@ -14,7 +14,7 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "ThetaMethod", "ImplicitMidpoint", "TRBDF2"]
 
 
 def is_cg(V):
@@ -585,3 +585,84 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+                         
+class TRBDF2(TimeDiscretisation):
+    """
+    Class to implement the theta timestepping method:
+    y_(n+g) = y_n + g*dt/2*(L(y_n) + L(y_(n+g)) where L is the operator.
+    y_(n+1) = (1-g3)y_n + g3*y_(n+g) +g2*dt*L(n+1)
+    """
+    def __init__(self, state, field_name=None, gamma=None,
+                 solver_parameters=None, options=None):
+
+        if gamma is None:
+            raise ValueError("please provide a value for gamma between 0 and 1")
+        if not solver_parameters:
+            # TRBDF2 method leads to asymmetric matrix, per lhs function below,
+            # so don't use CG
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
+
+        super().__init__(state, field_name,
+                         solver_parameters=solver_parameters,
+                         options=options)
+
+        self.gamma = gamma
+        self.gamma2 = (1.-gamma)/(2.-gamma)
+        self.gamma3 = 1./(gamma*(2.-gamma))
+        self.gamma4 = -(1.-gamma)**2/(gamma*(2.-gamma))
+
+    def lhs(self, stage):
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.dq, self.idx))
+        if stage == 0:
+            l = l.label_map(lambda t: t.has_label(time_derivative),
+                            map_if_false=lambda t: self.gamma/2*self.dt*t)
+        elif stage == 1:
+            l = l.label_map(lambda t: t.has_label(time_derivative),
+                            map_if_false=lambda t: self.gamma2*self.dt*t)
+        return l.form
+
+    def rhs(self, stage):
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.q1, self.idx))
+        if stage == 0:
+            r = r.label_map(lambda t: t.has_label(time_derivative),
+                            map_if_false=lambda t: -self.gamma/2 *self.dt*t)
+        elif stage == 1:
+        	r = r.label_map(lambda t: t.has_label(time_derivative),
+                            map_if_false=drop)
+           
+        return r.form
+    @cached_property
+    def solver1(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs(0)-self.rhs(0), self.dq, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+    @cached_property
+    def solver2(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs(1)-self.rhs(1), self.dq, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+    def solve_stage(self, x_in, stage):
+
+        if stage == 0:
+            self.solver1.solve()
+            self.q1.assign(self.dq)
+
+        elif stage == 1:
+            self.solver2.solve()
+            self.q1.assign(self.gamma4*x_in + self.gamma3*self.dq)
+
+    def apply_cycle(self, x_in, x_out):
+        self.q1.assign(x_in)
+        for i in range(2):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.q1)
+    def apply(self, x_in, x_out):
+        self.apply_cycle(x_in,x_out)
