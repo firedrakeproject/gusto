@@ -67,8 +67,6 @@ class Forcing(object):
         # the hydrostatic equations require some additional forms:
         if any([t.has_label(hydrostatic) for t in residual]):
 
-            print("hello!")
-            print([t.get(name) == "hydrostatic_form" for t in residual])
             L_explicit += residual.label_map(
                 lambda t: t.get(name) == "hydrostatic_form",
                 replace_subject(self.x0),
