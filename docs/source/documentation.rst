@@ -1,5 +1,5 @@
 .. only:: html
-
+..
   .. sidebar:: Current development information.
   
      Gusto is continually tested using the `Jenkins
@@ -11,8 +11,8 @@
                                  :target: https://jenkins.ese.ic.ac.uk:1080/blue/organizations/jenkins/firedrakeproject%2Fgusto/branches/
 
 
-  Getting started
-  ===============
+Getting started
+===============
 
   The first step is to download and install Gusto and its
   dependencies. For full instructions, see :doc:`obtaining Gusto
@@ -21,8 +21,8 @@
 
 .. only:: html
 
-  API documentation
-  =================
+API documentation
+=================
 
   The complete list of all the classes and methods in Gusto is
   available at the :doc:`gusto` page. The same information is
