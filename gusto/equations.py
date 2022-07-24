@@ -9,7 +9,7 @@ from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
                           name, pressure_gradient, coriolis,
                           replace_trial_function, hydrostatic)
-from gusto.thermodynamics import pi as Pi
+from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
                                    vector_invariant_form,
                                    vector_manifold_advection_form,
@@ -611,7 +611,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
         thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         zero_expr = Constant(0.0)*theta
-        exner_pi = Pi(state.parameters, rho, theta)
+        exner = exner_pressure(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
         # -------------------------------------------------------------------- #
@@ -681,8 +681,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = name(subject(prognostic(
-            cp*(-div(theta_v*w)*exner_pi*dx
-                + jump(theta_v*w, n)*avg(exner_pi)*dS_v), "u"), self.X), "pressure_gradient")
+            cp*(-div(theta_v*w)*exner*dx
+                + jump(theta_v*w, n)*avg(exner)*dS_v), "u"), self.X), "pressure_gradient")
 
         # -------------------------------------------------------------------- #
         # Gravitational Term

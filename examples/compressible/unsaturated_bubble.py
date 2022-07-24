@@ -79,7 +79,7 @@ physics_boundary_method = Boundary_Method.physics
 # Define constant theta_e and water_t
 Tsurf = 283.0
 psurf = 85000.
-pi_surf = (psurf / state.parameters.p_0) ** state.parameters.kappa
+exner_surf = (psurf / state.parameters.p_0) ** state.parameters.kappa
 humidity = 0.2
 S = 1.3e-5
 theta_surf = thermodynamics.theta(state.parameters, Tsurf, psurf)
@@ -88,7 +88,7 @@ H = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
 unsaturated_hydrostatic_balance(state, theta_d, H,
-                                pi_boundary=Constant(pi_surf))
+                                exner_boundary=Constant(exner_surf))
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
@@ -125,19 +125,19 @@ R_v = state.parameters.R_v
 epsilon = R_d / R_v
 
 # make expressions for determining water_v0
-pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-p = thermodynamics.p(state.parameters, pie)
-T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
+exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+p = thermodynamics.p(state.parameters, exner)
+T = thermodynamics.T(state.parameters, theta0, exner, water_v0)
 r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
 
 # make expressions to evaluate residual
-pi_ev = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-p_ev = thermodynamics.p(state.parameters, pi_ev)
-T_ev = thermodynamics.T(state.parameters, theta0, pi_ev, water_v0)
+exner_ev = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+p_ev = thermodynamics.p(state.parameters, exner_ev)
+T_ev = thermodynamics.T(state.parameters, theta0, exner_ev, water_v0)
 RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
 RH = Function(Vt)
 
-# set-up rho problem to keep Pi constant
+# set-up rho problem to keep exner constant
 gamma = TestFunction(Vr)
 rho_trial = TrialFunction(Vr)
 a = gamma * rho_trial * dxp

@@ -64,7 +64,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 class CompressibleSolver(TimesteppingSolver):
     """
     Timestepping linear solver object for the compressible equations
-    in theta-pi formulation with prognostic variables u, rho, and theta.
+    in theta-exner formulation with prognostic variables u, rho, and theta.
 
     This solver follows the following strategy:
 
@@ -184,20 +184,20 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
-        pibar_rho = thermodynamics.pi_rho(state.parameters, rhobar, thetabar)
-        pibar_theta = thermodynamics.pi_theta(state.parameters, rhobar, thetabar)
+        exnerbar = thermodynamics.exner_pressure(state.parameters, rhobar, thetabar)
+        exnerbar_rho = thermodynamics.dexner_drho(state.parameters, rhobar, thetabar)
+        exnerbar_theta = thermodynamics.dexner_dtheta(state.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
-        # Only include theta' (rather than pi') in the vertical
+        # Only include theta' (rather than exner') in the vertical
         # component of the gradient
 
-        # The pi prime term (here, bars are for mean and no bars are
+        # The exner prime term (here, bars are for mean and no bars are
         # for linear perturbations)
-        pi = pibar_theta*theta + pibar_rho*rho
+        exner = exnerbar_theta*theta + exnerbar_rho*rho
 
         # Vertical projection
         def V(u):
@@ -238,23 +238,23 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Project field averages into functions on the trace space
         rhobar_avg = Function(Vtrace)
-        pibar_avg = Function(Vtrace)
+        exnerbar_avg = Function(Vtrace)
 
         rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
-        pi_avg_prb = LinearVariationalProblem(a_tr, L_tr(pibar), pibar_avg)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg)
 
         rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                  solver_parameters=cg_ilu_parameters,
                                                  options_prefix='rhobar_avg_solver')
-        pi_avg_solver = LinearVariationalSolver(pi_avg_prb,
-                                                solver_parameters=cg_ilu_parameters,
-                                                options_prefix='pibar_avg_solver')
+        exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
+                                                   solver_parameters=cg_ilu_parameters,
+                                                   options_prefix='exnerbar_avg_solver')
 
         with timed_region("Gusto:HybridProjectRhobar"):
             rho_avg_solver.solve()
 
-        with timed_region("Gusto:HybridProjectPibar"):
-            pi_avg_solver.solve()
+        with timed_region("Gusto:HybridProjectExnerbar"):
+            exner_avg_solver.solve()
 
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
@@ -267,13 +267,13 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_cp*div(theta_w*V(w))*pibar*dxp
+            - beta_cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_vp
-            + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_hp
-            + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
-            - beta_cp*div(thetabar_w*w)*pi*dxp
+            # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
+            + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
+            + beta_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
+            - beta_cp*div(thetabar_w*w)*exner*dxp
             # trace terms appearing after integrating momentum equation
             + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
             + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)

@@ -7,8 +7,7 @@ Buoyancy is transported using SUPG.
 
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, ExtrudedMesh,
-                       sin, SpatialCoordinate, Function)
-import numpy as np
+                       sin, SpatialCoordinate, Function, pi)
 import sys
 
 dt = 6.
@@ -72,7 +71,7 @@ b_b = Function(Vb).interpolate(bref)
 # setup constants
 a = 5.0e3
 deltab = 1.0e-2
-b_pert = deltab*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+b_pert = deltab*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 

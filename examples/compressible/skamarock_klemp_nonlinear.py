@@ -9,7 +9,7 @@ PETSc.Sys.popErrorHandler()
 from gusto import *
 import itertools
 from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
-                       ExtrudedMesh, exp, sin, Function)
+                       ExtrudedMesh, exp, sin, Function, pi)
 import numpy as np
 import sys
 
@@ -91,12 +91,12 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 rho_b = Function(Vr)
 
-# Calculate hydrostatic Pi
+# Calculate hydrostatic exner
 compressible_hydrostatic_balance(state, theta_b, rho_b)
 
 a = 5.0e3
 deltaTheta = 1.0e-2
-theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0]))

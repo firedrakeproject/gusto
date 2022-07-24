@@ -62,7 +62,7 @@ Tsurf = Constant(300.)
 theta_b = Function(Vt).interpolate(Tsurf)
 rho_b = Function(Vr)
 
-# Calculate hydrostatic Pi
+# Calculate hydrostatic exner
 compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
 
 x = SpatialCoordinate(mesh)

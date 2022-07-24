@@ -7,8 +7,7 @@ Potential temperature is transported using SUPG.
 
 from gusto import *
 from firedrake import (as_vector, SpatialCoordinate, PeriodicRectangleMesh,
-                       ExtrudedMesh, exp, sin, Function)
-import numpy as np
+                       ExtrudedMesh, exp, sin, Function, pi)
 import sys
 
 dt = 25.
@@ -83,7 +82,7 @@ rho_b = Function(Vr)
 
 a = 1.0e5
 deltaTheta = 1.0e-2
-theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 
 compressible_hydrostatic_balance(state, theta_b, rho_b,

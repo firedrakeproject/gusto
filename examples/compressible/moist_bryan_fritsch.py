@@ -83,8 +83,8 @@ theta_b = Function(Vt).assign(theta0)
 rho_b = Function(Vr).assign(rho0)
 water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
-pibar = thermodynamics.pi(state.parameters, rho_b, theta_b)
-Tb = thermodynamics.T(state.parameters, theta_b, pibar, r_v=water_vb)
+exner_b = thermodynamics.exner_pressure(state.parameters, rho_b, theta_b)
+Tb = thermodynamics.T(state.parameters, theta_b, exner_b, r_v=water_vb)
 
 # define perturbation
 xc = L / 2
@@ -121,9 +121,9 @@ rho_recoverer = Recoverer(
     boundary_method=physics_boundary_method)
 rho_recoverer.project()
 
-pi = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-p = thermodynamics.p(state.parameters, pi)
-T = thermodynamics.T(state.parameters, theta0, pi, r_v=w_v)
+exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+p = thermodynamics.p(state.parameters, exner)
+T = thermodynamics.T(state.parameters, theta0, exner, r_v=w_v)
 w_sat = thermodynamics.r_sat(state.parameters, T, p)
 
 w_functional = (phi * w_v * dxp - phi * w_sat * dxp)

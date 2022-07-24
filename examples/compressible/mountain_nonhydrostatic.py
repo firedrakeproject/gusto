@@ -88,24 +88,24 @@ Tsurf = 300.
 thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
-# Calculate hydrostatic Pi
-Pi = Function(Vr)
+# Calculate hydrostatic exner
+exner = Function(Vr)
 rho_b = Function(Vr)
 
-piparams = {'ksp_type': 'gmres',
-            'ksp_monitor_true_residual': None,
-            'pc_type': 'python',
-            'mat_type': 'matfree',
-            'pc_python_type': 'gusto.VerticalHybridizationPC',
-            # Vertical trace system is only coupled vertically in columns
-            # block ILU is a direct solver!
-            'vert_hybridization': {'ksp_type': 'preonly',
-                                   'pc_type': 'bjacobi',
-                                   'sub_pc_type': 'ilu'}}
+exner_params = {'ksp_type': 'gmres',
+                'ksp_monitor_true_residual': None,
+                'pc_type': 'python',
+                'mat_type': 'matfree',
+                'pc_python_type': 'gusto.VerticalHybridizationPC',
+                # Vertical trace system is only coupled vertically in columns
+                # block ILU is a direct solver!
+                'vert_hybridization': {'ksp_type': 'preonly',
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'}}
 
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=0.5,
-                                 params=piparams)
+compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+                                 top=True, exner_boundary=0.5,
+                                 params=exner_params)
 
 
 def minimum(f):
@@ -118,16 +118,16 @@ static void minify(double *a, double *b) {
     return fmin.data[0]
 
 
-p0 = minimum(Pi)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, params=piparams)
-p1 = minimum(Pi)
+p0 = minimum(exner)
+compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+                                 top=True, params=exner_params)
+p1 = minimum(exner)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
-pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=pi_top, solve_for_rho=True,
-                                 params=piparams)
+exner_top = (1.-beta)/alpha
+compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+                                 top=True, exner_boundary=exner_top, solve_for_rho=True,
+                                 params=exner_params)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
