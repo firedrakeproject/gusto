@@ -55,7 +55,7 @@ def run_gw_incompressible(dirname):
     state, eqns = setup_gw(dirname)
     x = TimeLevelFields(state, [eqns])
     xn = x.n
-    forcing = Forcing(eqns, state.dt, alpha=1.)
+    forcing = Forcing(eqns, alpha=1.)
     forcing.apply(xn, xn, xn(eqns.field_name), label="explicit")
     u = xn('u')
     w = Function(state.spaces("DG")).interpolate(u[2])

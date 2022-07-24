@@ -114,6 +114,9 @@ class LabelledForm(object):
     def __mul__(self, other):
         if type(other) in (float, int):
             other = Constant(other)
+        # UFL can cancel constants to a Zero type which needs treating separately
+        elif type(other) is ufl.constantvalue.Zero:
+            other = Constant(0.0)
         elif type(other) not in [Constant, ufl.algebra.Product]:
             return NotImplemented
         return self.label_map(all_terms, lambda t: Term(other*t.form, t.labels))
