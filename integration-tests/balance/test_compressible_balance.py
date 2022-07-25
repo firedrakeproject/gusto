@@ -43,7 +43,7 @@ def setup_balance(dirname):
     Tsurf = Constant(300.)
     theta0.interpolate(Tsurf)
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner
     compressible_hydrostatic_balance(state, theta0, rho0, solve_for_rho=True)
 
     state.set_reference_profiles([('rho', rho0),

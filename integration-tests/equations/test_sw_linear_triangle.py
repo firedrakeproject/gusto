@@ -6,8 +6,7 @@ errors in the fields.
 
 from os import path
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
-from math import pi
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
 from netCDF4 import Dataset
 
 

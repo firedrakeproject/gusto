@@ -65,7 +65,7 @@ def setup_unsaturated(dirname, recovered):
     theta_d = Function(Vt).interpolate(Tsurf)
     RH = Function(Vt).interpolate(humidity)
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner
     unsaturated_hydrostatic_balance(state, theta_d, RH)
 
     state.set_reference_profiles([('rho', rho0),

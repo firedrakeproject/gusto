@@ -10,8 +10,7 @@ unit-tests
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace)
-from math import pi
+                       as_vector, FunctionSpace, pi)
 from netCDF4 import Dataset
 import pytest
 

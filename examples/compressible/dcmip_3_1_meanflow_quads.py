@@ -126,7 +126,7 @@ compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  top=False,
-                                 pi_boundary=(p/p_0)**kappa)
+                                 exner_boundary=(p/p_0)**kappa)
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)

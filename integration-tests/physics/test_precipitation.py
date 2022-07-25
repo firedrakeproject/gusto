@@ -8,9 +8,8 @@ from os import path
 from gusto import *
 from firedrake import PeriodicIntervalMesh, Constant, \
     SpatialCoordinate, ExtrudedMesh, sqrt, \
-    conditional, cos, as_vector
+    conditional, cos, as_vector, pi
 from netCDF4 import Dataset
-from math import pi
 
 
 def setup_fallout(dirname):

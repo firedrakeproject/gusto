@@ -7,8 +7,7 @@ to act as a convergence test.
 """
 
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
-from math import pi
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
 import sys
 
 day = 24.*60.*60.

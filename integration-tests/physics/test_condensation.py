@@ -13,9 +13,8 @@ from os import path
 from gusto import *
 from firedrake import (as_vector, Constant, sin, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, FunctionSpace,
-                       Function, sqrt, conditional, cos)
+                       Function, sqrt, conditional, cos, pi)
 from netCDF4 import Dataset
-from math import pi
 
 
 def setup_condens(dirname):

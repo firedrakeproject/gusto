@@ -6,8 +6,7 @@ This uses an icosahedral mesh of the sphere.
 """
 
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector
-from math import pi
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
 import sys
 
 dt = 3600.

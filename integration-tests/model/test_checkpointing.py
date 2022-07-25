@@ -5,7 +5,7 @@ timesteps, checkpoints and then starts a new run from the checkpoint file.
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       SpatialCoordinate, exp, sin, Function, as_vector)
+                       SpatialCoordinate, exp, sin, Function, as_vector, pi)
 import numpy as np
 import itertools
 
@@ -62,12 +62,12 @@ def setup_sk(dirname):
     theta_b = Function(Vt).interpolate(thetab)
     rho_b = Function(Vr)
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner
     compressible_hydrostatic_balance(state, theta_b, rho_b)
 
     a = 5.0e3
     deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(np.pi*z/H)/(1 + (x - L/2)**2/a**2)
+    theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
     u0.project(as_vector([20.0, 0.0]))

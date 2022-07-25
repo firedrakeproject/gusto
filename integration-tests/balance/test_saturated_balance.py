@@ -69,7 +69,7 @@ def setup_saturated(dirname, recovered):
     theta_e = Function(Vt).interpolate(Tsurf)
     water_t = Function(Vt).interpolate(total_water)
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner
     saturated_hydrostatic_balance(state, theta_e, water_t)
     water_c0.assign(water_t - water_v0)
 

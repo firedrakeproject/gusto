@@ -17,7 +17,7 @@ from gusto.recovery import Recoverer, Boundary_Method
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
-           "compressible_hydrostatic_balance", "remove_initial_w", "calculate_Pi0",
+           "compressible_hydrostatic_balance", "remove_initial_w", "calculate_exner0",
            "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 
@@ -98,8 +98,8 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
     p0.project(pprime)
 
 
-def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
-                                     top=False, pi_boundary=Constant(1.0),
+def compressible_hydrostatic_balance(state, theta0, rho0, exner0=None,
+                                     top=False, exner_boundary=Constant(1.0),
                                      mr_t=None,
                                      solve_for_rho=False,
                                      params=None):
@@ -113,8 +113,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     :arg rho0: :class:`.Function` to write the initial density into.
     :arg top: If True, set a boundary condition at the top. Otherwise, set
     it at the bottom.
-    :arg pi_boundary: a field or expression to use as boundary data for pi on
-    the top or bottom as specified.
+    :arg exner_boundary: a field or expression to use as boundary data for exner
+    on the top or bottom as specified.
     :arg mr_t: the initial total water mixing ratio field.
     """
 
@@ -123,8 +123,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     Vu = state.spaces("HDiv")
     Vv = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
     W = MixedFunctionSpace((Vv, VDG))
-    v, pi = TrialFunctions(W)
-    dv, dpi = TestFunctions(W)
+    v, exner = TrialFunctions(W)
+    dv, dexner = TestFunctions(W)
 
     n = FacetNormal(state.mesh)
 
@@ -137,8 +137,8 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         theta = theta0 / (1 + mr_t)
 
     alhs = (
-        (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
-        + dpi*div(theta*v)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx
+        + dexner*div(theta*v)*dx
     )
 
     if top:
@@ -148,7 +148,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         bmeasure = ds_b
         bstring = "top"
 
-    arhs = -cp*inner(dv, n)*theta*pi_boundary*bmeasure
+    arhs = -cp*inner(dv, n)*theta*exner_boundary*bmeasure
 
     # Possibly make g vary with spatial coordinates?
     g = state.parameters.g
@@ -158,7 +158,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
     bcs = [DirichletBC(W.sub(0), zero(), bstring)]
 
     w = Function(W)
-    PiProblem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
+    exner_problem = LinearVariationalProblem(alhs, arhs, w, bcs=bcs)
 
     if params is None:
         params = {'ksp_type': 'preonly',
@@ -171,26 +171,26 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
                                          'pc_type': 'bjacobi',
                                          'sub_pc_type': 'ilu'}}
 
-    PiSolver = LinearVariationalSolver(PiProblem,
-                                       solver_parameters=params,
-                                       options_prefix="pisolver")
+    exner_solver = LinearVariationalSolver(exner_problem,
+                                           solver_parameters=params,
+                                           options_prefix="exner_solver")
 
-    PiSolver.solve()
-    v, Pi = w.split()
-    if pi0 is not None:
-        pi0.assign(Pi)
+    exner_solver.solve()
+    v, exner = w.split()
+    if exner0 is not None:
+        exner0.assign(exner)
 
     if solve_for_rho:
         w1 = Function(W)
         v, rho = w1.split()
-        rho.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
+        rho.interpolate(thermodynamics.rho(state.parameters, theta0, exner))
         v, rho = split(w1)
-        dv, dpi = TestFunctions(W)
-        pi = thermodynamics.pi(state.parameters, rho, theta0)
+        dv, dexner = TestFunctions(W)
+        exner = thermodynamics.exner_pressure(state.parameters, rho, theta0)
         F = (
-            (cp*inner(v, dv) - cp*div(dv*theta)*pi)*dx
-            + dpi*div(theta0*v)*dx
-            + cp*inner(dv, n)*theta*pi_boundary*bmeasure
+            (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx
+            + dexner*div(theta0*v)*dx
+            + cp*inner(dv, n)*theta*exner_boundary*bmeasure
         )
         F += g*inner(dv, state.k)*dx
         rhoproblem = NonlinearVariationalProblem(F, w1, bcs=bcs)
@@ -200,7 +200,7 @@ def compressible_hydrostatic_balance(state, theta0, rho0, pi0=None,
         v, rho_ = w1.split()
         rho0.assign(rho_)
     else:
-        rho0.interpolate(thermodynamics.rho(state.parameters, theta0, Pi))
+        rho0.interpolate(thermodynamics.rho(state.parameters, theta0, exner))
 
 
 def remove_initial_w(u):
@@ -214,17 +214,17 @@ def remove_initial_w(u):
     u.assign(uin)
 
 
-def calculate_Pi0(state, theta0, rho0):
+def calculate_exner0(state, theta0, rho0):
     # exner function
     Vr = rho0.function_space()
-    Pi = Function(Vr).interpolate(thermodynamics.pi(state.parameters, rho0, theta0))
-    Pi0 = assemble(Pi*dx)/assemble(Constant(1)*dx(domain=state.mesh))
+    exner = Function(Vr).interpolate(thermodynamics.exner_pressure(state.parameters, rho0, theta0))
+    exner0 = assemble(exner*dx)/assemble(Constant(1)*dx(domain=state.mesh))
 
-    return Pi0
+    return exner0
 
 
-def saturated_hydrostatic_balance(state, theta_e, mr_t, pi0=None,
-                                  top=False, pi_boundary=Constant(1.0),
+def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
+                                  top=False, exner_boundary=Constant(1.0),
                                   max_outer_solve_count=40,
                                   max_theta_solve_count=5,
                                   max_inner_solve_count=3):
@@ -242,10 +242,10 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, pi0=None,
     :arg state: The :class:`State` object.
     :arg theta_e: The initial wet equivalent potential temperature profile.
     :arg mr_t: The total water pseudo-mixing ratio profile.
-    :arg pi0: Optional function to put exner pressure into.
+    :arg exner0: Optional function to put exner pressure into.
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
-    :arg pi_boundary: The value of pi on the specified boundary.
+    :arg exner_boundary: The value of exner on the specified boundary.
     :arg max_outer_solve_count: Max number of outer iterations for balance solver.
     :arg max_theta_solve_count: Max number of iterations for theta solver (middle part of solve).
     :arg max_inner_solve_count: Max number of iterations on the inner most
@@ -256,7 +256,7 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, pi0=None,
     rho0 = state.fields('rho')
     mr_v0 = state.fields('vapour_mixing_ratio')
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner pressure
     Vt = theta0.function_space()
     Vr = rho0.function_space()
 
@@ -282,16 +282,16 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, pi0=None,
     delta = 0.8
 
     # expressions for finding theta0 and mr_v0 from theta_e and mr_t
-    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-    p = thermodynamics.p(state.parameters, pie)
-    T = thermodynamics.T(state.parameters, theta0, pie, mr_v0)
+    exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, exner)
+    T = thermodynamics.T(state.parameters, theta0, exner, mr_v0)
     r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
     theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, mr_v0, mr_t)
 
     for i in range(max_outer_solve_count):
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
-                                         pi_boundary=pi_boundary, mr_t=mr_t,
+                                         exner_boundary=exner_boundary, mr_t=mr_t,
                                          solve_for_rho=True)
 
         # damp solution
@@ -324,18 +324,18 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, pi0=None,
         if i == max_outer_solve_count:
             raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
-    if pi0 is not None:
-        pie = thermodynamics.pi(state.parameters, rho0, theta0)
-        pi0.interpolate(pie)
+    if exner0 is not None:
+        exner = thermodynamics.exner(state.parameters, rho0, theta0)
+        exner0.interpolate(exner)
 
     # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
-                                     pi_boundary=pi_boundary,
+                                     exner_boundary=exner_boundary,
                                      mr_t=mr_t, solve_for_rho=True)
 
 
-def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
-                                    top=False, pi_boundary=Constant(1.0),
+def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
+                                    top=False, exner_boundary=Constant(1.0),
                                     max_outer_solve_count=40,
                                     max_inner_solve_count=20):
     """
@@ -352,10 +352,10 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     :arg state: The :class:`State` object.
     :arg theta_d: The initial dry potential temperature profile.
     :arg H: The relative humidity profile.
-    :arg pi0: Optional function to put exner pressure into.
+    :arg exner0: Optional function to put exner pressure into.
     :arg top: If True, set a boundary condition at the top, otherwise
               it will be at the bottom.
-    :arg pi_boundary: The value of pi on the specified boundary.
+    :arg exner_boundary: The value of exner on the specified boundary.
     :arg max_outer_solve_count: Max number of iterations for outer loop of balance solver.
     :arg max_inner_solve_count: Max number of iterations for inner loop of balanace solver.
     """
@@ -364,7 +364,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     rho0 = state.fields('rho')
     mr_v0 = state.fields('vapour_mixing_ratio')
 
-    # Calculate hydrostatic Pi
+    # Calculate hydrostatic exner pressure
     Vt = theta0.function_space()
     Vr = rho0.function_space()
     R_d = state.parameters.R_d
@@ -392,22 +392,22 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
     delta = 1.0
 
     # make expressions for determining mr_v0
-    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-    p = thermodynamics.p(state.parameters, pie)
-    T = thermodynamics.T(state.parameters, theta0, pie, mr_v0)
+    exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+    p = thermodynamics.p(state.parameters, exner)
+    T = thermodynamics.T(state.parameters, theta0, exner, mr_v0)
     r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
 
     # make expressions to evaluate residual
-    pi_ev = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-    p_ev = thermodynamics.p(state.parameters, pi_ev)
-    T_ev = thermodynamics.T(state.parameters, theta0, pi_ev, mr_v0)
+    exner_ev = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
+    p_ev = thermodynamics.p(state.parameters, exner_ev)
+    T_ev = thermodynamics.T(state.parameters, theta0, exner_ev, mr_v0)
     RH_ev = thermodynamics.RH(state.parameters, mr_v0, T_ev, p_ev)
     RH = Function(Vt)
 
     for i in range(max_outer_solve_count):
         # solve for rho with theta_vd and w_v guesses
         compressible_hydrostatic_balance(state, theta0, rho_h, top=top,
-                                         pi_boundary=pi_boundary, mr_t=mr_v0,
+                                         exner_boundary=exner_boundary, mr_t=mr_v0,
                                          solve_for_rho=True)
 
         # damp solution
@@ -436,11 +436,11 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, pi0=None,
         if i == max_outer_solve_count:
             raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
-    if pi0 is not None:
-        pie = thermodynamics.pi(state.parameters, rho0, theta0)
-        pi0.interpolate(pie)
+    if exner0 is not None:
+        exner = thermodynamics.exner_pressure(state.parameters, rho0, theta0)
+        exner0.interpolate(exner)
 
     # do one extra solve for rho
     compressible_hydrostatic_balance(state, theta0, rho0, top=top,
-                                     pi_boundary=pi_boundary,
+                                     exner_boundary=exner_boundary,
                                      mr_t=mr_v0, solve_for_rho=True)

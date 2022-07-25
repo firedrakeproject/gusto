@@ -74,8 +74,8 @@ for delta, dt in res_dt.items():
     rho_b = Function(Vr)
     exner = Function(Vr)
 
-    # Calculate hydrostatic Pi
-    compressible_hydrostatic_balance(state, theta_b, rho_b, pi0=exner,
+    # Calculate hydrostatic exner
+    compressible_hydrostatic_balance(state, theta_b, rho_b, exner0=exner,
                                      solve_for_rho=True)
 
     x = SpatialCoordinate(mesh)
