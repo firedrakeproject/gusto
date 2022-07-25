@@ -2,7 +2,6 @@ from gusto.active_tracers import *                   # noqa
 from gusto.configuration import *                    # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion import *                        # noqa
-from gusto.eady_diagnostics import *                 # noqa
 from gusto.equations import *                        # noqa
 from gusto.fml import *                              # noqa
 from gusto.forcing import *                          # noqa

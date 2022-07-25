@@ -90,9 +90,9 @@ class Condensation(Physics):
         R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, Pi)
+        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, exner)
         L_v = thermodynamics.Lv(state.parameters, T)
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * water_l
@@ -374,9 +374,9 @@ class Evaporation(Physics):
         R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, Pi)
+        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, exner)
         L_v = thermodynamics.Lv(state.parameters, T)
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * water_l

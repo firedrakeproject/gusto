@@ -3,12 +3,13 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunctions, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
-                       as_vector, split, Constant)
+                       split, Constant)
 from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis, replace_trial_function)
-from gusto.thermodynamics import pi as Pi
+                          name, pressure_gradient, coriolis,
+                          replace_trial_function, hydrostatic)
+from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
                                    vector_invariant_form,
                                    vector_manifold_advection_form,
@@ -610,7 +611,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
         thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
         zero_expr = Constant(0.0)*theta
-        exner_pi = Pi(state.parameters, rho, theta)
+        exner = exner_pressure(state.parameters, rho, theta)
         n = FacetNormal(state.mesh)
 
         # -------------------------------------------------------------------- #
@@ -680,8 +681,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = name(subject(prognostic(
-            cp*(-div(theta_v*w)*exner_pi*dx
-                + jump(theta_v*w, n)*avg(exner_pi)*dS_v), "u"), self.X), "pressure_gradient")
+            cp*(-div(theta_v*w)*exner*dx
+                + jump(theta_v*w, n)*avg(exner)*dS_v), "u"), self.X), "pressure_gradient")
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
@@ -771,47 +772,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
 
 
-class CompressibleEadyEquations(CompressibleEulerEquations):
-
-    def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
-                 u_transport_option="vector_invariant_form",
-                 diffusion_options=None,
-                 no_normal_flow_bc_ids=None,
-                 active_tracers=None):
-
-        super().__init__(state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
-                         Omega=Omega, sponge=sponge,
-                         u_transport_option=u_transport_option,
-                         diffusion_options=diffusion_options,
-                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
-
-        dthetady = state.parameters.dthetady
-        Pi0 = state.parameters.Pi0
-        cp = state.parameters.cp
-        y_vec = as_vector([0., 1., 0.])
-
-        W = self.function_space
-        w, _, gamma = TestFunctions(W)
-        X = self.X
-        u, rho, theta = split(X)
-
-        exner_pi = Pi(state.parameters, rho, theta)
-
-        self.residual -= subject(prognostic(
-            cp*dthetady*(exner_pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
-
-        self.residual += subject(prognostic(
-            gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
-
-
-class LinearCompressibleEulerEquations(CompressibleEulerEquations):
+class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     """
-    The linear version of the compressible Euler equations.
+    The hydrostatic version of the compressible Euler equations.
 
     # TODO: add documentation
     """
@@ -826,9 +789,6 @@ class LinearCompressibleEulerEquations(CompressibleEulerEquations):
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
 
-        if active_tracers is not None:
-            raise NotImplementedError('Tracers not implemented for linear Compressible Euler equations')
-
         super().__init__(state, family, degree, Omega=Omega, sponge=sponge,
                          extra_terms=extra_terms,
                          terms_to_linearise=terms_to_linearise,
@@ -837,28 +797,29 @@ class LinearCompressibleEulerEquations(CompressibleEulerEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Use the underlying routine to do a first linearisation of the equations
-        # TODO: should call linearise routine here but not yet implemented!
-        # self.linearise_equation_set()
-
-        # rho and theta transport terms are special cases
-        rho_b = state.fields('rhobar')
-        theta_b = state.fields('thetabar')
-        phi, gamma = self.tests[1:3]
-
-        # Replace rho transport with linear version
-        rho_adv = prognostic(linear_continuity_form(state, phi, rho_b, facet_term=True), "rho")
         self.residual = self.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "rho",
-            map_if_true=lambda t: Term(rho_adv.form, t.labels)
+            lambda t: t.has_label(time_derivative),
+            map_if_true=lambda t: hydrostatic(t, self.hydrostatic_projection(t))
         )
 
-        # Replace theta transport with linear version
-        theta_adv = prognostic(linear_advection_form(state, gamma, theta_b), "theta")
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "theta",
-            map_if_true=lambda t: Term(theta_adv.form, t.labels)
-        )
+        k = self.state.k
+        u = split(self.X)[0]
+        self.residual += name(
+            subject(
+                prognostic(
+                    -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
+                self.X),
+            "hydrostatic_form")
+
+    def hydrostatic_projection(self, t):
+
+        # TODO: make this more general, i.e. should work on the sphere
+        assert not self.state.on_sphere, "the hydrostatic projection is not yet implemented for spherical geometry"
+        k = Constant((*self.state.k, 0, 0))
+        X = t.get(subject)
+
+        new_subj = X - k * inner(X, k)
+        return replace_subject(new_subj)(t)
 
 
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
@@ -996,37 +957,3 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # TODO: add linearisation states for variables
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
-
-
-class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
-    def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'p': [time_derivative],
-                                     'b': [time_derivative, transport]},
-                 u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None,
-                 active_tracers=None):
-
-        super().__init__(state, family, degree,
-                         Omega=Omega,
-                         terms_to_linearise=terms_to_linearise,
-                         u_transport_option=u_transport_option,
-                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
-
-        dbdy = state.parameters.dbdy
-        H = state.parameters.H
-        _, _, z = SpatialCoordinate(state.mesh)
-        eady_exp = Function(state.spaces("DG")).interpolate(z-H/2.)
-        y_vec = as_vector([0., 1., 0.])
-
-        W = self.function_space
-        w, _, gamma = TestFunctions(W)
-        X = self.X
-        u, _, b = split(X)
-
-        self.residual += subject(prognostic(
-            dbdy*eady_exp*inner(w, y_vec)*dx, "u"), X)
-
-        self.residual += subject(prognostic(
-            gamma*dbdy*inner(u, y_vec)*dx, "b"), X)
