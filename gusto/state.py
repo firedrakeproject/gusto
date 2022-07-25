@@ -173,6 +173,7 @@ class PointDataOutput(object):
         :arg field_creator: The field creator (only used to determine
             datatype and shape of fields).
         :kwarg create: If False, assume that filename already exists
+
         """
         # Overwrite on creation.
         self.dump_count = 0
@@ -299,6 +300,7 @@ class State(object):
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg diagnostic_fields: list of diagnostic field classes
+
     """
 
     def __init__(self, mesh, dt,
@@ -401,8 +403,8 @@ class State(object):
         Setup checkpoint file
 
         :arg tmax: model stop time
-        :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk. (default is False).
+        :arg pickup: recover state from the checkpointing file if true, otherwise dump and checkpoint to disk. (default is False).
+
         """
 
         if any([self.output.dump_vtus, self.output.dumplist_latlon,

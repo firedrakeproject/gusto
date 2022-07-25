@@ -24,9 +24,10 @@
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc',
-              'sphinx.ext.mathjax', 'sphinx.ext.intersphinx',
+              'sphinx.ext.mathjax',
+              'sphinx.ext.intersphinx',
               'sphinx.ext.viewcode',
-              #'sphinxcontrib.youtube',
+              'sphinx.ext.viewcode',
               'sphinxcontrib.bibtex']
 
 mathjax_path = 'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'
@@ -105,7 +106,9 @@ html_theme = 'agogo'
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#html_theme_options = {}
+html_theme_options = {
+    'textalign': 'left',
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 html_theme_path = ['_themes']
@@ -261,8 +264,3 @@ intersphinx_mapping = {
 }
 
 bibtex_bibfiles = ['_static/bibliography.bib']
-
-html_theme_options = {
-    'prev_next_buttons_location': None
-}
-
