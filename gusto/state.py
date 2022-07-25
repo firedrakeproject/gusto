@@ -293,21 +293,20 @@ class State(object):
     Build a model state to keep the variables in, and specify parameters.
 
     :arg mesh: The :class:`Mesh` to use.
-    :arg sponge_function: (optional) Function specifying a sponge layer.
+    :arg dt: The time step as a :class:`Constant`. If a float or int is passed,
+             it will be cast to a :class:`Constant`.
     :arg output: class containing output parameters
     :arg parameters: class containing physical parameters
     :arg diagnostics: class containing diagnostic methods
     :arg diagnostic_fields: list of diagnostic field classes
     """
 
-    def __init__(self, mesh,
-                 dt=None,
+    def __init__(self, mesh, dt,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
 
-        self.dt = dt
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
@@ -358,15 +357,21 @@ class State(object):
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
 
-        #  Constant to hold current time
-        self.t = Constant(0.0)
-
         # setup logger
         logger.setLevel(output.log_level)
         set_log_handler(mesh.comm)
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(parameters).items()))
+
+        #  Constant to hold current time
+        self.t = Constant(0.0)
+        if type(dt) is Constant:
+            self.dt = dt
+        elif type(dt) in (float, int):
+            self.dt = Constant(dt)
+        else:
+            raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
     def setup_diagnostics(self):
         """
@@ -460,7 +465,7 @@ class State(object):
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
-            ndt = int(tmax/self.dt)
+            ndt = int(tmax/float(self.dt))
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,

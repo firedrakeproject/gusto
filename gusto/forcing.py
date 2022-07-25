@@ -23,10 +23,11 @@ class Forcing(object):
     term - these will be multiplied by the appropriate test function.
     """
 
-    def __init__(self, equation, dt, alpha):
+    def __init__(self, equation, alpha):
 
         self.field_name = equation.field_name
         implicit_terms = ["incompressibility", "sponge"]
+        dt = equation.state.dt
 
         W = equation.function_space
         self.x0 = Function(W)

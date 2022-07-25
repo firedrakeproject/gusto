@@ -153,8 +153,8 @@ class CompressibleSolver(TimesteppingSolver):
         import numpy as np
 
         state = self.state
-        Dt = state.dt
-        beta_ = Dt*self.alpha
+        dt = state.dt
+        beta_ = dt*self.alpha
         cp = state.parameters.cp
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
@@ -162,7 +162,6 @@ class CompressibleSolver(TimesteppingSolver):
         Vrho = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        dt = Constant(Dt)
         beta = Constant(beta_)
         beta_cp = Constant(beta_ * cp)
 
@@ -419,14 +418,13 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.dt
-        beta_ = Dt*self.alpha
+        dt = state.dt
+        beta_ = dt*self.alpha
         Vu = state.spaces("HDiv")
         Vb = state.spaces("theta")
         Vp = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        dt = Constant(Dt)
         beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
@@ -538,13 +536,14 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, dt, alpha):
+    def __init__(self, equation, alpha):
 
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
 
+        dt = equation.state.dt
         W = equation.function_space
         beta = dt*alpha
 
