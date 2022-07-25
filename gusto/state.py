@@ -373,7 +373,6 @@ class State(object):
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
-
     def setup_diagnostics(self):
         """
         Add special case diagnostic fields
