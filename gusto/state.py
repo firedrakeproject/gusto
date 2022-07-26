@@ -23,11 +23,13 @@ class SpaceCreator(object):
         self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self._initialised_base_spaces = False
 
-    def __call__(self, name, family=None, degree=None):
+    def __call__(self, name, family=None, degree=None, V=None):
         try:
             return getattr(self, name)
         except AttributeError:
-            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
+            if V is not None:
+                value = V
+            elif name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)

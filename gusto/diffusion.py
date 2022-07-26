@@ -1,4 +1,4 @@
-from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v,
+from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v, dS,
                        FacetNormal)
 from gusto.labels import diffusion
 
@@ -21,6 +21,7 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
     kappa = parameters.kappa
     mu = parameters.mu
 
+    dS_ = (dS_v + dS_h) if q.function_space().extruded else dS
     n = FacetNormal(state.mesh)
 
     form = inner(grad(test), grad(q)*kappa)*dx
@@ -34,7 +35,6 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
         )*dS
         return fluxes
 
-    form += get_flux_form(dS_v, kappa)
-    form += get_flux_form(dS_h, kappa)
+    form += get_flux_form(dS_, kappa)
 
     return diffusion(form)

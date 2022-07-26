@@ -13,7 +13,7 @@ from math import gamma
 from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
+__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments", "InstantRain"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -422,4 +422,40 @@ class Evaporation(Physics):
         self.lim_evap_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())
+        self.rain.assign(self.rain_new.interpolate())
+
+
+class InstantRain(Physics):
+    """
+    The process of converting moisture above the saturation curve to rain.
+
+    :arg state: :class:`.State.` object.
+    :arg saturation_curve: the saturation function,
+        above which excess moisture is converted to
+        rain
+    """
+
+    def __init__(self, state, saturation_curve):
+        super().__init__(state)
+
+        self.saturation = saturation_curve
+
+        # obtain the fields
+        self.moisture = state.fields("m")
+        self.rain = state.fields("r")
+
+        # obtain function space
+        Vm = self.moisture.function_space()
+        Vr = self.rain.function_space()
+
+        # convert moisture above saturation curve to rain
+        self.moisture_new = Interpolator(conditional(
+            self.moisture > self.saturation, self.saturation,
+            self.moisture), Vm)
+        self.rain_new = Interpolator(conditional(
+            self.moisture > self.saturation, self.rain + (self.moisture-self.saturation),
+            self.rain), Vr)
+
+    def apply(self):
+        self.moisture.assign(self.moisture_new.interpolate())
         self.rain.assign(self.rain_new.interpolate())
