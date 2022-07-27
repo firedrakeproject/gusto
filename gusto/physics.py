@@ -457,5 +457,5 @@ class InstantRain(Physics):
             self.rain), Vr)
 
     def apply(self):
-        self.moisture.assign(self.moisture_new.interpolate())
         self.rain.assign(self.rain_new.interpolate())
+        self.moisture.assign(self.moisture_new.interpolate())
