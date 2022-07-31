@@ -1,6 +1,8 @@
 """
 Tests discretisations of the advection-diffusion equation. This checks the
 errornorm for the resulting field to ensure that the result is reasonable.
+
+TODO: no it doesn't! Needs some check of correctness
 """
 
 from firedrake import as_vector

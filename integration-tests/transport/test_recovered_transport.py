@@ -1,82 +1,50 @@
 """
 This tests the transport of a scalar-valued field using the recovery wrapper.
-
-TODO: This needs to explicitly check that the field has been transported to
-the appropriate place. Use the tracer setup ...
+The computed solution is compared with a true one to check that the transport
+is working correctly.
 """
 
 from gusto import *
-from firedrake import (as_vector, Constant, PeriodicIntervalMesh,
-                       SpatialCoordinate, ExtrudedMesh, FunctionSpace,
-                       Function, conditional, sqrt)
+from firedrake import FunctionSpace, norm
+import pytest
 
-# This setup creates a sharp bubble of warm air in a vertical slice
-# This bubble is then transported by a prescribed transport scheme
-
-
-def run(state, transport_scheme, tmax):
+def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
+    return norm(state.fields("f") - f_end) / norm(f_end)
 
 
-def test_recovered_space_setup(tmpdir):
+@pytest.mark.parametrize("geometry", ["slice", "sphere"])
+def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
-    # declare grid shape, with length L and height H
-    L = 400.
-    H = 400.
-    nlayers = int(H / 20.)
-    ncolumns = int(L / 20.)
+    # Make mesh and state using routine from conftest
+    setup = tracer_setup(tmpdir, geometry, degree=0)
+    state = setup.state
+    mesh = state.mesh
 
-    # make mesh
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-
-    dt = 1.0
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=5)
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output)
-
-    # spaces
-    Vpsi = FunctionSpace(mesh, "CG", 2)
+    # Spaces for recovery
     VDG0 = FunctionSpace(mesh, "DG", 0)
     VDG1 = state.spaces("DG", "DG", 1)
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
-    tracereqn = ContinuityEquation(state, VDG0, "tracer", ufamily="CG",
-                                   udegree=1)
-    # initialise fields
-    u0 = state.fields("u")
+    # Make equation
+    eqn = ContinuityEquation(state, VDG0, "f",
+                             ufamily=setup.family, udegree=1)
 
-    x, z = SpatialCoordinate(mesh)
+    # Initialise fields
+    state.fields("f").interpolate(setup.f_init)
+    state.fields("u").project(setup.uexpr)
 
-    # set up velocity field
-    u_max = Constant(10.0)
-    psi_expr = - u_max * z
-    psi0 = Function(Vpsi).interpolate(psi_expr)
-
-    # make a gradperp
-    gradperp = lambda u: as_vector([-u.dx(1), u.dx(0)])
-
-    u0.project(gradperp(psi0))
-
-    # set up bubble
-    xc = 200.
-    zc = 200.
-    rc = 100.
-    tracer = state.fields("tracer")
-    tracer.interpolate(conditional(sqrt((x - xc) ** 2.0) < rc,
-                                   conditional(sqrt((z - zc) ** 2.0) < rc,
-                                               Constant(0.2),
-                                               Constant(0.0)), Constant(0.0)))
-
-    # set up transport scheme
+    # Declare transport scheme
     recovered_opts = RecoveredOptions(embedding_space=VDG1,
                                       recovered_space=VCG1,
                                       broken_space=VDG0,
                                       boundary_method=Boundary_Method.dynamics)
 
-    transport_scheme = [(tracereqn, SSPRK3(state, options=recovered_opts))]
+    transport_scheme = [(eqn, SSPRK3(state, options=recovered_opts))]
 
-    run(state, transport_scheme, tmax=10)
+    # Run and check error
+    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    assert error < setup.tol, \
+        'The transport error is greater than the permitted tolerance'
+

@@ -11,7 +11,7 @@ import pytest
 def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end)
+    return norm(state.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
@@ -45,7 +45,9 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
     elif scheme == "implicit_midpoint":
         transport_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
 
-    assert run(state, transport_scheme, setup.tmax, setup.f_end) < setup.tol
+    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    assert error < setup.tol, \
+        'The transport error is greater than the permitted tolerance'
 
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
@@ -58,7 +60,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     state = setup.state
 
     gdim = state.mesh.geometric_dimension()
-    f_init = as_vector((setup.f_init, *[0.]*(gdim-1)))
+    f_init = as_vector([setup.f_init]*gdim)
     if space == "CG":
         V = VectorFunctionSpace(state.mesh, "CG", 1)
         ibp = IntegrateByParts.NEVER
@@ -85,5 +87,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     elif scheme == "implicit_midpoint":
         transport_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
 
-    f_end = as_vector((setup.f_end, *[0.]*(gdim-1)))
-    assert run(state, transport_scheme, setup.tmax, f_end) < setup.tol
+    f_end = as_vector([setup.f_end]*gdim)
+    error = run(state, transport_scheme, setup.tmax, f_end)
+    assert error < setup.tol, \
+        'The transport error is greater than the permitted tolerance'

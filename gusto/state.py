@@ -35,6 +35,8 @@ class SpaceCreator(object):
                 value = self.build_dg_space(degree)
             elif family == "CG":
                 value = self.build_cg_space(degree)
+            else:
+                raise ValueError(f'State has no space corresponding to {name}')
             setattr(self, name, value)
             return value
 
