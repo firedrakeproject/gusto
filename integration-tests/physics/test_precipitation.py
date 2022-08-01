@@ -6,9 +6,8 @@ The test passes if there is no rain remaining at the end of the test.
 
 from os import path
 from gusto import *
-from firedrake import PeriodicIntervalMesh, Constant, \
-    SpatialCoordinate, ExtrudedMesh, sqrt, \
-    conditional, cos, as_vector, pi
+from firedrake import (PeriodicIntervalMesh, SpatialCoordinate,
+                       ExtrudedMesh, sqrt, conditional, cos, pi)
 from netCDF4 import Dataset
 
 
@@ -53,13 +52,9 @@ def setup_fallout(dirname):
 
     rain0.interpolate(rain_expr)
 
-    def zero_u(t):
-        return as_vector((Constant(0.), Constant(0.)))
-
     # build time stepper
     stepper = PrescribedTransport(state, problem,
-                                  physics_list=physics_list,
-                                  prescribed_transporting_velocity=zero_u)
+                                  physics_list=physics_list)
 
     return stepper, 10.0
 
