@@ -9,13 +9,15 @@ from gusto import *
 from collections import namedtuple
 import pytest
 
-opts = ('state', 'tmax', 'f_init', 'f_end', 'family', 'degree', 'uexpr', 'tol')
+opts = ('state', 'tmax', 'f_init', 'f_end', 'family', 'degree',
+        'uexpr', 'umax', 'radius', 'tol')
 TracerSetup = namedtuple('TracerSetup', opts)
 TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 
 def tracer_sphere(tmpdir, degree):
-    mesh = IcosahedralSphereMesh(radius=1,
+    radius = 1
+    mesh = IcosahedralSphereMesh(radius=radius,
                                  refinement_level=3,
                                  degree=1)
     x = SpatialCoordinate(mesh)
@@ -29,7 +31,8 @@ def tracer_sphere(tmpdir, degree):
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
     state = State(mesh, dt=dt, output=output)
 
-    uexpr = as_vector([-x[1], x[0], 0.0])
+    umax = 1.0
+    uexpr = as_vector([- umax * x[1] / radius, umax * x[0] / radius, 0.0])
 
     tmax = pi/2
     f_init = exp(-x[2]**2 - x[0]**2)
@@ -37,7 +40,8 @@ def tracer_sphere(tmpdir, degree):
 
     tol = 0.05
 
-    return TracerSetup(state, tmax, f_init, f_end, "BDM", degree, uexpr, tol)
+    return TracerSetup(state, tmax, f_init, f_end, "BDM", degree,
+                       uexpr, umax, radius, tol)
 
 
 def tracer_slice(tmpdir, degree):
@@ -61,15 +65,15 @@ def tracer_slice(tmpdir, degree):
     f0 = 0.5
     fmax = 2.0
     xc_init = 0.25
-    xc_final = 0.75
+    xc_end = 0.75
     r_init = sqrt((x[0]-xc_init)**2 + (x[1]-0.5)**2)
-    r_final = sqrt((x[0]-xc_final)**2 + (x[1]-0.5)**2)
+    r_end = sqrt((x[0]-xc_end)**2 + (x[1]-0.5)**2)
     f_init = f0 + (fmax - f0) * exp(-(r_init / width)**2)
-    f_end = f0 + (fmax - f0) * exp(-(r_final / width)**2)
+    f_end = f0 + (fmax - f0) * exp(-(r_end / width)**2)
 
     tol = 0.12
 
-    return TracerSetup(state, tmax, f_init, f_end, "CG", degree, uexpr, tol)
+    return TracerSetup(state, tmax, f_init, f_end, "CG", degree, uexpr, tol=tol)
 
 
 def tracer_blob_slice(tmpdir, degree):

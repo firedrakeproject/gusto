@@ -2,114 +2,75 @@
 This tests the 'auxiliary_equations_and_schemes' option of the timeloop,
 by transporting a passive tracer alongside the dynamical core.
 
-TODO: Don't need to test this with the whole compressible Euler equations.
-Doesn't necessarily test that the tracer has moved to the correct place?
+The test uses the linear shallow-water equations, using initial conditions from
+the Williamson 2 test case, so that the wind corresponds to a solid body
+rotation. The tracer initial condition is a Gaussian bell, the same as is
+used with the transport tests.
 """
 
-from os import path
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       Constant, SpatialCoordinate, pi, Function,
-                       sqrt, conditional, cos)
-from netCDF4 import Dataset
+from firedrake import SpatialCoordinate, Function, norm
+import pytest
 
+def run_tracer(setup):
 
-def setup_tracer(dirname):
+    # Get initial conditions from shared config
+    state = setup.state
+    mesh = state.mesh
+    dt = state.dt
+    output = state.output
 
-    # declare grid shape, with length L and height H
-    L = 1000.
-    H = 1000.
-    nlayers = int(H / 100.)
-    ncolumns = int(L / 100.)
+    x = SpatialCoordinate(state.mesh)
+    H = 0.1
+    parameters = ShallowWaterParameters(H=H)
+    Omega = parameters.Omega
+    g = parameters.g
+    umax = setup.umax
+    R = setup.radius
+    fexpr = 2*Omega*x[2]/R
 
-    # make mesh
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
+    # Need to create a new state containing parameters
+    state = State(mesh, dt=dt, output=output, parameters=parameters)
 
-    dt = 10.
-    output = OutputParameters(dirname=dirname+"/tracer",
-                              dumpfreq=1,
-                              dumplist=['u'],
-                              perturbation_fields=['theta', 'rho'])
-    parameters = CompressibleParameters()
+    # Equations
+    eqns = LinearShallowWaterEquations(state, setup.family,
+                                       setup.degree, fexpr=fexpr)
+    tracer_eqn = AdvectionEquation(state, state.spaces("DG"), "tracer")
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=[Difference('theta', 'tracer')])
+    # Specify initial prognostic fields
+    u0 = state.fields("u")
+    D0 = state.fields("D")
+    tracer0 = state.fields("tracer", D0.function_space())
+    tracer_end = Function(D0.function_space())
 
-    eqns = CompressibleEulerEquations(state, "CG", 1)
-
-    # Initial density and potential temperature fields
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
-
-    tracer_eqn = AdvectionEquation(state, theta0.function_space(), "tracer")
-    # Initial tracer
-    tracer0 = state.fields("tracer")
-
-    # spaces
-    Vt = theta0.function_space()
-    Vr = rho0.function_space()
-
-    # Isentropic background state
-    Tsurf = Constant(300.)
-
-    theta_b = Function(Vt).interpolate(Tsurf)
-    rho_b = Function(Vr)
-
-    # Calculate initial rho
-    compressible_hydrostatic_balance(state, theta_b, rho_b,
-                                     solve_for_rho=True)
-
-    # set up perturbation to theta
-    xc = 500.
-    zc = 350.
-    rc = 250.
-    x = SpatialCoordinate(mesh)
-    r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
-    theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
-
-    theta0.interpolate(theta_b + theta_pert)
-    rho0.interpolate(rho_b)
-    tracer0.interpolate(theta0)
-
-    state.set_reference_profiles([('rho', rho_b),
-                                  ('theta', theta_b)])
+    # Expressions for initial fields corresponding to Williamson 2 test case
+    Dexpr = H - ((R * Omega * umax)*(x[2]*x[2]/(R*R))) / g
+    u0.project(setup.uexpr)
+    D0.interpolate(Dexpr)
+    tracer0.interpolate(setup.f_init)
+    tracer_end.interpolate(setup.f_end)
 
     # set up transport schemes
-    transport_schemes = [ImplicitMidpoint(state, "u"),
-                         SSPRK3(state, "rho"),
-                         SSPRK3(state, "theta", options=SUPGOptions())]
+    transport_schemes = [ForwardEuler(state, "D")]
 
-    # Set up linear solver
-    linear_solver = CompressibleSolver(state, eqns)
+    # Set up tracer transport
+    tracer_transport = [(tracer_eqn, SSPRK3(state))]
 
     # build time stepper
     stepper = CrankNicolson(state, eqns, transport_schemes,
-                            auxiliary_equations_and_schemes=[(tracer_eqn, SSPRK3(state, options=SUPGOptions()))],
-                            linear_solver=linear_solver)
+                            auxiliary_equations_and_schemes=tracer_transport)
 
-    return stepper, 100.0
+    stepper.run(t=0, tmax=setup.tmax)
 
+    error = norm(state.fields("tracer") - tracer_end) / norm(tracer_end)
 
-def run_tracer(dirname):
+    return error
 
-    stepper, tmax = setup_tracer(dirname)
-    stepper.run(t=0, tmax=tmax)
+@pytest.mark.parametrize("geometry", ["sphere"])
+def test_tracer_setup(tmpdir, geometry, tracer_setup):
 
+    setup = tracer_setup(tmpdir, geometry)
+    error = run_tracer(setup)
 
-def test_tracer_setup(tmpdir):
-
-    dirname = str(tmpdir)
-
-    run_tracer(dirname)
-    filename = path.join(dirname, "tracer/diagnostics.nc")
-    data = Dataset(filename, "r")
-
-    diff = data.groups["theta_minus_tracer"]
-    theta = data.groups["theta"]
-    diffl2 = diff["l2"][-1] / theta["l2"][0]
-
-    assert diffl2 < 1e-5
+    assert error < setup.tol, 'The error in transporting ' + \
+        'the tracer is greater than the permitted tolerance'
