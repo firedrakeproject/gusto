@@ -45,7 +45,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
             state.fields(field_name, function_space,
-                         subfield_names=self.field_names)
+                         subfield_names=self.field_names,
+                         pickup=True)
             for fname in self.field_names:
                 state.diagnostics.register(fname)
                 self.bcs[fname] = []

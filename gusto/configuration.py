@@ -84,9 +84,10 @@ class OutputParameters(Configuration):
     dumplist_latlon = []
     dump_diagnostics = True
     checkpoint = True
+    checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
-    #: Should the output fields be interpolated or projected to
+    #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
     #: List of fields to dump error fields for steady state simulation

@@ -107,13 +107,17 @@ class Timestepper(object):
 
         state = self.state
 
-        if pickup:
-            t = state.pickup_from_checkpoint()
+        # TODO: not sure if this should be after setup dump?
+        # if pickup:
+        #     t = state.pickup_from_checkpoint()
 
         state.setup_diagnostics()
 
         with timed_stage("Dump output"):
             state.setup_dump(t, tmax, pickup)
+
+        if pickup:
+            t = state.pickup_from_checkpoint()
 
         state.t.assign(t)
 

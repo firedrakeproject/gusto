@@ -162,7 +162,10 @@ class StateFields(FieldCreator):
                 else:
                     self.to_dump.add(name)
             if pickup:
-                self.to_pickup.add(name)
+                if subfield_names is not None:
+                    self.to_pickup.update(subfield_names)
+                else:
+                    self.to_pickup.add(name)
             return getattr(self, name)
 
 
@@ -488,8 +491,9 @@ class State(object):
 
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the checkpointing
-        if self.output.checkpoint and not pickup:
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, "chkpt"), 'w')
+        if self.output.checkpoint:
+            if not pickup:
+                self.chkpt = CheckpointFile(path.join(self.dumpdir, "chkpt"), 'w')
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
@@ -507,7 +511,10 @@ class State(object):
         """
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
+            if self.output.checkpoint_pickup_filename is None:
+                chkfile = path.join(self.dumpdir, "chkpt")
+            else:
+                chkfile = self.output.checkpoint_pickup_filename
             with CheckpointFile(chkfile, 'r') as chk:
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
