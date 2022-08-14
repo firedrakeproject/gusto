@@ -158,7 +158,10 @@ class StateFields(FieldCreator):
                 else:
                     self.to_dump.add(name)
             if pickup:
-                self.to_pickup.add(name)
+                if subfield_names is not None:
+                    self.to_pickup.update(subfield_names)
+                else:
+                    self.to_pickup.add(name)
             return getattr(self, name)
 
 
@@ -484,8 +487,10 @@ class State(object):
 
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the checkpointing
-        if self.output.checkpoint and not pickup:
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, "chkpt"), 'w')
+        if self.output.checkpoint:
+            if not pickup:
+                self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
+                self.chkpt.save_mesh(self.mesh)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
@@ -503,15 +508,19 @@ class State(object):
         """
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
+            chkfile = path.join(self.dumpdir, 'chkpt.h5')
+            logger.info('Pickup from checkpoint')
             with CheckpointFile(chkfile, 'r') as chk:
                 # Recover all the fields from the checkpoint
+                mesh = chk.load_mesh(self.mesh.name)
                 for field in self.to_pickup:
-                    chk.load_function(field)
-                t = chk.get_attr("/", "time")
+                    stored_field = chk.load_function(mesh, field.name())
+                    field.assign(stored_field)
+                t = chk.get_attr('/', 'time')
                 next(self.dumpcount)
             # Setup new checkpoint
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, "chkpt"), 'w')
+            self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
+            self.chkpt.save_mesh(self.mesh)
         else:
             raise ValueError("Must set checkpoint True if pickup")
 
@@ -538,9 +547,10 @@ class State(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
+            logger.info('Writing checkpoint')
             for field in self.to_pickup:
                 self.chkpt.save_function(field)
-            self.chkpt.set_attr("/", "time", t)
+            self.chkpt.set_attr('/', 'time', t)
 
         if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
