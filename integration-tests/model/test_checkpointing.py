@@ -5,7 +5,8 @@ timesteps, checkpoints and then starts a new run from the checkpoint file.
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, norm,
-                       SpatialCoordinate, exp, sin, Function, as_vector, pi)
+                       SpatialCoordinate, exp, sin, Function, as_vector,
+                       pi, CheckpointFile)
 
 def setup_checkpointing(dirname):
 
@@ -116,10 +117,15 @@ def test_checkpointing(tmpdir):
     # Compare fields against saved values for run without checkpointing
     # ------------------------------------------------------------------------ #
 
-    # TODO: CheckpointFile does not seem to recognise "equispaced" elements so
-    # our checkpointing will not correctly
-
+    # Pick up from both stored checkpoint files
+    # This is the best way to compare fields from different meshes
     for field_name in ['u', 'rho', 'theta']:
-        error = norm(state_1.fields(field_name) - state_2.fields(field_name))
+        with CheckpointFile(dirname_1+'/chkpt.h5', 'r') as chkpt:
+            mesh = chkpt.load_mesh(name='firedrake_default_extruded')
+            field_1 = chkpt.load_function(mesh, name=field_name)
+        with CheckpointFile(dirname_2+'/chkpt.h5', 'r') as chkpt:
+            field_2 = chkpt.load_function(mesh, name=field_name)
+
+        error = norm(field_1 - field_2)
         assert error < 1e-15, \
             f'Checkpointed field {field_name} is not equal to non-checkpointed field'
