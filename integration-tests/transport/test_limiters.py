@@ -31,7 +31,7 @@ def setup_limiters(dirname):
                   parameters=parameters)
 
     # set up the function spaces:
-    Vr = state.spaces("DG", "DG", 1)
+    Vr = state.spaces("DG1_equispaced")
     Vt = state.spaces("theta", degree=1)
     Vpsi = FunctionSpace(mesh, "CG", 2)
 
@@ -133,7 +133,6 @@ def run_limiters(dirname):
 
     stepper, tmax = setup_limiters(dirname)
     stepper.run(t=0, tmax=tmax)
-    # print(stepper.state.fields('moisture').dat.data[:])
     return
 
 

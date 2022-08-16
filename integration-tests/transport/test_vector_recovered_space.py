@@ -41,12 +41,12 @@ def test_vector_recovered_space_setup(tmpdir):
 
     # horizontal base spaces
     cell = mesh._base_mesh.ufl_cell().cellname()
-    u_hori = FiniteElement("CG", cell, 1, variant="equispaced")
-    w_hori = FiniteElement("DG", cell, 0, variant="equispaced")
+    u_hori = FiniteElement("CG", cell, 1)
+    w_hori = FiniteElement("DG", cell, 0)
 
     # vertical base spaces
-    u_vert = FiniteElement("DG", interval, 0, variant="equispaced")
-    w_vert = FiniteElement("CG", interval, 1, variant="equispaced")
+    u_vert = FiniteElement("DG", interval, 0)
+    w_vert = FiniteElement("CG", interval, 1)
 
     # build elements
     u_element = HDiv(TensorProductElement(u_hori, u_vert))
@@ -55,7 +55,7 @@ def test_vector_recovered_space_setup(tmpdir):
 
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
-    VDG1 = state.spaces("DG", "DG", 1)
+    VDG1 = state.spaces("DG1_equispaced")
     Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element(), name='Vec_DG1')
     Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
     Vu = FunctionSpace(mesh, v_element)

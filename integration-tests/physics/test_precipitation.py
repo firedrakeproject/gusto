@@ -37,7 +37,7 @@ def setup_fallout(dirname):
                   parameters=parameters,
                   diagnostic_fields=diagnostic_fields)
 
-    Vrho = state.spaces("DG", "DG", 1)
+    Vrho = state.spaces("DG1_equispaced")
     problem = [(AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1), ForwardEuler(state))]
     state.fields("rho").assign(1.)
 
