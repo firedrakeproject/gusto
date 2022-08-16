@@ -8,8 +8,8 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
-                       op2, CheckpointFile, FILE_CREATE, FILE_READ, interpolate,
-                       CellNormal, cross, as_vector)
+                       op2, CheckpointFile, interpolate, CellNormal, cross,
+                       as_vector)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 

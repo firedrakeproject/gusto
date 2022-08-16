@@ -8,10 +8,11 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, norm,
                        SpatialCoordinate, exp, sin, Function, as_vector,
                        pi, CheckpointFile)
 
+
 def setup_checkpointing(dirname):
 
-    nlayers = 5  # horizontal layers
-    columns = 15 # number of columns
+    nlayers = 5   # horizontal layers
+    columns = 15  # number of columns
     L = 3.e5
     m = PeriodicIntervalMesh(columns, L)
     dt = 2.0
@@ -84,6 +85,7 @@ def initialise_fields(state):
     u0.project(as_vector([20.0, 0.0]))
 
     state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+
 
 def test_checkpointing(tmpdir):
 
