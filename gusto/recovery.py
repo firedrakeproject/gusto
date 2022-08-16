@@ -147,16 +147,16 @@ class Boundary_Recoverer(object):
                 raise NotImplementedError('The physics boundary method only works on extruded meshes')
             # check that function spaces are valid
             sub_elements = v_CG1.function_space().ufl_element().sub_elements()
-            if (sub_elements[0].family() not in ['Discontinuous Lagrange','DQ'] or
-                sub_elements[1].family() != 'Lagrange' or
-                v_CG1.function_space().ufl_element().degree() != (0,1)):
+            if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
+                    or sub_elements[1].family() != 'Lagrange'
+                    or v_CG1.function_space().ufl_element().degree() != (0, 1)):
                 raise ValueError("This boundary recovery method requires v_CG1 to be in DG0xCG1 TensorProductSpace.")
 
             brok_elt = v_DG1.function_space().ufl_element()
-            if (brok_elt.degree() != (0,1) or
-                (type(brok_elt) is not BrokenElement and
-                 (brok_elt.sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ'] or
-                  brok_elt.sub_elements[1].family() != 'Discontinuous Lagrange'))):
+            if (brok_elt.degree() != (0, 1)
+                or (type(brok_elt) is not BrokenElement
+                    and (brok_elt.sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
+                         or brok_elt.sub_elements[1].family() != 'Discontinuous Lagrange'))):
                 raise ValueError("This boundary recovery method requires v_DG1 to be in the broken DG0xCG1 TensorProductSpace.")
         else:
             raise ValueError("Boundary method should be a Boundary Method Enum object.")

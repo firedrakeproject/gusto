@@ -1,6 +1,6 @@
 from firedrake import (dx, BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
-from firedrake.parloops import par_loop, READ, WRITE, INC
+from firedrake.parloops import par_loop, READ, WRITE
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 __all__ = ["ThetaLimiter", "NoLimiter"]
@@ -26,9 +26,9 @@ class ThetaLimiter(object):
 
         # check that horizontal degree is 1 and vertical degree is 2
         sub_elements = space.ufl_element().sub_elements()
-        if (sub_elements[0].family() not in ['Discontinuous Lagrange','DQ'] or
-            sub_elements[1].family() != 'Lagrange' or
-            space.ufl_element().degree() != (1,2)):
+        if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
+                or sub_elements[1].family() != 'Lagrange'
+                or space.ufl_element().degree() != (1, 2)):
             raise ValueError('Theta Limiter should only be used with the DG1xCG2 space')
 
         # Transport will happen in broken form of Vtheta
