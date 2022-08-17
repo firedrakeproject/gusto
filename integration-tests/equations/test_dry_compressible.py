@@ -7,7 +7,7 @@ from os import path
 from gusto import *
 from gusto import thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, Function)
+                       sqrt, ExtrudedMesh, norm)
 
 def run_dry_compressible(dirname):
 
@@ -24,6 +24,7 @@ def run_dry_compressible(dirname):
                               dumpfreq=2, chkptfreq=2)
     parameters = CompressibleParameters()
     R_d = parameters.R_d
+    g = parameters.g
 
     state = State(mesh,
                   dt=dt,
@@ -39,14 +40,17 @@ def run_dry_compressible(dirname):
     # Approximate hydrostatic balance
     x, z = SpatialCoordinate(mesh)
     T = Constant(300.0)
-    zH = g / (R_d * T)
+    zH = R_d * T / g
     p = Constant(100000.0) * exp(-z / zH)
     theta0.interpolate(tde.theta(parameters, T, p))
     rho0.interpolate(p / (R_d * T))
 
+    state.set_reference_profiles([('rho', rho0),
+                                  ('theta', theta0)])
+
     # Add perturbation
     r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)
-    theta_pert = 1.0*exp(-(r/(Lx/5)**2))
+    theta_pert = 1.0*exp(-(r/(Lx/5))**2)
     theta0.interpolate(theta0 + theta_pert)
 
     # Set up transport schemes
@@ -55,7 +59,7 @@ def run_dry_compressible(dirname):
                           SSPRK3(state, "theta")]
 
     # Set up linear solver for the timestepping scheme
-    linear_solver = IncompressibleSolver(state, eqn)
+    linear_solver = CompressibleSolver(state, eqn)
 
     # build time stepper
     stepper = CrankNicolson(state, eqn, transported_fields,
@@ -70,8 +74,8 @@ def run_dry_compressible(dirname):
     new_path = path.join(path.split(path.split(gusto.__file__)[0])[0], f'integration-tests/data/{checkpoint_name}')
     check_output = OutputParameters(dirname=dirname+"/dry_compressible",
                                     checkpoint_pickup_filename=new_path)
-    check_state = State(mesh, dt=dt, output=check_output)
-    check_eqn = CompressibleEquations(check_state, "CG", 1)
+    check_state = State(mesh, dt=dt, output=check_output, parameters=parameters)
+    check_eqn = CompressibleEulerEquations(check_state, "CG", 1)
     # TODO: Would like to use a normal TimeStepper here but then get into problems
     # with eqns needing to be part of a list of a list
     check_stepper = CrankNicolson(check_state, check_eqn, [])

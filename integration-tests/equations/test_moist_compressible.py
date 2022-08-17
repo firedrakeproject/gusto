@@ -7,7 +7,7 @@ from os import path
 from gusto import *
 import gusto.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh)
+                       sqrt, ExtrudedMesh, norm)
 
 def run_moist_compressible(dirname):
 
@@ -25,6 +25,8 @@ def run_moist_compressible(dirname):
     parameters = CompressibleParameters()
     R_d = parameters.R_d
     R_v = parameters.R_v
+    g = parameters.g
+
     tracers = [WaterVapour(), CloudWater()]
 
     state = State(mesh,
@@ -44,14 +46,17 @@ def run_moist_compressible(dirname):
     T = Constant(300.0)
     m_v0.interpolate(Constant(0.01))
     T_vd = T * (1 + R_v * m_v0 / R_d)
-    zH = g / (R_d * T_vd)
+    zH = R_d * T / g
     p = Constant(100000.0) * exp(-z / zH)
     theta0.interpolate(tde.theta(parameters, T_vd, p))
     rho0.interpolate(p / (R_d * T))
 
+    state.set_reference_profiles([('rho', rho0),
+                                  ('theta', theta0)])
+
     # Add perturbation
     r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)
-    theta_pert = 1.0*exp(-(r/(Lx/5)**2))
+    theta_pert = 1.0*exp(-(r/(Lx/5))**2)
     theta0.interpolate(theta0 + theta_pert)
 
     # Set up transport schemes
@@ -75,8 +80,8 @@ def run_moist_compressible(dirname):
     new_path = path.join(path.split(path.split(gusto.__file__)[0])[0], f'integration-tests/data/{checkpoint_name}')
     check_output = OutputParameters(dirname=dirname+"/moist_compressible",
                                     checkpoint_pickup_filename=new_path)
-    check_state = State(mesh, dt=dt, output=check_output)
-    check_eqn = CompressibleEquations(check_state, "CG", 1, active_tracers=tracers)
+    check_state = State(mesh, dt=dt, output=check_output, parameters=parameters)
+    check_eqn = CompressibleEulerEquations(check_state, "CG", 1, active_tracers=tracers)
     # TODO: Would like to use a normal TimeStepper here but then get into problems
     # with eqns needing to be part of a list of a list
     check_stepper = CrankNicolson(check_state, check_eqn, [])

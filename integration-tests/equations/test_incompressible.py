@@ -6,7 +6,7 @@ atmosphere, and checks the example against a known good checkpointed answer.
 from os import path
 from gusto import *
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, Function)
+                       sqrt, ExtrudedMesh, Function, norm)
 
 def run_incompressible(dirname):
 
