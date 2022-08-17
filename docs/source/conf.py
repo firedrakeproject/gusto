@@ -264,3 +264,5 @@ intersphinx_mapping = {
 }
 
 bibtex_bibfiles = ['_static/bibliography.bib']
+
+autodoc_preserve_defaults = True
