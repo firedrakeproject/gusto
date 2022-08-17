@@ -512,7 +512,7 @@ class State(object):
         """
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt.h5")
+            chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:

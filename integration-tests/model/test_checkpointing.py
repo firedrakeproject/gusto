@@ -5,12 +5,14 @@ timesteps, checkpoints and then starts a new run from the checkpoint file.
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, norm,
-                       SpatialCoordinate, exp, sin, Function, as_vector, pi)
+                       SpatialCoordinate, exp, sin, Function, as_vector,
+                       pi, DumbCheckpoint, FILE_READ)
+
 
 def setup_checkpointing(dirname):
 
-    nlayers = 5  # horizontal layers
-    columns = 15 # number of columns
+    nlayers = 5   # horizontal layers
+    columns = 15  # number of columns
     L = 3.e5
     m = PeriodicIntervalMesh(columns, L)
     dt = 2.0
@@ -84,6 +86,7 @@ def initialise_fields(state):
 
     state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
+
 def test_checkpointing(tmpdir):
 
     dirname_1 = str(tmpdir)+'/checkpointing_1'
@@ -116,10 +119,23 @@ def test_checkpointing(tmpdir):
     # Compare fields against saved values for run without checkpointing
     # ------------------------------------------------------------------------ #
 
-    # TODO: CheckpointFile does not seem to recognise "equispaced" elements so
-    # our checkpointing will not correctly
-
+    # Pick up from both stored checkpoint files
+    # This is the best way to compare fields from different meshes
     for field_name in ['u', 'rho', 'theta']:
-        error = norm(state_1.fields(field_name) - state_2.fields(field_name))
+        with DumbCheckpoint(dirname_1+'/chkpt', mode=FILE_READ) as chkpt:
+            field_1 = Function(state_1.fields(field_name).function_space(),
+                               name=field_name)
+            chkpt.load(field_1)
+            # These are preserved in the comments for when we can use CheckpointFile
+            # mesh = chkpt.load_mesh(name='firedrake_default_extruded')
+            # field_1 = chkpt.load_function(mesh, name=field_name)
+        with DumbCheckpoint(dirname_2+'/chkpt', mode=FILE_READ) as chkpt:
+            field_2 = Function(state_1.fields(field_name).function_space(),
+                               name=field_name)
+            chkpt.load(field_2)
+            # These are preserved in the comments for when we can use CheckpointFile
+            # field_2 = chkpt.load_function(mesh, name=field_name)
+
+        error = norm(field_1 - field_2)
         assert error < 1e-15, \
             f'Checkpointed field {field_name} is not equal to non-checkpointed field'
