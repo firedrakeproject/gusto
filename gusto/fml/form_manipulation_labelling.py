@@ -195,8 +195,8 @@ class Label(object):
         # if value is provided, check that we have a validator function
         # and validate the value, otherwise use default value
         if value is not None:
-            assert(self.validator)
-            assert(self.validator(value))
+            assert self.validator
+            assert self.validator(value)
             self.value = value
         else:
             self.value = self.default_value
