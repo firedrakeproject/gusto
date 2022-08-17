@@ -8,7 +8,7 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        FunctionSpace, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
-                       op2, CheckpointFile, FILE_CREATE, FILE_READ, interpolate,
+                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
                        CellNormal, cross, as_vector)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
@@ -493,8 +493,8 @@ class State(object):
         # checkpoint file, setup the checkpointing
         if self.output.checkpoint:
             if not pickup:
-                self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-                self.chkpt.save_mesh(self.mesh)
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                            mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
@@ -512,19 +512,15 @@ class State(object):
         """
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, 'chkpt.h5')
-            logger.info('Pickup from checkpoint')
-            with CheckpointFile(chkfile, 'r') as chk:
+            chkfile = path.join(self.dumpdir, "chkpt.h5")
+            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
-                mesh = chk.load_mesh(self.mesh.name)
                 for field in self.to_pickup:
-                    stored_field = chk.load_function(mesh, field.name())
-                    field.assign(stored_field)
-                t = chk.get_attr('/', 'time')
+                    chk.load(field)
+                t = chk.read_attribute("/", "time")
                 next(self.dumpcount)
             # Setup new checkpoint
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-            self.chkpt.save_mesh(self.mesh)
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
         else:
             raise ValueError("Must set checkpoint True if pickup")
 
@@ -551,10 +547,9 @@ class State(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            logger.info('Writing checkpoint')
             for field in self.to_pickup:
-                self.chkpt.save_function(field)
-            self.chkpt.set_attr('/', 'time', t)
+                self.chkpt.store(field)
+            self.chkpt.write_attribute("/", "time", t)
 
         if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
             # dump fields
