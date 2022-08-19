@@ -526,7 +526,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
                  terms_to_linearise={'D': [time_derivative, transport],
-                                     'u': [time_derivative, pressure_gradient, coriolis]},
+                                     'u': [time_derivative, pressure_gradient]},
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -535,6 +535,10 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
+
+        coriolis_form = self.residual.label_map(
+            lambda t: t.has_label(coriolis),
+            map_if_false=drop)
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
@@ -547,6 +551,10 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
             lambda t: t.has_label(transport) and t.get(prognostic) == "D",
             map_if_true=lambda t: Term(D_adv.form, t.labels)
         )
+
+        # Coriolis term is a special case (for now)
+        # TODO: fix this properly!
+        self.residual += coriolis_form
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
