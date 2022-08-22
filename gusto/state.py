@@ -33,6 +33,8 @@ class SpaceCreator(object):
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)
+            elif name == "DG1_equispaced":
+                value = self.build_dg_space(1, variant='equispaced')
             elif family == "DG":
                 value = self.build_dg_space(degree)
             elif family == "CG":
@@ -64,12 +66,12 @@ class SpaceCreator(object):
         cell = self.mesh._base_mesh.ufl_cell().cellname()
 
         # horizontal base spaces
-        self.S1 = FiniteElement(family, cell, degree+1, variant="equispaced")
-        self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+        self.S1 = FiniteElement(family, cell, degree+1)
+        self.S2 = FiniteElement("DG", cell, degree)
 
         # vertical base spaces
-        self.T0 = FiniteElement("CG", interval, degree+1, variant="equispaced")
-        self.T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+        self.T0 = FiniteElement("CG", interval, degree+1)
+        self.T1 = FiniteElement("DG", interval, degree)
 
         self._initialised_base_spaces = True
 
@@ -86,28 +88,28 @@ class SpaceCreator(object):
             V_elt = FiniteElement(family, cell, degree+1)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, degree):
+    def build_dg_space(self, degree, variant=None):
         if self.extruded_mesh:
-            if not self._initialised_base_spaces or self.T1.degree() != degree:
+            if not self._initialised_base_spaces or self.T1.degree() != degree or self.T1.variant() != variant:
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
-                S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-                T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+                S2 = FiniteElement("DG", cell, degree, variant=variant)
+                T1 = FiniteElement("DG", interval, degree, variant=variant)
             else:
                 S2 = self.S2
                 T1 = self.T1
             V_elt = TensorProductElement(S2, T1)
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
-        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
+            V_elt = FiniteElement("DG", cell, degree, variant=variant)
+        name = f'DG{degree}_equispaced' if variant == 'equispaced' else f'DG{degree}'
+        return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, degree):
         assert self.extruded_mesh
         if not self._initialised_base_spaces:
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-            self.T0 = FiniteElement("CG", interval, degree+1,
-                                    variant="equispaced")
+            self.S2 = FiniteElement("DG", cell, degree)
+            self.T0 = FiniteElement("CG", interval, degree+1)
         V_elt = TensorProductElement(self.S2, self.T0)
         return FunctionSpace(self.mesh, V_elt, name='Vtheta')
 

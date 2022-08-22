@@ -13,6 +13,7 @@ import pytest
 def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
+
     return norm(state.fields("f") - f_end) / norm(f_end)
 
 
@@ -28,7 +29,7 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     # Spaces for recovery
     Vu = state.spaces("HDiv", family=setup.family, degree=setup.degree)
     if geometry == "slice":
-        VDG1 = state.spaces("DG", "DG", 1)
+        VDG1 = state.spaces("DG1_equispaced")
         Vec_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element(), name='Vec_DG1')
         Vec_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
         Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))

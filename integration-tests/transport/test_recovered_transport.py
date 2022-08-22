@@ -25,7 +25,7 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
     # Spaces for recovery
     VDG0 = FunctionSpace(mesh, "DG", 0)
-    VDG1 = state.spaces("DG", "DG", 1)
+    VDG1 = state.spaces("DG1_equispaced")
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
     # Make equation
