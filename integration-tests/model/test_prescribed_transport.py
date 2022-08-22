@@ -42,4 +42,3 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     error = run(state, transport_scheme, setup.tmax, setup.f_init, u_evaluation)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
-

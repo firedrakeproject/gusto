@@ -9,6 +9,7 @@ from firedrake import (as_vector, FunctionSpace, VectorFunctionSpace,
                        BrokenElement, norm)
 import pytest
 
+
 def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)

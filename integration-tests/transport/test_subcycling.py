@@ -4,7 +4,7 @@ compared with a true one to check that the transport is working correctly.
 """
 
 from gusto import *
-from firedrake import  norm
+from firedrake import norm
 import pytest
 
 

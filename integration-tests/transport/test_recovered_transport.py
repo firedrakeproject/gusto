@@ -8,6 +8,7 @@ from gusto import *
 from firedrake import FunctionSpace, norm
 import pytest
 
+
 def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
@@ -47,4 +48,3 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
     error = run(state, transport_scheme, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
-

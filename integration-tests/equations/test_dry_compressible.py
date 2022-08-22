@@ -9,6 +9,7 @@ from gusto import thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, norm)
 
+
 def run_dry_compressible(dirname):
 
     dt = 6.0
@@ -83,15 +84,17 @@ def run_dry_compressible(dirname):
 
     return state, check_state
 
+
 def test_dry_compressible(tmpdir):
 
     dirname = str(tmpdir)
     state, check_state = run_dry_compressible(dirname)
 
-    for variable in ['u','rho','theta']:
+    for variable in ['u', 'rho', 'theta']:
         new_variable = state.fields(variable)
         check_variable = check_state.fields(variable)
         error = norm(new_variable - check_variable) / norm(check_variable)
 
-        assert error < 1e-12, f'Values for {variable} in ' + \
+        # Slack values chosen to be robust to different platforms
+        assert error < 1e-10, f'Values for {variable} in ' + \
             'Dry Compressible test do not match KGO values'

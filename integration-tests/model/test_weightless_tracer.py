@@ -12,6 +12,7 @@ from gusto import *
 from firedrake import SpatialCoordinate, Function, norm
 import pytest
 
+
 def run_tracer(setup):
 
     # Get initial conditions from shared config
@@ -65,6 +66,7 @@ def run_tracer(setup):
     error = norm(state.fields("tracer") - tracer_end) / norm(tracer_end)
 
     return error
+
 
 @pytest.mark.parametrize("geometry", ["sphere"])
 def test_tracer_setup(tmpdir, geometry, tracer_setup):

@@ -28,7 +28,6 @@ def run_advection_diffusion(tmpdir):
     problem = [(equation, ((SSPRK3(state), transport),
                            (BackwardEuler(state), diffusion)))]
 
-
     # Initial conditions
     x = SpatialCoordinate(mesh)
     xc_init = 0.25*L
@@ -67,4 +66,4 @@ def test_advection_diffusion(tmpdir):
     tol = 0.01
     error = run_advection_diffusion(tmpdir)
     assert error < tol, 'The error in the advection-diffusion ' + \
-    'equation is greater than the permitted tolerance'
+        'equation is greater than the permitted tolerance'

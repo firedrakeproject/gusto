@@ -9,6 +9,7 @@ import gusto.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, norm)
 
+
 def run_moist_compressible(dirname):
 
     dt = 6.0
@@ -89,15 +90,17 @@ def run_moist_compressible(dirname):
 
     return state, check_state
 
+
 def test_moist_compressible(tmpdir):
 
     dirname = str(tmpdir)
     state, check_state = run_moist_compressible(dirname)
 
-    for variable in ['u','rho','theta','vapour_mixing_ratio']:
+    for variable in ['u', 'rho', 'theta', 'vapour_mixing_ratio']:
         new_variable = state.fields(variable)
         check_variable = check_state.fields(variable)
         error = norm(new_variable - check_variable) / norm(check_variable)
 
-        assert error < 1e-12, f'Values for {variable} in ' + \
+        # Slack values chosen to be robust to different platforms
+        assert error < 1e-10, f'Values for {variable} in ' + \
             'Moist Compressible test do not match KGO values'

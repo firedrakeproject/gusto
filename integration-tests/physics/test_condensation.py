@@ -110,7 +110,7 @@ def test_cond_evap(tmpdir, process):
     water_c = state.fields('cloud_liquid_mixing_ratio')
     theta_vd = state.fields('theta')
     theta_d = Function(theta_vd.function_space())
-    theta_d.interpolate(theta_vd/(1 + water_v * state.parameters.R_v /state. parameters.R_d))
+    theta_d.interpolate(theta_vd/(1 + water_v * state.parameters.R_v / state.parameters.R_d))
 
     # Check that water vapour is approximately equal to saturation amount
     assert norm(water_v - mv_true) / norm(mv_true) < 0.01, \
@@ -136,4 +136,3 @@ def test_cond_evap(tmpdir, process):
 
     assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12, \
         f'Total amount of water should be conserved by {process}'
-
