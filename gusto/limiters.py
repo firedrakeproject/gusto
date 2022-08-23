@@ -35,9 +35,6 @@ class ThetaLimiter(object):
         mesh = space.mesh()
         self.Vt_brok = FunctionSpace(mesh, BrokenElement(space.ufl_element()))
 
-        # if sub_elements[0].variant() == 'equispaced':
-        #     raise ValueError('Theta Limiter can only be used with an equispaced DG1 space in the horizontal')
-
         # Create equispaced DG1 space needed for limiting
         cell = mesh._base_mesh.ufl_cell().cellname()
         DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")

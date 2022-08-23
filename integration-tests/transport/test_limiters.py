@@ -5,14 +5,11 @@ by a prescribed transport scheme. If the limiter is working, the transport
 should have produced no new maxima or minima.
 """
 
-from os import path
-from posixpath import dirname
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, pi, SpatialCoordinate,
                        ExtrudedMesh, FunctionSpace, Function, norm,
                        conditional, sqrt, BrokenElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from netCDF4 import Dataset
 import numpy as np
 import pytest
 
@@ -35,7 +32,7 @@ def setup_limiters(dirname, space):
     m = PeriodicIntervalMesh(20, Ld)
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
     output = OutputParameters(dirname=dirname+'/limiters',
-                              dumpfreq=1, dumplist=['u', 'tracer','true_tracer'])
+                              dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
     parameters = CompressibleParameters()
 
     state = State(mesh,
@@ -70,7 +67,6 @@ def setup_limiters(dirname, space):
     # ------------------------------------------------------------------------ #
 
     tracer0 = state.fields('tracer', V)
-    # true_field = Function(V)
     true_field = state.fields('true_tracer', V)
 
     x, z = SpatialCoordinate(mesh)

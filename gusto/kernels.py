@@ -465,10 +465,10 @@ class LimitMidpoints():
 
         self._kernel = (domain, instrs)
 
-
     def apply(self, field_hat, field_DG1, field_old):
 
         """
+        Performs the par loop.
 
         :arg field_hat: The field to write to in the broken temperature space.
         :arg field_DG1: A field in the equispaced DG1 space whose vertex values
