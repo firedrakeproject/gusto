@@ -41,7 +41,7 @@ def test_recovered_space_setup(tmpdir):
     # spaces
     Vpsi = FunctionSpace(mesh, "CG", 2)
     VDG0 = FunctionSpace(mesh, "DG", 0)
-    VDG1 = state.spaces("DG", "DG", 1)
+    VDG1 = state.spaces("DG1_equispaced")
     VCG1 = FunctionSpace(mesh, "CG", 1)
 
     tracereqn = ContinuityEquation(state, VDG0, "tracer", ufamily="CG",
