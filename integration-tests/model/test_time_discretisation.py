@@ -6,7 +6,7 @@ import pytest
 def run(state, transport_scheme, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_scheme)
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end)
+    return norm(state.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",

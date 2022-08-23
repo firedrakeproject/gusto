@@ -45,7 +45,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
             state.fields(field_name, function_space,
-                         subfield_names=self.field_names)
+                         subfield_names=self.field_names, pickup=True)
             for fname in self.field_names:
                 state.diagnostics.register(fname)
                 self.bcs[fname] = []
@@ -65,11 +65,16 @@ class AdvectionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the advection_form
     """
     def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, **kwargs):
+                 ufamily=None, udegree=None, Vu=None, **kwargs):
         super().__init__(state, function_space, field_name)
 
         if not hasattr(state.fields, "u"):
-            V = state.spaces("HDiv", ufamily, udegree)
+            if Vu is not None:
+                V = state.spaces("HDiv", V=Vu)
+            else:
+                assert ufamily is not None, "Specify the family for u"
+                assert udegree is not None, "Specify the degree of the u space"
+                V = state.spaces("HDiv", ufamily, udegree)
             state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -90,11 +95,16 @@ class ContinuityEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the continuity_form
     """
     def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, **kwargs):
+                 ufamily=None, udegree=None, Vu=None, **kwargs):
         super().__init__(state, function_space, field_name)
 
         if not hasattr(state.fields, "u"):
-            V = state.spaces("HDiv", ufamily, udegree)
+            if Vu is not None:
+                V = state.spaces("HDiv", V=Vu)
+            else:
+                assert ufamily is not None, "Specify the family for u"
+                assert udegree is not None, "Specify the degree of the u space"
+                V = state.spaces("HDiv", ufamily, udegree)
             state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -139,12 +149,17 @@ class AdvectionDiffusionEquation(PrognosticEquation):
     :kwargs: any kwargs to be passed on to the advection_form or diffusion_form
     """
     def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, diffusion_parameters=None,
+                 ufamily=None, udegree=None, Vu=None, diffusion_parameters=None,
                  **kwargs):
         super().__init__(state, function_space, field_name)
 
         if not hasattr(state.fields, "u"):
-            V = state.spaces("HDiv", ufamily, udegree)
+            if Vu is not None:
+                V = state.spaces("HDiv", V=Vu)
+            else:
+                assert ufamily is not None, "Specify the family for u"
+                assert udegree is not None, "Specify the degree of the u space"
+                V = state.spaces("HDiv", ufamily, udegree)
             state.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
