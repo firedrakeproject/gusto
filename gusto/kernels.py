@@ -425,7 +425,7 @@ class LimitMidpoints():
     """
     A kernel that copies the vertex values back from the DG1 space to a broken,
     equispaced temperature space, while taking the midpoint values from the
-    priginal field. This checks that the midpoint values are within the minimum
+    original field. This checks that the midpoint values are within the minimum
     and maximum at the adjacent vertices. If outside of the minimu and maximum,
     correct the values to be the average.
     """

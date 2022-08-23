@@ -3,14 +3,14 @@ This runs a dry compressible example with a perturbation in a vertical slice,
 and checks the example against a known good checkpointed answer.
 """
 
-from os import path
+from os.path import join, abspath, dirname
 from gusto import *
 from gusto import thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, norm)
 
 
-def run_dry_compressible(dirname):
+def run_dry_compressible(tmpdir):
 
     dt = 6.0
     tmax = 2*dt
@@ -21,7 +21,7 @@ def run_dry_compressible(dirname):
     m = PeriodicIntervalMesh(ncols, Lx)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers)
 
-    output = OutputParameters(dirname=dirname+"/dry_compressible",
+    output = OutputParameters(dirname=tmpdir+"/dry_compressible",
                               dumpfreq=2, chkptfreq=2)
     parameters = CompressibleParameters()
     R_d = parameters.R_d
@@ -70,15 +70,12 @@ def run_dry_compressible(dirname):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    import gusto
     checkpoint_name = 'dry_compressible_chkpt'
-    new_path = path.join(path.split(path.split(gusto.__file__)[0])[0], f'integration-tests/data/{checkpoint_name}')
-    check_output = OutputParameters(dirname=dirname+"/dry_compressible",
+    new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
+    check_output = OutputParameters(dirname=tmpdir+"/dry_compressible",
                                     checkpoint_pickup_filename=new_path)
     check_state = State(mesh, dt=dt, output=check_output, parameters=parameters)
     check_eqn = CompressibleEulerEquations(check_state, "CG", 1)
-    # TODO: Would like to use a normal TimeStepper here but then get into problems
-    # with eqns needing to be part of a list of a list
     check_stepper = CrankNicolson(check_state, check_eqn, [])
     check_stepper.run(t=0, tmax=0, pickup=True)
 
