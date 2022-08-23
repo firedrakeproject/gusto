@@ -19,7 +19,7 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
 
     """
 
-    dS_ = (dS_v + dS_h) if q.function_space().extruded else dS
+    dS_ = (dS_v + dS_h) if state.mesh.extruded else dS
     kappa = parameters.kappa
     mu = parameters.mu
 
