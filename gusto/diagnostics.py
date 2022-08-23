@@ -13,11 +13,11 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "SphericalComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
            "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
            "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
-           "CompressibleKineticEnergy", "ExnerPi", "Sum", "Difference", "SteadyStateError",
+           "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
-           "RelativeHumidity", "Pressure", "Pi_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
+           "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
 
 
 class Diagnostics(object):
@@ -196,6 +196,19 @@ class Gradient(DiagnosticField):
         return self.field
 
 
+class Divergence(DiagnosticField):
+    name = "Divergence"
+
+    def setup(self, state):
+        if not self._initialised:
+            space = state.spaces("DG1", "DG", 1)
+            super(Divergence, self).setup(state, space=space)
+
+    def compute(self, state):
+        u = state.fields("u")
+        return self.field.interpolate(div(u))
+
+
 class SphericalComponent(DiagnosticField):
 
     def __init__(self, name):
@@ -364,10 +377,10 @@ class CompressibleKineticEnergy(Energy):
         return self.field.interpolate(energy)
 
 
-class ExnerPi(DiagnosticField):
+class Exner(DiagnosticField):
 
     def __init__(self, reference=False):
-        super(ExnerPi, self).__init__()
+        super(Exner, self).__init__()
         self.reference = reference
         if reference:
             self.rho_name = "rhobar"
@@ -379,20 +392,20 @@ class ExnerPi(DiagnosticField):
     @property
     def name(self):
         if self.reference:
-            return "ExnerPibar"
+            return "Exnerbar"
         else:
-            return "ExnerPi"
+            return "Exner"
 
     def setup(self, state):
         if not self._initialised:
             space = state.spaces("CG1", "CG", 1)
-            super(ExnerPi, self).setup(state, space=space)
+            super(Exner, self).setup(state, space=space)
 
     def compute(self, state):
         rho = state.fields(self.rho_name)
         theta = state.fields(self.theta_name)
-        Pi = thermodynamics.pi(state.parameters, rho, theta)
-        return self.field.interpolate(Pi)
+        exner = thermodynamics.exner_pressure(state.parameters, rho, theta)
+        return self.field.interpolate(exner)
 
 
 class Sum(DiagnosticField):
@@ -498,9 +511,9 @@ class ThermodynamicDiagnostic(DiagnosticField):
                 self.rain = Constant(0.0)
 
             # now let's store the most common expressions
-            self.pi = thermodynamics.pi(state.parameters, self.rho_averaged, self.theta)
-            self.T = thermodynamics.T(state.parameters, self.theta, self.pi, r_v=self.r_v)
-            self.p = thermodynamics.p(state.parameters, self.pi)
+            self.exner = thermodynamics.exner_pressure(state.parameters, self.rho_averaged, self.theta)
+            self.T = thermodynamics.T(state.parameters, self.theta, self.exner, r_v=self.r_v)
+            self.p = thermodynamics.p(state.parameters, self.exner)
             self.r_l = self.r_c + self.rain
             self.r_t = self.r_v + self.r_c + self.rain
 
@@ -593,13 +606,13 @@ class Pressure(ThermodynamicDiagnostic):
         return self.field.assign(self.p)
 
 
-class Pi_Vt(ThermodynamicDiagnostic):
-    name = "Pi_Vt"
+class Exner_Vt(ThermodynamicDiagnostic):
+    name = "Exner_Vt"
 
     def compute(self, state):
         super().compute(state)
 
-        return self.field.assign(self.pi)
+        return self.field.assign(self.exner)
 
 
 class HydrostaticImbalance(DiagnosticField):
@@ -614,8 +627,8 @@ class HydrostaticImbalance(DiagnosticField):
             rhobar = state.fields("rhobar")
             theta = state.fields("theta")
             thetabar = state.fields("thetabar")
-            pi = thermodynamics.pi(state.parameters, rho, theta)
-            pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
+            exner = thermodynamics.exner_pressure(state.parameters, rho, theta)
+            exnerbar = thermodynamics.exner_pressure(state.parameters, rhobar, thetabar)
 
             cp = Constant(state.parameters.cp)
             n = FacetNormal(state.mesh)
@@ -623,10 +636,10 @@ class HydrostaticImbalance(DiagnosticField):
             F = TrialFunction(space)
             w = TestFunction(space)
             a = inner(w, F)*dx
-            L = (- cp*div((theta-thetabar)*w)*pibar*dx
-                 + cp*jump((theta-thetabar)*w, n)*avg(pibar)*dS_v
-                 - cp*div(thetabar*w)*(pi-pibar)*dx
-                 + cp*jump(thetabar*w, n)*avg(pi-pibar)*dS_v)
+            L = (- cp*div((theta-thetabar)*w)*exnerbar*dx
+                 + cp*jump((theta-thetabar)*w, n)*avg(exnerbar)*dS_v
+                 - cp*div(thetabar*w)*(exner-exnerbar)*dx
+                 + cp*jump(thetabar*w, n)*avg(exner-exnerbar)*dS_v)
 
             bcs = [DirichletBC(space, 0.0, "bottom"),
                    DirichletBC(space, 0.0, "top")]
@@ -688,7 +701,7 @@ class Vorticity(DiagnosticField):
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
                 space = state.spaces("CG")
-            except UnboundLocalError:
+            except ValueError:
                 dgspace = state.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
                 space = FunctionSpace(state.mesh, "CG", cg_degree)

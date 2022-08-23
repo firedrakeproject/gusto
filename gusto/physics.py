@@ -90,9 +90,9 @@ class Condensation(Physics):
         R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, Pi)
+        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, exner)
         L_v = thermodynamics.Lv(state.parameters, T)
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * water_l
@@ -171,11 +171,10 @@ class Fallout(Physics):
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered spac
-        Vrho = state.spaces("DG")
-        h_deg = Vrho.ufl_element().degree()[0]
-        v_deg = Vrho.ufl_element().degree()[1]
+        h_deg = Vt.ufl_element().degree()[0]
+        v_deg = Vt.ufl_element().degree()[1] - 1
         if v_deg == 0 and h_deg == 0:
-            VDG1 = state.spaces("DG1")
+            VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
             boundary_method = Boundary_Method.dynamics
@@ -374,9 +373,9 @@ class Evaporation(Physics):
         R_v = state.parameters.R_v
 
         # make useful fields
-        Pi = thermodynamics.pi(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, Pi, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, Pi)
+        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
+        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
+        p = thermodynamics.p(state.parameters, exner)
         L_v = thermodynamics.Lv(state.parameters, T)
         R_m = R_d + R_v * self.water_v
         c_pml = cp + c_pv * self.water_v + c_pl * water_l

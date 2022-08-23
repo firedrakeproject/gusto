@@ -1,4 +1,4 @@
-from firedrake import Function
+from firedrake import Function, Projector
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
@@ -22,9 +22,6 @@ class TimeLevelFields(object):
 
         for level in time_levels:
             setattr(self, level, FieldCreator(equations))
-
-        # hack for Eady diagnostic
-        state.xb = self.nm1
 
     def initialise(self, state):
         for field in self.n:
@@ -118,15 +115,12 @@ class Timestepper(object):
         with timed_stage("Dump output"):
             state.setup_dump(t, tmax, pickup)
 
-        dt = state.dt
+        state.t.assign(t)
 
         self.x.initialise(state)
 
-        while t < tmax - 0.5*dt:
-            logger.info("at start of timestep, t=%s, dt=%s" % (t, dt))
-
-            t += dt
-            state.t.assign(t)
+        while float(state.t) < tmax - 0.5*float(state.dt):
+            logger.info(f'at start of timestep, t={float(state.t)}, dt={float(state.dt)}')
 
             self.x.update()
 
@@ -136,16 +130,23 @@ class Timestepper(object):
                 state.fields(field.name()).assign(field)
 
             with timed_stage("Physics"):
+
                 for physics in self.physics_list:
                     physics.apply()
 
+                # TODO: Hack to ensure that xnp1 fields are updated
+                for field in self.x.np1:
+                    field.assign(state.fields(field.name()))
+
+            state.t.assign(state.t + state.dt)
+
             with timed_stage("Dump output"):
-                state.dump(t)
+                state.dump(float(state.t))
 
         if state.output.checkpoint:
             state.chkpt.close()
 
-        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (t, tmax))
+        logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
 
 
 class CrankNicolson(Timestepper):
@@ -224,10 +225,10 @@ class CrankNicolson(Timestepper):
         self.xrhs = Function(W)
         self.dy = Function(W)
         if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, state.dt, self.alpha)
+            self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, state.dt, self.alpha)
+        self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
     @property
@@ -310,16 +311,21 @@ class PrescribedTransport(Timestepper):
     def __init__(self, state, problem, physics_list=None,
                  prescribed_transporting_velocity=None):
 
-        self.prescribed_transporting_velocity = prescribed_transporting_velocity
         super().__init__(state, problem,
                          physics_list=physics_list)
+
+        if prescribed_transporting_velocity is not None:
+            self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
+                                                 self.state.fields('u'))
+        else:
+            self.velocity_projection = None
 
     @property
     def transporting_velocity(self):
         return self.state.fields('u')
 
     def timestep(self):
-        if self.prescribed_transporting_velocity is not None:
-            self.state.fields('u').project(self.prescribed_transporting_velocity(self.state.t))
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
 
         super().timestep()

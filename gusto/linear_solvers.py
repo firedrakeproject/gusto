@@ -9,7 +9,7 @@ from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
-from gusto.labels import linearisation, time_derivative
+from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.fml.form_manipulation_labelling import Term, drop
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -64,7 +64,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 class CompressibleSolver(TimesteppingSolver):
     """
     Timestepping linear solver object for the compressible equations
-    in theta-pi formulation with prognostic variables u, rho, and theta.
+    in theta-exner formulation with prognostic variables u, rho, and theta.
 
     This solver follows the following strategy:
 
@@ -153,8 +153,8 @@ class CompressibleSolver(TimesteppingSolver):
         import numpy as np
 
         state = self.state
-        Dt = state.dt
-        beta_ = Dt*self.alpha
+        dt = state.dt
+        beta_ = dt*self.alpha
         cp = state.parameters.cp
         Vu = state.spaces("HDiv")
         Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
@@ -162,7 +162,6 @@ class CompressibleSolver(TimesteppingSolver):
         Vrho = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        dt = Constant(Dt)
         beta = Constant(beta_)
         beta_cp = Constant(beta_ * cp)
 
@@ -184,24 +183,27 @@ class CompressibleSolver(TimesteppingSolver):
         # Get background fields
         thetabar = state.fields("thetabar")
         rhobar = state.fields("rhobar")
-        pibar = thermodynamics.pi(state.parameters, rhobar, thetabar)
-        pibar_rho = thermodynamics.pi_rho(state.parameters, rhobar, thetabar)
-        pibar_theta = thermodynamics.pi_theta(state.parameters, rhobar, thetabar)
+        exnerbar = thermodynamics.exner_pressure(state.parameters, rhobar, thetabar)
+        exnerbar_rho = thermodynamics.dexner_drho(state.parameters, rhobar, thetabar)
+        exnerbar_theta = thermodynamics.dexner_dtheta(state.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
         k = state.k             # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
-        # Only include theta' (rather than pi') in the vertical
+        # Only include theta' (rather than exner') in the vertical
         # component of the gradient
 
-        # The pi prime term (here, bars are for mean and no bars are
+        # The exner prime term (here, bars are for mean and no bars are
         # for linear perturbations)
-        pi = pibar_theta*theta + pibar_rho*rho
+        exner = exnerbar_theta*theta + exnerbar_rho*rho
 
         # Vertical projection
         def V(u):
             return k*inner(u, k)
+
+        # hydrostatic projection
+        h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
         dxp = dx(degree=(self.quadrature_degree))
@@ -235,37 +237,42 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Project field averages into functions on the trace space
         rhobar_avg = Function(Vtrace)
-        pibar_avg = Function(Vtrace)
+        exnerbar_avg = Function(Vtrace)
 
         rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
-        pi_avg_prb = LinearVariationalProblem(a_tr, L_tr(pibar), pibar_avg)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg)
 
         rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                  solver_parameters=cg_ilu_parameters,
                                                  options_prefix='rhobar_avg_solver')
-        pi_avg_solver = LinearVariationalSolver(pi_avg_prb,
-                                                solver_parameters=cg_ilu_parameters,
-                                                options_prefix='pibar_avg_solver')
+        exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
+                                                   solver_parameters=cg_ilu_parameters,
+                                                   options_prefix='exnerbar_avg_solver')
 
         with timed_region("Gusto:HybridProjectRhobar"):
             rho_avg_solver.solve()
 
-        with timed_region("Gusto:HybridProjectPibar"):
-            pi_avg_solver.solve()
+        with timed_region("Gusto:HybridProjectExnerbar"):
+            exner_avg_solver.solve()
 
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
         # a periodic (or sphere) base mesh.
+        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in))*dx
+
         eqn = (
             # momentum equation
-            inner(w, (state.h_project(u) - u_in))*dx
-            - beta_cp*div(theta_w*V(w))*pibar*dxp
+            u_mass
+            - beta_cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_vp
-            + beta_cp*jump(theta_w*V(w), n=n)*pibar_avg('+')*dS_hp
-            + beta_cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
-            - beta_cp*div(thetabar_w*w)*pi*dxp
+            # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
+            + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
+            + beta_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
+            - beta_cp*div(thetabar_w*w)*exner*dxp
             # trace terms appearing after integrating momentum equation
             + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
             + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
@@ -411,14 +418,13 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         state = self.state      # just cutting down line length a bit
-        Dt = state.dt
-        beta_ = Dt*self.alpha
+        dt = state.dt
+        beta_ = dt*self.alpha
         Vu = state.spaces("HDiv")
         Vb = state.spaces("theta")
         Vp = state.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        dt = Constant(Dt)
         beta = Constant(beta_)
 
         # Split up the rhs vector (symbolically)
@@ -530,13 +536,14 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, dt, alpha):
+    def __init__(self, equation, alpha):
 
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
 
+        dt = equation.state.dt
         W = equation.function_space
         beta = dt*alpha
 

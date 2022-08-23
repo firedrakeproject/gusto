@@ -419,3 +419,65 @@ class PhysicsRecoveryBottom():
                        "CG1": (v_CG1, READ)},
                  is_loopy_kernel=True,
                  iteration_region=ON_BOTTOM)
+
+
+class LimitMidpoints():
+    """
+    A kernel that copies the vertex values back from the DG1 space to a broken,
+    equispaced temperature space, while taking the midpoint values from the
+    original field. This checks that the midpoint values are within the minimum
+    and maximum at the adjacent vertices. If outside of the minimu and maximum,
+    correct the values to be the average.
+    """
+
+    def __init__(self, Vt_brok):
+        """
+        Initialises the kernel.
+
+        :arg Vt_brok: The broken temperature space, which is the space of the
+                      outputted field. The horizontal base element must use the
+                      equispaced variant of DG1, while the vertical uses CG2
+                      (before the space has been broken).
+        """
+
+        shapes = {'nDOFs': Vt_brok.finat_element.space_dimension(),
+                  'nDOFs_base': int(Vt_brok.finat_element.space_dimension() / 3)}
+        domain = "{{[i,j]: 0 <= i < {nDOFs_base} and 0 <= j < 2}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> max_value = 0.0
+                  <float64> min_value = 0.0
+                  for i
+                      for j
+                          field_hat[i*3+2*j] = field_DG1[i*2+j]
+                      end
+                      max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
+                      min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
+                      if field_old[i*3+1] > max_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      elif field_old[i*3+1] < min_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      else
+                          field_hat[i*3+1] = field_old[i*3+1]
+                      end
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, field_hat, field_DG1, field_old):
+
+        """
+        Performs the par loop.
+
+        :arg field_hat: The field to write to in the broken temperature space.
+        :arg field_DG1: A field in the equispaced DG1 space whose vertex values
+                        have been limited.
+        :arg field_old: The original un-limited field in the broken temperature
+                        space.
+        """
+        par_loop(self._kernel, dx,
+                 {"field_hat": (field_hat, WRITE),
+                  "field_DG1": (field_DG1, READ),
+                  "field_old": (field_old, READ)},
+                 is_loopy_kernel=True)
