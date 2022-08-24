@@ -50,6 +50,11 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           python $(which firedrake-clean)
           python -m pytest -n 12 -v examples
+      - name: Gusto jupyter_notebooks 
+        run: |
+          . /home/firedrake/firedrake/bin/activate
+          python $(which firedrake-clean)
+          python -m pytest --nbval-lax -n 12 -v jupyter_notebooks
       - name: Lint
         if: ${{ always() }}
         run: |
