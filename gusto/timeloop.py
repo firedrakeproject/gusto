@@ -75,15 +75,6 @@ class Timestepper(object):
     def transporting_velocity(self):
         return "prognostic"
 
-    def _apply_bcs(self):
-        """
-        Set the zero boundary conditions in the velocity.
-        """
-        unp1 = self.x.np1("u")
-
-        for bc in self.bcs['u']:
-            bc.apply(unp1)
-
     def setup_timeloop(self):
         self.x = TimeLevelFields(self.state, self.equations)
 
@@ -230,6 +221,15 @@ class CrankNicolson(Timestepper):
             self.linear_solver = linear_solver
         self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
+
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.x.np1("u")
+
+        for bc in self.bcs['u']:
+            bc.apply(unp1)
 
     @property
     def transporting_velocity(self):
