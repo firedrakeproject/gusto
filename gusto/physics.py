@@ -171,11 +171,10 @@ class Fallout(Physics):
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered spac
-        Vrho = state.spaces("DG")
-        h_deg = Vrho.ufl_element().degree()[0]
-        v_deg = Vrho.ufl_element().degree()[1]
+        h_deg = Vt.ufl_element().degree()[0]
+        v_deg = Vt.ufl_element().degree()[1] - 1
         if v_deg == 0 and h_deg == 0:
-            VDG1 = state.spaces("DG1")
+            VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
             boundary_method = Boundary_Method.dynamics

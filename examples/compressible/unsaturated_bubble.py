@@ -68,7 +68,7 @@ x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
-VDG1 = state.spaces("DG1", "DG", 1)
+VDG1 = state.spaces("DG1_equispaced")
 VCG1 = FunctionSpace(mesh, "CG", 1)
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
