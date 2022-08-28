@@ -70,7 +70,7 @@ def run_dry_compressible(tmpdir):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    checkpoint_name = 'dry_compressible_chkpt'
+    checkpoint_name = 'dry_compressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/dry_compressible",
                                     checkpoint_pickup_filename=new_path)

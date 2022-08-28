@@ -66,7 +66,7 @@ def run_incompressible(tmpdir):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    checkpoint_name = 'incompressible_chkpt'
+    checkpoint_name = 'incompressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/incompressible",
                                     checkpoint_pickup_filename=new_path)
