@@ -281,7 +281,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # the residual rather than to use the label_map
         for term_idx, t in enumerate(residual.terms):
             field = t.get(prognostic)
-            if (not t.has_label(linearisation) and field is not None
+            if (not t.has_label(linearisation)
                 and any(t.has_label(*terms_to_linearise[field], return_tuple=True))):
                 # Linear form is obtained by taking derivative of original term
                 linear_form = action(ufl.derivative(t.form, self.X), self.trials)
@@ -476,14 +476,14 @@ class ShallowWaterEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = kinetic_energy_form(state, w, u)
+            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = advection_equation_circulation_form(state, w, u) + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
@@ -521,6 +521,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
             f.interpolate(fexpr)
             coriolis_form = coriolis(
                 subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
+            # Add linearisation
+            linear_coriolis = coriolis(
+                subject(prognostic(f*inner(state.perp(u_trial), w)*dx, "u"), self.X))
+            coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
         if bexpr is not None:
@@ -532,11 +536,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u, D = self.X.split()
+        u_ref, D_ref = self.X_ref.split()
         # Linearise about D = H
-        # TODO: add linearisation state for u
-        D.assign(Constant(H))
-        u, D = split(self.X)
+        # TODO: add interface to update linearisation state
+        D_ref.assign(Constant(H))
+        u_ref.assign(Constant(0.0))
 
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
@@ -655,14 +659,14 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = kinetic_energy_form(state, w, u)
+            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = advection_equation_circulation_form(state, w, u) + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
@@ -922,14 +926,14 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_manifold_advection_form":
             u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = kinetic_energy_form(state, w, u)
+            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = advection_equation_circulation_form(state, w, u) + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
