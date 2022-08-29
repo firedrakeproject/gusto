@@ -758,6 +758,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if Omega is not None:
+            # TODO: add linearisation and label for this
             residual += subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X)
 
@@ -978,6 +979,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
         if Omega is not None:
+            # TODO: add linearisation and label for this
             residual += subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X)
 
