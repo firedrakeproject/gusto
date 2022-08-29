@@ -26,10 +26,6 @@ jobs:
         run: |
           cd ..
           rm -rf build
-      - name: Setup python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
@@ -38,23 +34,19 @@ jobs:
       - name: Gusto unit-tests
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          python -m pytest -n 12 -v unit-tests
+          make unit_test PYTEST_ARGS="-n 12 -v"
       - name: Gusto integration-tests
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          python -m pytest -n 12 -v integration-tests
+          make integration_test PYTEST_ARGS="-n 12 -v"
       - name: Gusto examples
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          python -m pytest -n 12 -v examples
-      - name: Gusto jupyter_notebooks 
+          make example PYTEST_ARGS="-n 12 -v"
+      - name: Gusto jupyter_notebooks
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          python -m pytest --nbval-lax -n 12 -v jupyter_notebooks
+          make notebook_test PYTEST_ARGS="-n 4 -v"
       - name: Lint
         if: ${{ always() }}
         run: |
