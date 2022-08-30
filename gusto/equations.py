@@ -4,7 +4,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        TrialFunction, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
-from gusto.fml.form_manipulation_labelling import Term, all_terms, LabelledForm, drop
+from gusto.fml.form_manipulation_labelling import Term, all_terms, identity, drop
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
                           name, pressure_gradient, coriolis,
@@ -277,20 +277,27 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # TODO: Neaten up the `terms_to_linearise` variable. This should not be
         # a dictionary, it should be a filter of some sort
 
-        # This is quite in-depth so it is clearer to loop through the terms in
-        # the residual rather than to use the label_map
-        for term_idx, t in enumerate(residual.terms):
-            field = t.get(prognostic)
-            if (not t.has_label(linearisation)
-                and any(t.has_label(*terms_to_linearise[field], return_tuple=True))):
-                # Linear form is obtained by taking derivative of original term
-                linear_form = action(ufl.derivative(t.form, self.X), self.trials)
-                # Make term by adding labels from original term to form
-                raw_linear_term = Term(linear_form, t.labels)
-                # Replace the prognostic variables with their reference state
-                linear_term = replace_subject(self.X_ref)(raw_linear_term)
-                # Add the linearisation to the original term through a label
-                residual.terms[term_idx] = linearisation(t, linear_term)
+        from functools import partial
+
+        # Function to check if term should be linearised
+        def should_linearise(term, field):
+            return (not term.has_label(linearisation)
+                    and term.get(prognostic) == field
+                    and any(term.has_label(*terms_to_linearise[field], return_tuple=True))
+                    )
+
+        # Linearise a term, and add the linearisation as a label
+        def linearise(term, X, X_ref, du):
+            linear_term = Term(action(ufl.derivative(term.form, X), du), term.labels)
+            return linearisation(term, replace_subject(X_ref)(linear_term))
+
+        # Add linearisations to all terms that need linearising
+        for field in self.field_names:
+            residual = residual.label_map(
+                partial(should_linearise, field=field),
+                map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
+                map_if_false=identity,  # TODO: should "keep" be an alias for identity?
+            )
 
         return residual
 
