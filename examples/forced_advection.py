@@ -4,6 +4,7 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        FiniteElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
+import numpy as np
 
 # set up mesh
 Lx = 100
@@ -14,12 +15,15 @@ mesh = PeriodicIntervalMesh(nx, Lx)
 x = SpatialCoordinate(mesh)[0]
 
 tophat = False
-triangle = True
+triangle = False
+trig = True
 
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
     dirname = "forced_advection_triangle"
+elif trig:
+    dirname = "forced_advection_trig"
 
 output = OutputParameters(dirname=dirname, dumpfreq=100)
 
@@ -34,6 +38,9 @@ if tophat:
 elif triangle:
     qmax = 0.9
     qh = 0.4
+elif trig:
+    C0 = 0.6
+    K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
 x1 = 0
@@ -56,6 +63,8 @@ if tophat:
     mexpr = conditional(x < x2, conditional(x > x1, qmax, qmax-qh), qmax-qh)
 elif triangle:
     mexpr = conditional(x < x2, conditional(x > x1, qmax - 2*qh - (4*qh*(x-(Lx/2)))/Lx, qmax-qh), qmax-qh)
+elif trig:
+    mexpr = C0 + K0*cos((2*pi*x)/Lx)
 
 # define saturation profile
 msat_expr = Csat + (Ksat * cos(2*pi*(x/Lx)))
@@ -75,15 +84,22 @@ rain = state.fields("r", VD)
 rain.project(Constant(0.))
 
 # exact rainfall profile (analytically)
-import numpy as np
-lim2 = Lx/2
-lim1 = Lx/(2*pi) * np.arccos((qmax - Csat)/Ksat)
 r_exact = Function(VD)
+if trig:
+    lim1 = Lx/(2*pi) * np.arccos((C0 + K0 - Csat)/Ksat)
+    lim2 = Lx/2
+else:
+    lim1 = Lx/(2*pi) * np.arccos((qmax - Csat)/Ksat)
+    lim2 = Lx/2
 if tophat:
     exact_expr = (pi*Ksat)/2 * sin((2*pi*x)/Lx)
 elif triangle:
     coord = (2*pi*x)/Lx
     exact_expr = ((pi*Ksat)/(2*qh) * sin(coord))*(qmax - Csat - Ksat*cos(coord))
+elif trig:
+    coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/Ksat
+    test = np.arccos(x)
+    exact_expr = 2*Ksat*sin(2*pi*x/Lx)*np.arccos(coord)
 r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 plot(r_exact)
