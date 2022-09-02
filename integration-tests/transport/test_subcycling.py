@@ -1,50 +1,35 @@
 """
-This tests transport using the subcycling option.
-
-TODO: this doesn't check that the transport is correct. Should use the
-existing config
+This tests transport using the subcycling option. The computed solution is
+compared with a true one to check that the transport is working correctly.
 """
 
 from gusto import *
-from firedrake import PeriodicSquareMesh, exp, SpatialCoordinate, Constant
+from firedrake import norm
+import pytest
 
 
-def setup_gaussian(dirname):
-    n = 16
-    L = 1.
-    mesh = PeriodicSquareMesh(n, n, L)
-
-    parameters = ShallowWaterParameters(H=1.0, g=1.0)
-    dt = 0.08
-    output = OutputParameters(dirname=dirname+'/sw_plane_gaussian_subcycled')
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters)
-
-    eqns = ShallowWaterEquations(state, family="BDM", degree=1,
-                                 fexpr=Constant(1.))
-    D0 = state.fields("D")
-    x, y = SpatialCoordinate(mesh)
-    H = Constant(state.parameters.H)
-    D0.interpolate(H + exp(-50*((x-0.5)**2 + (y-0.5)**2)))
-
-    transported_fields = []
-    transported_fields.append((SSPRK3(state, "u", options=EmbeddedDGOptions(), subcycles=2)))
-    transported_fields.append((SSPRK3(state, "D", subcycles=2)))
-
-    # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields)
-
-    return stepper
+def run(state, transport_scheme, tmax, f_end):
+    timestepper = PrescribedTransport(state, transport_scheme)
+    timestepper.run(0, tmax)
+    return norm(state.fields("f") - f_end) / norm(f_end)
 
 
-def run(dirname):
-    stepper = setup_gaussian(dirname)
-    stepper.run(t=0, tmax=0.3)
+@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
+def test_subcyling(tmpdir, equation_form, tracer_setup):
+    geometry = "slice"
+    setup = tracer_setup(tmpdir, geometry)
+    state = setup.state
+    V = state.spaces("DG", "DG", 1)
+    if equation_form == "advective":
+        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
+                                udegree=setup.degree)
+    else:
+        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
+                                 udegree=setup.degree)
+    state.fields("f").interpolate(setup.f_init)
+    state.fields("u").project(setup.uexpr)
 
-
-def test_subcycling(tmpdir):
-    dirname = str(tmpdir)
-    run(dirname)
+    transport_scheme = [(eqn, SSPRK3(state, subcycles=2))]
+    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    assert error < setup.tol, \
+        'The transport error is greater than the permitted tolerance'

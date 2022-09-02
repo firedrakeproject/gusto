@@ -77,10 +77,6 @@ Vr = state.spaces("DG")
 # and reference profiles
 g = parameters.g
 N = parameters.N
-p_0 = parameters.p_0
-c_p = parameters.cp
-R_d = parameters.R_d
-kappa = parameters.kappa
 
 x, z = SpatialCoordinate(mesh)
 

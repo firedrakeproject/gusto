@@ -23,18 +23,24 @@ class SpaceCreator(object):
         self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self._initialised_base_spaces = False
 
-    def __call__(self, name, family=None, degree=None):
+    def __call__(self, name, family=None, degree=None, V=None):
         try:
             return getattr(self, name)
         except AttributeError:
-            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
+            if V is not None:
+                value = V
+            elif name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)
+            elif name == "DG1_equispaced":
+                value = self.build_dg_space(1, variant='equispaced')
             elif family == "DG":
                 value = self.build_dg_space(degree)
             elif family == "CG":
                 value = self.build_cg_space(degree)
+            else:
+                raise ValueError(f'State has no space corresponding to {name}')
             setattr(self, name, value)
             return value
 
@@ -60,12 +66,12 @@ class SpaceCreator(object):
         cell = self.mesh._base_mesh.ufl_cell().cellname()
 
         # horizontal base spaces
-        self.S1 = FiniteElement(family, cell, degree+1, variant="equispaced")
-        self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+        self.S1 = FiniteElement(family, cell, degree+1)
+        self.S2 = FiniteElement("DG", cell, degree)
 
         # vertical base spaces
-        self.T0 = FiniteElement("CG", interval, degree+1, variant="equispaced")
-        self.T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+        self.T0 = FiniteElement("CG", interval, degree+1)
+        self.T1 = FiniteElement("DG", interval, degree)
 
         self._initialised_base_spaces = True
 
@@ -82,28 +88,28 @@ class SpaceCreator(object):
             V_elt = FiniteElement(family, cell, degree+1)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, degree):
+    def build_dg_space(self, degree, variant=None):
         if self.extruded_mesh:
-            if not self._initialised_base_spaces or self.T1.degree() != degree:
+            if not self._initialised_base_spaces or self.T1.degree() != degree or self.T1.variant() != variant:
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
-                S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-                T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+                S2 = FiniteElement("DG", cell, degree, variant=variant)
+                T1 = FiniteElement("DG", interval, degree, variant=variant)
             else:
                 S2 = self.S2
                 T1 = self.T1
             V_elt = TensorProductElement(S2, T1)
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
-        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
+            V_elt = FiniteElement("DG", cell, degree, variant=variant)
+        name = f'DG{degree}_equispaced' if variant == 'equispaced' else f'DG{degree}'
+        return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, degree):
         assert self.extruded_mesh
         if not self._initialised_base_spaces:
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-            self.T0 = FiniteElement("CG", interval, degree+1,
-                                    variant="equispaced")
+            self.S2 = FiniteElement("DG", cell, degree)
+            self.T0 = FiniteElement("CG", interval, degree+1)
         V_elt = TensorProductElement(self.S2, self.T0)
         return FunctionSpace(self.mesh, V_elt, name='Vtheta')
 
@@ -158,7 +164,10 @@ class StateFields(FieldCreator):
                 else:
                     self.to_dump.add(name)
             if pickup:
-                self.to_pickup.add(name)
+                if subfield_names is not None:
+                    self.to_pickup.update(subfield_names)
+                else:
+                    self.to_pickup.add(name)
             return getattr(self, name)
 
 
@@ -335,7 +344,9 @@ class State(object):
 
         self.fields = StateFields(*self.output.dumplist)
 
+        self.dumpdir = None
         self.dumpfile = None
+        self.to_pickup = None
 
         # figure out if we're on a sphere
         try:
@@ -485,10 +496,11 @@ class State(object):
                 self.output.pddumpfreq = self.output.dumpfreq
 
         # if we want to checkpoint and are not picking up from a previous
-        # checkpoint file, setup the dumb checkpointing
-        if self.output.checkpoint and not pickup:
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                        mode=FILE_CREATE)
+        # checkpoint file, setup the checkpointing
+        if self.output.checkpoint:
+            if not pickup:
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                            mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
@@ -504,15 +516,25 @@ class State(object):
         """
         :arg t: the current model time (default is zero).
         """
+        # TODO: this duplicates some code from setup_dump. Can this be avoided?
+        # It is because we don't know if we are picking up or setting dump first
+        if self.to_pickup is None:
+            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
+        # Set dumpdir if has not been done already
+        if self.dumpdir is None:
+            self.dumpdir = path.join("results", self.output.dirname)
+
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
+            if self.output.checkpoint_pickup_filename is not None:
+                chkfile = self.output.checkpoint_pickup_filename
+            else:
+                chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
                     chk.load(field)
                 t = chk.read_attribute("/", "time")
-                next(self.dumpcount)
             # Setup new checkpoint
             self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
         else:

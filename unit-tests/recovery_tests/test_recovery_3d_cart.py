@@ -80,11 +80,11 @@ def test_3D_cartesian_recovery(geometry, element, mesh, expr):
     # horizontal base spaces
     cell = mesh._base_mesh.ufl_cell().cellname()
     u_hori = FiniteElement(family, cell, 1)
-    w_hori = FiniteElement("DG", cell, 0, variant="equispaced")
+    w_hori = FiniteElement("DG", cell, 0)
 
     # vertical base spaces
-    u_vert = FiniteElement("DG", interval, 0, variant="equispaced")
-    w_vert = FiniteElement("CG", interval, 1, variant="equispaced")
+    u_vert = FiniteElement("DG", interval, 0)
+    w_vert = FiniteElement("CG", interval, 1)
 
     # build elements
     u_element = HDiv(TensorProductElement(u_hori, u_vert))

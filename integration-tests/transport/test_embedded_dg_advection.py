@@ -11,7 +11,7 @@ import pytest
 def run(state, transport_schemes, tmax, f_end):
     timestepper = PrescribedTransport(state, transport_schemes)
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end)
+    return norm(state.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("ibp", [IntegrateByParts.ONCE, IntegrateByParts.TWICE])
@@ -39,4 +39,6 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
 
     transport_schemes = [(eqn, SSPRK3(state, options=opts))]
 
-    assert run(state, transport_schemes, setup.tmax, setup.f_end) < setup.tol
+    error = run(state, transport_schemes, setup.tmax, setup.f_end)
+    assert error < setup.tol, \
+        'The transport error is greater than the permitted tolerance'

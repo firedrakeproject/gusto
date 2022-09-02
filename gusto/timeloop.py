@@ -75,15 +75,6 @@ class Timestepper(object):
     def transporting_velocity(self):
         return "prognostic"
 
-    def _apply_bcs(self):
-        """
-        Set the zero boundary conditions in the velocity.
-        """
-        unp1 = self.x.np1("u")
-
-        for bc in self.bcs['u']:
-            bc.apply(unp1)
-
     def setup_timeloop(self):
         self.x = TimeLevelFields(self.state, self.equations)
 
@@ -231,6 +222,15 @@ class CrankNicolson(Timestepper):
         self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.x.np1("u")
+
+        for bc in self.bcs['u']:
+            bc.apply(unp1)
+
     @property
     def transporting_velocity(self):
         xn = self.x.n
@@ -277,10 +277,6 @@ class CrankNicolson(Timestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-            # Update xnp1 values for active tracers not included in the linear solve
-            # TODO: should this actually be after forcing is applied?
-            self.copy_active_tracers(xp, xnp1)
-
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
@@ -291,9 +287,11 @@ class CrankNicolson(Timestepper):
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
 
-                # TODO: I am confused by these lines
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
+
+            # Update xnp1 values for active tracers not included in the linear solve
+            self.copy_active_tracers(xp, xnp1)
 
             self._apply_bcs()
 
