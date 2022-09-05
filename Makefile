@@ -9,8 +9,6 @@ lint:
 	@python3 -m flake8 integration-tests
 	@echo "    Linting gusto plotting scripts"
 	@python3 -m flake8 plotting
-	@echo "     Linting gusto jupyter notebooks"
-	@python3 -m flake8_nb jupyter_notebooks
 
 test: unit_test integration_test example notebook_test
 
