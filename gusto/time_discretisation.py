@@ -794,7 +794,7 @@ class RKF45(ExplicitTimeDiscretisation):
             self.k6.assign(self.dq)
             self.q1.assign(x_in + self.dt*((25./216.)*self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
             self.q4.assign(x_in + self.dt*((25./216.)*self.k1 + (1408./2565.)*self.k3 + (2197./4101.)*self.k4 + (-1./5.)*self.k5))
-            self.q5.assign(x_in + self.dt*((16./135.)*self.k1 + (6656./12825.)*self.k3 + (28561./56430.)*self.k4 + (-9./50.)*self.k5 + (2./55.)*self.k6))
+            self.q5.assign(x_in + self.dt*((16./135.)*self.k1 + (6656./12825.)*self.k3 + (28561./56430.)*self.k4 + (-9./50.)*self.k5 + (200./55.)*self.k6))
 
 
     def apply_cycle(self, x_in, x_out):
@@ -823,7 +823,7 @@ class RKF45(ExplicitTimeDiscretisation):
             new_dt = self.dt_max
             
         self.dt.assign(new_dt)
-        
+        print(self.dt)
         
         x_out.assign(self.q1)
       
