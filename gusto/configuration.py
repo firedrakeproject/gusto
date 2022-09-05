@@ -5,10 +5,13 @@ from abc import ABCMeta, abstractproperty
 from enum import Enum
 import logging
 from logging import DEBUG, INFO, WARNING
-from firedrake import sqrt
+from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType", "OutputParameters", "CompressibleParameters", "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters", "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"]
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
+           "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
+           "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions",
+           "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -56,7 +59,13 @@ class Configuration(object):
         """Cause setting an unknown attribute to be an error"""
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
-        object.__setattr__(self, name, value)
+
+        # Almost all parameters should be Constants -- but there are some
+        # specific exceptions which should be kept as integers
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+            object.__setattr__(self, name, Constant(value))
+        else:
+            object.__setattr__(self, name, value)
 
 
 class OutputParameters(Configuration):
@@ -75,9 +84,10 @@ class OutputParameters(Configuration):
     dumplist_latlon = []
     dump_diagnostics = True
     checkpoint = True
+    checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
-    #: Should the output fields be interpolated or projected to
+    #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
     #: List of fields to dump error fields for steady state simulation
@@ -122,33 +132,6 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
-
-
-class EadyParameters(Configuration):
-
-    """
-    Physical parameters for Incompressible Eady
-    """
-    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
-    dbdy = -1.0e-07
-    H = None
-    L = None
-    f = None
-    deltax = None
-    deltaz = None
-    fourthorder = False
-
-
-class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
-
-    """
-    Physical parameters for Compressible Eady
-    """
-    g = 10.
-    N = sqrt(EadyParameters.Nsq)
-    theta_surf = 300.
-    dthetady = theta_surf/g*EadyParameters.dbdy
-    Pi0 = 0.0
 
 
 class AdvectionOptions(Configuration, metaclass=ABCMeta):

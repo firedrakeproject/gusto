@@ -1,4 +1,4 @@
-from firedrake import Function
+from firedrake import Function, Projector
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
@@ -22,9 +22,6 @@ class TimeLevelFields(object):
 
         for level in time_levels:
             setattr(self, level, FieldCreator(equations))
-
-        # hack for Eady diagnostic
-        state.xb = self.nm1
 
     def initialise(self, state):
         for field in self.n:
@@ -78,15 +75,6 @@ class Timestepper(object):
     def transporting_velocity(self):
         return "prognostic"
 
-    def _apply_bcs(self):
-        """
-        Set the zero boundary conditions in the velocity.
-        """
-        unp1 = self.x.np1("u")
-
-        for bc in self.bcs['u']:
-            bc.apply(unp1)
-
     def setup_timeloop(self):
         self.x = TimeLevelFields(self.state, self.equations)
 
@@ -121,16 +109,15 @@ class Timestepper(object):
         with timed_stage("Dump output"):
             state.setup_dump(float(t), tmax, pickup)
 
-        
-        dt = state.dt
+<<<<<<< HEAD
+=======
+        state.t.assign(t)
 
         self.x.initialise(state)
 
-        while float(t) < tmax - 0.5*float(dt):
-            logger.info("at start of timestep, t=%s, dt=%s" % (float(t), float(dt)))
-
-            t.assign(t+dt)
-            state.t.assign(t)
+        while float(state.t) < tmax - 0.5*float(state.dt):
+            logger.info(f'at start of timestep, t={float(state.t)}, dt={float(state.dt)}')
+>>>>>>> main
 
             self.x.update()
 
@@ -148,13 +135,23 @@ class Timestepper(object):
                 for field in self.x.np1:
                     field.assign(state.fields(field.name()))
 
+            state.t.assign(state.t + state.dt)
+
             with timed_stage("Dump output"):
+<<<<<<< HEAD
                 state.dump(float(t))
+=======
+                state.dump(float(state.t))
+>>>>>>> main
 
         if state.output.checkpoint:
             state.chkpt.close()
 
+<<<<<<< HEAD
         logger.info("TIMELOOP complete. t=%s, tmax=%s" % (float(t), tmax))
+=======
+        logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
+>>>>>>> main
 
 
 class CrankNicolson(Timestepper):
@@ -233,11 +230,20 @@ class CrankNicolson(Timestepper):
         self.xrhs = Function(W)
         self.dy = Function(W)
         if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, state.dt, self.alpha)
+            self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, state.dt, self.alpha)
+        self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
+
+    def _apply_bcs(self):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = self.x.np1("u")
+
+        for bc in self.bcs['u']:
+            bc.apply(unp1)
 
     @property
     def transporting_velocity(self):
@@ -285,10 +291,6 @@ class CrankNicolson(Timestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-            # Update xnp1 values for active tracers not included in the linear solve
-            # TODO: should this actually be after forcing is applied?
-            self.copy_active_tracers(xp, xnp1)
-
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
@@ -299,9 +301,11 @@ class CrankNicolson(Timestepper):
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
 
-                # TODO: I am confused by these lines
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
+
+            # Update xnp1 values for active tracers not included in the linear solve
+            self.copy_active_tracers(xp, xnp1)
 
             self._apply_bcs()
 
@@ -319,16 +323,21 @@ class PrescribedTransport(Timestepper):
     def __init__(self, state, problem, physics_list=None,
                  prescribed_transporting_velocity=None):
 
-        self.prescribed_transporting_velocity = prescribed_transporting_velocity
         super().__init__(state, problem,
                          physics_list=physics_list)
+
+        if prescribed_transporting_velocity is not None:
+            self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
+                                                 self.state.fields('u'))
+        else:
+            self.velocity_projection = None
 
     @property
     def transporting_velocity(self):
         return self.state.fields('u')
 
     def timestep(self):
-        if self.prescribed_transporting_velocity is not None:
-            self.state.fields('u').project(self.prescribed_transporting_velocity(self.state.t))
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
 
         super().timestep()

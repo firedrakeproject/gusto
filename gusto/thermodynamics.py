@@ -3,7 +3,7 @@ Some thermodynamic expressions to help declutter the code.
 """
 from firedrake import exp, ln
 
-__all__ = ["theta", "pi", "pi_rho", "pi_theta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_dew"]
+__all__ = ["theta", "exner_pressure", "dexner_drho", "dexner_dtheta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_dew"]
 
 
 def theta(parameters, T, p):
@@ -21,7 +21,7 @@ def theta(parameters, T, p):
     return T * (p_0 / p) ** kappa
 
 
-def pi(parameters, rho, theta_v):
+def exner_pressure(parameters, rho, theta_v):
     """
     Returns an expression for the Exner pressure.
 
@@ -38,7 +38,7 @@ def pi(parameters, rho, theta_v):
     return (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa))
 
 
-def pi_rho(parameters, rho, theta_v):
+def dexner_drho(parameters, rho, theta_v):
     """
     Returns an expression for the derivative of Exner pressure
     with respect to density.
@@ -56,7 +56,7 @@ def pi_rho(parameters, rho, theta_v):
     return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / rho
 
 
-def pi_theta(parameters, rho, theta_v):
+def dexner_dtheta(parameters, rho, theta_v):
     """
     Returns an expression for the deriavtive of Exner pressure
     with respect to potential temperature.
@@ -74,27 +74,27 @@ def pi_theta(parameters, rho, theta_v):
     return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / theta_v
 
 
-def p(parameters, pi):
+def p(parameters, exner):
     """
     Returns an expression for the pressure in Pa from the Exner Pi.
 
     :arg parameters: a CompressibleParameters object.
-    :arg pi: the Exner pressure.
+    :arg exner: the Exner pressure.
     """
 
     kappa = parameters.kappa
     p_0 = parameters.p_0
 
-    return p_0 * pi ** (1 / kappa)
+    return p_0 * exner ** (1 / kappa)
 
 
-def T(parameters, theta_v, pi, r_v=None):
+def T(parameters, theta_v, exner, r_v=None):
     """
     Returns an expression for temperature T in K.
 
     :arg parameters: a CompressibleParameters object.
     :arg theta_v: the virtual potential temperature in K.
-    :arg pi: the Exner pressure.
+    :arg exner: the Exner pressure.
     :arg r_v: the mixing ratio of water vapour.
     """
 
@@ -103,27 +103,27 @@ def T(parameters, theta_v, pi, r_v=None):
 
     # if the air is wet, need to divide by (1 + r_v)
     if r_v is not None:
-        return theta_v * pi / (1 + r_v * R_v / R_d)
+        return theta_v * exner / (1 + r_v * R_v / R_d)
     # in the case that r_v is None, theta_v=theta
     else:
-        return theta_v * pi
+        return theta_v * exner
 
 
-def rho(parameters, theta_v, pi):
+def rho(parameters, theta_v, exner):
     """
     Returns an expression for the dry density rho in kg / m^3
     from the (virtual) potential temperature and Exner pressure.
 
     :arg parameters: a CompressibleParameters object.
     :arg theta_v: the virtual potential temperature in K.
-    :arg pi: the Exner pressure.
+    :arg exner: the Exner pressure.
     """
 
     kappa = parameters.kappa
     p_0 = parameters.p_0
     R_d = parameters.R_d
 
-    return p_0 * pi ** (1 / kappa - 1) / (R_d * theta_v)
+    return p_0 * exner ** (1 / kappa - 1) / (R_d * theta_v)
 
 
 def r_sat(parameters, T, p):

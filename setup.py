@@ -3,8 +3,8 @@
 from distutils.core import setup
 
 setup(name="gusto",
-      version="0.1",
-      description="Finite element atmospheric dynamical core",
-      author="Imperial College London",
+      version="1.0",
+      description="Toolkit for compatible finite element dynamical cores",
+      author="The Gusto Team",
       url="http://www.firedrakeproject.org/gusto/",
       packages=["gusto"])
