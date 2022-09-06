@@ -1,3 +1,11 @@
+"""
+This module contains slope limiters.
+
+Slope limiters are used in transport schemes to enforce monotonicity. They are
+generally passed as an argument to time discretisations, and should be selected
+to be compatible with with :class:`FunctionSpace` of the transported field.
+"""
+
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
@@ -8,6 +16,8 @@ __all__ = ["ThetaLimiter", "NoLimiter"]
 
 class ThetaLimiter(object):
     """
+    A vertex-based limiter for the degree 1 temperature space.
+
     A vertex based limiter for fields in the DG1xCG2 space, i.e. temperature
     variables in the next-to-lowest order set of spaces. This acts like the
     vertex-based limiter implemented in Firedrake, but in addition corrects
@@ -16,11 +26,14 @@ class ThetaLimiter(object):
 
     def __init__(self, space):
         """
-        Initialise limiter
-        :arg space: the space in which the transported variables lies.
-                    It should be a form of the DG1xCG2 space.
-        """
+        Args:
+            space (:class:`FunctionSpace`): the space in which the transported
+                variables lies. It should be a form of the DG1xCG2 space.
 
+        Raises:
+            ValueError: If the mesh is not extruded.
+            ValueError: If the space is not appropriate for the limiter.
+        """
         if not space.extruded:
             raise ValueError('The Theta Limiter can only be used on an extruded mesh')
 
@@ -55,7 +68,15 @@ class ThetaLimiter(object):
 
     def apply(self, field):
         """
-        The application of the limiter to the theta-space field.
+        The application of the limiter to the field.
+
+        Args:
+            field (:class:`Function`): the field to apply the limiter to.
+
+        Raises:
+            AssertionError: If the field is not in the broken form of the
+                :class:`FunctionSpace` that the :class:`ThetaLimiter` was
+                initialised with.
         """
         assert field.function_space() == self.Vt_brok, \
             "Given field does not belong to this object's function space"
@@ -72,18 +93,18 @@ class ThetaLimiter(object):
 
 
 class NoLimiter(object):
-    """
-    A blank limiter that does nothing.
-    """
+    """A blank limiter that does nothing."""
 
     def __init__(self):
-        """
-        Initialise the blank limiter.
-        """
+        """Initialise the blank limiter."""
         pass
 
     def apply(self, field):
         """
         The application of the blank limiter.
+
+        Args:
+            field (:class:`Function`): the field to which the limiter would be
+                applied, if this was not a blank limiter.
         """
         pass

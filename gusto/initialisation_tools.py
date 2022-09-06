@@ -108,14 +108,15 @@ def compressible_hydrostatic_balance(state, theta0, rho0, exner0=None,
     profile. By default, this uses a vertically-oriented hybridization
     procedure for solving the resulting discrete systems.
 
-    :arg state: The :class:`State` object.
-    :arg theta0: :class:`.Function`containing the potential temperature.
+    :arg state: The :class:`.State` object.
+    :arg theta0: :class:`.Function` containing the potential temperature.
     :arg rho0: :class:`.Function` to write the initial density into.
     :arg top: If True, set a boundary condition at the top. Otherwise, set
-    it at the bottom.
-    :arg exner_boundary: a field or expression to use as boundary data for exner
-    on the top or bottom as specified.
+        it at the bottom.
+    :arg exner_boundary: a field or expression to use as boundary data for
+        exner on the top or bottom as specified.
     :arg mr_t: the initial total water mixing ratio field.
+
     """
 
     # Calculate hydrostatic Pi

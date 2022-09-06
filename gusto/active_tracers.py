@@ -17,12 +17,12 @@ __all__ = ["TracerVariableType", "Phases", "ActiveTracer",
 class TracerVariableType(Enum):
     """
     An Enum object which stores the variable type of a tracer X. If the density
-    of tracer X is \rho_X, the density of dry air is \rho_d and the total
-    density is \rho_t then these variables are given by:
+    of tracer X is rho_X, the density of dry air is rho_d and the total
+    density is rho_t then these variables are given by:
 
-    mixing ratio = \rho_X / \rho_d
-    specific_humidity = \rho_X / \rho_t
-    density = \rho_X
+    mixing ratio = rho_X / rho_d
+    specific_humidity = rho_X / rho_t
+    density = rho_X
     """
 
     mixing_ratio = 25
