@@ -316,8 +316,6 @@ class State(object):
                  diagnostics=None,
                  diagnostic_fields=None):
 
-<<<<<<< HEAD
->>>>>>> main
         if output is None:
             raise RuntimeError("You must provide a directory name for dumping results")
         else:

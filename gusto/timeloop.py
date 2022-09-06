@@ -109,15 +109,13 @@ class Timestepper(object):
         with timed_stage("Dump output"):
             state.setup_dump(float(t), tmax, pickup)
 
-<<<<<<< HEAD
-=======
         state.t.assign(t)
 
         self.x.initialise(state)
 
         while float(state.t) < tmax - 0.5*float(state.dt):
             logger.info(f'at start of timestep, t={float(state.t)}, dt={float(state.dt)}')
->>>>>>> main
+
 
             self.x.update()
 
@@ -138,20 +136,15 @@ class Timestepper(object):
             state.t.assign(state.t + state.dt)
 
             with timed_stage("Dump output"):
-<<<<<<< HEAD
-                state.dump(float(t))
-=======
                 state.dump(float(state.t))
->>>>>>> main
+
 
         if state.output.checkpoint:
             state.chkpt.close()
 
-<<<<<<< HEAD
-        logger.info("TIMELOOP complete. t=%s, tmax=%s" % (float(t), tmax))
-=======
+
         logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
->>>>>>> main
+
 
 
 class CrankNicolson(Timestepper):
