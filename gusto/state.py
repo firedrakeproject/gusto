@@ -326,6 +326,7 @@ class StateFields(FieldCreator):
                     self.to_pickup.add(name)
             return getattr(self, name)
 
+
 class PointDataOutput(object):
     """Object for outputting field point data."""
     def __init__(self, filename, ndt, field_points, description,
