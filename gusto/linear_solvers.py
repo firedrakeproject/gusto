@@ -1,3 +1,10 @@
+"""
+This module provides abstract linear solver objects.
+
+The linear solvers provided here are used for solving linear problems on mixed
+finite element spaces.
+"""
+
 from firedrake import (split, LinearVariationalProblem, Constant,
                        LinearVariationalSolver, TestFunctions, TrialFunctions,
                        TestFunction, TrialFunction, lhs, rhs, FacetNormal,
@@ -19,21 +26,24 @@ __all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolv
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
-    """
-    Base class for timestepping linear solvers for Gusto.
-
-    This is a dummy base class.
-
-    :arg state: :class:`.State` object.
-    :arg solver_parameters (optional): solver parameters
-    :arg overwrite_solver_parameters: boolean, if True use only the
-         solver_parameters that have been passed in, if False then update
-         the default solver parameters with the solver_parameters passed in.
-    """
+    """Base class for timestepping linear solvers for Gusto."""
 
     def __init__(self, state, equations, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
-
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            equations (:class:`PrognosticEquation`): the model's equation.
+            alpha (float, optional): the semi-implicit off-centring factor.
+                Defaults to 0.5. A value of 1 is fully-implicit.
+            solver_parameters (dict, optional): contains the options to be
+                passed to the underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
+            overwrite_solver_parameters (bool, optional): if True use only the
+                `solver_parameters` that have been passed in. If False then
+                update the default parameters with the `solver_parameters`
+                passed in. Defaults to False.
+        """
         self.state = state
         self.equations = equations
         self.alpha = alpha
@@ -63,10 +73,12 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
 class CompressibleSolver(TimesteppingSolver):
     """
-    Timestepping linear solver object for the compressible equations
-    in theta-exner formulation with prognostic variables u, rho, and theta.
+    Timestepping linear solver object for the compressible Euler equations.
 
-    This solver follows the following strategy:
+    This solves a linear problem for the compressible Euler equations in
+    theta-exner formulation with prognostic variables u (velocity), rho
+    (density) and theta (potential temperature). It follows the following
+    strategy:
 
     (1) Analytically eliminate theta (introduces error near topography)
 
@@ -91,17 +103,6 @@ class CompressibleSolver(TimesteppingSolver):
          space using local averaging.
 
     (3) Reconstruct theta
-
-    :arg state: a :class:`.State` object containing everything else.
-    :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
-         quadrature degree in the horizontal direction and q_v is that in
-         the vertical direction.
-    :arg solver_parameters (optional): solver parameters for the
-         trace system.
-    :arg overwrite_solver_parameters: boolean, if True use only the
-         solver_parameters that have been passed in, if False then update.
-         the default solver parameters with the solver_parameters passed in.
-    :arg moisture (optional): list of names of moisture fields.
     """
 
     solver_parameters = {'mat_type': 'matfree',
@@ -124,7 +125,25 @@ class CompressibleSolver(TimesteppingSolver):
     def __init__(self, state, equations, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
-
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            equations (:class:`PrognosticEquation`): the model's equation.
+            alpha (float, optional): the semi-implicit off-centring factor.
+                Defaults to 0.5. A value of 1 is fully-implicit.
+            quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
+                the required quadrature degree in the horizontal direction and
+                q_v is that in the vertical direction. Defaults to None.
+            solver_parameters (dict, optional): contains the options to be
+                passed to the underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
+            overwrite_solver_parameters (bool, optional): if True use only the
+                `solver_parameters` that have been passed in. If False then
+                update the default parameters with the `solver_parameters`
+                passed in. Defaults to False.
+            moisture (list, optional): list of names of moisture fields.
+                Defaults to None.
+        """
         self.moisture = moisture
 
         if quadrature_degree is not None:
@@ -306,6 +325,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
+        # TODO: these kernels can be obtained from kernels.py
         shapes = {"i": Vu.finat_element.space_dimension(),
                   "j": np.prod(Vu.shape, dtype=int)}
         weight_kernel = """
@@ -347,9 +367,14 @@ class CompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs xrhs and result dy.
-        """
+        Solve the linear problem.
 
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
         self.xrhs.assign(xrhs)
 
         # Solve the hybridized system
@@ -385,8 +410,12 @@ class CompressibleSolver(TimesteppingSolver):
 
 
 class IncompressibleSolver(TimesteppingSolver):
-    """Timestepping linear solver object for the incompressible
-    Boussinesq equations with prognostic variables u, p, b.
+    """
+    Linear solver object for the incompressible Boussinesq equations.
+
+    This solves a linear problem for the incompressible Boussinesq equations
+    with prognostic variables u (velocity), p (pressure) and b (buoyancy). It
+    follows the following strategy:
 
     This solver follows the following strategy:
     (1) Analytically eliminate b (introduces error near topography)
@@ -497,7 +526,13 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs xrhs and result dy.
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
 
@@ -517,9 +552,12 @@ class IncompressibleSolver(TimesteppingSolver):
 
 class LinearTimesteppingSolver(object):
     """
-    Timestepping linear solver object for the nonlinear shallow water
-    equations with prognostic variables u and D. The linearized system
-    is solved using a hybridized-mixed method.
+    A general object for solving mixed finite element linear problems.
+
+    This linear solver object is general and is designed for use with different
+    equation sets, including with the non-linear shallow-water equations. It
+    forms the linear problem from the equations using FML. The linear system is
+    solved using a hybridised-mixed method.
     """
 
     solver_parameters = {
@@ -537,7 +575,12 @@ class LinearTimesteppingSolver(object):
     }
 
     def __init__(self, equation, alpha):
-
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation object.
+            alpha (float): the semi-implicit off-centring factor. A value of 1
+                is fully-implicit.
+        """
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
@@ -573,9 +616,14 @@ class LinearTimesteppingSolver(object):
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
-        Apply the solver with rhs xrhs and result dy.
-        """
+        Solve the linear problem.
 
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
         self.xrhs.assign(xrhs)
         self.solver.solve()
         dy.assign(self.dy)

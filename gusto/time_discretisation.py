@@ -1,3 +1,10 @@
+u"""
+Objects for discretising time derivatives.
+
+Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t and
+operator F.
+"""
+
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
@@ -15,15 +22,21 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun", "ThetaMethod", "ImplicitMidpoint"]
+__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
+           "ThetaMethod", "ImplicitMidpoint"]
 
 
 def is_cg(V):
     """
-    Function to check if a given space, V, is CG. Broken elements are
-    always discontinuous; for vector elements we check the names of
-    the sobolev spaces of the subelements and for all other elements
-    we just check the sobolev space name.
+    Checks if a :class:`FunctionSpace` is continuous.
+
+    Function to check if a given space, V, is CG. Broken elements are always
+    discontinuous; for vector elements we check the names of the Sobolev spaces
+    of the subelements and for all other elements we just check the Sobolev
+    space name.
+
+    Args:
+        V (:class:`FunctionSpace`): the space to check.
     """
     ele = V.ufl_element()
     if isinstance(ele, BrokenElement):
@@ -35,9 +48,7 @@ def is_cg(V):
 
 
 def embedded_dg(original_apply):
-    """
-    Decorator to add interpolation and projection steps for embedded DG method.
-    """
+    """Decorator to add steps for embedded DG method."""
     def get_apply(self, x_in, x_out):
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
@@ -58,21 +69,24 @@ def embedded_dg(original_apply):
 
 
 class TimeDiscretisation(object, metaclass=ABCMeta):
-    """
-    Base class for time discretisation schemes.
-
-    :arg state: :class:`.State` object.
-    :arg field: field to be evolved
-    :arg equation: :class:`.Equation` object, specifying the equation
-    that field satisfies
-    :arg solver_parameters: solver_parameters
-    :arg limiter: :class:`.Limiter` object.
-    :arg options: :class:`.DiscretisationOptions` object
-    """
+    """Base class for time discretisation schemes."""
 
     def __init__(self, state, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
-
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         self.state = state
         self.field_name = field_name
 
@@ -97,7 +111,18 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
     def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
 
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            apply_bcs (bool, optional): whether to apply the equation's boundary
+                conditions. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
         self.residual = equation.residual
 
         if self.field_name is not None:
@@ -243,12 +268,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     def pre_apply(self, x_in, discretisation_option):
         """
-        Extra steps to discretisation if using an embedded method,
-        which might be either the plain embedded method or the
-        recovered space scheme.
+        Extra steps to the discretisation if using a "wrapper" method.
 
-        :arg x_in: the input set of prognostic fields.
-        :arg discretisation option: string specifying which scheme to use.
+        Performs extra steps before the generic apply method if the whole method
+        is a "wrapper" around some existing discretisation. For instance, if
+        using an embedded or recovered method this routine performs the
+        transformation to the function space in which the discretisation is
+        computed.
+
+        Args:
+            x_in (:class:`Function`): the original field to be evolved.
+            discretisation_option (str): specifies the "wrapper" method.
         """
         if discretisation_option == "embedded_dg":
             try:
@@ -262,15 +292,23 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.x_brok_projector.project()
             self.xdg_interpolator.interpolate()
 
+        else:
+            raise ValueError(
+                f'discretisation_option {discretisation_option} not recognised')
+
     def post_apply(self, x_out, discretisation_option):
         """
-        The projection steps, returning a field to its original space
-        for an embedded DG scheme. For the case of the
+        Extra steps to the discretisation if using a "wrapper" method.
+
+        Performs projection steps after the generic apply method if the whole
+        method is a "wrapper" around some existing discretisation. This
+        generally returns a field to its original space. For the case of the
         recovered scheme, there are two options dependent on whether
         the scheme is limited or not.
 
-        :arg x_out: the outgoing field.
-        :arg discretisation_option: string specifying which option to use.
+        Args:
+            x_out (:class:`Function`): the outgoing field to be computed.
+            discretisation_option (str): specifies the "wrapper" method.
         """
         if discretisation_option == "recovered" and self.limiter is not None:
             self.x_brok_interpolator.interpolate()
@@ -279,6 +317,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     @abstractproperty
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.dq, self.idx),
@@ -288,6 +327,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     @abstractproperty
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.q1, self.idx))
@@ -300,13 +340,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     def replace_transport_term(self):
         """
+        Replaces a transport term with some other transport term.
+
         This routine allows the default transport term to be replaced with a
-        different one, specified through the transport options.
-
-        This is necessary because when the prognostic equations are declared,
-        the whole transport
+        different one, specified through the transport options. This is
+        necessary because when the prognostic equations are declared,
+        the particular transport scheme is not known. The details of the new
+        transport term are stored in the time discretisation's options object.
         """
-
         # Extract transport term of equation
         old_transport_term_list = self.residual.label_map(
             lambda t: t.has_label(transport), map_if_false=drop)
@@ -340,6 +381,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.residual += subject(new_transport_term, field)
 
     def replace_transporting_velocity(self, uadv):
+        """
+        Replace the transport velocity.
+
+        Args:
+            uadv (:class:`ufl.Expr`): the new transporting velocity.
+        """
         # replace the transporting velocity in any terms that contain it
         if any([t.has_label(transporting_velocity) for t in self.residual]):
             assert uadv is not None
@@ -359,6 +406,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     @cached_property
     def solver(self):
+        """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.dq, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
@@ -367,30 +415,36 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     @abstractmethod
     def apply(self, x_in, x_out):
         """
-        Function takes x as input, computes L(x) as defined by the equation,
-        and returns x_out as output.
+        Apply the time discretisation to advance one whole time step.
 
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
         """
         pass
 
 
 class ExplicitTimeDiscretisation(TimeDiscretisation):
-    """
-    Base class for explicit time discretisations.
-
-    :arg state: :class:`.State` object.
-    :arg field: field to be evolved
-    :arg equation: :class:`.Equation` object, specifying the equation
-    that field satisfies
-    :arg subcycles: (optional) integer specifying number of subcycles to perform
-    :arg solver_parameters: solver_parameters
-    :arg limiter: :class:`.Limiter` object.
-    """
+    """Base class for explicit time discretisations."""
 
     def __init__(self, state, field_name=None, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         super().__init__(state, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
@@ -398,7 +452,16 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.subcycles = subcycles
 
     def setup(self, equation, uadv, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
 
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
         super().setup(equation, uadv, *active_labels)
 
         # if user has specified a number of subcycles, then save this
@@ -414,22 +477,22 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
     @abstractmethod
     def apply_cycle(self, x_in, x_out):
         """
-        Function takes x as input, computes L(x) as defined by the equation,
-        and returns x_out as output.
+        Apply the time discretisation through a single sub-step.
 
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
         """
         pass
 
     @embedded_dg
     def apply(self, x_in, x_out):
         """
-        Function takes x as input, computes L(x) as defined by the equation,
-        and returns x_out as output.
+        Apply the time discretisation to advance one whole time step.
 
-        :arg x: :class:`.Function` object, the input Function.
-        :arg x_out: :class:`.Function` object, the output Function.
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
         """
         self.x[0].assign(x_in)
         for i in range(self.ncycles):
@@ -440,46 +503,68 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
 class ForwardEuler(ExplicitTimeDiscretisation):
     """
-    Class to implement the forward Euler timestepping scheme:
-    y_(n+1) = y_n + dt*L(y_n)
-    where L is the operator
+    Implements the forward Euler timestepping scheme.
+
+    The forward Euler method for operator F is the most simple explicit scheme:
+    y^(n+1) = y^n + dt*F[y^n].
     """
 
     @cached_property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         return super(ForwardEuler, self).lhs
 
     @cached_property
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         return super(ForwardEuler, self).rhs
 
     def apply_cycle(self, x_in, x_out):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
 
 
 class SSPRK3(ExplicitTimeDiscretisation):
-    """
-    Class to implement the Strongly Structure Preserving Runge Kutta 3-stage
-    timestepping method:
-    y^1 = y_n + L(y_n)
-    y^2 = (3/4)y_n + (1/4)(y^1 + L(y^1))
-    y_(n+1) = (1/3)y_n + (2/3)(y^2 + L(y^2))
-    where subscripts indicate the time-level, superscripts indicate the stage
-    number and L is the operator.
+    u"""
+    Implements the 3-stage Strong-Stability-Prevering Runge-Kutta method.
+
+    The 3-stage Strong-Stability-Preserving Runge-Kutta method (SSPRK), for
+    solving ∂y/∂t = F(y). It can be written as:
+
+    y_1 = y^n + F[y^n]
+    y_2 = (3/4)y^n + (1/4)(y_1 + F[y_1])
+    y^(n+1) = (1/3)y^n + (2/3)(y_2 + F[y_2])
+
+    where superscripts indicate the time-level and subscripts indicate the stage
+    number. See e.g. Shu and Osher (1988).
     """
 
     @cached_property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         return super(SSPRK3, self).lhs
 
     @cached_property
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         return super(SSPRK3, self).rhs
 
     def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
 
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
         if stage == 0:
             self.solver.solve()
             self.q1.assign(self.dq)
@@ -496,7 +581,13 @@ class SSPRK3(ExplicitTimeDiscretisation):
             self.limiter.apply(self.q1)
 
     def apply_cycle(self, x_in, x_out):
+        """
+        Apply the time discretisation through a single sub-step.
 
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
@@ -507,19 +598,32 @@ class SSPRK3(ExplicitTimeDiscretisation):
 
 
 class RK4(ExplicitTimeDiscretisation):
-    """
-    Class to implement the 4-stage Runge-Kutta timestepping method:
-    k1 = f(y_n)
-    k2 = f(y_n + 1/2*dt*k1)
-    k3 = f(y_n + 1/2*dt*k2)
-    k4 = f(y_n + dt*k3)
-    y_(n+1) = y_n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
-    where subscripts indicate the timelevel, superscripts indicate the stage
-    number and f is the RHS.
+    u"""
+    Implements the classic 4-stage Runge-Kutta method.
+
+    The classic 4-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
+    written as:
+
+    k1 = F[y^n]
+    k2 = F[y^n + 1/2*dt*k1]
+    k3 = F[y^n + 1/2*dt*k2]
+    k4 = F[y^n + dt*k3]
+    y^(n+1) = y^n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
+
+    where superscripts indicate the time-level.
     """
 
     def setup(self, equation, uadv, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
 
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
         super().setup(equation, uadv, *active_labels)
 
         self.k1 = Function(self.fs)
@@ -529,6 +633,7 @@ class RK4(ExplicitTimeDiscretisation):
 
     @cached_property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.dq, self.idx),
@@ -538,6 +643,7 @@ class RK4(ExplicitTimeDiscretisation):
 
     @cached_property
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.q1, self.idx))
@@ -550,7 +656,13 @@ class RK4(ExplicitTimeDiscretisation):
         return r.form
 
     def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
 
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
         if stage == 0:
             self.solver.solve()
             self.k1.assign(self.dq)
@@ -572,6 +684,13 @@ class RK4(ExplicitTimeDiscretisation):
             self.q1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
     def apply_cycle(self, x_in, x_out):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
@@ -583,22 +702,36 @@ class RK4(ExplicitTimeDiscretisation):
 
 
 class Heun(ExplicitTimeDiscretisation):
-    """
-    Class to implement Heun's timestepping method:
-    y^1 = L(y_n)
-    y_(n+1) = (1/2)y_n + (1/2)Ly^1)
-    where subscripts indicate the timelevel, superscripts indicate the stage
-    number and L is the advection operator.
+    u"""
+    Implements Heun's method.
+
+    The 2-stage Runge-Kutta scheme known as Heun's method,for solving
+    ∂y/∂t = F(y). It can be written as:
+
+    y_1 = F[y^n]
+    y^(n+1) = (1/2)y^n + (1/2)F[y_1]
+
+    where superscripts indicate the time-level and subscripts indicate the stage
+    number.
     """
     @cached_property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         return super(Heun, self).lhs
 
     @cached_property
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         return super(Heun, self).rhs
 
     def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
+
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
         if stage == 0:
             self.solver.solve()
             self.q1.assign(self.dq)
@@ -608,7 +741,13 @@ class Heun(ExplicitTimeDiscretisation):
             self.q1.assign(0.5 * x_in + 0.5 * (self.dq))
 
     def apply_cycle(self, x_in, x_out):
+        """
+        Apply the time discretisation through a single sub-step.
 
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
@@ -619,9 +758,16 @@ class Heun(ExplicitTimeDiscretisation):
 
 
 class BackwardEuler(TimeDiscretisation):
+    """
+    Implements the backward Euler timestepping scheme.
+
+    The backward Euler method for operator F is the most simple implicit scheme:
+    y^(n+1) = y^n + dt*F[y^(n+1)].
+    """
 
     @property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.dq, self.idx))
@@ -632,7 +778,7 @@ class BackwardEuler(TimeDiscretisation):
 
     @property
     def rhs(self):
-
+        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.q1, self.idx),
@@ -641,6 +787,13 @@ class BackwardEuler(TimeDiscretisation):
         return r.form
 
     def apply(self, x_in, x_out):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
@@ -648,12 +801,34 @@ class BackwardEuler(TimeDiscretisation):
 
 class ThetaMethod(TimeDiscretisation):
     """
-    Class to implement the theta timestepping method:
-    y_(n+1) = y_n + dt*(theta*L(y_n) + (1-theta)*L(y_(n+1))) where L is the operator.
+    Implements the theta implicit-explicit timestepping method.
+
+    The theta implicit-explicit timestepping method for operator F is written as
+    y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]
+    for off-centring parameter theta.
     """
+
     def __init__(self, state, field_name=None, theta=None,
                  solver_parameters=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            theta (float, optional): the off-centring parameter. theta = 1
+                corresponds to a backward Euler method. Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
 
+        Raises:
+            ValueError: if theta is not provided.
+        """
+        # TODO: would this be better as a non-optional argument? Or should the
+        # check be on the provided value?
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
         if not solver_parameters:
@@ -671,6 +846,7 @@ class ThetaMethod(TimeDiscretisation):
 
     @cached_property
     def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.dq, self.idx))
@@ -681,6 +857,7 @@ class ThetaMethod(TimeDiscretisation):
 
     @cached_property
     def rhs(self):
+        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.q1, self.idx))
@@ -690,6 +867,13 @@ class ThetaMethod(TimeDiscretisation):
         return r.form
 
     def apply(self, x_in, x_out):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
         self.q1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.dq)
@@ -697,13 +881,27 @@ class ThetaMethod(TimeDiscretisation):
 
 class ImplicitMidpoint(ThetaMethod):
     """
-    Class to implement the implicit midpoint timestepping method, i.e. the
-    theta method with theta=0.5:
-    y_(n+1) = y_n + 0.5*dt*(L(y_n) + L(y_(n+1)))
-    where L is the operator.
+    Implements the implicit midpoint timestepping method.
+
+    The implicit midpoint timestepping method for operator F is written as
+    y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].
+    It is equivalent to the "theta" method with theta = 1/2.
     """
+
     def __init__(self, state, field_name=None, solver_parameters=None,
                  options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)

@@ -1,5 +1,9 @@
 """
-The recovery operators used for improving accuracy of lowest-order spatial
+Operators to recover fields from a discontinuous to a continuous function space.
+
+The recovery operators provided in this module are used to restore continuity
+in a discontinuous field, or to reconstruct a higher-order field from a lower-
+order field, which can be used to improve the accuracy of lowest-order spatial
 discretisations.
 """
 from enum import Enum
@@ -18,18 +22,26 @@ __all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
 
 class Averager(object):
     """
-    An object that 'recovers' a low order field (e.g. in DG0)
-    into a higher order field (e.g. in CG1).
-    The code is essentially that of the Firedrake Projector
-    object, using the "average" method, and could possibly
-    be replaced by it if it comes into the master branch.
+    Computes a continuous field from a broken space through averaging.
 
-    :arg v: the :class:`ufl.Expr` or
-         :class:`.Function` to project.
-    :arg v_out: :class:`.Function` to put the result in.
+    This object restores the continuity from a field in a discontinuous or
+    broken function space. The target function space must have the same DoFs per
+    cell as the source function space. Then the value of the continuous field
+    at a particular DoF is the average of the corresponding DoFs from the
+    discontinuous space.
     """
 
     def __init__(self, v, v_out):
+        """
+        Args:
+            v (:class:`Function`): the (discontinuous) field to average. Can
+                also be a :class:`ufl.Expr`.
+            v_out (:class:`Function`): the (continuous) field to compute.
+
+        Raises:
+            RuntimeError: the geometric shape of the two fields must be equal.
+            RuntimeError: the number of DoFs per cell must be equal.
+        """
 
         if not isinstance(v, (ufl.core.expr.Expr, function.Function)):
             raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v))
@@ -51,9 +63,7 @@ class Averager(object):
 
     @cached_property
     def _weighting(self):
-        """
-        Generates a weight function for computing a projection via averaging.
-        """
+        """Generate the weights to be used in the averaging."""
         w = Function(self.V)
 
         weight_kernel = kernels.AverageWeightings(self.V)
@@ -62,10 +72,7 @@ class Averager(object):
         return w
 
     def project(self):
-        """
-        Apply the recovery.
-        """
-
+        """Apply the recovery."""
         # Ensure that the function being populated is zeroed out
         self.v_out.dat.zero()
         self.average_kernel.apply(self.v_out, self._weighting, self.v)
@@ -74,9 +81,11 @@ class Averager(object):
 
 class Boundary_Method(Enum):
     """
-    An Enum object storing the two types of boundary method:
-    dynamics -- which corrects a field recovered into CG1.
-    physics -- which corrects a field recovered into the temperature space.
+    Method for correcting the recovery at the domain boundaries.
+
+    An enumerator object encoding methods for correcting boundary recovery:
+    dynamics: which corrects a field recovered into CG1.
+    physics: corrects a field recovered into the lowest-order temperature space.
     """
 
     dynamics = 0
@@ -85,30 +94,50 @@ class Boundary_Method(Enum):
 
 class Boundary_Recoverer(object):
     """
-    An object that performs a `recovery` process at the domain
-    boundaries that has second order accuracy. This is necessary
-    because the :class:`Averager` object does not recover a field
-    with sufficient accuracy at the boundaries.
+    Corrects values in domain boundary cells that have been recovered.
 
-    The strategy is to minimise the curvature of the function in
-    the boundary cells, subject to the constraints of conserved
-    mass and continuity on the interior facets. The quickest way
-    to perform this is by using the analytic solution and a parloop.
+    An object that performs a `recovery` process at the domain boundaries that
+    has second-order accuracy. This is necessary because the :class:`Averager`
+    object does not recover a field with sufficient accuracy at the boundaries.
 
-    Currently this is only implemented for the (DG0, DG1, CG1)
-    set of spaces, and only on a `PeriodicIntervalMesh` or
-    'PeriodicUnitIntervalMesh` that has been extruded.
+    The strategy is to expand the function at the boundary using a Taylor
+    expansion. The quickest way to perform this is by using the analytic
+    solution and a parloop.
 
-    :arg v_CG1: the continuous function after the first recovery
-             is performed. Should be in CG1. This is correct
-             on the interior of the domain.
-    :arg v_DG1: the function to be output. Should be in DG1.
-    :arg method: a Boundary_Method Enum object.
-    :arg eff_coords: the effective coordinates of the iniital recovery.
-                     This must be provided for the dynamics Boundary_Method.
+    This is only implemented to recover to the CG1 function space.
     """
 
     def __init__(self, v_CG1, v_DG1, method=Boundary_Method.physics, eff_coords=None):
+        """
+        Args:
+            v_CG1 (:class:`Function`): the continuous function after the first
+                recovery is performed. Should be in a first-order continuous
+                :class:`FunctionSpace`. This is already correct on the interior
+                of the domain.
+            v_DG1 (:class:`Function`): the function to be output. Should be in a
+                discontinuous first-order :class:`FunctionSpace`.
+            method (:class:`Boundary_Method`, optional): enumerator specifying
+                the method to use. Defaults to `Boundary_Method.physics`.
+            eff_coords (:class:`Function`, optional): the effective coordinates
+                corresponding to the initial recovery process. Should be in the
+                :class:`VectorFunctionSpace` corresponding to the space of the
+                `v_DG1` variable. This must be provided for the dynamics
+                boundary method. Defaults to None.
+
+        Raises:
+            ValueError: if the `v_CG1` field is in a space that is not CG1 when
+                using the dynamics boundary method.
+            ValueError: if the `v_DG1` field is in a space that is not the DG1
+                equispaced space when using the dynamics boundary method.
+            ValueError: if the effective coordinates are not provided when using
+                the dynamics boundary method.
+            ValueError: using the physics boundary method with a non-extruded
+                mesh.
+            ValueError: using the physics boundary method `v_CG1` in the
+                DG0 x CG1 tensor product space.
+            ValueError: using the physics boundary method `v_DG1` in the
+                DG0 x DG1 tensor product space.
+        """
 
         self.v_DG1 = v_DG1
         self.v_CG1 = v_CG1
@@ -135,16 +164,16 @@ class Boundary_Recoverer(object):
         # check function spaces of functions
         if self.method == Boundary_Method.dynamics:
             if v_CG1.function_space() != CG1:
-                raise NotImplementedError("This boundary recovery method requires v1 to be in CG1.")
+                raise ValueError("This boundary recovery method requires v1 to be in CG1.")
             if v_DG1.function_space() != DG1:
-                raise NotImplementedError("This boundary recovery method requires v_out to be in DG1.")
+                raise ValueError("This boundary recovery method requires v_out to be in DG1.")
             if eff_coords is None:
                 raise ValueError('Need eff_coords field for dynamics boundary methods')
 
         elif self.method == Boundary_Method.physics:
             # check that mesh is valid -- must be an extruded mesh
             if not DG0.extruded:
-                raise NotImplementedError('The physics boundary method only works on extruded meshes')
+                raise ValueError('The physics boundary method only works on extruded meshes')
             # check that function spaces are valid
             sub_elements = v_CG1.function_space().ufl_element().sub_elements()
             if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
@@ -182,6 +211,7 @@ class Boundary_Recoverer(object):
             self.top_kernel = kernels.PhysicsRecoveryTop()
 
     def apply(self):
+        """Applies the boundary recovery process."""
         self.interpolator.interpolate()
         if self.method == Boundary_Method.physics:
             self.bottom_kernel.apply(self.v_DG1, self.v_CG1)
@@ -198,22 +228,31 @@ class Boundary_Recoverer(object):
 
 class Recoverer(object):
     """
-    An object that 'recovers' a field from a low order space
-    (e.g. DG0) into a higher order space (e.g. CG1). This encompasses
-    the process of interpolating first to a the right space before
-    using the :class:`Averager` object, and also automates the
-    boundary recovery process. If no boundary method is specified,
-    this simply performs the action of the :class: `Averager`.
+    Recovers a field from a low-order space to a higher-order space.
 
-    :arg v_in: the :class:`ufl.Expr` or
-         :class:`.Function` to project. (e.g. a DG0 function)
-    :arg v_out: :class:`.Function` to put the result in. (e.g. a CG1 function)
-    :arg VDG: optional :class:`.FunctionSpace`. If not None, v_in is interpolated
-         to this space first before recovery happens.
-    :arg boundary_method: an Enum object, .
+    An object that 'recovers' a field from a low-order space (e.g. DG0) into a
+    higher-order space (e.g. CG1). This encompasses the process of interpolating
+    first to a the right space before using the :class:`Averager` object, and
+    if specified this also coordinates the boundary recovery process.
     """
 
     def __init__(self, v_in, v_out, VDG=None, boundary_method=None):
+        """
+        Args:
+            v_in (:class:`Function`): the field or :class:`ufl.Expr` to project.
+                For instance this could be in the DG0 space.
+            v_out (:class:`Function`): to field to put the result in. This could
+                for instance lie in the CG1 space.
+            VDG (:class:`FunctionSpace`, optional): if specified, `v_in` is
+                interpolated to this space first before the recovery happens.
+                Defaults to None.
+            boundary_method (:class:`Boundary_Method`, optional): enumerator
+                specifying the boundary method to use. Defaults to None.
+
+        Raises:
+            ValueError: the `VDG` argument must be specified if the
+                `boundary_method` is not None.
+        """
 
         # check if v_in is valid
         if not isinstance(v_in, (ufl.core.expr.Expr, function.Function)):
@@ -314,13 +353,18 @@ class Recoverer(object):
 
 def find_eff_coords(V0):
     """
-    Takes a function in a field V0 and returns the effective coordinates,
-    in a vector DG1 space, of a recovery into a CG1 field. This is for use with the
-    Boundary_Recoverer, as it facilitates the Gaussian elimination used to get
-    second-order recovery at boundaries.
-    If V0 is a vector function space, this returns an array of coordinates for
-    each component.
-    :arg V0: the original function space.
+    Find the effective coordinates corresponding to a recovery process.
+
+    Takes a function in a space `V0` and returns the effective coordinates,
+    in an equispaced vector DG1 space, of a recovery into a CG1 field. This is
+    for use with the :class:`Boundary_Recoverer`, as it facilitates the Gaussian
+    elimination used to get second-order recovery at boundaries. If `V0` is a
+    vector function space, this returns an array of coordinates for each
+    component. Geocentric Cartesian coordinates are returned.
+
+    Args:
+        V0 (:class:`FunctionSpace`): the function space of the original field
+            before the recovery process.
     """
 
     mesh = V0.mesh()
@@ -385,9 +429,14 @@ def find_eff_coords(V0):
 
 def correct_eff_coords(eff_coords):
     """
-    Correct the effective coordinates calculated by simply averaging
-    which will not be correct at periodic boundaries.
-    :arg eff_coords: the effective coordinates in vec_DG1 space.
+    Corrects the effective coordinates.
+
+    This corrects the effective coordinates that have been calculated by simply
+    averaging, as they may which will not be correct for periodic meshes.
+
+    Args:
+        eff_coords (:class:`Function`): the effective coordinates field in
+            the vector equispaced DG1 :class:`FunctionSpace`.
     """
 
     mesh = eff_coords.function_space().mesh()
@@ -426,10 +475,14 @@ def correct_eff_coords(eff_coords):
 
 def find_domain_boundaries(mesh):
     """
-    Makes a scalar DG0 function whose values are 0. everywhere except for in
-    cells on the boundary of the domain, where the values are 1.0.
-    This allows boundary cells to be identified easily.
-    :arg mesh: the mesh.
+    Find the cells on the domain boundaries.
+
+    Makes a field in the scalar DG0 :class:`FunctionSpace`, whose values are 0
+    everywhere except for in cells on the boundary of the domain, where the
+    values are 1.0. This allows boundary cells to be identified.
+
+    Args:
+        mesh (:class:`Mesh`): the mesh.
     """
 
     DG0 = FunctionSpace(mesh, "DG", 0)

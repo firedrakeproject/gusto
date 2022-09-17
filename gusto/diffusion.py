@@ -13,8 +13,7 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
     :arg state: :class:`.State` object.
     :arg V: Function space of diffused field
     :arg direction: list containing directions in which function space
-    :arg: mu: the penalty weighting function, which is
-    :recommended to be proportional to 1/dx
+    :arg: mu: the penalty weighting function, which is recommended to be proportional to 1/dx
     :arg: kappa: strength of diffusion
 
     """

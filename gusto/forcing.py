@@ -13,14 +13,6 @@ class Forcing(object):
     """
     Base class for forcing terms for Gusto.
 
-    :arg state: x :class:`.State` object.
-    :arg euler_poincare: if True then the momentum equation is in Euler
-    Poincare form and we need to add 0.5*grad(u^2) to the forcing term.
-    If False then this term is not added.
-    :arg linear: if True then we are solving a linear equation so nonlinear
-    terms (namely the Euler Poincare term) should not be added.
-    :arg extra_terms: extra terms to add to the u component of the forcing
-    term - these will be multiplied by the appropriate test function.
     """
 
     def __init__(self, equation, alpha):
