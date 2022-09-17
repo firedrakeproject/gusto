@@ -263,8 +263,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
 
         # setup required functions
-        self.dq = Function(self.fs)
-        self.q1 = Function(self.fs)
+        self.x_out = Function(self.fs)
+        self.x1 = Function(self.fs)
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -320,7 +320,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -330,7 +330,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -408,7 +408,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def solver(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.dq, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -527,9 +527,9 @@ class ForwardEuler(ExplicitTimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class SSPRK3(ExplicitTimeDiscretisation):
@@ -567,18 +567,18 @@ class SSPRK3(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.q1.assign(self.dq)
+            self.x1.assign(self.x_out)
 
         elif stage == 1:
             self.solver.solve()
-            self.q1.assign(0.75*x_in + 0.25*self.dq)
+            self.x1.assign(0.75*x_in + 0.25*self.x_out)
 
         elif stage == 2:
             self.solver.solve()
-            self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
+            self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
 
         if self.limiter is not None:
-            self.limiter.apply(self.q1)
+            self.limiter.apply(self.x1)
 
     def apply_cycle(self, x_in, x_out):
         """
@@ -591,10 +591,10 @@ class SSPRK3(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class RK4(ExplicitTimeDiscretisation):
@@ -636,7 +636,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -646,7 +646,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -665,23 +665,23 @@ class RK4(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.k1.assign(self.dq)
-            self.q1.assign(x_in + 0.5 * self.dt * self.k1)
+            self.k1.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
             self.solver.solve()
-            self.k2.assign(self.dq)
-            self.q1.assign(x_in + 0.5 * self.dt * self.k2)
+            self.k2.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
             self.solver.solve()
-            self.k3.assign(self.dq)
-            self.q1.assign(x_in + self.dt * self.k3)
+            self.k3.assign(self.x_out)
+            self.x1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
             self.solver.solve()
-            self.k4.assign(self.dq)
-            self.q1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+            self.k4.assign(self.x_out)
+            self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
     def apply_cycle(self, x_in, x_out):
         """
@@ -694,11 +694,11 @@ class RK4(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
 
         for i in range(4):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class Heun(ExplicitTimeDiscretisation):
@@ -734,11 +734,11 @@ class Heun(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.q1.assign(self.dq)
+            self.x1.assign(self.x_out)
 
         elif stage == 1:
             self.solver.solve()
-            self.q1.assign(0.5 * x_in + 0.5 * (self.dq))
+            self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
     def apply_cycle(self, x_in, x_out):
         """
@@ -751,10 +751,10 @@ class Heun(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         for i in range(2):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class BackwardEuler(TimeDiscretisation):
@@ -770,7 +770,7 @@ class BackwardEuler(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.dq, self.idx))
+            map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -781,7 +781,7 @@ class BackwardEuler(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.q1, self.idx),
+            map_if_true=replace_subject(self.x1, self.idx),
             map_if_false=drop)
 
         return r.form
@@ -794,9 +794,9 @@ class BackwardEuler(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class ThetaMethod(TimeDiscretisation):
@@ -849,7 +849,7 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.dq, self.idx))
+            map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
@@ -860,7 +860,7 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
@@ -874,9 +874,9 @@ class ThetaMethod(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class ImplicitMidpoint(ThetaMethod):
