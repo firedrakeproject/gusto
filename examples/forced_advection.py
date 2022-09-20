@@ -1,10 +1,9 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
-                       VectorFunctionSpace, conditional, cos, pi, plot,
-                       FiniteElement)
+                       VectorFunctionSpace, conditional, acos, cos, pi, plot,
+                       FiniteElement, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
-import numpy as np
 
 # set up mesh
 Lx = 100
@@ -75,9 +74,6 @@ msat.interpolate(msat_expr)
 meqn = AdvectionEquation(state, VD, field_name="m", Vu=Vu)
 state.fields("u").project(as_vector([u_max]))
 state.fields("m").project(mexpr)
-plot(state.fields("m"))
-plt.title("Inital moisture profile")
-plt.show()
 
 # define rain variable
 rain = state.fields("r", VD)
@@ -86,10 +82,10 @@ rain.project(Constant(0.))
 # exact rainfall profile (analytically)
 r_exact = Function(VD)
 if trig:
-    lim1 = Lx/(2*pi) * np.arccos((C0 + K0 - Csat)/Ksat)
+    lim1 = Lx/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
     lim2 = Lx/2
 else:
-    lim1 = Lx/(2*pi) * np.arccos((qmax - Csat)/Ksat)
+    lim1 = Lx/(2*pi) * acos((qmax - Csat)/Ksat)
     lim2 = Lx/2
 if tophat:
     exact_expr = (pi*Ksat)/2 * sin((2*pi*x)/Lx)
@@ -98,12 +94,17 @@ elif triangle:
     exact_expr = ((pi*Ksat)/(2*qh) * sin(coord))*(qmax - Csat - Ksat*cos(coord))
 elif trig:
     coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/Ksat
-    test = np.arccos(x)
-    exact_expr = 2*Ksat*sin(2*pi*x/Lx)*np.arccos(coord)
+    exact_expr = 2*Ksat*sin(2*pi*x/Lx)*acos(coord)
 r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
-plot(r_exact)
-plt.title("Analytic rainfall profile")
+
+# plot initial set-up
+fig, axes = plt.subplots()
+plot(msat, axes=axes, label='m_sat', color='black')
+plot(state.fields("m"), axes=axes, label='m_0', color='blue')
+plot(r_exact, axes=axes, label='r(x)', color='green')
+axes.legend(loc='lower right')
+plt.title('Saturation curve, initial moisture profile and analytical rainfall profile')
 plt.show()
 
 # set up moisture as a field to be transported
@@ -126,6 +127,16 @@ stepper = PrescribedTransport(state, ((meqn, SSPRK3(state)),),
 
 stepper.run(t=0, tmax=11000*dt)
 
-plot(state.fields("r"))
+fig, axes = plt.subplots()
+plot(r_exact, axes=axes, label='exact solution', color='green')
+plot(state.fields("r"), axes=axes, label='rain after advection', color='red')
 plt.title("Rainfall profile after advecting")
+plt.legend()
 plt.show()
+
+# compute L2 error
+# rdiff = Function(VD).interpolate(state.fields("r") - r_exact)
+# L_2_error = sqrt(assemble(dot(rdiff,rdiff) * dx))
+L_2_error = errornorm(r_exact, state.fields("r"))
+print("error:")
+print(L_2_error)
