@@ -31,20 +31,14 @@ Z = V*V*V
 u, v, eta = TrialFunction(Z)
 w, tau, phi = TestFunction(Z)
 
-# height and velocity in the jet
-u_bar, _, eta_bar = Function(Z).split()
-u_bar_expr = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
-u_bar.interpolate(u_bar_expr)
-eta_bar_expr = -d_eta * (sinh(coordinate)/cosh(coordinate))
-eta_bar.interpolate(eta_bar_expr)
-
 # plot functions to check
 u_bar, _, eta_bar = Function(Z).split()
 # shift axis so that perturbation is at 0
 plotting_y = Function(V)
 plot_y = plotting_y.interpolate((y - 0.5 * Ly)/Rd).vector()
 # u_bar, divided by U
-u_bar.interpolate((g * d_eta)/(f*L) * (1/cosh(coordinate))**2)
+u_bar_expr = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
+u_bar.interpolate(u_bar_expr)
 plotting_u_bar = Function(V)
 plot_u_bar = plotting_u_bar.interpolate(u_bar_expr/U).vector()
 plt.plot(plot_y, plot_u_bar)
@@ -53,7 +47,8 @@ plt.xlabel("y/Rd")
 plt.ylabel("u_bar/U")
 plt.show()
 # eta_bar, divided by d_eta
-eta_bar.interpolate(-d_eta * (sinh(coordinate)/cosh(coordinate)))
+eta_bar_expr = -d_eta * (sinh(coordinate)/cosh(coordinate))
+eta_bar.interpolate(eta_bar_expr)
 plotting_eta_bar = Function(V)
 plot_eta_bar = plotting_eta_bar.interpolate(eta_bar_expr/d_eta).vector()
 plt.plot(plot_y, plot_eta_bar)
@@ -66,7 +61,8 @@ plt.show()
 bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
 
 
-k = 9.42477796076938
+# k = 0.942477796076938
+k = 9.1106186954104
 eigenmodes_real, eigenmodes_imag = Function(Z), Function(Z)
 
 a = (
@@ -150,8 +146,9 @@ etai2.dat.data[:] = interp(etai, etai2)(X2.dat.data_ro)
 # Multiply u, v, eta by the exponential term, retaining only the real part
 x, y = SpatialCoordinate(mesh)
 # Non-dimensionalise x and y by dividing by L
-x = x/Rd
-y = y/Rd
+x = x/L
+y = y/L
+k = k*L
 coordinate = (y - 0.5 * Ly)/L
 # u minus background jet
 u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x) - (((g * d_eta)/(f*L) * (1/cosh(coordinate))**2))
@@ -173,15 +170,22 @@ with CheckpointFile("eigenmode.h5", 'w') as afile:
     afile.save_mesh(mesh)
     afile.save_function(eta_real)
 
-# Plot this eigenmode
-# height as contour plot
-tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
-cb = plt.colorbar(tcf)
+# Plot this eigenmode - height as a contour plot and velocity as a quiver plot
+fig, axes = plt.subplots()
+velocity = project(as_vector([u_real, v_real]), W2)
+contours = tricontourf(eta_real, levels=14, axes=axes, cmap="RdBu_r")
+# quiver function from Firedrake
+from firedrake.plot import toreal
+coords = toreal(velocity.ufl_domain().coordinates.dat.data_ro, "real")
+V_plot = velocity.ufl_domain().coordinates.function_space()
+vals = toreal(interpolate(velocity, V_plot).dat.data_ro, "real")
+axes.quiver(*(coords.T), *(vals.T), color='black')
 scaled_lim1 = Ly/2 - (1.5 * Rd)
 scaled_lim2 = Ly/2 + (1.5 * Rd)
 plt.xlim(left=scaled_lim1, right=scaled_lim2)
 plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
+fig.colorbar(contours)
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("Re(eta)")
+# plt.title("Re(eta)")
 plt.show()
