@@ -5,16 +5,37 @@ import numpy as np
 from gusto import *
 import matplotlib.pyplot as plt
 
-# set up parameters
-f = 10
-g = 10
-L = 0.1
-Ro = 0.1
-Bu = 10
-U = f * L * Ro
-H = (f**2 * L**2 * Bu)/g
-d_eta = (f * L * U)/g
-Rd = sqrt(g * H)/f
+Z = True
+
+# set up parameters based on source choice
+if Z:
+    # parameters from Zeitlin
+    f = 10
+    g = 10
+    L = 0.1
+    Ro = 0.1 # 0.1
+    Bu = 10
+    U = f * L * Ro # 0.1
+    H = (f**2 * L**2 * Bu)/g # 1
+    d_eta = (f * L * U)/g # 0.01
+    Rd = sqrt(g * H)/f
+
+else:
+    # parameters from Poulin and Flierl
+    # what they specify
+    L = 0.1
+    f = 10
+    H = 1
+    # what they choose (and vary)
+    Ro = 0.5
+    Fr = 0.1
+    # what falls out as a result of the choices
+    U = Ro
+    d_eta = Fr * Ro
+    g = 1/Fr
+    # what we need
+    Bu = (g*H)/(f**2 * L**2) # 10 for Ro=0.1 and Fr=0.1
+    Rd = sqrt(g * H)/f
 
 # set up mesh
 Ly = 2
@@ -31,31 +52,28 @@ Z = V*V*V
 u, v, eta = TrialFunction(Z)
 w, tau, phi = TestFunction(Z)
 
-# height and velocity in the jet
-u_bar, _, eta_bar = Function(Z).split()
-u_bar_expr = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
-u_bar.interpolate(u_bar_expr)
-eta_bar_expr = -d_eta * (sinh(coordinate)/cosh(coordinate))
-eta_bar.interpolate(eta_bar_expr)
-
 # plot functions to check
 u_bar, _, eta_bar = Function(Z).split()
 # shift axis so that perturbation is at 0
 plotting_y = Function(V)
-plot_y = plotting_y.interpolate((y - 0.5 * Ly)/Rd).vector()
+plot_y = plotting_y.interpolate((y - 0.5 * Ly)).vector()
 # u_bar, divided by U
+u_bar_expr = (g * d_eta)/(f*L) * (1/cosh(coordinate))**2
+u_bar.interpolate(u_bar_expr)
 plotting_u_bar = Function(V)
 plot_u_bar = plotting_u_bar.interpolate(u_bar_expr/U).vector()
 plt.plot(plot_y, plot_u_bar)
-plt.xlim(left=-1.5, right=1.5)
+# plt.xlim(left=-1.5, right=1.5)
 plt.xlabel("y/Rd")
 plt.ylabel("u_bar/U")
 plt.show()
 # eta_bar, divided by d_eta
+eta_bar_expr = -d_eta * (sinh(coordinate)/cosh(coordinate))
+eta_bar.interpolate(eta_bar_expr)
 plotting_eta_bar = Function(V)
 plot_eta_bar = plotting_eta_bar.interpolate(eta_bar_expr/d_eta).vector()
 plt.plot(plot_y, plot_eta_bar)
-plt.xlim(left=-1.5, right=1.5)
+# plt.xlim(left=-1.5, right=1.5)
 plt.xlabel("y/Rd")
 plt.ylabel("eta_bar/d_eta")
 plt.show()
@@ -65,13 +83,13 @@ rel_vort = (vort_expr + f)/(eta_bar_expr + H)
 plotting_vort = Function(V)
 plot_vort = plotting_vort.interpolate(rel_vort/f).vector()
 plt.plot(plot_y, plot_vort)
-plt.xlim(left=-1.5, right=1.5)
+# plt.xlim(left=-1.5, right=1.5)
 plt.xlabel("y/Rd")
 plt.ylabel("PV/f")
 plt.show()
 
 # boundary conditions: Dirichlet conditions enforcing v = 0 on both ends of the interval
-bc = DirichletBC(Z.sub(1), Constant(0), "on_boundary")
+bc = DirichletBC(Z.sub(1), 0.0, "on_boundary")
 
 # set up arrays to store all k's, eigenvectors and eigenvalues
 k_list = []
@@ -107,7 +125,7 @@ for n in np.arange(1, 61, 1):
 
     m = (u * w + v * tau + eta * phi) * dx
 
-    petsc_a = assemble(a).M.handle
+    petsc_a = assemble(a, bcs = bc).M.handle
     petsc_m = assemble(m, bcs = bc).M.handle
 
     num_eigenvalues = 1
@@ -139,25 +157,30 @@ for n in np.arange(1, 61, 1):
         etar_list.append(etar)
         etai_list.append(etai)
         eigenvalue_list.append(lam)
-        sigma_list.append(k*np.imag(lam))  # dimensionless already
+        sigma_list.append((k*np.imag(lam)/Ro))  # dimensionless already
         k_list.append(k)  # dimensional k; nondimensionalise by *L
-        cp_list.append(np.real(lam))  # dimensional phase speed; non by /U
+        cp_list.append(np.real(lam)/U)  # dimensional phase speed; non by /U
 
 # Extract k-value corresponding to the largest growth rate
 max_sigma = max(sigma_list)
 index = np.argmax(sigma_list)
 k = k_list[index]
+print("k-value corresponding to the maximum growth rate: ")
 print(k)
 
 # Plot figures
 plt.scatter(k_list, cp_list)
+# plt.xticks(np.arange(0, 2, 0.5))
+# plt.xlim(left=0, right=2)
 plt.xlabel('k')
 plt.ylabel('c_p')
 plt.show()
 
 plt.scatter(k_list, sigma_list)
+# plt.xticks(np.arange(0, 2, 0.5))
+# plt.xlim(left=0, right=2)
 plt.xlabel('k')
-plt.ylabel('sigma')
+plt.ylabel('sigma/Ro')
 plt.show()
 
 # Extract fastest-growing eigenmode
@@ -212,6 +235,7 @@ x, y = SpatialCoordinate(mesh)
 # Non-dimensionalise x and y by dividing by L
 x = x/L
 y = y/L
+k = k*L # k*L if k hasn't already been non-dimensionalised for the plot
 coordinate = (y - 0.5 * Ly)/L
 # u minus background jet
 u_real_expr = ur2 * cos(k*x) - ui2 * sin(k*x) - (((g * d_eta)/(f*L) * (1/cosh(coordinate))**2))
@@ -237,10 +261,10 @@ with CheckpointFile("eigenmode.h5", 'w') as afile:
 # height as contour plot
 tcf = tricontourf(eta_real, levels=14, cmap="RdBu_r")
 cb = plt.colorbar(tcf)
-scaled_lim1 = Ly/2 - (1.5 * Rd)
-scaled_lim2 = Ly/2 + (1.5 * Rd)
-plt.xlim(left=scaled_lim1, right=scaled_lim2)
-plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
+# scaled_lim1 = Ly/2 - (1.5 * Rd)
+# scaled_lim2 = Ly/2 + (1.5 * Rd)
+# plt.xlim(left=scaled_lim1, right=scaled_lim2)
+# plt.ylim(bottom=scaled_lim1, top=scaled_lim2)
 plt.xlabel("x")
 plt.ylabel("y")
 plt.title("Re(eta)")
