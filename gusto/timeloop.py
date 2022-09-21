@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
@@ -34,31 +35,20 @@ class TimeLevelFields(object):
             field.assign(self.np1(field.name()))
 
 
-class Timestepper(object):
-    """
-    Basic timestepping class for Gusto
+class BaseTimestepper(object, metaclass=ABCMeta):
 
-    :arg state: a :class:`.State` object
-    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to transport, and the
-        :class:`~.TimeDiscretisation` to use.
-    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
-    :arg physics_list: optional list of classes that implement `physics` schemes
-    """
-
-    def __init__(self, state, problem, apply_bcs=True, physics_list=None):
-
+    def __init__(self, state, problem):
         self.state = state
 
         self.equations = []
         self.schemes = []
         self.equations = [eqn for (eqn, _) in problem]
+
         self.setup_timeloop()
+
         for eqn, method in problem:
             if type(method) is tuple:
-                for scheme, *active_labels in method:
+                for scheme, apply_bcs, *active_labels in method:
                     scheme.setup(eqn, self.transporting_velocity, apply_bcs, *active_labels)
                     self.schemes.append((eqn.field_name, scheme))
             else:
@@ -66,28 +56,16 @@ class Timestepper(object):
                 scheme.setup(eqn, self.transporting_velocity)
                 self.schemes.append((eqn.field_name, scheme))
 
-        if physics_list is not None:
-            self.physics_list = physics_list
-        else:
-            self.physics_list = []
-
-    @property
+    @abstractproperty
     def transporting_velocity(self):
-        return "prognostic"
+        return NotImplementedError
 
     def setup_timeloop(self):
         self.x = TimeLevelFields(self.state, self.equations)
 
+    @abstractmethod
     def timestep(self):
-        """
-        Implement the timestep
-        """
-        xn = self.x.n
-        xnp1 = self.x.np1
-
-        for name, scheme in self.schemes:
-            scheme.apply(xn(name), xnp1(name))
-            xn(name).assign(xnp1(name))
+        return NotImplementedError
 
     def run(self, t, tmax, pickup=False):
         """
@@ -120,15 +98,6 @@ class Timestepper(object):
             for field in self.x.np1:
                 state.fields(field.name()).assign(field)
 
-            with timed_stage("Physics"):
-
-                for physics in self.physics_list:
-                    physics.apply()
-
-                # TODO: Hack to ensure that xnp1 fields are updated
-                for field in self.x.np1:
-                    field.assign(state.fields(field.name()))
-
             state.t.assign(state.t + state.dt)
 
             with timed_stage("Dump output"):
@@ -140,7 +109,37 @@ class Timestepper(object):
         logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
 
 
-class CrankNicolson(Timestepper):
+class Timestepper(BaseTimestepper):
+    """
+    Basic timestepping class for Gusto
+
+    :arg state: a :class:`.State` object
+    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
+        indicating the fields to transport, and the
+        :class:`~.TimeDiscretisation` to use.
+    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
+        pairs indictaing the fields to diffusion, and the
+        :class:`~.Diffusion` to use.
+    :arg physics_list: optional list of classes that implement `physics` schemes
+    """
+
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
+
+    def timestep(self):
+        """
+        Implement the timestep
+        """
+        xn = self.x.n
+        xnp1 = self.x.np1
+
+        for name, scheme in self.schemes:
+            scheme.apply(xn(name), xnp1(name))
+            xn(name).assign(xnp1(name))
+
+
+class CrankNicolson(BaseTimestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
     splitting and auxilliary semi-Lagrangian transport.
@@ -173,19 +172,26 @@ class CrankNicolson(Timestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
+
         schemes = []
         self.transport_schemes = []
         self.active_transport = []
         for scheme in transport_schemes:
-            schemes.append((scheme, transport))
+            apply_bcs = False
+            schemes.append((scheme, apply_bcs, transport))
             assert scheme.field_name in equation_set.field_names
             self.active_transport.append((scheme.field_name, scheme))
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
+                apply_bcs = True
                 assert scheme.field_name in equation_set.field_names
-                schemes.append((scheme, diffusion))
+                schemes.append((scheme, apply_bcs, diffusion))
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
         problem = [(equation_set, tuple(schemes))]
@@ -207,9 +213,7 @@ class CrankNicolson(Timestepper):
             if not mass_form.terms[0].has_label(linearisation):
                 self.tracers_to_copy.append(name)
 
-        # TODO: why was this False? Should this be an argument?
-        apply_bcs = True
-        super().__init__(state, problem, apply_bcs, physics_list)
+        super().__init__(state, problem)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -303,14 +307,33 @@ class CrankNicolson(Timestepper):
             for name, scheme in self.diffusion_schemes:
                 scheme.apply(xnp1(name), xnp1(name))
 
+        with timed_stage("Physics"):
+
+            if len(self.physics_list) > 0:
+                for field in self.x.np1:
+                    self.state.fields(field.name()).assign(field)
+
+                for physics in self.physics_list:
+                    physics.apply()
+
+                # TODO hack to reproduce current behaviour - only
+                # necessary if physics routines change field values in
+                # state
+                for field in self.x.np1:
+                    field.assign(self.state.fields(field.name()))
+
 
 class PrescribedTransport(Timestepper):
 
     def __init__(self, state, problem, physics_list=None,
                  prescribed_transporting_velocity=None):
 
-        super().__init__(state, problem,
-                         physics_list=physics_list)
+        super().__init__(state, problem)
+
+        if physics_list is not None:
+            self.physics_list = physics_list
+        else:
+            self.physics_list = []
 
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
@@ -327,3 +350,18 @@ class PrescribedTransport(Timestepper):
             self.velocity_projection.project()
 
         super().timestep()
+
+        with timed_stage("Physics"):
+
+            if len(self.physics_list) > 0:
+                for field in self.x.np1:
+                    self.state.fields(field.name()).assign(field)
+
+                for physics in self.physics_list:
+                    physics.apply()
+
+                # TODO hack to reproduce current behaviour - only
+                # necessary if physics routines change field values in
+                # state
+                for field in self.x.np1:
+                    field.assign(self.state.fields(field.name()))

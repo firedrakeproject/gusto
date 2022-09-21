@@ -25,8 +25,8 @@ def run_advection_diffusion(tmpdir):
     equation = AdvectionDiffusionEquation(state, V, "f", Vu=Vu,
                                           diffusion_parameters=diffusion_params)
 
-    problem = [(equation, ((SSPRK3(state), transport),
-                           (BackwardEuler(state), diffusion)))]
+    problem = [(equation, ((SSPRK3(state), False, transport),
+                           (BackwardEuler(state), False, diffusion)))]
 
     # Initial conditions
     x = SpatialCoordinate(mesh)
