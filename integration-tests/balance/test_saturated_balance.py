@@ -124,9 +124,9 @@ def setup_saturated(dirname, recovered):
     physics_list = [Condensation(state)]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields,
-                            linear_solver=linear_solver,
-                            physics_list=physics_list)
+    stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+                                      linear_solver=linear_solver,
+                                      physics_list=physics_list)
 
     return stepper, tmax
 

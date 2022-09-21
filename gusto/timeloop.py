@@ -9,7 +9,8 @@ from gusto.labels import (transport, diffusion, time_derivative,
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
-__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedTransport"]
+__all__ = ["TimeLevelFields", "Timestepper", "SemiImplicitQuasiNewton",
+           "PrescribedTransport"]
 
 
 class TimeLevelFields(object):
@@ -139,7 +140,7 @@ class Timestepper(BaseTimestepper):
             xn(name).assign(xnp1(name))
 
 
-class CrankNicolson(BaseTimestepper):
+class SemiImplicitQuasiNewton(BaseTimestepper):
     """
     This class implements a Crank-Nicolson discretisation, with Strang
     splitting and auxilliary semi-Lagrangian transport.

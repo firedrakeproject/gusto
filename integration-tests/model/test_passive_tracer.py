@@ -58,8 +58,9 @@ def run_tracer(setup):
     tracer_transport = [(tracer_eqn, SSPRK3(state))]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, transport_schemes,
-                            auxiliary_equations_and_schemes=tracer_transport)
+    stepper = SemiImplicitQuasiNewton(
+        state, eqns, transport_schemes,
+        auxiliary_equations_and_schemes=tracer_transport)
 
     stepper.run(t=0, tmax=setup.tmax)
 
