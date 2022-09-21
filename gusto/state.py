@@ -1,3 +1,11 @@
+"""
+Provides the model's state object, which controls IO and other core functions.
+
+The model's :class:`State` object is defined in this module. It controls various
+input/output (IO) aspects, as well as setting up the compatible finite element
+spaces and holding the mesh. In some ways it acts as a bucket, holding core
+parts of the model.
+"""
 from os import path, makedirs
 import itertools
 from netCDF4 import Dataset
@@ -17,28 +25,76 @@ __all__ = ["State"]
 
 
 class SpaceCreator(object):
-
+    """Object to create and hold the model's finite element spaces."""
     def __init__(self, mesh):
+        """
+        Args:
+            mesh (:class:`Mesh`): the model's mesh.
+        """
         self.mesh = mesh
         self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self._initialised_base_spaces = False
 
-    def __call__(self, name, family=None, degree=None):
+    def __call__(self, name, family=None, degree=None, V=None):
+        """
+        Returns a space, and also creates it if it is not created yet.
+
+        If a space needs creating, it may be that more arguments (such as the
+        family and degree) need to be provided. Alternatively a space can be
+        passed in to be stored in the creator.
+
+        Args:
+            name (str): the name of the space.
+            family (str, optional): name of the finite element family to be
+                created. Defaults to None.
+            degree (int, optional): the degree of the finite element space to be
+                created. Defaults to None.
+            V (:class:`FunctionSpace`, optional): an existing space, to be
+                stored in the creator object. If this is provided, it will be
+                added to the creator and no other action will be taken. This
+                space will be returned. Defaults to None.
+
+        Returns:
+            :class:`FunctionSpace`: the desired function space.
+        """
+
         try:
             return getattr(self, name)
         except AttributeError:
-            if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
+            if V is not None:
+                value = V
+            elif name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
                 value = self.build_hdiv_space(family, degree)
             elif name == "theta":
                 value = self.build_theta_space(degree)
+            elif name == "DG1_equispaced":
+                value = self.build_dg_space(1, variant='equispaced')
             elif family == "DG":
                 value = self.build_dg_space(degree)
             elif family == "CG":
                 value = self.build_cg_space(degree)
+            else:
+                raise ValueError(f'State has no space corresponding to {name}')
             setattr(self, name, value)
             return value
 
     def build_compatible_spaces(self, family, degree):
+        """
+        Builds the sequence of compatible finite element spaces for the mesh.
+
+        If the mesh is not extruded, this builds and returns the spaces:
+            (HDiv, DG).
+        If the mesh is extruded, this builds and returns the following spaces:
+            (HDiv, DG, theta).
+        The 'theta' space corresponds to the vertical component of the velocity.
+
+        Args:
+            family (str): the family of the horizontal part of the HDiv space.
+            degree (int): the polynomial degree of the DG space.
+
+        Returns:
+            tuple: the created compatible :class:`FunctionSpace` objects.
+        """
         if self.extruded_mesh and not self._initialised_base_spaces:
             self.build_base_spaces(family, degree)
             Vu = self.build_hdiv_space(family, degree)
@@ -56,20 +112,36 @@ class SpaceCreator(object):
             return Vu, Vdg
 
     def build_base_spaces(self, family, degree):
+        """
+        Builds the :class:`FiniteElement` objects for the base mesh.
 
+        Args:
+            family (str): the family of the horizontal part of the HDiv space.
+            degree (int): the polynomial degree of the DG space.
+        """
         cell = self.mesh._base_mesh.ufl_cell().cellname()
 
         # horizontal base spaces
-        self.S1 = FiniteElement(family, cell, degree+1, variant="equispaced")
-        self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
+        self.S1 = FiniteElement(family, cell, degree+1)
+        self.S2 = FiniteElement("DG", cell, degree)
 
         # vertical base spaces
-        self.T0 = FiniteElement("CG", interval, degree+1, variant="equispaced")
-        self.T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+        self.T0 = FiniteElement("CG", interval, degree+1)
+        self.T1 = FiniteElement("DG", interval, degree)
 
         self._initialised_base_spaces = True
 
     def build_hdiv_space(self, family, degree):
+        """
+        Builds and returns the HDiv :class:`FunctionSpace`.
+
+        Args:
+            family (str): the family of the horizontal part of the HDiv space.
+            degree (int): the polynomial degree of the space.
+
+        Returns:
+            :class:`FunctionSpace`: the HDiv space.
+        """
         if self.extruded_mesh:
             if not self._initialised_base_spaces:
                 self.build_base_spaces(family, degree)
@@ -82,44 +154,97 @@ class SpaceCreator(object):
             V_elt = FiniteElement(family, cell, degree+1)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, degree):
+    def build_dg_space(self, degree, variant=None):
+        """
+        Builds and returns the DG :class:`FunctionSpace`.
+
+        Args:
+            degree (int): the polynomial degree of the space.
+            variant (str): the variant of the underlying :class:`FiniteElement`
+                to use. Defaults to None, which will call the default variant.
+
+        Returns:
+            :class:`FunctionSpace`: the DG space.
+        """
         if self.extruded_mesh:
-            if not self._initialised_base_spaces or self.T1.degree() != degree:
+            if not self._initialised_base_spaces or self.T1.degree() != degree or self.T1.variant() != variant:
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
-                S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-                T1 = FiniteElement("DG", interval, degree, variant="equispaced")
+                S2 = FiniteElement("DG", cell, degree, variant=variant)
+                T1 = FiniteElement("DG", interval, degree, variant=variant)
             else:
                 S2 = self.S2
                 T1 = self.T1
             V_elt = TensorProductElement(S2, T1)
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement("DG", cell, degree, variant="equispaced")
-        return FunctionSpace(self.mesh, V_elt, name=f'DG{degree}')
+            V_elt = FiniteElement("DG", cell, degree, variant=variant)
+        name = f'DG{degree}_equispaced' if variant == 'equispaced' else f'DG{degree}'
+        return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, degree):
+        """
+        Builds and returns the 'theta' space.
+
+        This corresponds to the non-Piola mapped space of the vertical component
+        of the velocity. The space will be discontinuous in the horizontal but
+        continuous in the vertical.
+
+        Args:
+            degree (int): degree of the corresponding density space.
+
+        Raises:
+            AssertionError: the mesh is not extruded.
+
+        Returns:
+            :class:`FunctionSpace`: the 'theta' space.
+        """
         assert self.extruded_mesh
         if not self._initialised_base_spaces:
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            self.S2 = FiniteElement("DG", cell, degree, variant="equispaced")
-            self.T0 = FiniteElement("CG", interval, degree+1,
-                                    variant="equispaced")
+            self.S2 = FiniteElement("DG", cell, degree)
+            self.T0 = FiniteElement("CG", interval, degree+1)
         V_elt = TensorProductElement(self.S2, self.T0)
         return FunctionSpace(self.mesh, V_elt, name='Vtheta')
 
     def build_cg_space(self, degree):
+        """
+        Builds the continuous scalar space at the top of the de Rham complex.
+
+        Args:
+            degree (int): degree of the continuous space.
+
+        Returns:
+            :class:`FunctionSpace`: the continuous space.
+        """
         return FunctionSpace(self.mesh, "CG", degree, name=f'CG{degree}')
 
 
 class FieldCreator(object):
-
+    """Object to hold and create a specified set of fields."""
     def __init__(self, equations):
+        """
+        Args:
+            equations (:class:`PrognosticEquation`): an equation object.
+        """
         self.fields = []
         for eqn in equations:
             subfield_names = eqn.field_names if hasattr(eqn, "field_names") else None
             self.add_field(eqn.field_name, eqn.function_space, subfield_names)
 
     def add_field(self, name, space, subfield_names=None):
+        """
+        Adds a new field to the :class:`FieldCreator`.
+
+        Args:
+            name (str): the name of the prognostic variable.
+            space (:class:`FunctionSpace`): the space to create the field in.
+                Can also be a :class:`MixedFunctionSpace`, and then will create
+                the fields in their appropriate subspaces. Then, the
+                'subfield_names' argument must be provided.
+            subfield_names (list, optional): a list of names of the prognostic
+                variables. Defaults to None.
+        """
+
         value = Function(space, name=name)
         setattr(self, name, value)
         self.fields.append(value)
@@ -132,15 +257,30 @@ class FieldCreator(object):
                 self.fields.append(field)
 
     def __call__(self, name):
+        """
+        Returns a specified field from the :class:`FieldCreator`.
+
+        Args:
+            name (str): the name of the field.
+
+        Returns:
+            :class:`Function`: the desired field.
+        """
         return getattr(self, name)
 
     def __iter__(self):
+        """Returns an iterable of the contained fields."""
         return iter(self.fields)
 
 
 class StateFields(FieldCreator):
+    """Creates the prognostic fields for the :class:`State` object."""
 
     def __init__(self, *fields_to_dump):
+        """
+        Args:
+            *fields_to_dump (str): the names of fields to be dumped.
+        """
         self.fields = []
         self.output_specified = len(fields_to_dump) > 0
         self.to_dump = set((fields_to_dump))
@@ -148,6 +288,28 @@ class StateFields(FieldCreator):
 
     def __call__(self, name, space=None, subfield_names=None, dump=True,
                  pickup=False):
+        """
+        Returns a field from or adds a field to the :class:`StateFields`.
+
+        If a named field does not yet exist in the :class:`StateFields`, then
+        the optional arguments must be specified so that it can be created and
+        added to the :class:`StateFields`.
+
+        Args:
+            name (str): name of the field to be returned/added.
+            space (:class:`FunctionSpace`, optional): the function space to
+                create the field in. Defaults to None.
+            subfield_names (list, optional): a list of names of the constituent
+                prognostic variables to be created, if the provided space is
+                actually a :class:`MixedFunctionSpace`. Defaults to None.
+            dump (bool, optional): whether the created field should be
+                outputted. Defaults to True.
+            pickup (bool, optional): whether the created field should be picked
+                up when checkpointing. Defaults to False.
+
+        Returns:
+            :class:`Function`: the specified field.
+        """
         try:
             return getattr(self, name)
         except AttributeError:
@@ -158,21 +320,33 @@ class StateFields(FieldCreator):
                 else:
                     self.to_dump.add(name)
             if pickup:
-                self.to_pickup.add(name)
+                if subfield_names is not None:
+                    self.to_pickup.update(subfield_names)
+                else:
+                    self.to_pickup.add(name)
             return getattr(self, name)
 
 
 class PointDataOutput(object):
+    """Object for outputting field point data."""
     def __init__(self, filename, ndt, field_points, description,
                  field_creator, comm, tolerance=None, create=True):
-        """Create a dump file that stores fields evaluated at points.
-
-        :arg filename: The filename.
-        :arg field_points: Iterable of pairs (field_name, evaluation_points).
-        :arg description: Description of the simulation.
-        :arg field_creator: The field creator (only used to determine
-            datatype and shape of fields).
-        :kwarg create: If False, assume that filename already exists
+        """
+        Args:
+            filename (str): name of file to output to.
+            ndt (int): number of time points to output at. TODO: remove as this
+                is unused.
+            field_points (list): some iterable of pairs, matching fields with
+                arrays of evaluation points: (field_name, evaluation_points).
+            description (str): a description of the simulation to be included in
+                the output.
+            field_creator (:class:`FieldCreator`): the field creator, used to
+                determine the datatype and shape of fields.
+            comm (:class:`MPI.Comm`): MPI communicator.
+            tolerance (float, optional): tolerance to use for the evaluation of
+                fields at points. Defaults to None.
+            create (bool, optional): whether the output file needs creating, or
+                if it already exists. Defaults to True.
         """
         # Overwrite on creation.
         self.dump_count = 0
@@ -214,11 +388,12 @@ class PointDataOutput(object):
                     group.createVariable(field_name, field_creator(field_name).dat.dtype, dimensions)
 
     def dump(self, field_creator, t):
-        """Evaluate and dump field data at points.
+        """
+        Evaluate and output field data at points.
 
-        :arg field_creator: :class:`FieldCreator` for accessing
-            fields.
-        :arg t: Simulation time at which dump occurs.
+        Args:
+            field_creator (:class:`FieldCreator`): gives access to the fields.
+            t (float): simulation time at which the output occurs.
         """
 
         val_list = []
@@ -238,13 +413,18 @@ class PointDataOutput(object):
 
 
 class DiagnosticsOutput(object):
+    """Object for outputting global diagnostic data."""
     def __init__(self, filename, diagnostics, description, comm, create=True):
-        """Create a dump file that stores diagnostics.
-
-        :arg filename: The filename.
-        :arg diagnostics: The :class:`Diagnostics` object.
-        :arg description: A description.
-        :kwarg create: If False, assume that filename already exists
+        """
+        Args:
+            filename (str): name of file to output to.
+            diagnostics (:class:`Diagnostics`): the object holding and
+                controlling the diagnostic evaluation.
+            description (str): a description of the simulation to be included in
+                the output.
+            comm (:class:`MPI.Comm`): MPI communicator.
+            create (bool, optional): whether the output file needs creating, or
+                if it already exists. Defaults to True.
         """
         self.filename = filename
         self.diagnostics = diagnostics
@@ -265,10 +445,11 @@ class DiagnosticsOutput(object):
                         group.createVariable(diagnostic, np.float64, ("time", ))
 
     def dump(self, state, t):
-        """Dump diagnostics.
+        """
+        Output the global diagnostics.
 
-        :arg state: The :class:`State` at which to compute the diagnostic.
-        :arg t: The current time.
+            state (:class:`State`): the model's state object.
+            t (float): simulation time at which the output occurs.
         """
 
         diagnostics = []
@@ -289,25 +470,35 @@ class DiagnosticsOutput(object):
 
 
 class State(object):
-    """
-    Build a model state to keep the variables in, and specify parameters.
-
-    :arg mesh: The :class:`Mesh` to use.
-    :arg dt: The time step as a :class:`Constant`. If a float or int is passed,
-             it will be cast to a :class:`Constant`.
-    :arg output: class containing output parameters
-    :arg parameters: class containing physical parameters
-    :arg diagnostics: class containing diagnostic methods
-    :arg diagnostic_fields: list of diagnostic field classes
-    """
+    """Keeps the model's mesh and variables, and controls its IO."""
 
     def __init__(self, mesh, dt,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
+        """
+        Args:
+            mesh (:class:`Mesh`): the model's mesh.
+            dt (:class:`Constant`): the time taken to perform a single model
+                step. If a float or int is passed, it will be cast to a
+                :class:`Constant`.
+            output (:class:`OutputParameters`, optional): holds and describes
+                the options for outputting. Defaults to None.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters. Defaults to None.
+            diagnostics (:class:`Diagnostics`, optional): object holding and
+                controlling the model's diagnostics. Defaults to None.
+            diagnostic_fields (list, optional): an iterable of `DiagnosticField`
+                objects. Defaults to None.
+
+        Raises:
+            RuntimeError: if no output is provided.
+            TypeError: if `dt` cannot be cast to a :class:`Constant`.
+        """
 
         if output is None:
+            # TODO: maybe this shouldn't be an optional argument then?
             raise RuntimeError("You must provide a directory name for dumping results")
         else:
             self.output = output
@@ -333,7 +524,9 @@ class State(object):
 
         self.fields = StateFields(*self.output.dumplist)
 
+        self.dumpdir = None
         self.dumpfile = None
+        self.to_pickup = None
 
         # figure out if we're on a sphere
         try:
@@ -374,9 +567,7 @@ class State(object):
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
     def setup_diagnostics(self):
-        """
-        Add special case diagnostic fields
-        """
+        """Concatenates the various types of diagnostic field."""
         for name in self.output.perturbation_fields:
             f = Perturbation(name)
             self.diagnostic_fields.append(f)
@@ -395,14 +586,22 @@ class State(object):
 
     def setup_dump(self, t, tmax, pickup=False):
         """
-        Setup dump files
-        Check for existence of directory so as not to overwrite
-        output files
-        Setup checkpoint file
+        Sets up a series of things used for outputting.
 
-        :arg tmax: model stop time
-        :arg pickup: recover state from the checkpointing file if true,
-        otherwise dump and checkpoint to disk. (default is False).
+        This prepares the model for outputting. First it checks for the
+        existence the specified outputting directory, so prevent it being
+        overwritten unintentionally. It then sets up the output files and the
+        checkpointing file.
+
+        Args:
+            t (float): the current model time.
+            tmax (float): the end time of the model's simulation.
+            pickup (bool, optional): whether to pick up the model's initial
+                state from a checkpointing file. Defaults to False.
+
+        Raises:
+            IOError: if the results directory already exists, and the model is
+                not picking up or running in test mode.
         """
 
         if any([self.output.dump_vtus, self.output.dumplist_latlon,
@@ -483,10 +682,11 @@ class State(object):
                 self.output.pddumpfreq = self.output.dumpfreq
 
         # if we want to checkpoint and are not picking up from a previous
-        # checkpoint file, setup the dumb checkpointing
-        if self.output.checkpoint and not pickup:
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                        mode=FILE_CREATE)
+        # checkpoint file, setup the checkpointing
+        if self.output.checkpoint:
+            if not pickup:
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                            mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
@@ -499,18 +699,26 @@ class State(object):
         self.dump(t)
 
     def pickup_from_checkpoint(self):
-        """
-        :arg t: the current model time (default is zero).
-        """
+        """Picks up the model's variables from a checkpoint file."""
+        # TODO: this duplicates some code from setup_dump. Can this be avoided?
+        # It is because we don't know if we are picking up or setting dump first
+        if self.to_pickup is None:
+            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
+        # Set dumpdir if has not been done already
+        if self.dumpdir is None:
+            self.dumpdir = path.join("results", self.output.dirname)
+
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            chkfile = path.join(self.dumpdir, "chkpt")
+            if self.output.checkpoint_pickup_filename is not None:
+                chkfile = self.output.checkpoint_pickup_filename
+            else:
+                chkfile = path.join(self.dumpdir, "chkpt")
             with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                 # Recover all the fields from the checkpoint
                 for field in self.to_pickup:
                     chk.load(field)
                 t = chk.read_attribute("/", "time")
-                next(self.dumpcount)
             # Setup new checkpoint
             self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
         else:
@@ -520,7 +728,14 @@ class State(object):
 
     def dump(self, t):
         """
-        Dump output
+        Dumps all of the required model output.
+
+        This includes point data, global diagnostics and general field data to
+        paraview data files. Also writes the model's prognostic variables to
+        a checkpoint file if specified.
+
+        Args:
+            t (float): the simulation's current time.
         """
         output = self.output
 
@@ -553,9 +768,13 @@ class State(object):
 
     def initialise(self, initial_conditions):
         """
-        Initialise state variables
+        Initialise the state's prognostic variables.
 
-        :arg initial_conditions: An iterable of pairs (field_name, pointwise_value)
+        Args:
+            initial_conditions (list): an iterable of pairs: (field_name, expr),
+                where 'field_name' is the string giving the name of the
+                prognostic field and expr is the :class:`ufl.Expr` whose value
+                is used to set the initial field.
         """
         for name, ic in initial_conditions:
             f_init = getattr(self.fields, name)
@@ -564,9 +783,12 @@ class State(object):
 
     def set_reference_profiles(self, reference_profiles):
         """
-        Initialise reference profiles
+        Initialise the state's reference profiles.
 
-        :arg reference_profiles: An iterable of pairs (field_name, interpolatory_value)
+        reference_profiles (list): an iterable of pairs: (field_name, expr),
+                where 'field_name' is the string giving the name of the
+                reference profile field expr is the :class:`ufl.Expr` whose
+                value is used to set the reference field.
         """
         for name, profile in reference_profiles:
             if name+'bar' in self.fields:
@@ -584,6 +806,12 @@ class State(object):
 
 
 def get_latlon_mesh(mesh):
+    """
+    Construct a planar latitude-longitude mesh from a spherical mesh.
+
+    Args:
+        mesh (:class:`State`): the mesh on which the simulation is performed.
+    """
     coords_orig = mesh.coordinates
     coords_fs = coords_orig.function_space()
 
@@ -642,6 +870,19 @@ void splat_coords(double *coords) {{
 
 
 def topo_sort(field_deps):
+    """
+    Perform a topological sort to determine the order to evaluate diagnostics.
+
+    Args:
+        field_deps (list): a list of tuples, pairing diagnostic fields with the
+            fields that they are to be evaluated from.
+
+    Raises:
+        RuntimeError: if there is a cyclic dependency in the diagnostic fields.
+
+    Returns:
+        list: a list specifying the order in which to evaluate the diagnostics.
+    """
     name2field = dict((f.name, f) for f, _ in field_deps)
     # map node: (input_deps, output_deps)
     graph = dict((f.name, (list(deps), [])) for f, deps in field_deps)

@@ -1,3 +1,12 @@
+"""
+Objects to perform parametrisations of physical processes, or "physics".
+
+"Physics" schemes are routines to compute updates to prognostic fields that
+represent the action of non-fluid processes, or those fluid processes that are
+unresolved. This module contains a set of these processes in the form of classes
+with "apply" methods.
+"""
+
 from abc import ABCMeta, abstractmethod
 from gusto.recovery import Recoverer, Boundary_Method
 from gusto.time_discretisation import SSPRK3
@@ -6,8 +15,8 @@ from gusto.equations import AdvectionEquation
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function,
-                       min_value, max_value, as_vector, BrokenElement, FunctionSpace,
-                       Constant, pi, Projector)
+                       min_value, max_value, as_vector, BrokenElement,
+                       FunctionSpace, Constant, pi, Projector)
 from gusto import thermodynamics
 from math import gamma
 from enum import Enum
@@ -17,38 +26,47 @@ __all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMom
 
 
 class Physics(object, metaclass=ABCMeta):
-    """
-    Base class for physics processes for Gusto.
-
-    :arg state: :class:`.State` object.
-    """
+    """Base class for the parametrisation of physical processes for Gusto."""
 
     def __init__(self, state):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+        """
         self.state = state
 
     @abstractmethod
     def apply(self):
         """
-        Function computes the value of specific
-        fields at the next time step.
+        Computes the value of certain prognostic fields, representing the
+        action of the physical process.
         """
         pass
 
 
 class Condensation(Physics):
     """
-    The process of condensation of water vapour
-    into liquid water and evaporation of liquid
-    water into water vapour, with the associated
-    latent heat changes. The parametrization follows
-    that used in Bryan and Fritsch (2002).
+    Represents the phase change between water vapour and cloud liquid.
 
-    :arg state: :class:`.State.` object.
-    :arg iterations: number of iterations to do
-         of condensation scheme per time step.
+    This class computes updates to water vapour, cloud liquid and (virtual dry)
+    potential temperature, representing the action of condensation of water
+    vapour and/or evaporation of cloud liquid, with the associated latent heat
+    change. The parametrisation follows the saturation adjustment used in Bryan
+    and Fritsch (2002).
+
+    Currently this is only implemented for use with mixing ratio variables, and
+    with "theta" assumed to be the virtual dry potential temperature. Latent
+    heating effects are always assumed, and the total mixing ratio is conserved.
+    A filter is applied to prevent generation of negative mixing ratios.
     """
 
     def __init__(self, state, iterations=1):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            iterations (int, optional): number of saturation adjustment
+                iterations to perform for each call of the step. Defaults to 1.
+        """
         super().__init__(state)
 
         self.iterations = iterations
@@ -123,6 +141,7 @@ class Condensation(Physics):
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        """Applies the condensation/evaporation process."""
         self.rho_recoverer.project()
         for i in range(self.iterations):
             self.lim_cond_rate.interpolate()
@@ -133,9 +152,11 @@ class Condensation(Physics):
 
 class AdvectedMoments(Enum):
     """
-    An Enum object storing moments of the rain drop
-    size distribution. This is then used in deciding
-    which to be advected in the Fallout step of the model.
+    Enumerator describing the moments in the raindrop size distribution.
+
+    This stores enumerators for the number of moments used to describe the
+    size distribution curve of raindrops. This can be used for deciding which
+    moments to advect in a precipitation scheme.
     """
 
     M0 = 0  # don't advect the distribution -- advect all rain at the same speed
@@ -144,19 +165,39 @@ class AdvectedMoments(Enum):
 
 class Fallout(Physics):
     """
-    The fallout process of hydrometeors.
+    Represents the fallout process of hydrometeors.
 
-    :arg state :class: `.State.` object.
-    :arg moments: an AdvectedMoments Enum object, indicating which
-                rainfall scheme to use. Current valid values are:
-                AdvectedMoments.M0 -- advects all rain at constant speed;
-                AdvectedMoments.M3 -- advects mean mass of droplet distribution.
-                The default value is AdvectedMoments.M3.
-    :arg limit: if True (the default value), applies a limiter to the
-                rainfall advection.
+    Precipitation is described by downwards transport of tracer species. This
+    process determines the precipitation velocity from the `AdvectedMoments`
+    enumerator, which either:
+    (a) sets a terminal velocity of 5 m/s
+    (b) determines a rainfall size distribution based on a Gamma distribution,
+    as in Paluch (1979). The droplets are based on the mean mass of the rain
+    droplets (aka a single-moment scheme).
+
+    Outflow boundary conditions are applied to the transport, so the rain will
+    flow out of the bottom of the domain.
+
+    This is currently only implemented for "rain" in the compressible Euler
+    equation set. This variable must be a mixing ratio, It is only implemented
+    for Cartesian geometry.
     """
 
     def __init__(self, state, moments=AdvectedMoments.M3, limit=True):
+        """
+        Args:
+            state (:class:`State`): the model's state object
+            moments (int, optional): an :class:`AdvectedMoments` enumerator,
+                representing the number of moments of the size distribution of
+                raindrops to be transported. Defaults to `AdvectedMoments.M3`.
+            limit (bool, optional): whether to apply a limiter to the transport.
+                Defaults to True.
+
+        Raises:
+            NotImplementedError: the limiter is only implemented for specific
+                spaces (the equispaced DG1 field and the degree 1 temperature
+                space).
+        """
         super().__init__(state)
 
         # function spaces
@@ -171,11 +212,10 @@ class Fallout(Physics):
 
         # determine whether to do recovered space advection scheme
         # if horizontal and vertical degrees are 0 do recovered spac
-        Vrho = state.spaces("DG")
-        h_deg = Vrho.ufl_element().degree()[0]
-        v_deg = Vrho.ufl_element().degree()[1]
+        h_deg = Vt.ufl_element().degree()[0]
+        v_deg = Vt.ufl_element().degree()[1] - 1
         if v_deg == 0 and h_deg == 0:
-            VDG1 = state.spaces("DG1")
+            VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
             boundary_method = Boundary_Method.dynamics
@@ -187,6 +227,7 @@ class Fallout(Physics):
             advect_options = EmbeddedDGOptions()
 
         # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
+        # TODO: check if rain is a mixing ratio
         advection_equation = AdvectionEquation(state, Vt, "rain_mixing_ratio", outflow=True)
         self.rain = state.fields("rain_mixing_ratio")
 
@@ -229,6 +270,8 @@ class Fallout(Physics):
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
+            # TODO: implement for spherical geometry. Raise an error if the
+            # geometry is not Cartesian
             if state.mesh.geometric_dimension() == 2:
                 self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
             elif state.mesh.geometric_dimension() == 3:
@@ -251,6 +294,7 @@ class Fallout(Physics):
         self.advection_method.setup(advection_equation, self.v)
 
     def apply(self):
+        """Applies the precipitation process."""
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
         self.advection_method.apply(self.rain, self.rain)
@@ -258,21 +302,27 @@ class Fallout(Physics):
 
 class Coalescence(Physics):
     """
-    The process of the coalescence of cloud
-    droplets to form rain droplets. These
-    parametrizations come from Klemp and
-    Wilhelmson (1978).
+    Represents the coalescence of cloud droplets to form rain droplets.
 
-    :arg state: :class:`.State.` object.
-    :arg accretion: Boolean which determines
-                    whether the accretion
-                    process is used.
-    :arg accumulation: Boolean which determines
-                    whether the accumulation
-                    process is used.
+    Coalescence is the process of forming rain droplets from cloud droplets.
+    This scheme performs that process, using two parts: accretion, which is
+    independent of the rain concentration, and auto-accumulation, which is
+    accelerated by the existence of rain. These parametrisations come from Klemp
+    and Wilhelmson (1978). The rate of change is limited to prevent production
+    of negative moisture values.
+
+    This is only implemented for mixing ratio variables.
     """
 
     def __init__(self, state, accretion=True, accumulation=True):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            accretion (bool, optional): whether to include the accretion process
+                in the parametrisation. Defaults to True.
+            accumulation (bool, optional): whether to include the accumulation
+                process in the parametrisation. Defaults to True.
+        """
         super().__init__(state)
 
         # obtain our fields
@@ -320,6 +370,7 @@ class Coalescence(Physics):
         self.rain_new = Interpolator(self.rain + dt * coalesce_rate, Vt)
 
     def apply(self):
+        """Applies the coalescence process."""
         self.lim_coalesce_rate.interpolate()
         self.rain.assign(self.rain_new.interpolate())
         self.water_c.assign(self.water_c_new.interpolate())
@@ -327,14 +378,22 @@ class Coalescence(Physics):
 
 class Evaporation(Physics):
     """
-    The process of evaporation of rain into water vapour
-    with the associated latent heat change. This
-    parametrization comes from Klemp and Wilhelmson (1978).
+    Represents the evaporation of rain into water vapour.
 
-    :arg state: :class:`.State.` object.
+    This describes the evaporation of rain into water vapour, with the
+    associated latent heat change. This parametrisation comes from Klemp and
+    Wilhelmson (1978). The rate of change is limited to prevent production of
+    negative moisture values.
+
+    This is only implemented for mixing ratio variables, and when the prognostic
+    is the virtual dry potential temperature.
     """
 
     def __init__(self, state):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+        """
         super().__init__(state)
 
         # obtain our fields
@@ -418,6 +477,7 @@ class Evaporation(Physics):
                                             - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
 
     def apply(self):
+        """Applies the process to evaporate rain droplets."""
         self.rho_recoverer.project()
         self.lim_evap_rate.interpolate()
         self.theta.assign(self.theta_new.interpolate())

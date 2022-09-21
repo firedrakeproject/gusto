@@ -1,4 +1,4 @@
-from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v,
+from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v, dS,
                        FacetNormal)
 from gusto.labels import diffusion
 
@@ -13,11 +13,12 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
     :arg state: :class:`.State` object.
     :arg V: Function space of diffused field
     :arg direction: list containing directions in which function space
-    :arg: mu: the penalty weighting function, which is
-    :recommended to be proportional to 1/dx
+    :arg: mu: the penalty weighting function, which is recommended to be proportional to 1/dx
     :arg: kappa: strength of diffusion
 
     """
+
+    dS_ = (dS_v + dS_h) if state.mesh.extruded else dS
     kappa = parameters.kappa
     mu = parameters.mu
 
@@ -34,7 +35,6 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
         )*dS
         return fluxes
 
-    form += get_flux_form(dS_v, kappa)
-    form += get_flux_form(dS_h, kappa)
+    form += get_flux_form(dS_, kappa)
 
     return diffusion(form)

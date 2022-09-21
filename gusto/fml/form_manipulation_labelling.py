@@ -15,6 +15,7 @@ class Term(object):
 
     :arg form: the form for this term
     :arg label_dict: dictionary of key-value pairs corresponding to current form labels.
+
     """
     __slots__ = ["form", "labels"]
 
@@ -73,7 +74,8 @@ class LabelledForm(object):
     objects with :class:`Label`s. The `label_map` routine allows the terms to be
     manipulated or selected based on particular filters.
 
-    :arg *terms: a list of `Term` objects or a single `LabelledForm`.
+    :arg terms: a list of `Term` objects or a single `LabelledForm`.
+
     """
     __slots__ = ["terms"]
 
@@ -175,8 +177,8 @@ class Label(object):
 
     :arg label: str giving the name of the label.
     :arg value: str providing the value of the label. Defaults to True.
-    :arg validator: (optional) function to check the validity of any
-    value later passed to __call__
+    :arg validator: (optional) function to check the validity of any value later passed to __call__
+
     """
     __slots__ = ["label", "default_value", "value", "validator"]
 
@@ -193,8 +195,8 @@ class Label(object):
         # if value is provided, check that we have a validator function
         # and validate the value, otherwise use default value
         if value is not None:
-            assert(self.validator)
-            assert(self.validator(value))
+            assert self.validator
+            assert self.validator(value)
             self.value = value
         else:
             self.value = self.default_value
@@ -210,7 +212,7 @@ class Label(object):
             raise ValueError("Unable to label %s" % target)
 
     def remove(self, target):
-        """Remove any :form:`Label` with this `label` from
+        """Remove any :class:`Label` with this `label` from
         `target`. If called on an :class:`LabelledForm`, act termwise."""
 
         if isinstance(target, LabelledForm):
@@ -226,7 +228,7 @@ class Label(object):
             raise ValueError("Unable to unlabel %s" % target)
 
     def update_value(self, target, new):
-        """Update any :form:`Label` with this `label` in `target`, giving it
+        """Update any :class:`Label` with this `label` in `target`, giving it
         the new value of `new`."""
 
         if isinstance(target, LabelledForm):

@@ -1,3 +1,5 @@
+"""Provides forms for different transport operators."""
+
 from firedrake import (Function, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
                        ds_v, ds_t, ds_b,
@@ -7,13 +9,27 @@ from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.labels import transport, transporting_velocity, ibp_label
 
 
-__all__ = ["advection_form", "continuity_form", "vector_invariant_form", "vector_manifold_advection_form", "kinetic_energy_form", "advection_equation_circulation_form", "linear_continuity_form"]
+__all__ = ["advection_form", "continuity_form", "vector_invariant_form",
+           "vector_manifold_advection_form", "kinetic_energy_form",
+           "advection_equation_circulation_form", "linear_continuity_form"]
 
 
 def linear_advection_form(state, test, qbar):
+    """
+    The form corresponding to the linearised advective transport operator.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        qbar (:class:`ufl.Expr`): the variable to be transported.
+
+    Returns:
+        :class:`LabelledForm`: a labelled transport form.
+    """
 
     ubar = Function(state.spaces("HDiv"))
 
+    # TODO: why is there a k here?
     L = test*dot(ubar, state.k)*dot(state.k, grad(qbar))*dx
 
     form = transporting_velocity(L, ubar)
@@ -22,6 +38,19 @@ def linear_advection_form(state, test, qbar):
 
 
 def linear_continuity_form(state, test, qbar, facet_term=False):
+    """
+    The form corresponding to the linearised continuity transport operator.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        qbar (:class:`ufl.Expr`): the variable to be transported.
+        facet_term (bool, optional): whether to include interior facet terms.
+            Defaults to False.
+
+    Returns:
+        :class:`LabelledForm`: a labelled transport form.
+    """
 
     Vu = state.spaces("HDiv")
     ubar = Function(Vu)
@@ -40,6 +69,30 @@ def linear_continuity_form(state, test, qbar, facet_term=False):
 
 
 def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The form corresponding to the advective transport operator.
+
+    This discretises (u.∇)q, for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
@@ -73,6 +126,30 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
 
 def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The form corresponding to the continuity transport operator.
+
+    This discretises ∇.(u*q), for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
@@ -106,9 +183,31 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
 
 def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    """
+    Form for advective transport operator including vector manifold correction.
+
+    This creates the form corresponding to the advective transport operator, but
+    also includes a correction for the treatment of facet terms when the
+    transported field is vector-valued and the mesh is curved. This correction
+    is based on that of Bernard, Remacle et al (2009).
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     L = advection_form(state, test, q, ibp, outflow)
 
+    # TODO: there should maybe be a restriction on IBP here
     Vu = state.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
@@ -121,6 +220,27 @@ def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, ou
 
 
 def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    """
+    Form for continuity transport operator including vector manifold correction.
+
+    This creates the form corresponding to the continuity transport operator,
+    but also includes a correction for the treatment of facet terms when the
+    transported field is vector-valued and the mesh is curved. This correction
+    is based on that of Bernard, Remacle et al (2009).
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     L = continuity_form(state, test, q, ibp, outflow)
 
@@ -138,6 +258,34 @@ def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, o
 
 
 def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
+    u"""
+    The form corresponding to the vector invariant transport operator.
+
+    The self-transporting transport operator for a vector-valued field u can be
+    written as circulation and kinetic energy terms:
+    (u.∇)u = (∇×u)×u + (1/2)∇u^2
+
+    When the transporting field u and transported field q are similar, we write
+    this as:
+    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
+
+    This form discretises this final equation, using an upwind discretisation
+    when integrating by parts.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+
+    Raises:
+        NotImplementedError: the specified integration by parts is not 'once'.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     Vu = state.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
@@ -195,6 +343,21 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
 
 
 def kinetic_energy_form(state, test, q):
+    u"""
+    The form corresponding to the kinetic energy term.
+
+    Writing the kinetic energy term as (1/2)∇u^2, if the transported variable
+    q is similar to the transporting variable u then this can be written as:
+    (1/2)∇(u.q).
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     ubar = Function(state.spaces("HDiv"))
     L = 0.5*div(test)*inner(q, ubar)*dx
@@ -206,6 +369,34 @@ def kinetic_energy_form(state, test, q):
 
 def advection_equation_circulation_form(state, test, q,
                                         ibp=IntegrateByParts.ONCE):
+    u"""
+    The circulation term in the transport of a vector-valued field.
+
+    The self-transporting transport operator for a vector-valued field u can be
+    written as circulation and kinetic energy terms:
+    (u.∇)u = (∇×u)×u + (1/2)∇u^2
+
+    When the transporting field u and transported field q are similar, we write
+    this as:
+    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
+
+    The form returned by this function corresponds to the (∇×q)×u circulation
+    term. An an upwind discretisation is used when integrating by parts.
+
+    Args:
+        state (:class:`State`): the model's state object.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+
+    Raises:
+        NotImplementedError: the specified integration by parts is not 'once'.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
 
     form = (
         vector_invariant_form(state, test, q, ibp=ibp)

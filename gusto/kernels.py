@@ -1,6 +1,12 @@
 """
-This file provides kernels for par loops.
-These are contained in this file as functions so that they can be tested separately.
+This module provides kernels for performing element-wise operations.
+
+Kernels are held in classes containing the instructions and an apply method,
+which calls the kernel using a par_loop. The code snippets used in the kernels
+are written using loopy: https://documen.tician.de/loopy/index.html
+
+Kernels are contained in this module so that they can be easily imported and
+tested.
 """
 
 import numpy as np
@@ -11,25 +17,28 @@ from pyop2 import ON_TOP, ON_BOTTOM
 
 class GaussianElimination(object):
     """
-    A kernel for performing Gaussian elimination locally in each element
-    for the BoundaryRecoverer procedure.
+    Performs local Gaussian elimination for the :class:`BoundaryRecoverer`.
 
-    The apply method takes a scalar field in DG1, the coordinates of the DoFs
-    and the effective" coordinates of the DoFs. These "effective" coordinates
-    correspond to the locations of the DoFs from the original space (i.e.
-    the one being recovered from).
+    The kernel is used to improve the accuracy of the recovery process into DG1
+    by performing local extrapolation at the domain boundaries. The kernel
+    should be applied after an initial recovery process, which has reduced
+    accuracy at the domain boundaries.
 
-    This kernel expands the field in the cell as a local Taylor series,
-    keeping only the linear terms. By assuming that the field would be
-    correct for the effective coordinates, we can extrapolate to find
-    what the field would be at the actual coordinates, which involves
-    inverting a local matrix -- which is done by this kernel using
-    Gaussian elimination.
-
-    :arg DG1: A 1st order discontinuous Galerkin FunctionSpace.
+    The inaccurate initial recovery can be treated as an accurate recovery
+    process at an alternative ("effective") set of coordinates. To correct this,
+    the original field is expanded using a Taylor series in each cell, using the
+    "effective" coordinates. This kernel performs this expansion and uses a
+    Gaussian elimination process to obtain the coefficents in the Taylor
+    expansion. These coefficients are then used with the actual coordinates of
+    the cell's vertices to extrapolate and obtain a more accurate field on the
+    domain boundaries.
     """
-    def __init__(self, DG1):
 
+    def __init__(self, DG1):
+        """
+        Args:
+            DG1 (:class:`FunctionSpace`): The equispaced DG1 function space.
+        """
         shapes = {"nDOFs": DG1.finat_element.space_dimension(),
                   "dim": DG1.mesh().topological_dimension()}
 
@@ -246,15 +255,33 @@ class GaussianElimination(object):
 
     def apply(self, v_DG1_old, v_DG1, act_coords, eff_coords, num_ext):
         """
-        Performs the par loop for the Gaussian elimination kernel.
+        Perform the par loop.
 
-        :arg v_DG1_old: the originally recovered field in DG1.
-        :arg v_DG1: the new target field in DG1.
-        :arg act_coords: the actual coordinates in vec DG1.
-        :arg eff_coords: the effective coordinates of the recovery in vec DG1.
-        :arg num_ext: the number of exterior DOFs in the cell, in DG0.
+        Takes a scalar field in DG1, the coordinates of the equispaced DG1 DoFs
+        and the "effective" coordinates of those DoFs. These "effective"
+        coordinates correspond to the locations of the DoFs from the original
+        space (i.e. the one being recovered from), with the recovery process
+        applied to them.
+
+        Args:
+            v_DG1_old (:class:`Function`): the originally recovered field in the
+                equispaced DG1 :class:`FunctionSpace`.
+            v_DG1 (:class:`Function`): the output field in the equispaced DG1
+                :class:`FunctionSpace`.
+            act_coords (:class:`Function`): a field whose values contain the
+                actual coordinates (in Cartesian components) of the DoFs of the
+                equispaced DG1 :class:`FunctionSpace`. This field should be in
+                the equispaced DG1 :class:`VectorFunctionSpace`.
+            eff_coords (:class:`Function`): a field whose values contain
+                coordinates (in Cartesian components) of the DoFs corresponding
+                to the effective locations of the original recovery process.
+                This field  should be in the equispaced DG1
+                :class:`VectorFunctionSpace`.
+            num_ext (:class:`Function`): a field in the DG0
+                :class:`FunctionSpace` whose DoFs contain the number of DoFs of
+                the equispaced DG1 :class:`FunctionSpace` that are on the
+                exterior of the domain.
         """
-
         par_loop(self._kernel, dx,
                  {"DG1_OLD": (v_DG1_old, READ),
                   "DG1": (v_DG1, WRITE),
@@ -266,16 +293,18 @@ class GaussianElimination(object):
 
 class Average(object):
     """
-    A kernel for the Averager object.
+    Evaluates values at DoFs shared between elements using averaging.
 
-    For vertices shared between cells, it computes the average
-    value from the neighbouring cells.
-
-    :arg V: The FunctionSpace of the target field for the Averager.
+    This kernel restores the continuity of a broken field using an averaging
+    operation. The values of DoFs shared between by elements are computed as the
+    average of the corresponding DoFs of the discontinuous field.
     """
-
     def __init__(self, V):
-
+        """
+        Args:
+            V (:class:`FunctionSpace`): The :class:`FunctionSpace` of the target
+                field for the :class:`Averager` operator.
+        """
         shapes = {"nDOFs": V.finat_element.space_dimension(),
                   "dim": np.prod(V.shape, dtype=int)}
 
@@ -297,13 +326,14 @@ class Average(object):
 
     def apply(self, v_out, weighting, v_in):
         """
-        Perform the averaging par loop.
+        Performs the par_loop.
 
-        :arg v_out: the continuous target field.
-        :arg weighting: the weights to be used for the averaging.
-        :arg v_in: the input field.
+        Args:
+            v_out (:class:`Function`): the continuous output field.
+            weighting (:class:`Function`): the weights to be used for the
+                averaging.
+            v_in (:class:`Function`): the (discontinuous) input field.
         """
-
         par_loop(self._kernel, dx,
                  {"vo": (v_out, INC),
                   "w": (weighting, READ),
@@ -313,13 +343,19 @@ class Average(object):
 
 class AverageWeightings(object):
     """
-    A kernel for finding the weights for the Averager object.
+    Finds the weights for the :class:`Averager` operator.
 
-    :arg V: The FunctionSpace of the target field for the Averager.
+    This computes the weights used in the averaging process for each DoF. This
+    is the multiplicity of the DoFs -- as in how many elements each DoF is
+    shared between.
     """
 
     def __init__(self, V):
-
+        """
+        Args:
+            V (:class:`FunctionSpace`): the continuous function space in which
+                the target field of the averaging process lives.
+        """
         shapes = {"nDOFs": V.finat_element.space_dimension(),
                   "dim": np.prod(V.shape, dtype=int)}
 
@@ -339,11 +375,12 @@ class AverageWeightings(object):
 
     def apply(self, w):
         """
-        Perform the par loop for calculating the weightings for the Averager.
+        Performs the par loop.
 
-        :arg w: the field to store the weights in.
+        Args:
+            w (:class:`Function`): the field in which to store the weights. This
+                lives in the continuous target space.
         """
-
         par_loop(self._kernel, dx,
                  {"w": (w, INC)},
                  is_loopy_kernel=True)
@@ -351,9 +388,12 @@ class AverageWeightings(object):
 
 class PhysicsRecoveryTop():
     """
-    A kernel for fixing the physics recovery method at the top boundary.
-    This takes a variable from the lowest order density space to the lowest
-    order temperature space.
+    Performs the "physics" boundary recovery at the domain's top boundary.
+
+    A kernel for improving the accuracy at the top boundary of the domain for
+    the operator for recovering a field from the lowest-order density space to
+    the lowest-order temperature space. The kernel is called as part of the
+    "physics" method of the :class:`BoundaryRecovery` operator.
     """
 
     def __init__(self):
@@ -374,10 +414,13 @@ class PhysicsRecoveryTop():
         """
         Performs the par loop.
 
-        :arg v_DG1: the target field to correct.
-        :arg v_CG1: the initially recovered uncorrected field.
+        Args:
+            v_DG1 (:class:`Function`): the target field to be corrected. It
+                should be in a discontinuous :class:`FunctionSpace`.
+            v_CG1 (:class:`Function`): the uncorrected field (after the initial
+                recovery process). It should be in a continuous
+                :class:`FunctionSpace`.
         """
-
         par_loop(self._kernel, dx,
                  args={"DG1": (v_DG1, WRITE),
                        "CG1": (v_CG1, READ)},
@@ -387,9 +430,12 @@ class PhysicsRecoveryTop():
 
 class PhysicsRecoveryBottom():
     """
-    A kernel for fixing the physics recovery method at the bottom boundary.
-    This takes a variable from the lowest order density space to the lowest
-    order temperature space.
+    Performs the "physics" boundary recovery at the domain's bottom boundary.
+
+    A kernel for improving the accuracy at the bottom boundary of the domain for
+    the operator for recovering a field from the lowest-order density space to
+    the lowest-order temperature space. The kernel is called as part of the
+    "physics" method of the :class:`BoundaryRecovery` operator.
     """
 
     def __init__(self):
@@ -410,12 +456,79 @@ class PhysicsRecoveryBottom():
         """
         Performs the par loop.
 
-        :arg v_DG1: the target field to correct.
-        :arg v_CG1: the initially recovered uncorrected field.
+        Args:
+            v_DG1 (:class:`Function`): the target field to be corrected. It
+                should be in a discontinuous :class:`FunctionSpace`.
+            v_CG1 (:class:`Function`): the uncorrected field (after the initial
+                recovery process). It should be in a continuous
+                :class:`FunctionSpace`.
         """
-
         par_loop(self._kernel, dx,
                  args={"DG1": (v_DG1, WRITE),
                        "CG1": (v_CG1, READ)},
                  is_loopy_kernel=True,
                  iteration_region=ON_BOTTOM)
+
+
+class LimitMidpoints():
+    """
+    Limits the vertical midpoint values for the degree 1 temperature space.
+
+    A kernel that copies the vertex values back from the DG1 space to a broken,
+    equispaced temperature space, while taking the midpoint values from the
+    original field. This checks that the midpoint values are within the minimum
+    and maximum at the adjacent vertices. If outside of the minimu and maximum,
+    correct the values to be the average.
+    """
+
+    def __init__(self, Vt_brok):
+        """
+        Args:
+            Vt_brok (:class:`FunctionSpace`): The broken temperature space,
+                which is the space of the outputted field. The horizontal base
+                element must use the equispaced variant of DG1, while the
+                vertical uses CG2 (before the space has been broken).
+        """
+        shapes = {'nDOFs': Vt_brok.finat_element.space_dimension(),
+                  'nDOFs_base': int(Vt_brok.finat_element.space_dimension() / 3)}
+        domain = "{{[i,j]: 0 <= i < {nDOFs_base} and 0 <= j < 2}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> max_value = 0.0
+                  <float64> min_value = 0.0
+                  for i
+                      for j
+                          field_hat[i*3+2*j] = field_DG1[i*2+j]
+                      end
+                      max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
+                      min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
+                      if field_old[i*3+1] > max_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      elif field_old[i*3+1] < min_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      else
+                          field_hat[i*3+1] = field_old[i*3+1]
+                      end
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, field_hat, field_DG1, field_old):
+        """
+        Performs the par loop.
+
+        Args:
+            field_hat (:class:`Function`): The field to write to in the broken
+                temperature :class:`FunctionSpace`.
+            field_DG1 (:class:`Function`): A field in the equispaced DG1
+                :class:`FunctionSpace`space whose vertex values have already
+                been limited.
+            field_old (:class:`Function`): The original un-limited field in the
+                broken temperature :class:`FunctionSpace`.
+        """
+        par_loop(self._kernel, dx,
+                 {"field_hat": (field_hat, WRITE),
+                  "field_DG1": (field_DG1, READ),
+                  "field_old": (field_old, READ)},
+                 is_loopy_kernel=True)
