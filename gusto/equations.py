@@ -20,6 +20,7 @@ from gusto.transport_forms import (advection_form, continuity_form,
 from gusto.diffusion import interior_penalty_diffusion_form
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
+from gusto.moisture import (condensation, evaporation)
 import ufl
 
 
@@ -211,6 +212,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
+        self.W = W
 
         # Can now call the underlying PrognosticEquation
         full_field_name = "_".join(self.field_names)
@@ -339,7 +341,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 'No-normal-flow boundary conditions can only be applied '
                 + 'when there is a variable called "u" and none was found')
 
-        Vu = state.spaces("HDiv")
+        Vu = self.W.sub(0)
         if Vu.extruded:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
@@ -445,12 +447,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient]},
                  u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, active_tracers=None):
+                 no_normal_flow_bc_ids=None, active_tracers=None,
+                 diffusion_options=None):
 
         field_names = ["u", "D"]
-
-        if active_tracers is not None:
-            raise NotImplementedError('Tracers not implemented for shallow water equations')
 
         if active_tracers is None:
             active_tracers = []
@@ -463,8 +463,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
         g = state.parameters.g
         H = state.parameters.H
 
-        w, phi = self.tests
-        u, D = split(self.X)
+        w, phi = self.tests[0:2]
+        u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
 
         # -------------------------------------------------------------------- #
@@ -520,7 +520,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
-        # Extra Terms (Coriolis and Topography)
+        # Extra Terms (Coriolis, Topography, Moisture and Diffusion terms)
         # -------------------------------------------------------------------- #
         if fexpr is not None:
             V = FunctionSpace(state.mesh, "CG", 1)
@@ -540,10 +540,58 @@ class ShallowWaterEquations(PrognosticEquationSet):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
             residual += topography_form
 
+        if diffusion_options is not None:
+            tests = TestFunctions(self.W)
+            tests = self.tests
+            for field, diffusion_params in diffusion_options:
+                idx = self.field_names.index(field)
+                test = tests[idx]
+                fn = self.X.split()[idx]
+                residual += (
+                    subject(prognostic(
+                        interior_penalty_diffusion_form(
+                            state, test, fn, diffusion_params), field), self.X)
+                )
+
+        if len(active_tracers) > 0:
+            gamma = self.tests[2]
+            Q = split(self.X)[2]
+
+            # add weak form of condensation to moisture evolution equation
+            residual += (
+                subject(prognostic(
+                    condensation(gamma, Q, D, state.parameters),
+                    "Q"),
+                    self.X)
+            )
+
+            # add weak form of evaporation to moisture evolution equation
+            residual -= (
+                subject(prognostic(
+                    evaporation(gamma, Q, state.parameters),
+                    "Q"),
+                    self.X)
+            )
+
+            # add weak form of condensation forcing to depth equation
+            residual += (
+                subject(prognostic(
+                    state.parameters.gamma * condensation
+                    (phi, Q, D, state.parameters), "D"),
+                    self.X)
+            )
+
+            # add weak form of the radiative relaxation term to depth equation
+            residual += (
+                subject(prognostic(
+                    state.parameters.lamda_r * phi * (D-H) * dx, "D"), self.X)
+            )
+
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u_ref, D_ref = self.X_ref.split()
+        u, D = self.X.split()[0:2]
+        u_ref, D_ref = self.X_ref.split()[0:2]
         # Linearise about D = H
         # TODO: add interface to update linearisation state
         D_ref.assign(Constant(H))
