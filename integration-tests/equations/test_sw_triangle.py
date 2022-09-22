@@ -144,7 +144,7 @@ def test_sw_setup(tmpdir, u_transport_option):
     transported_fields = []
     transported_fields.append((ImplicitMidpoint(state, "u")))
     transported_fields.append((SSPRK3(state, "D")))
-    stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields)
     stepper.run(t=0, tmax=0.25*day)
 
     check_results(dirname)
@@ -159,7 +159,7 @@ def test_sw_ssprk3(tmpdir, u_transport_option):
     dt = 100
     state, eqns = setup_sw(dirname, dt, u_transport_option)
 
-    stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+    stepper = Timestepper(eqns, SSPRK3(state), state)
     stepper.run(t=0, tmax=0.01*day)
 
     check_results(dirname)

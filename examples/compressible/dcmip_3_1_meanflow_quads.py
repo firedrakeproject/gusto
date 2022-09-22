@@ -143,7 +143,7 @@ transported_fields = [ImplicitMidpoint(state, "u"),
 linear_solver = CompressibleSolver(state, eqns)
 
 # Build time stepper
-stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver)
 
 # Run!

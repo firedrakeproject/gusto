@@ -126,7 +126,7 @@ transported_fields = [SSPRK3(state, "rho", options=rho_opts),
 linear_solver = CompressibleSolver(state, eqns)
 
 # build time stepper
-stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver)
 
 stepper.run(t=0, tmax=tmax)

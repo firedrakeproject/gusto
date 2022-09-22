@@ -155,7 +155,7 @@ linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 physics_list = [Condensation(state)]
 
 # build time stepper
-stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver,
                                   physics_list=physics_list)
 

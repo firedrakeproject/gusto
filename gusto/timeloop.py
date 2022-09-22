@@ -15,15 +15,20 @@ __all__ = ["TimeLevelFields", "Timestepper", "SemiImplicitQuasiNewton",
 
 class TimeLevelFields(object):
 
-    def __init__(self, state, equations, time_levels=None):
-        default_time_levels = ("nm1", "n", "np1")
-        if time_levels is not None:
-            time_levels = tuple(time_levels) + default_time_levels
-        else:
-            time_levels = default_time_levels
+    def __init__(self, equation):
+        print("initialising", equation.field_name)
+        self.default_levels = ("nm1", "n", "np1")
+        self.add_fields(equation)
 
+    def add_fields(self, equation, time_levels=None):
+        if time_levels is None:
+            time_levels = self.default_levels
         for level in time_levels:
-            setattr(self, level, FieldCreator(equations))
+            try:
+                x = getattr(self, level)
+                x.add_field(equation.field_name, equation.function_space)
+            except AttributeError:
+                setattr(self, level, FieldCreator(equation))
 
     def initialise(self, state):
         for field in self.n:
@@ -38,31 +43,28 @@ class TimeLevelFields(object):
 
 class BaseTimestepper(object, metaclass=ABCMeta):
 
-    def __init__(self, state, problem):
+    def __init__(self, equation, method, state):
+        self.equation = equation
         self.state = state
-
-        self.equations = []
-        self.schemes = []
-        self.equations = [eqn for (eqn, _) in problem]
 
         self.setup_timeloop()
 
-        for eqn, method in problem:
-            if type(method) is tuple:
-                for scheme, apply_bcs, *active_labels in method:
-                    scheme.setup(eqn, self.transporting_velocity, apply_bcs, *active_labels)
-                    self.schemes.append((eqn.field_name, scheme))
-            else:
-                scheme = method
-                scheme.setup(eqn, self.transporting_velocity)
-                self.schemes.append((eqn.field_name, scheme))
+        self.schemes = []
+        if type(method) is tuple:
+            for scheme, apply_bcs, *active_labels in method:
+                scheme.setup(equation, self.transporting_velocity, apply_bcs, *active_labels)
+                self.schemes.append((equation.field_name, scheme))
+        else:
+            scheme = method
+            scheme.setup(equation, self.transporting_velocity)
+            self.schemes.append((equation.field_name, scheme))
 
     @abstractproperty
     def transporting_velocity(self):
         return NotImplementedError
 
     def setup_timeloop(self):
-        self.x = TimeLevelFields(self.state, self.equations)
+        self.x = TimeLevelFields(self.equation)
 
     @abstractmethod
     def timestep(self):
@@ -161,7 +163,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
              iterations and alpha is the offcentering parameter
     """
 
-    def __init__(self, state, equation_set, transport_schemes,
+    def __init__(self, equation_set, state, transport_schemes,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -172,6 +174,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = kwargs.pop("alpha", 0.5)
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
+
+        self.equation_set = equation_set
 
         if physics_list is not None:
             self.physics_list = physics_list
@@ -195,9 +199,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 schemes.append((scheme, apply_bcs, diffusion))
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        problem = [(equation_set, tuple(schemes))]
+        super().__init__(equation_set, tuple(schemes), state)
+
         if auxiliary_equations_and_schemes is not None:
-            problem.append(*auxiliary_equations_and_schemes)
+            for eqn, scheme in auxiliary_equations_and_schemes:
+                print("setting up: ", scheme.field_name)
+                self.x.add_fields(eqn)
+                print(scheme.field_name)
+                scheme.setup(eqn, self.transporting_velocity)
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
                 for eqn, scheme in auxiliary_equations_and_schemes]
@@ -213,8 +222,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             # Copy over field if the time derivative term has no linearisation
             if not mass_form.terms[0].has_label(linearisation):
                 self.tracers_to_copy.append(name)
-
-        super().__init__(state, problem)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -244,8 +251,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
     def setup_timeloop(self):
-        self.x = TimeLevelFields(self.state, self.equations,
-                                 time_levels=("star", "p"))
+        super().setup_timeloop()
+        self.x.add_fields(self.equation_set, time_levels=("star", "p"))
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -326,10 +333,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
 class PrescribedTransport(Timestepper):
 
-    def __init__(self, state, problem, physics_list=None,
+    def __init__(self, equation, method, state, physics_list=None,
                  prescribed_transporting_velocity=None):
 
-        super().__init__(state, problem)
+        super().__init__(equation, method, state)
 
         if physics_list is not None:
             self.physics_list = physics_list

@@ -105,7 +105,7 @@ for delta, dt in res_dt.items():
                          BackwardEuler(state, "theta")]
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                       linear_solver=linear_solver,
                                       diffusion_schemes=diffusion_schemes)
 

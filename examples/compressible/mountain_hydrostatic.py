@@ -171,7 +171,7 @@ linear_solver = CompressibleSolver(state, eqns, alpha, solver_parameters=params,
                                    overwrite_solver_parameters=True)
 
 # build time stepper
-stepper = SemiImplicitQuasiNewton(state, eqns, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver,
                                   alpha=alpha)
 

@@ -25,9 +25,6 @@ def run_advection_diffusion(tmpdir):
     equation = AdvectionDiffusionEquation(state, V, "f", Vu=Vu,
                                           diffusion_parameters=diffusion_params)
 
-    problem = [(equation, ((SSPRK3(state), False, transport),
-                           (BackwardEuler(state), False, diffusion)))]
-
     # Initial conditions
     x = SpatialCoordinate(mesh)
     xc_init = 0.25*L
@@ -53,7 +50,9 @@ def run_advection_diffusion(tmpdir):
     f_end = state.fields('f_end', V).interpolate(f_end_expr)
 
     # Time stepper
-    timestepper = PrescribedTransport(state, problem)
+    method = ((SSPRK3(state), False, transport),
+              (BackwardEuler(state), False, diffusion))
+    timestepper = PrescribedTransport(equation, method, state)
     timestepper.run(0, tmax=tmax)
 
     error = norm(state.fields('f') - f_end) / norm(f_end)

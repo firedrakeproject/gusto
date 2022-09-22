@@ -59,7 +59,7 @@ def run_tracer(setup):
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(
-        state, eqns, transport_schemes,
+        eqns, state, transport_schemes,
         auxiliary_equations_and_schemes=tracer_transport)
 
     stepper.run(t=0, tmax=setup.tmax)

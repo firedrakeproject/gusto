@@ -51,7 +51,7 @@ def setup_sw(dirname):
     transport_schemes = [ForwardEuler(state, "D")]
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(state, eqns, transport_schemes)
+    stepper = SemiImplicitQuasiNewton(eqns, state, transport_schemes)
 
     return stepper, 2*day
 

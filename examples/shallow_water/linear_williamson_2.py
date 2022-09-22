@@ -59,6 +59,6 @@ D0.interpolate(Dexpr)
 transport_schemes = [ForwardEuler(state, "D")]
 
 # build time stepper
-stepper = SemiImplicitQuasiNewton(state, eqns, transport_schemes)
+stepper = SemiImplicitQuasiNewton(eqns, state, transport_schemes)
 
 stepper.run(t=0, tmax=tmax)

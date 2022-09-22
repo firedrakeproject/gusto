@@ -221,15 +221,15 @@ class SpaceCreator(object):
 
 class FieldCreator(object):
     """Object to hold and create a specified set of fields."""
-    def __init__(self, equations):
+    def __init__(self, equation):
         """
         Args:
             equations (:class:`PrognosticEquation`): an equation object.
         """
         self.fields = []
-        for eqn in equations:
-            subfield_names = eqn.field_names if hasattr(eqn, "field_names") else None
-            self.add_field(eqn.field_name, eqn.function_space, subfield_names)
+        subfield_names = equation.field_names if hasattr(equation, "field_names") else None
+        self.add_field(equation.field_name, equation.function_space,
+                       subfield_names)
 
     def add_field(self, name, space, subfield_names=None):
         """
