@@ -8,9 +8,11 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
-           "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
-           "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions",
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
+           "TransportEquationType", "OutputParameters",
+           "CompressibleParameters", "ShallowWaterParameters",
+           "MoistShallowWaterParameters", "logger", "EmbeddedDGOptions",
+           "RecoveredOptions", "SUPGOptions",
            "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
@@ -132,6 +134,20 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+
+
+class MoistShallowWaterParameters(ShallowWaterParameters):
+
+    """
+    Physical parameters for the moist shallow water equations
+    """
+    gamma = None  # condensation proportionality constant
+    tau_e = None  # timescale of evaporation
+    tau = None  # timescale of condensation
+    q_0 = None  # factor in the saturation humidity expr
+    q_g = None  # surface humidity
+    alpha = None  # exponential factor in the saturation humidity expr
+    lamda_r = None  # coefficient of evaporation
 
 
 class AdvectionOptions(Configuration, metaclass=ABCMeta):
