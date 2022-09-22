@@ -1,0 +1,139 @@
+from firedrake import Function
+
+__all__ = ["TimeLevelFields", "StateFields"]
+
+
+class Fields(object):
+    """Object to hold and create a specified set of fields."""
+    def __init__(self, equation):
+        """
+        Args:
+            equations (:class:`PrognosticEquation`): an equation object.
+        """
+        self.fields = []
+        subfield_names = equation.field_names if hasattr(equation, "field_names") else None
+        self.add_field(equation.field_name, equation.function_space,
+                       subfield_names)
+
+    def add_field(self, name, space, subfield_names=None):
+        """
+        Adds a new field to the :class:`FieldCreator`.
+
+        Args:
+            name (str): the name of the prognostic variable.
+            space (:class:`FunctionSpace`): the space to create the field in.
+                Can also be a :class:`MixedFunctionSpace`, and then will create
+                the fields in their appropriate subspaces. Then, the
+                'subfield_names' argument must be provided.
+            subfield_names (list, optional): a list of names of the prognostic
+                variables. Defaults to None.
+        """
+
+        value = Function(space, name=name)
+        setattr(self, name, value)
+        self.fields.append(value)
+
+        if len(space) > 1:
+            assert len(space) == len(subfield_names)
+            for field_name, field in zip(subfield_names, value.split()):
+                setattr(self, field_name, field)
+                field.rename(field_name)
+                self.fields.append(field)
+
+    def __call__(self, name):
+        """
+        Returns a specified field from the :class:`FieldCreator`.
+
+        Args:
+            name (str): the name of the field.
+
+        Returns:
+            :class:`Function`: the desired field.
+        """
+        return getattr(self, name)
+
+    def __iter__(self):
+        """Returns an iterable of the contained fields."""
+        return iter(self.fields)
+
+
+class StateFields(Fields):
+    """Creates the prognostic fields for the :class:`State` object."""
+
+    def __init__(self, *fields_to_dump):
+        """
+        Args:
+            *fields_to_dump (str): the names of fields to be dumped.
+        """
+        self.fields = []
+        self.output_specified = len(fields_to_dump) > 0
+        self.to_dump = set((fields_to_dump))
+        self.to_pickup = set(())
+
+    def __call__(self, name, space=None, subfield_names=None, dump=True,
+                 pickup=False):
+        """
+        Returns a field from or adds a field to the :class:`StateFields`.
+
+        If a named field does not yet exist in the :class:`StateFields`, then
+        the optional arguments must be specified so that it can be created and
+        added to the :class:`StateFields`.
+
+        Args:
+            name (str): name of the field to be returned/added.
+            space (:class:`FunctionSpace`, optional): the function space to
+                create the field in. Defaults to None.
+            subfield_names (list, optional): a list of names of the constituent
+                prognostic variables to be created, if the provided space is
+                actually a :class:`MixedFunctionSpace`. Defaults to None.
+            dump (bool, optional): whether the created field should be
+                outputted. Defaults to True.
+            pickup (bool, optional): whether the created field should be picked
+                up when checkpointing. Defaults to False.
+
+        Returns:
+            :class:`Function`: the specified field.
+        """
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            self.add_field(name, space, subfield_names)
+            if dump:
+                if subfield_names is not None:
+                    self.to_dump.update(subfield_names)
+                else:
+                    self.to_dump.add(name)
+            if pickup:
+                if subfield_names is not None:
+                    self.to_pickup.update(subfield_names)
+                else:
+                    self.to_pickup.add(name)
+            return getattr(self, name)
+
+
+class TimeLevelFields(object):
+
+    def __init__(self, equation):
+        print("initialising", equation.field_name)
+        self.default_levels = ("nm1", "n", "np1")
+        self.add_fields(equation)
+
+    def add_fields(self, equation, time_levels=None):
+        if time_levels is None:
+            time_levels = self.default_levels
+        for level in time_levels:
+            try:
+                x = getattr(self, level)
+                x.add_field(equation.field_name, equation.function_space)
+            except AttributeError:
+                setattr(self, level, Fields(equation))
+
+    def initialise(self, state):
+        for field in self.n:
+            field.assign(state.fields(field.name()))
+            self.np1(field.name()).assign(field)
+
+    def update(self):
+        for field in self.n:
+            self.nm1(field.name()).assign(field)
+            field.assign(self.np1(field.name()))

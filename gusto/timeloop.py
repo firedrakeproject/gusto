@@ -7,38 +7,10 @@ from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic)
 from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.state import FieldCreator
+from gusto.fields import TimeLevelFields
 
-__all__ = ["TimeLevelFields", "Timestepper", "SemiImplicitQuasiNewton",
+__all__ = ["Timestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
-
-
-class TimeLevelFields(object):
-
-    def __init__(self, equation):
-        print("initialising", equation.field_name)
-        self.default_levels = ("nm1", "n", "np1")
-        self.add_fields(equation)
-
-    def add_fields(self, equation, time_levels=None):
-        if time_levels is None:
-            time_levels = self.default_levels
-        for level in time_levels:
-            try:
-                x = getattr(self, level)
-                x.add_field(equation.field_name, equation.function_space)
-            except AttributeError:
-                setattr(self, level, FieldCreator(equation))
-
-    def initialise(self, state):
-        for field in self.n:
-            field.assign(state.fields(field.name()))
-            self.np1(field.name()).assign(field)
-
-    def update(self):
-        for field in self.n:
-            self.nm1(field.name()).assign(field)
-            field.assign(self.np1(field.name()))
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
