@@ -93,7 +93,7 @@ elif triangle:
     coord = (2*pi*x)/Lx
     exact_expr = ((pi*Ksat)/(2*qh) * sin(coord))*(qmax - Csat - Ksat*cos(coord))
 elif trig:
-    coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/Ksat
+    coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/K0
     exact_expr = 2*Ksat*sin(2*pi*x/Lx)*acos(coord)
 r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
@@ -107,23 +107,15 @@ axes.legend(loc='lower right')
 plt.title('Saturation curve, initial moisture profile and analytical rainfall profile')
 plt.show()
 
-# set up moisture as a field to be transported
-transported_fields = [SSPRK3(state, "m", limiter=VertexBasedLimiter(VD)),
-                      ImplicitMidpoint(state, "u")]
-
 # add instant rain forcing
 physics_list = [InstantRain(state, msat)]
 
 
-# prescribe velocity for transport
-def transport_u(t):
-    return state.fields("u")
-
-
 # build time stepper
-stepper = PrescribedTransport(state, ((meqn, SSPRK3(state)),),
-                              physics_list=physics_list,
-                              prescribed_transporting_velocity=transport_u)
+stepper = PrescribedTransport(
+    state,
+    ((meqn, SSPRK3(state, limiter=VertexBasedLimiter(VD))),),
+    physics_list=physics_list)
 
 stepper.run(t=0, tmax=11000*dt)
 
@@ -135,5 +127,6 @@ plt.legend()
 plt.show()
 
 # calculate L2 error norm
-L2_error = errornorm(r_exact, state.fields("r"))
+r = state.fields("r")
+L2_error = errornorm(r_exact, r)
 print(L2_error)
