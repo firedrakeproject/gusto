@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi, plot,
-                       FiniteElement, as_vector)
+                       FiniteElement, as_vector, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
 
@@ -133,3 +133,7 @@ plot(state.fields("r"), axes=axes, label='rain after advection', color='red')
 plt.title("Rainfall profile after advecting")
 plt.legend()
 plt.show()
+
+# calculate L2 error norm
+L2_error = errornorm(r_exact, state.fields("r"))
+print(L2_error)
