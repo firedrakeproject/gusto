@@ -114,7 +114,6 @@ class StateFields(Fields):
 class TimeLevelFields(object):
 
     def __init__(self, equation):
-        print("initialising", equation.field_name)
         self.default_levels = ("nm1", "n", "np1")
         self.add_fields(equation)
 
