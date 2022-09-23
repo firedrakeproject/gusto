@@ -110,7 +110,7 @@ class Timestepper(BaseTimestepper):
         xnp1 = self.x.np1
 
         for name, scheme in self.schemes:
-            scheme.apply(xn(name), xnp1(name))
+            scheme.apply(xnp1(name), xn(name))
             xn(name).assign(xnp1(name))
 
 
@@ -257,7 +257,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             with timed_stage("Transport"):
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xstar(name), xp(name))
+                    scheme.apply(xp(name), xstar(name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
@@ -281,7 +281,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
-            scheme.apply(xn(name), xnp1(name))
+            scheme.apply(xnp1(name), xn(name))
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:

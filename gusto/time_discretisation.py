@@ -49,21 +49,21 @@ def is_cg(V):
 
 def embedded_dg(original_apply):
     """Decorator to add steps for embedded DG method."""
-    def get_apply(self, x_in, x_out):
+    def get_apply(self, x_out, x_in):
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
 
-            def new_apply(self, x_in, x_out):
+            def new_apply(self, x_out, x_in):
 
                 self.pre_apply(x_in, self.discretisation_option)
-                original_apply(self, self.xdg_in, self.xdg_out)
+                original_apply(self, self.xdg_out, self.xdg_in)
                 self.post_apply(x_out, self.discretisation_option)
 
-            return new_apply(self, x_in, x_out)
+            return new_apply(self, x_out, x_in)
 
         else:
 
-            return original_apply(self, x_in, x_out)
+            return original_apply(self, x_out, x_in)
 
     return get_apply
 
@@ -413,7 +413,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
@@ -475,7 +475,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x = [Function(self.fs)]*(self.ncycles+1)
 
     @abstractmethod
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -486,7 +486,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         pass
 
     @embedded_dg
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
@@ -496,7 +496,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x[0].assign(x_in)
         for i in range(self.ncycles):
-            self.apply_cycle(self.x[i], self.x[i+1])
+            self.apply_cycle(self.x[i+1], self.x[i])
             self.x[i].assign(self.x[i+1])
         x_out.assign(self.x[self.ncycles-1])
 
@@ -519,7 +519,7 @@ class ForwardEuler(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         return super(ForwardEuler, self).rhs
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -580,7 +580,7 @@ class SSPRK3(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(self.x1)
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -683,7 +683,7 @@ class RK4(ExplicitTimeDiscretisation):
             self.k4.assign(self.x_out)
             self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -786,7 +786,7 @@ class BackwardEuler(TimeDiscretisation):
 
         return r.form
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
@@ -866,7 +866,7 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
