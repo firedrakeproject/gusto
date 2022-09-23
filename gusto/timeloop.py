@@ -175,9 +175,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if auxiliary_equations_and_schemes is not None:
             for eqn, scheme in auxiliary_equations_and_schemes:
-                print("setting up: ", scheme.field_name)
                 self.x.add_fields(eqn)
-                print(scheme.field_name)
                 scheme.setup(eqn, self.transporting_velocity)
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
