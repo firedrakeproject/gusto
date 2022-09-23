@@ -14,7 +14,8 @@ from firedrake import (Function, NonlinearVariationalProblem, split,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import logger, DEBUG, TransportEquationType
+from gusto.configuration import (logger, DEBUG, TransportEquationType,
+                                 EmbeddedDGOptions, RecoveredOptions)
 from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
                           transport, ibp_label, replace_subject, replace_test_function)
 from gusto.recovery import Recoverer
@@ -764,6 +765,13 @@ class BackwardEuler(TimeDiscretisation):
     The backward Euler method for operator F is the most simple implicit scheme:
     y^(n+1) = y^n + dt*F[y^(n+1)].
     """
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 limiter=None, options=None):
+        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        super().__init__(state=state, field_name=field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
 
     @property
     def lhs(self):
@@ -831,6 +839,8 @@ class ThetaMethod(TimeDiscretisation):
         # check be on the provided value?
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
+        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
