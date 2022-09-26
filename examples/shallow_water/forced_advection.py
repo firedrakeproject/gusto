@@ -10,7 +10,7 @@ triangle = False
 trig = True
 
 # set up resolution and timestepping parameters for convergence test
-dx_dt = {0.05: 0.005, 0.1: 0.001, 0.15: 0.015, 0.2: 0.002, 0.25: 0.025}
+dx_dt = {0.05: 0.005, 0.1: 0.01, 0.15: 0.015, 0.2: 0.02, 0.25: 0.025}
 error_norms = []
 dx_list = []
 dt_list = []
@@ -37,7 +37,7 @@ for dx, dt in dx_dt.items():
     elif triangle:
         dirname = "forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "forced_advection_trig_dx%s_dt%s" % (dx, dt)
+        dirname = "forced_advection_trigDG1_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -58,7 +58,7 @@ for dx, dt in dx_dt.items():
                   diagnostic_fields=diagnostic_fields)
 
     # set up function spaces
-    eltDG = FiniteElement("DG", "interval", 0, variant="equispaced")
+    eltDG = FiniteElement("DG", "interval", 1, variant="equispaced")
     VD = FunctionSpace(mesh, eltDG)
     Vu = VectorFunctionSpace(mesh, "CG", 1)
 
@@ -76,16 +76,15 @@ for dx, dt in dx_dt.items():
     msat.interpolate(msat_expr)
 
     # set up advection equation
-    meqn = AdvectionEquation(state, VD, field_name="m", Vu=Vu)
+    meqn = AdvectionEquation(state, VD, field_name="water_v", Vu=Vu)
     state.fields("u").project(as_vector([u_max]))
-    state.fields("m").project(mexpr)
+    state.fields("water_v").project(mexpr)
 
     # define rain variable
-    rain = state.fields("r", VD)
-    rain.project(Constant(0.))
+    r = state.fields("rain", VD)
 
     # exact rainfall profile (analytically)
-    r_exact = Function(VD)
+    r_exact = state.fields("r_exact", VD)
     if trig:
         lim1 = Lx/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
         lim2 = Lx/2
@@ -123,7 +122,7 @@ for dx, dt in dx_dt.items():
     # plt.show()
 
     # calculate L2 error norm
-    r = state.fields("r")
+    r = state.fields("rain")
     L2_error = errornorm(r_exact, r)
     error_norms.append(L2_error)
     dx_list.append(dx)
