@@ -105,11 +105,9 @@ class Timestepper(BaseTimestepper):
     def transporting_velocity(self):
         return "prognostic"
 
-    @abstractmethod
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
 
-    @abstractmethod
     def setup_scheme(self):
         self.scheme.setup(self.equation, self.transporting_velocity)
 
@@ -232,13 +230,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # computes ubar from un and unp1
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
-    @abstractmethod
     def setup_fields(self):
         # TODO: check this
         self.x.add_fields(self.equation_set, time_levels=("star", "p"))
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
 
-    @abstractmethod
     def setup_scheme(self):
         # TODO: make this work
         self.scheme.setup(self.equation, self.transporting_velocity)
@@ -341,6 +337,12 @@ class PrescribedTransport(Timestepper):
     @property
     def transporting_velocity(self):
         return self.state.fields('u')
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    def setup_scheme(self):
+        self.scheme.setup(self.equation, self.transporting_velocity)
 
     def timestep(self):
         if self.velocity_projection is not None:
