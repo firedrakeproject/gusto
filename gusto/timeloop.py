@@ -15,28 +15,27 @@ __all__ = ["Timestepper", "SemiImplicitQuasiNewton",
 
 class BaseTimestepper(object, metaclass=ABCMeta):
 
-    def __init__(self, equation, method, state):
+    def __init__(self, equation, state):
         self.equation = equation
         self.state = state
 
         self.setup_timeloop()
-
-        self.schemes = []
-        if type(method) is tuple:
-            for scheme, apply_bcs, *active_labels in method:
-                scheme.setup(equation, self.transporting_velocity, apply_bcs, *active_labels)
-                self.schemes.append((equation.field_name, scheme))
-        else:
-            scheme = method
-            scheme.setup(equation, self.transporting_velocity)
-            self.schemes.append((equation.field_name, scheme))
 
     @abstractproperty
     def transporting_velocity(self):
         return NotImplementedError
 
     def setup_timeloop(self):
-        self.x = TimeLevelFields(self.equation)
+        self.setup_fields()
+        self.setup_scheme()
+
+    @abstractmethod
+    def setup_fields(self):
+        pass
+
+    @abstractmethod
+    def setup_scheme(self):
+        pass
 
     @abstractmethod
     def timestep(self):
@@ -98,20 +97,31 @@ class Timestepper(BaseTimestepper):
     :arg physics_list: optional list of classes that implement `physics` schemes
     """
 
+    def __init__(self, equation, scheme, state):
+        self.scheme = scheme
+        super().__init__(equation=equation, state=state)
+
     @property
     def transporting_velocity(self):
         return "prognostic"
+
+    @abstractmethod
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    @abstractmethod
+    def setup_scheme(self):
+        self.scheme.setup(self.equation, self.transporting_velocity)
 
     def timestep(self):
         """
         Implement the timestep
         """
-        xn = self.x.n
         xnp1 = self.x.np1
+        name = self.equation.field_name
+        x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
 
-        for name, scheme in self.schemes:
-            scheme.apply(xnp1(name), xn(name))
-            xn(name).assign(xnp1(name))
+        self.scheme.apply(xnp1(name), *x_in)
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -126,7 +136,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     :arg linear_solver: a :class:`.TimesteppingSolver` object
     :arg forcing: a :class:`.Forcing` object
     :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
+        pairs indicating the fields to diffuse, and the
         :class:`~.Diffusion` to use.
     :arg physics_list: optional list of classes that implement `physics` schemes
     :arg prescribed_fields: an order list of tuples, pairing a field name with a
@@ -158,6 +168,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.transport_schemes = []
         self.active_transport = []
         for scheme in transport_schemes:
+            assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             apply_bcs = False
             schemes.append((scheme, apply_bcs, transport))
             assert scheme.field_name in equation_set.field_names
@@ -166,6 +177,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
+                assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
                 apply_bcs = True
                 assert scheme.field_name in equation_set.field_names
                 schemes.append((scheme, apply_bcs, diffusion))
@@ -220,9 +232,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # computes ubar from un and unp1
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
-    def setup_timeloop(self):
-        super().setup_timeloop()
+    @abstractmethod
+    def setup_fields(self):
+        # TODO: check this
         self.x.add_fields(self.equation_set, time_levels=("star", "p"))
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    @abstractmethod
+    def setup_scheme(self):
+        # TODO: make this work
+        self.scheme.setup(self.equation, self.transporting_velocity)
 
     def copy_active_tracers(self, x_in, x_out):
         """

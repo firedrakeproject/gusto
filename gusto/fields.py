@@ -113,14 +113,22 @@ class StateFields(Fields):
 
 class TimeLevelFields(object):
 
-    def __init__(self, equation):
-        self.default_levels = ("nm1", "n", "np1")
-        self.add_fields(equation)
+    def __init__(self, equation, nlevels=None):
+        default_levels = ("n", "np1")
+        if nlevels is None or nlevels == 1:
+            previous_levels = ["nm1"]
+        else:
+            previous_levels = ["nm%i" % n for n in range(nlevels-1, 0, -1)]
+        levels = tuple(previous_levels) + default_levels
 
-    def add_fields(self, equation, time_levels=None):
-        if time_levels is None:
-            time_levels = self.default_levels
-        for level in time_levels:
+        self.add_fields(equation, levels)
+        self.previous = [getattr(self, level) for level in previous_levels]
+        self.previous.append(getattr(self, "n"))
+
+    def add_fields(self, equation, levels):
+        if levels is None:
+            levels = self.levels
+        for level in levels:
             try:
                 x = getattr(self, level)
                 x.add_field(equation.field_name, equation.function_space)
@@ -133,6 +141,10 @@ class TimeLevelFields(object):
             self.np1(field.name()).assign(field)
 
     def update(self):
+        for i in range(len(self.previous)-1):
+            xi = self.previous[i]
+            xip1 = self.previous[i+1]
+            for field in xi:
+                field.assign(xip1(field.name()))
         for field in self.n:
-            self.nm1(field.name()).assign(field)
             field.assign(self.np1(field.name()))

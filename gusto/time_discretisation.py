@@ -24,7 +24,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2"]
 
 
 def is_cg(V):
@@ -315,6 +315,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.x_brok_interpolator.interpolate()
         self.x_out_projector.project()
         x_out.assign(self.x_projected)
+
+    @property
+    def nlevels(self):
+        return 1
 
     @abstractproperty
     def lhs(self):
@@ -915,3 +919,115 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+
+
+class MultilevelTimeDiscretisation(TimeDiscretisation):
+
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 limiter=None, options=None):
+        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        super().__init__(state=state, field_name=field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.initial_timesteps = 0
+
+    @abstractproperty
+    def nlevels(self):
+        pass
+
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
+                      *active_labels)
+        for n in range(self.nlevels, 1, -1):
+            setattr(self, "xnm%i" % (n-1), Function(self.fs))
+
+
+class BDF2(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 2
+
+    @property
+    def lhs0(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: self.dt*t)
+
+        return l.form
+
+    @property
+    def rhs0(self):
+        """Set up the time discretisation's right hand side."""
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_false=drop)
+
+        return r.form
+
+    @property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: (2/3)*self.dt*t)
+
+        return l.form
+
+    @property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        xn = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_false=drop)
+        xnm1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xnm1, self.idx),
+            map_if_false=drop)
+
+        r = (4/3.) * xn - (1/3.) * xnm1
+
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
+        if self.initial_timesteps < self.nlevels-1:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
+
+        self.xnm1.assign(x_in[0])
+        self.x1.assign(x_in[1])
+        solver.solve()
+        x_out.assign(self.x_out)
