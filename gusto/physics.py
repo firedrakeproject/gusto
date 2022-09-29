@@ -500,21 +500,21 @@ class InstantRain(Physics):
         self.saturation = saturation_curve
 
         # obtain the fields
-        self.moisture = state.fields("m")
-        self.rain = state.fields("r")
+        self.water_v = state.fields("water_v")
+        self.rain = state.fields("rain")
 
         # obtain function space
-        Vm = self.moisture.function_space()
+        Vm = self.water_v.function_space()
         Vr = self.rain.function_space()
 
         # convert moisture above saturation curve to rain
-        self.moisture_new = Interpolator(conditional(
-            self.moisture > self.saturation, self.saturation,
-            self.moisture), Vm)
+        self.water_v_new = Interpolator(conditional(
+            self.water_v > self.saturation, self.saturation,
+            self.water_v), Vm)
         self.rain_new = Interpolator(conditional(
-            self.moisture > self.saturation, self.rain + (self.moisture-self.saturation),
+            self.water_v > self.saturation, self.rain + (self.water_v-self.saturation),
             self.rain), Vr)
 
     def apply(self):
         self.rain.assign(self.rain_new.interpolate())
-        self.moisture.assign(self.moisture_new.interpolate())
+        self.water_v.assign(self.water_v_new.interpolate())
