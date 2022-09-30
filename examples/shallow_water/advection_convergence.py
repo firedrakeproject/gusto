@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi, plot,
                        FiniteElement, as_vector, errornorm)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
 
 tophat = True
@@ -33,11 +32,11 @@ Ksat = 0.25
 for dx, dt in dx_dt.items():
 
     if tophat:
-        dirname = "convergence_test_forced_advection_hat_DG1_limiter_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test__advection_hat_DG1_dx%s_dt%s" % (dx, dt)
     elif triangle:
-        dirname = "forced_advection_triangle_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_advection_triangle_DG1_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -45,6 +44,7 @@ for dx, dt in dx_dt.items():
     x = SpatialCoordinate(mesh)[0]
     x1 = 0
     x2 = Lx/4
+    tmax = 55
 
     output = OutputParameters(dirname=dirname, dumpfreq=100)
 
@@ -62,67 +62,41 @@ for dx, dt in dx_dt.items():
     VD = FunctionSpace(mesh, eltDG)
     Vu = VectorFunctionSpace(mesh, "CG", 1)
 
-    # initial moisture profile
+    # initial advected profile
     if tophat:
         mexpr = conditional(x < x2, conditional(x > x1, qmax, qmax-qh), qmax-qh)
+        exact_mexpr = conditional(x < (x2+tmax), conditional(x > (x1+tmax), qmax, qmax-qh), qmax-qh)
     elif triangle:
         mexpr = conditional(x < x2, conditional(x > x1, qmax - 2*qh - (4*qh*(x-(Lx/2)))/Lx, qmax-qh), qmax-qh)
     elif trig:
         mexpr = C0 + K0*cos((2*pi*x)/Lx)
-
-    # define saturation profile
-    msat_expr = Csat + (Ksat * cos(2*pi*(x/Lx)))
-    msat = Function(VD)
-    msat.interpolate(msat_expr)
+        exact_mexpr = C0 + K0*cos((2*pi*(x-(u_max*tmax)))/Lx)
 
     # set up advection equation
-    meqn = AdvectionEquation(state, VD, field_name="water_v", Vu=Vu)
+    meqn = AdvectionEquation(state, VD, field_name="advected_m", Vu=Vu)
     state.fields("u").project(as_vector([u_max]))
-    state.fields("water_v").project(mexpr)
-
-    # define rain variable
-    r = state.fields("rain", VD)
-
-    # exact rainfall profile (analytically)
-    r_exact = state.fields("r_exact", VD)
-    if trig:
-        lim1 = Lx/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
-        lim2 = Lx/2
-    else:
-        lim1 = Lx/(2*pi) * acos((qmax - Csat)/Ksat)
-        lim2 = Lx/2
-    if tophat:
-        exact_expr = (pi*Ksat)/2 * sin((2*pi*x)/Lx)
-    elif triangle:
-        coord = (2*pi*x)/Lx
-        exact_expr = ((pi*Ksat)/(2*qh) * sin(coord))*(qmax - Csat - Ksat*cos(coord))
-    elif trig:
-        coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/K0
-        exact_expr = 2*Ksat*sin(2*pi*x/Lx)*acos(coord)
-    r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
-    r_exact.interpolate(r_expr)
-
-    # add instant rain forcing
-    physics_list = [InstantRain(state, msat)]
+    state.fields("advected_m").project(mexpr)
 
     # build time stepper
     stepper = PrescribedTransport(state,
                                   ((meqn,
-                                    SSPRK3(state,limiter=VertexBasedLimiter(VD))),),
-                                  physics_list=physics_list)
+                                    SSPRK3(state,)),),)
+    stepper.run(t=0, tmax=tmax)
 
-    stepper.run(t=0, tmax=55)
-
+    # analytical solution
+    exact_m = Function(VD)
+    exact_m.project(exact_mexpr)
+    
     fig, axes = plt.subplots()
-    plot(r_exact, axes=axes, label='exact solution', color='green')
-    plot(state.fields("rain"), axes=axes, label='rain after advection', color='red')
-    plt.title("Rainfall profile after advecting")
-    plt.legend()
+    plot(exact_m, axes=axes, label='exact solution', color='green')
+    plot(state.fields("advected_m"), axes=axes, label='m after advection', color='red')
+    plt.title("Profile after advection")
     plt.show()
 
     # calculate L2 error norm
-    r = state.fields("rain")
-    L2_error = errornorm(r_exact, r)
+    m = state.fields("advected_m")
+    L2_error = errornorm(exact_m, m)
+    print(L2_error)
     error_norms.append(L2_error)
     dx_list.append(dx)
     dt_list.append(dt)
@@ -134,5 +108,9 @@ plt.show()
 
 plt.plot(dx_list, error_norms)
 plt.xlabel("dx")
-plt.title("Errors norms against dx for constant Courant number")
+plt.title("Errors against dx for constant Courant number")
 plt.show()
+
+
+
+    
