@@ -7,10 +7,10 @@ from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic)
 from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.fields import TimeLevelFields
+from gusto.fields import TimeLevelFields, PararealFields
 
 __all__ = ["Timestepper", "SemiImplicitQuasiNewton",
-           "PrescribedTransport"]
+           "PrescribedTransport", "Parareal"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -71,6 +71,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             for field in self.x.np1:
                 state.fields(field.name()).assign(field)
+                print("JEMMA: in timeloop:")
+                print(state.fields(field.name()).dat.data.min(), state.fields(field.name()).dat.data.max())
 
             state.t.assign(state.t + state.dt)
 
@@ -364,3 +366,101 @@ class PrescribedTransport(Timestepper):
                 # state
                 for field in self.x.np1:
                     field.assign(self.state.fields(field.name()))
+
+
+class Parareal(Timestepper):
+
+    def __init__(self, equation, coarse_scheme, fine_scheme, state, maxk, n_intervals):
+
+        self.maxk = maxk
+        self.n_intervals = n_intervals
+        self.fine_scheme = fine_scheme
+        assert coarse_scheme.nlevels == 1
+        assert fine_scheme.nlevels == 1
+        super().__init__(equation, coarse_scheme, state)
+
+    @property
+    def transporting_velocity(self):
+        return self.state.fields('u')
+
+    def setup_fields(self):
+        self.x = PararealFields(self.equation, self.n_intervals)
+        self.xF = PararealFields(self.equation, self.n_intervals)
+        self.xG = PararealFields(self.equation, self.n_intervals)
+        self.xG_km1 = Function(self.equation.function_space)
+
+    def setup_scheme(self):
+        super().setup_scheme()
+        self.fine_scheme.setup(self.equation, self.transporting_velocity)
+
+    def run(self, t, tmax, pickup=False):
+        """
+        This is the timeloop.
+        """
+        from firedrake import errornorm
+        state = self.state
+
+        if pickup:
+            t = state.pickup_from_checkpoint()
+
+        state.setup_diagnostics()
+
+        with timed_stage("Dump output"):
+            state.setup_dump(t, tmax, pickup)
+
+        state.t.assign(t)
+
+        self.x.initialise(state)
+        name = self.equation.field_name
+        #print("this is the initial value", self.x(0)(name).dat.data.min(), self.x(0)(name).dat.data.max())
+
+        # compute first guess from coarse scheme
+        for n in range(self.n_intervals):
+            # apply coarse scheme and save data as initial conditions for fine
+            xn = self.x(n)(name)
+            self.xG(n)(name).assign(xn)
+            xnp1 = self.x(n+1)(name)
+            self.scheme.apply(xnp1, xn)
+        for n in range(self.n_intervals+1):
+            self.xG(n)(name).assign(self.x(n)(name))
+
+        for k in range(self.maxk):
+            print("iteration: ", k)
+
+            # apply fine scheme in each interval using previously
+            # calculated coarse data
+            for n in range(k, self.n_intervals):
+                xinit = self.x(n)(name)
+                xF = self.xF(n)(name)
+                self.fine_scheme.apply(xF, xinit)
+            
+            # bring data back to rank 0 to compute correction
+            for n in range(k, self.n_intervals):
+                xn = self.x(n)(name)
+                self.xG_km1.assign(self.xG(n+1)(name))
+                xG = self.xG(n+1)(name)
+                xF = self.xF(n)(name)
+                self.scheme.apply(xG, xn)
+                xnp1 = self.x(n+1)(name)
+                xnp1.assign(xG - self.xG_km1 + xF)
+                print(n, self.n_intervals)
+                if n == (self.n_intervals-1):
+                    print("this is the outcome of F at the end of interval: ", n, xF.dat.data.min(), xF.dat.data.max())
+                    print("this is the input value of G at the beginning of interval: ", n, xn.dat.data.min(), xn.dat.data.max())
+                    print("this is the previous outcome of G at the end of interval: ", n, self.xG_km1.dat.data.min(), self.xG_km1.dat.data.max())
+                    print("this is the outcome of G at the end of interval: ", n, xG.dat.data.min(), xG.dat.data.max())
+                    print("this is the corrected value at the end of interval: ", n, xnp1.dat.data.min(), xnp1.dat.data.max())
+
+        # think about output! need at different iterations or just compute
+        # contraction factor to show convergence
+        for n in range(1, self.n_intervals+1):
+            state.fields(name).assign(self.x(n)(name))
+            print("final fields:")
+            print(n, state.fields(name).dat.data.min(), state.fields(name).dat.data.max())
+            xa = Function(self.x(n)(name).function_space()).assign(state.fields(name)-self.xF(n-1)(name))
+            print(xa.dat.data.min(), xa.dat.data.max(), errornorm(state.fields(name), self.xF(n-1)(name)))
+
+            with timed_stage("Dump output"):
+                state.dump(float(n*state.dt))
+
+        logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')

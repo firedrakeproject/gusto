@@ -1,6 +1,6 @@
 from firedrake import Function
 
-__all__ = ["TimeLevelFields", "StateFields"]
+__all__ = ["TimeLevelFields", "StateFields", "PararealFields"]
 
 
 class Fields(object):
@@ -148,3 +148,24 @@ class TimeLevelFields(object):
                 field.assign(xip1(field.name()))
         for field in self.n:
             field.assign(self.np1(field.name()))
+
+
+class PararealFields(TimeLevelFields):
+
+    def __init__(self, equation, nlevels):
+        levels = [str(n) for n in range(nlevels+1)]
+        self.add_fields(equation, levels)
+
+    def initialise(self, state):
+        x0 = getattr(self, "0")
+        for field in x0:
+            field.assign(state.fields(field.name()))
+
+    def update(self):
+        # this will do the correction so that these fields hold the
+        # initial conditions for the fine propagator
+        pass
+
+    def __call__(self, n):
+        return getattr(self, str(n))
+        

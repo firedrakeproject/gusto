@@ -477,7 +477,9 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         else:
             self.dt = self.dt
             self.ncycles = 1
-        self.x = [Function(self.fs)]*(self.ncycles+1)
+        self.x = []
+        for i in range(self.ncycles+1):
+            self.x.append(Function(self.fs))
 
     @abstractmethod
     def apply_cycle(self, x_out, x_in):
@@ -499,11 +501,21 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
+        #print("before in", [(i, self.x[i].dat.data.min(), self.x[i].dat.data.max()) for i in range(self.ncycles+1)])
+        #print(self.x[0])
+        #print(self.x[1])
         self.x[0].assign(x_in)
+        #print("in", [(i, self.x[i].dat.data.min(), self.x[i].dat.data.max()) for i in range(self.ncycles+1)])
         for i in range(self.ncycles):
+            #print("before i", i, self.x[i].dat.data.min(), self.x[i].dat.data.max())
+            #print("before i+1", i+1, self.x[i+1].dat.data.min(), self.x[i+1].dat.data.max())
             self.apply_cycle(self.x[i+1], self.x[i])
+            print("after i", i, self.x[i].dat.data.min(), self.x[i].dat.data.max())
+            print("after i+1", i+1, self.x[i+1].dat.data.min(), self.x[i+1].dat.data.max())
             self.x[i].assign(self.x[i+1])
-        x_out.assign(self.x[self.ncycles-1])
+        x_out.assign(self.x[self.ncycles])
+        #print(self.ncycles, self.ncycles-1)
+        print("out", x_out.dat.data.min(), x_out.dat.data.max())
 
 
 class ForwardEuler(ExplicitTimeDiscretisation):
@@ -745,7 +757,7 @@ class Heun(ExplicitTimeDiscretisation):
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
