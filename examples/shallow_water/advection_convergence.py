@@ -4,12 +4,12 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        FiniteElement, as_vector, errornorm)
 import matplotlib.pyplot as plt
 
-tophat = True
+tophat = False
 triangle = False
-trig = False
+trig = True
 
 # set up resolution and timestepping parameters for convergence test
-dx_dt = {0.05: 0.005, 0.1: 0.01, 0.15: 0.015, 0.2: 0.02, 0.25: 0.025}
+dx_dt = {0.05: 0.005, 0.1: 0.01, 0.2: 0.02, 0.25: 0.025, 0.5, 0.05}
 error_norms = []
 dx_list = []
 dt_list = []
@@ -32,11 +32,11 @@ Ksat = 0.25
 for dx, dt in dx_dt.items():
 
     if tophat:
-        dirname = "convergence_test__advection_hat_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_advection_hat_DG1_dx%s_dt%s" % (dx, dt)
     elif triangle:
         dirname = "convergence_test_advection_triangle_DG1_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "compare_exact_convergence_test_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -76,6 +76,9 @@ for dx, dt in dx_dt.items():
     meqn = AdvectionEquation(state, VD, field_name="advected_m", Vu=Vu)
     state.fields("u").project(as_vector([u_max]))
     state.fields("advected_m").project(mexpr)
+    # analytical solution
+    exact_m = state.fields("exact_m", VD)
+    exact_m.interpolate(exact_mexpr)
 
     # build time stepper
     stepper = PrescribedTransport(state,
@@ -83,9 +86,7 @@ for dx, dt in dx_dt.items():
                                     SSPRK3(state,)),),)
     stepper.run(t=0, tmax=tmax)
 
-    # analytical solution
-    exact_m = Function(VD)
-    exact_m.project(exact_mexpr)
+
     
     fig, axes = plt.subplots()
     plot(exact_m, axes=axes, label='exact solution', color='green')

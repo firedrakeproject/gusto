@@ -5,12 +5,12 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
 
-tophat = True
+tophat = False
 triangle = False
-trig = False
+trig = True
 
 # set up resolution and timestepping parameters for convergence test
-dx_dt = {0.05: 0.005, 0.1: 0.01, 0.15: 0.015, 0.2: 0.02, 0.25: 0.025}
+dx_dt = {0.05: 0.005, 0.1: 0.01, 0.2: 0.02, 0.25: 0.025, 0.5: 0.05}
 error_norms = []
 dx_list = []
 dt_list = []
@@ -37,7 +37,7 @@ for dx, dt in dx_dt.items():
     elif triangle:
         dirname = "forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
