@@ -12,9 +12,10 @@ from gusto.recovery import Recoverer, Boundary_Method
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
+from gusto.labels import subject
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
-from firedrake import (Interpolator, conditional, Function,
+from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, as_vector, BrokenElement,
                        FunctionSpace, Constant, pi, Projector)
 from gusto import thermodynamics
@@ -485,7 +486,7 @@ class Evaporation(Physics):
         self.rain.assign(self.rain_new.interpolate())
 
 
-class InstantRain(Physics):
+class InstantRain(object):
     """
     The process of converting moisture above the saturation curve to rain.
     :arg state: :class:`.State.` object.
@@ -494,27 +495,31 @@ class InstantRain(Physics):
         rain
     """
 
-    def __init__(self, state, saturation_curve):
-        super().__init__(state)
+    def __init__(self, equation, saturation_curve):
 
-        self.saturation = saturation_curve
+        self.Vm_idx = equation.field_names.index("water_v")
+        Vr_idx = equation.field_names.index("rain_mixing_ratio")
 
-        # obtain the fields
-        self.water_v = state.fields("water_v")
-        self.rain = state.fields("rain")
+        # obtain function space and functions
+        W = equation.function_space
+        Vm = W.sub(self.Vm_idx)
+        Vr = W.sub(Vr_idx)
 
-        # obtain function space
-        Vm = self.water_v.function_space()
-        Vr = self.rain.function_space()
+        # the source function is the difference between the water
+        # vapour and the saturation
+        self.water_v = Function(Vm)
+        self.S = Function(Vm)
+
+        test_m = equation.tests[self.Vm_idx]
+        test_r = equation.tests[Vr_idx]
+        equation.residual += subject(test_m * self.S * dx -
+                                     test_r * self.S * dx, equation.X)
 
         # convert moisture above saturation curve to rain
-        self.water_v_new = Interpolator(conditional(
-            self.water_v > self.saturation, self.saturation,
-            self.water_v), Vm)
-        self.rain_new = Interpolator(conditional(
-            self.water_v > self.saturation, self.rain + (self.water_v-self.saturation),
-            self.rain), Vr)
+        self.S_interpolator = Interpolator(conditional(
+            self.water_v > saturation_curve, self.water_v - saturation_curve,
+            0), Vm)
 
-    def apply(self):
-        self.rain.assign(self.rain_new.interpolate())
-        self.water_v.assign(self.water_v_new.interpolate())
+    def evaluate(self, x_in):
+        self.water_v.assign(x_in.split()[self.Vm_idx])
+        self.S.assign(self.S_interpolator.interpolate())

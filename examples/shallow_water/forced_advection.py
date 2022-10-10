@@ -3,11 +3,10 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi, plot,
                        FiniteElement, as_vector, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-import matplotlib.pyplot as plt
 
-tophat = False
+tophat = True
 triangle = False
-trig = True
+trig = False
 
 u_max = 1
 if tophat:
@@ -31,14 +30,14 @@ elif trig:
 
 dt = 0.005
 dx = 0.05
-Lx = 100
+Lx = 50
 nx = int(Lx/dx)
 mesh = PeriodicIntervalMesh(nx, Lx)
 x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=100)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,
@@ -66,12 +65,11 @@ msat = Function(VD)
 msat.interpolate(msat_expr)
 
 # set up advection equation
-meqn = AdvectionEquation(state, VD, field_name="water_v", Vu=Vu)
+rain = Rain(space='tracer', transport_flag=False, transport_eqn=TransportEquationType.no_transport)
+meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
+                               active_tracers=[rain])
 state.fields("u").project(as_vector([u_max]))
 state.fields("water_v").project(mexpr)
-
-# define rain variable
-r = state.fields("rain", VD)
 
 # exact rainfall profile (analytically)
 r_exact = state.fields("r_exact", VD)
@@ -93,22 +91,10 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics_list = [InstantRain(state, msat)]
+physics = ((InstantRain(meqn, msat), ForwardEuler(state)))
+
 # build time stepper
 stepper = PrescribedTransport(state,
-                              ((meqn,
-                                SSPRK3(state, limiter=VertexBasedLimiter(VD))),),
-                              physics_list=physics_list)
-stepper.run(t=0, tmax=55)
-
-fig, axes = plt.subplots()
-plot(r_exact, axes=axes, label='exact solution', color='green')
-plot(state.fields("rain"), axes=axes, label='rain after advection', color='red')
-plt.title("Rainfall profile after advecting")
-plt.legend()
-plt.show()
-
-# calculate L2 error norm
-r = state.fields("rain")
-L2_error = errornorm(r_exact, r)
-print(L2_error)
+                              ((meqn, SSPRK3(state)),),
+                              physics=physics)
+stepper.run(t=0, tmax=5*dt)

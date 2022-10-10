@@ -111,4 +111,5 @@ class Rain(ActiveTracer):
                  transport_flag=True,
                  transport_eqn=TransportEquationType.advective):
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
-                         transport_flag, phase=Phases.liquid, is_moisture=True)
+                         transport_flag, transport_eqn,
+                         phase=Phases.liquid, is_moisture=True)
