@@ -110,7 +110,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+    def setup(self, equation, uadv=None, apply_bcs=True, evaluate_source=None,
+              *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -124,6 +125,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 the equation to include.
         """
         self.residual = equation.residual
+        self.evaluate_source = evaluate_source
 
         if self.field_name is not None:
             self.idx = equation.field_names.index(self.field_name)
@@ -451,7 +453,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         self.subcycles = subcycles
 
-    def setup(self, equation, uadv, *active_labels):
+    def setup(self, equation, uadv, apply_bcs=True, evaluate_source=None,
+              *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -462,7 +465,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, uadv, apply_bcs, evaluate_source,
+                      *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -496,6 +500,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x[0].assign(x_in)
         for i in range(self.ncycles):
+            if self.evaluate_source is not None:
+                self.evaluate_source(x_in)
             self.apply_cycle(self.x[i], self.x[i+1])
             self.x[i].assign(self.x[i+1])
         x_out.assign(self.x[self.ncycles-1])

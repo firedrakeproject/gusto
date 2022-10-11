@@ -30,14 +30,14 @@ elif trig:
 
 dt = 0.005
 dx = 0.05
-Lx = 50
+Lx = 100
 nx = int(Lx/dx)
 mesh = PeriodicIntervalMesh(nx, Lx)
 x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=1)
+output = OutputParameters(dirname=dirname, dumpfreq=100)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,
@@ -95,6 +95,6 @@ physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
 
 # build time stepper
 stepper = PrescribedTransport(state,
-                              ((meqn, SSPRK3(state)),),
+                              ((meqn, ((SSPRK3(state), transport),)),),
                               physics_schemes=physics_schemes)
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=dt)
