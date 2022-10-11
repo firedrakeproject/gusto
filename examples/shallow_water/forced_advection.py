@@ -29,9 +29,9 @@ elif trig:
     dirname = "DG1_withlimiter_forced_advection_trig"
 
 dt = 0.005
-dx = 0.05
+delta_x = 0.05
 Lx = 100
-nx = int(Lx/dx)
+nx = int(Lx/delta_x)
 mesh = PeriodicIntervalMesh(nx, Lx)
 x = SpatialCoordinate(mesh)[0]
 x1 = 0
@@ -97,4 +97,4 @@ physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
 stepper = PrescribedTransport(state,
                               ((meqn, ((SSPRK3(state), transport),)),),
                               physics_schemes=physics_schemes)
-stepper.run(t=0, tmax=dt)
+stepper.run(t=0, tmax=55)
