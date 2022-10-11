@@ -4,7 +4,7 @@ from gusto.configuration import logger
 from gusto.forcing import Forcing
 from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
-                          linearisation, prognostic)
+                          linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
@@ -71,6 +71,9 @@ class Timestepper(object):
         else:
             self.physics = []
 
+        for _, scheme in self.physics:
+            scheme.setup(eqn, self.transporting_velocity, physics)
+
     @property
     def transporting_velocity(self):
         return "prognostic"
@@ -122,8 +125,8 @@ class Timestepper(object):
 
             with timed_stage("Physics"):
 
-                for physics in self.physics:
-                    physics.apply()
+                for physics, scheme in self.physics:
+                    scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
 
                 # TODO: Hack to ensure that xnp1 fields are updated
                 for field in self.x.np1:
