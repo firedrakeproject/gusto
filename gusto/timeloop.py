@@ -125,17 +125,13 @@ class Timestepper(object):
 
             self.timestep()
 
-            for field in self.x.np1:
-                state.fields(field.name()).assign(field)
-
             with timed_stage("Physics"):
 
                 for physics, scheme in self.physics_schemes:
                     scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
 
-                # TODO: Hack to ensure that xnp1 fields are updated
-                for field in self.x.np1:
-                    field.assign(state.fields(field.name()))
+            for field in self.x.np1:
+                state.fields(field.name()).assign(field)
 
             state.t.assign(state.t + state.dt)
 
