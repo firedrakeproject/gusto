@@ -91,10 +91,10 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics = [(InstantRain(meqn, msat), ForwardEuler(state))]
+physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
 
 # build time stepper
 stepper = PrescribedTransport(state,
                               ((meqn, SSPRK3(state)),),
-                              physics=physics)
+                              physics_schemes=physics_schemes)
 stepper.run(t=0, tmax=5*dt)
