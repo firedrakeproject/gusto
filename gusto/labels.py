@@ -123,6 +123,7 @@ def replace_subject(new, idx=None):
 time_derivative = Label("time_derivative")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
+physics = Label("physics")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)

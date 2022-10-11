@@ -12,7 +12,7 @@ from gusto.recovery import Recoverer, Boundary_Method
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
-from gusto.labels import subject
+from gusto.labels import subject, physics
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function, dx,
@@ -512,8 +512,8 @@ class InstantRain(object):
 
         test_m = equation.tests[self.Vm_idx]
         test_r = equation.tests[Vr_idx]
-        equation.residual += subject(test_m * self.S * dx -
-                                     test_r * self.S * dx, equation.X)
+        equation.residual += physics(subject(test_m * self.S * dx -
+                                     test_r * self.S * dx, equation.X))
 
         # convert moisture above saturation curve to rain
         self.S_interpolator = Interpolator(conditional(
