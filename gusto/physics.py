@@ -514,7 +514,8 @@ class InstantRain(object):
         test_m = equation.tests[self.Vm_idx]
         test_r = equation.tests[Vr_idx]
         equation.residual += physics(subject(test_m * self.S * dx -
-                                     test_r * self.S * dx, equation.X))
+                                             test_r * self.S * dx, equation.X),
+                                     self.evaluate)
 
         # convert moisture above saturation curve to rain
         self.S_interpolator = Interpolator(conditional(

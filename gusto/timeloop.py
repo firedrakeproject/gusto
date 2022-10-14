@@ -60,9 +60,8 @@ class Timestepper(object):
         for eqn, method in problem:
             if type(method) is tuple:
                 for scheme, *active_labels in method:
-                    evaluate_source = None
                     scheme.setup(eqn, self.transporting_velocity, apply_bcs,
-                                 evaluate_source, *active_labels)
+                                 *active_labels)
                     self.schemes.append((eqn.field_name, scheme))
             else:
                 scheme = method
@@ -77,7 +76,7 @@ class Timestepper(object):
         for phys, scheme in self.physics_schemes:
             apply_bcs = False
             scheme.setup(eqn, self.transporting_velocity, apply_bcs,
-                         phys.evaluate, physics)
+                         physics)
 
     @property
     def transporting_velocity(self):
