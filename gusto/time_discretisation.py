@@ -501,7 +501,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x[0].assign(x_in)
         for i in range(self.ncycles):
             if self.evaluate_source is not None:
-                self.evaluate_source(x_in)
+                self.evaluate_source(x_in, self.dt)
             self.apply_cycle(self.x[i], self.x[i+1])
             self.x[i].assign(self.x[i+1])
         x_out.assign(self.x[self.ncycles-1])
