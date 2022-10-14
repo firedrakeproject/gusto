@@ -2,6 +2,7 @@ import ufl
 from firedrake import Function, split, MixedElement
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
+from types import MethodType
 
 
 def replace_test_function(new_test):
@@ -123,7 +124,7 @@ def replace_subject(new, idx=None):
 time_derivative = Label("time_derivative")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
-physics = Label("physics")
+physics = Label("physics", validator=lambda value: type(value) == MethodType)
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
