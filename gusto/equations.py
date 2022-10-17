@@ -410,7 +410,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
 class ForcedAdvectionEquation(PrognosticEquationSet):
 
-    def __init__(self,  state, function_space, field_name,
+    def __init__(self, state, function_space, field_name,
                  ufamily=None, udegree=None, Vu=None, active_tracers=None,
                  **kwargs):
 
@@ -454,6 +454,7 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
+
 
 class ShallowWaterEquations(PrognosticEquationSet):
     """

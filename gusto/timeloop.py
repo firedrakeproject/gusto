@@ -126,7 +126,7 @@ class Timestepper(object):
 
             with timed_stage("Physics"):
 
-                for physics, scheme in self.physics_schemes:
+                for _, scheme in self.physics_schemes:
                     scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
 
             for field in self.x.np1:
