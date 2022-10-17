@@ -4,9 +4,9 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        FiniteElement, as_vector, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
-tophat = True
+tophat = False
 triangle = False
-trig = False
+trig = True
 
 u_max = 1
 if tophat:
@@ -91,10 +91,10 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+InstantRain(meqn, msat)
 
 # build time stepper
 stepper = PrescribedTransport(state,
-                              ((meqn, ((SSPRK3(state), transport),)),),
-                              physics_schemes=physics_schemes)
+                              ((meqn, RK4(state)),))
+
 stepper.run(t=0, tmax=55)
