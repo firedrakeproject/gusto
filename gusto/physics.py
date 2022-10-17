@@ -508,17 +508,18 @@ class InstantRain(object):
         # the source function is the difference between the water
         # vapour and the saturation
         self.water_v = Function(Vm)
-        self.S = Function(Vm)
+        self.source = Function(Vm)
         self.dt = Constant(0.0)
 
         test_m = equation.tests[self.Vm_idx]
         test_r = equation.tests[Vr_idx]
-        equation.residual += physics(subject(test_m * self.S * dx -
-                                             test_r * self.S * dx, equation.X),
+        equation.residual += physics(subject(test_m * self.source * dx
+                                             - test_r * self.source * dx,
+                                             equation.X),
                                      self.evaluate)
 
         # convert moisture above saturation curve to rain
-        self.S_interpolator = Interpolator(conditional(
+        self.source_interpolator = Interpolator(conditional(
             self.water_v > saturation_curve,
             (1/self.dt)*(self.water_v - saturation_curve),
             0), Vm)
@@ -526,4 +527,4 @@ class InstantRain(object):
     def evaluate(self, x_in, dt):
         self.dt.assign(dt)
         self.water_v.assign(x_in.split()[self.Vm_idx])
-        self.S.assign(self.S_interpolator.interpolate())
+        self.source.assign(self.source_interpolator.interpolate())
