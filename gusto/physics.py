@@ -557,7 +557,6 @@ class BouchutForcing(object):
         self.source = Function(VD)
         self.Q = Function(VQ)
         self.D = Function(VD)
-        self.dt = Constant(0)
 
         # test functions
         test_D = equation.tests[self.VD_idx]
@@ -577,7 +576,6 @@ class BouchutForcing(object):
             self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/self.tau, 0), VQ)
 
     def evaluate(self, x_in, dt):
-        self.dt.assign(dt)
         self.Q.assign(x_in.split()[self.VQ_idx])
         self.D.assign(x_in.split()[self.VD_idx])
         self.source.assign(self.source_interpolator.interpolate())
