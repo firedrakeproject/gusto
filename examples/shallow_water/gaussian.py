@@ -24,7 +24,7 @@ gamma = 5
 q_g = 3
 
 parameters=ConvectiveMoistShallowWaterParameters(H=H, g=g, gamma=gamma,
-                                                 tau=tau, q_0=q_0, alpha=60)
+                                                 tau=tau, q_0=q_0, alpha=alpha)
 
 dirname="tracer_sw_gaussian"
 
