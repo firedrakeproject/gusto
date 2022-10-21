@@ -493,9 +493,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         field_names = ["u", "D"]
 
-        if active_tracers is not None:
-            raise NotImplementedError('Tracers not implemented for shallow water equations')
-
         if active_tracers is None:
             active_tracers = []
 
@@ -507,8 +504,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
         g = state.parameters.g
         H = state.parameters.H
 
-        w, phi = self.tests
-        u, D = split(self.X)
+        w, phi = self.tests[0:2]
+        u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
 
         # -------------------------------------------------------------------- #
@@ -587,7 +584,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u_ref, D_ref = self.X_ref.split()
+        u_ref, D_ref = self.X_ref.split()[0:2]
         # Linearise about D = H
         # TODO: add interface to update linearisation state
         D_ref.assign(Constant(H))
