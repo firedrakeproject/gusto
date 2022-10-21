@@ -1,3 +1,5 @@
+# This example is to test the implementation of the Bouchut et al moist
+# shallow water framework.
 from gusto import *
 from firedrake import (PeriodicSquareMesh, conditional, TestFunction,
                        TrialFunction, exp, Constant, sqrt)
@@ -22,7 +24,7 @@ gamma = 5
 q_g = 3
 
 parameters=ConvectiveMoistShallowWaterParameters(H=H, g=g, gamma=gamma,
-                                                 tau = tau, q_0=q_0, alpha=60)
+                                                 tau=tau, q_0=q_0, alpha=60)
 
 dirname="tracer_sw_gaussian"
 
@@ -50,7 +52,7 @@ u0 = state.fields("u")
 D0 = state.fields("D")
 Q0 = state.fields("Q_mixing_ratio")
 gaussian = 11*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
-D0.interpolate(Constant(H) - 0.01 * gaussian)
+D0.interpolate(Constant(H) + 0.01 * gaussian)
 Q0.interpolate(q_g * Constant(1 - 1e-4))
 
 # Add Bouchut condensation forcing
