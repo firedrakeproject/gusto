@@ -28,16 +28,20 @@ elif trig:
     K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
+if trig:
+    tmax = 85
+else:
+    tmax = 55
 
 # loop over range of dx, dt pairs
 for dx, dt in dx_dt.items():
 
     if tophat:
-        dirname = "convergence_test_forced_advection_hat_DG1_limiter_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_hat_dx%s_dt%s" % (dx, dt)
     elif triangle:
-        dirname = "forced_advection_triangle_dx%s_dt%s" % (dx, dt)
+        dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -76,12 +80,11 @@ for dx, dt in dx_dt.items():
     msat.interpolate(msat_expr)
 
     # set up advection equation
-    meqn = AdvectionEquation(state, VD, field_name="water_v", Vu=Vu)
+    rain = Rain(space='tracer', transport_flag=False, transport_eqn=TransportEquationType.no_transport)
+    meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
+                                   active_tracers=[rain])
     state.fields("u").project(as_vector([u_max]))
     state.fields("water_v").project(mexpr)
-
-    # define rain variable
-    r = state.fields("rain", VD)
 
     # exact rainfall profile (analytically)
     r_exact = state.fields("r_exact", VD)
@@ -103,25 +106,23 @@ for dx, dt in dx_dt.items():
     r_exact.interpolate(r_expr)
 
     # add instant rain forcing
-    physics_list = [InstantRain(state, msat)]
+    [InstantRain(meqn, msat)]
 
     # build time stepper
     stepper = PrescribedTransport(state,
-                                  ((meqn,
-                                    SSPRK3(state,limiter=VertexBasedLimiter(VD))),),
-                                  physics_list=physics_list)
+                                  ((meqn, RK4(state)),))
 
-    stepper.run(t=0, tmax=55)
+    stepper.run(t=0, tmax=tmax)
 
     fig, axes = plt.subplots()
     plot(r_exact, axes=axes, label='exact solution', color='green')
-    plot(state.fields("rain"), axes=axes, label='rain after advection', color='red')
+    plot(state.fields("rain_mixing_ratio"), axes=axes, label='rain after advection', color='red')
     plt.title("Rainfall profile after advecting")
     plt.legend()
     plt.show()
 
     # calculate L2 error norm
-    r = state.fields("rain")
+    r = state.fields("rain_mixing_ratio")
     L2_error = errornorm(r_exact, r)
     error_norms.append(L2_error)
     dx_list.append(dx)

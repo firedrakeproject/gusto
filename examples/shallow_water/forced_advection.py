@@ -20,13 +20,17 @@ elif trig:
     K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
+if trig:
+    tmax = 85
+else:
+    tmax = 55
 
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "DG1_withlimiter_forced_advection_trig"
+    dirname = "forced_advection_trig"
 
 dt = 0.005
 delta_x = 0.05
@@ -97,4 +101,4 @@ InstantRain(meqn, msat)
 stepper = PrescribedTransport(state,
                               ((meqn, RK4(state)),))
 
-stepper.run(t=0, tmax=55)
+stepper.run(t=0, tmax=tmax)
