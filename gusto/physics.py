@@ -541,11 +541,11 @@ class BouchutForcing(object):
     def __init__(self, equation, parameters):
 
         # store moist shallow water parameters
-        self.alpha = parameters.alpha
-        self.q_0 = parameters.q_0
-        self.H = parameters.H
-        self.tau = parameters.tau
-        self.gamma = parameters.gamma
+        alpha = parameters.alpha
+        q_0 = parameters.q_0
+        H = parameters.H
+        tau = parameters.tau
+        gamma = parameters.gamma
 
         # obtain function spaces and functions
         W = equation.function_space
@@ -564,16 +564,16 @@ class BouchutForcing(object):
 
         equation.residual += physics(subject
                                      (
-                                         + self.gamma * test_D * self.source * dx
+                                         + gamma * test_D * self.source * dx
                                          + test_Q * self.source * dx,
                                          equation.X),
                                      self.evaluate)
 
         # define saturation function based on parameters
-        q_s = self.q_0 * exp(-self.alpha*(self.D-self.H)/self.H)
+        q_s = q_0 * exp(-alpha*(self.D-H)/H)
 
         self.source_interpolator = Interpolator(conditional(
-            self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/self.tau, 0), VQ)
+            self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/tau, 0), VQ)
 
     def evaluate(self, x_in, dt):
         self.Q.assign(x_in.split()[self.VQ_idx])
