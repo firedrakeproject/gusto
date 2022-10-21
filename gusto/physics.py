@@ -565,8 +565,8 @@ class BouchutForcing(object):
 
         equation.residual += physics(subject
                                      (
-                                         -self.gamma * test_D * self.source * dx
-                                         - test_Q * self.source * dx,
+                                         + self.gamma * test_D * self.source * dx
+                                         + test_Q * self.source * dx,
                                          equation.X),
                                      self.evaluate)
 
