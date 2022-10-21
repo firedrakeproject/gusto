@@ -571,12 +571,7 @@ class BouchutForcing(object):
                                      self.evaluate)
 
         # define saturation function based on parameters
-        def saturation_function(D):
-            q_s = self.q_0 * exp(-self.alpha*(D-self.H)/self.H)
-            return q_s
-
-        # convert moisture above saturation to rain
-        q_s = saturation_function(self.D)
+        q_s = self.q_0 * exp(-self.alpha*(self.D-self.H)/self.H)
 
         self.source_interpolator = Interpolator(conditional(
             self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/self.tau, 0), VQ)
