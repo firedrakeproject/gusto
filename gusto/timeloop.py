@@ -4,7 +4,7 @@ from gusto.configuration import logger
 from gusto.forcing import Forcing
 from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
-                          linearisation, prognostic)
+                          linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.state import FieldCreator
 
@@ -45,10 +45,11 @@ class Timestepper(object):
     :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
-    :arg physics_list: optional list of classes that implement `physics` schemes
+    :arg physics_schemes: optional list of classes that implement `physics`
+        schemes
     """
 
-    def __init__(self, state, problem, apply_bcs=True, physics_list=None):
+    def __init__(self, state, problem, apply_bcs=True, physics_schemes=None):
 
         self.state = state
 
@@ -59,17 +60,23 @@ class Timestepper(object):
         for eqn, method in problem:
             if type(method) is tuple:
                 for scheme, *active_labels in method:
-                    scheme.setup(eqn, self.transporting_velocity, apply_bcs, *active_labels)
+                    scheme.setup(eqn, self.transporting_velocity, apply_bcs,
+                                 *active_labels)
                     self.schemes.append((eqn.field_name, scheme))
             else:
                 scheme = method
                 scheme.setup(eqn, self.transporting_velocity)
                 self.schemes.append((eqn.field_name, scheme))
 
-        if physics_list is not None:
-            self.physics_list = physics_list
+        if physics_schemes is not None:
+            self.physics_schemes = physics_schemes
         else:
-            self.physics_list = []
+            self.physics_schemes = []
+
+        for phys, scheme in self.physics_schemes:
+            apply_bcs = False
+            scheme.setup(eqn, self.transporting_velocity, apply_bcs,
+                         physics)
 
     @property
     def transporting_velocity(self):
@@ -117,17 +124,13 @@ class Timestepper(object):
 
             self.timestep()
 
-            for field in self.x.np1:
-                state.fields(field.name()).assign(field)
-
             with timed_stage("Physics"):
 
-                for physics in self.physics_list:
-                    physics.apply()
+                for _, scheme in self.physics_schemes:
+                    scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
 
-                # TODO: Hack to ensure that xnp1 fields are updated
-                for field in self.x.np1:
-                    field.assign(state.fields(field.name()))
+            for field in self.x.np1:
+                state.fields(field.name()).assign(field)
 
             state.t.assign(state.t + state.dt)
 
@@ -154,7 +157,8 @@ class CrankNicolson(Timestepper):
     :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indictaing the fields to diffusion, and the
         :class:`~.Diffusion` to use.
-    :arg physics_list: optional list of classes that implement `physics` schemes
+    :arg physics_schemes: optional list of classes that implement `physics`
+        schemes
     :arg prescribed_fields: an order list of tuples, pairing a field name with a
          function that returns the field as a function of time.
     :kwargs: maxk is the number of outer iterations, maxi is the number of inner
@@ -165,7 +169,7 @@ class CrankNicolson(Timestepper):
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
-                 physics_list=None, **kwargs):
+                 physics_schemes=None, **kwargs):
 
         self.maxk = kwargs.pop("maxk", 4)
         self.maxi = kwargs.pop("maxi", 1)
@@ -209,7 +213,7 @@ class CrankNicolson(Timestepper):
 
         # TODO: why was this False? Should this be an argument?
         apply_bcs = True
-        super().__init__(state, problem, apply_bcs, physics_list)
+        super().__init__(state, problem, apply_bcs, physics_schemes)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -306,12 +310,14 @@ class CrankNicolson(Timestepper):
 
 class PrescribedTransport(Timestepper):
 
-    def __init__(self, state, problem, physics_list=None,
+    def __init__(self, state, problem, physics_schemes=None,
                  prescribed_transporting_velocity=None):
 
         super().__init__(state, problem,
-                         physics_list=physics_list)
+                         physics_schemes=physics_schemes)
 
+        equation, _ = problem[0]
+        self.field_name = equation.field_name
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
                                                  self.state.fields('u'))

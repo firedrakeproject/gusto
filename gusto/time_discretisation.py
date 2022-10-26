@@ -15,8 +15,10 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import logger, DEBUG, TransportEquationType
-from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
-                          transport, ibp_label, replace_subject, replace_test_function)
+from gusto.labels import (time_derivative, transporting_velocity,
+                          prognostic, subject, physics,
+                          transport, ibp_label, replace_subject,
+                          replace_test_function)
 from gusto.recovery import Recoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
@@ -149,6 +151,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
                 map_if_false=drop)
+
+        self.evaluate_source = []
+        for t in self.residual:
+            if t.has_label(physics):
+                self.evaluate_source.append(t.get(physics))
 
         options = self.options
 
@@ -451,7 +458,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         self.subcycles = subcycles
 
-    def setup(self, equation, uadv, *active_labels):
+    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -462,7 +469,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, uadv, apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -497,9 +504,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            self.apply_cycle(self.x0, self.x1)
-            self.x0.assign(self.x1)
-        x_out.assign(self.x1)
+            for evaluate in self.evaluate_source:
+                evaluate(x_in, self.dt)
+            self.apply_cycle(self.x[i], self.x[i+1])
+            self.x[i].assign(self.x[i+1])
+        x_out.assign(self.x[self.ncycles-1])
 
 
 class ForwardEuler(ExplicitTimeDiscretisation):

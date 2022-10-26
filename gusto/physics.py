@@ -12,17 +12,18 @@ from gusto.recovery import Recoverer, Boundary_Method
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
+from gusto.labels import subject, physics
 from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
-from firedrake import (Interpolator, conditional, Function,
+from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, as_vector, BrokenElement,
-                       FunctionSpace, Constant, pi, Projector)
+                       FunctionSpace, Constant, pi, Projector, exp)
 from gusto import thermodynamics
 from math import gamma
 from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
+__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments", "InstantRain", "BouchutForcing"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -483,3 +484,98 @@ class Evaporation(Physics):
         self.theta.assign(self.theta_new.interpolate())
         self.water_v.assign(self.water_v_new.interpolate())
         self.rain.assign(self.rain_new.interpolate())
+
+
+class InstantRain(object):
+    """
+    The process of converting moisture above the saturation curve to rain.
+    :arg state: :class:`.State.` object.
+    :arg saturation_curve: the saturation function,
+        above which excess moisture is converted to
+        rain
+    """
+
+    def __init__(self, equation, saturation_curve):
+
+        self.Vm_idx = equation.field_names.index("water_v")
+        Vr_idx = equation.field_names.index("rain_mixing_ratio")
+
+        # obtain function space and functions
+        W = equation.function_space
+        Vm = W.sub(self.Vm_idx)
+        Vr = W.sub(Vr_idx)
+
+        # the source function is the difference between the water
+        # vapour and the saturation
+        self.water_v = Function(Vm)
+        self.source = Function(Vm)
+        self.dt = Constant(0.0)
+
+        test_m = equation.tests[self.Vm_idx]
+        test_r = equation.tests[Vr_idx]
+        equation.residual += physics(subject(test_m * self.source * dx
+                                             - test_r * self.source * dx,
+                                             equation.X),
+                                     self.evaluate)
+
+        # convert moisture above saturation curve to rain
+        self.source_interpolator = Interpolator(conditional(
+            self.water_v > saturation_curve,
+            (1/self.dt)*(self.water_v - saturation_curve),
+            0), Vm)
+
+    def evaluate(self, x_in, dt):
+        self.dt.assign(dt)
+        self.water_v.assign(x_in.split()[self.Vm_idx])
+        self.source.assign(self.source_interpolator.interpolate())
+
+
+class BouchutForcing(object):
+    """
+    Forcing for the version of the moist shallow water equations described in
+    Bouchut et al (2009). Condenstation is a sink in the moisture equation and
+    feeds back on directly on the height equation.
+    :arg state: :class:`.State.` object.
+    :arg parameters: the ConvectiveMoistShallowWaterParameters
+    """
+    def __init__(self, equation, parameters):
+
+        # store moist shallow water parameters
+        alpha = parameters.alpha
+        q_0 = parameters.q_0
+        H = parameters.H
+        tau = parameters.tau
+        gamma = parameters.gamma
+
+        # obtain function spaces and functions
+        W = equation.function_space
+        self.VD_idx = equation.field_names.index("D")
+        self.VQ_idx = equation.field_names.index("Q_mixing_ratio")
+        VD = W.sub(self.VD_idx)
+        VQ = W.sub(self.VQ_idx)
+
+        self.source = Function(VD)
+        self.Q = Function(VQ)
+        self.D = Function(VD)
+
+        # test functions
+        test_D = equation.tests[self.VD_idx]
+        test_Q = equation.tests[self.VQ_idx]
+
+        equation.residual += physics(subject
+                                     (
+                                         + gamma * test_D * self.source * dx
+                                         + test_Q * self.source * dx,
+                                         equation.X),
+                                     self.evaluate)
+
+        # define saturation function based on parameters
+        q_s = q_0 * exp(-alpha*(self.D-H)/H)
+
+        self.source_interpolator = Interpolator(conditional(
+            self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/tau, 0), VQ)
+
+    def evaluate(self, x_in, dt):
+        self.Q.assign(x_in.split()[self.VQ_idx])
+        self.D.assign(x_in.split()[self.VD_idx])
+        self.source.assign(self.source_interpolator.interpolate())
