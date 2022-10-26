@@ -258,6 +258,12 @@ def compressible_hydrostatic_balance(state, theta0, rho0, exner0=None,
 
 
 def remove_initial_w(u):
+    """
+    Removes the vertical component of a velocity field.
+
+    Args:
+        u (:class:`Function`): the velocity field to be altered.
+    """
     Vu = u.function_space()
     Vv = FunctionSpace(Vu._ufl_domain, Vu.ufl_element()._elements[-1])
     bc = DirichletBC(Vu[0], 0.0, "bottom")
@@ -268,42 +274,52 @@ def remove_initial_w(u):
     u.assign(uin)
 
 
-def calculate_exner0(state, theta0, rho0):
-    # exner function
-    Vr = rho0.function_space()
-    exner = Function(Vr).interpolate(thermodynamics.exner_pressure(state.parameters, rho0, theta0))
-    exner0 = assemble(exner*dx)/assemble(Constant(1)*dx(domain=state.mesh))
-
-    return exner0
-
-
 def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
                                   top=False, exner_boundary=Constant(1.0),
                                   max_outer_solve_count=40,
                                   max_theta_solve_count=5,
                                   max_inner_solve_count=3):
     """
-    Given a wet equivalent potential temperature, theta_e, and the total moisture
-    content, mr_t, compute a hydrostatically balance virtual potential temperature,
-    dry density and water vapour profile.
+    Computes hydrostatic balance for a moist saturated, compressible atmosphere.
+
+    Given a wet equivalent potential temperature, theta_e, and the total
+    moisture content, mr_t, compute a hydrostatically balanced virtual dry
+    potential temperature, dry density and water vapour profile.
 
     The general strategy is to split up the solving into two steps:
     1) finding rho to balance the theta profile
-    2) finding theta_v and r_v to get back theta_e and saturation
+    2) finding theta_vd and r_v to get back theta_e and saturation, using a fixed
+        point iteration.
     We iteratively solve these steps until we (hopefully)
     converge to a solution.
 
-    :arg state: The :class:`State` object.
-    :arg theta_e: The initial wet equivalent potential temperature profile.
-    :arg mr_t: The total water pseudo-mixing ratio profile.
-    :arg exner0: Optional function to put exner pressure into.
-    :arg top: If True, set a boundary condition at the top, otherwise
-              it will be at the bottom.
-    :arg exner_boundary: The value of exner on the specified boundary.
-    :arg max_outer_solve_count: Max number of outer iterations for balance solver.
-    :arg max_theta_solve_count: Max number of iterations for theta solver (middle part of solve).
-    :arg max_inner_solve_count: Max number of iterations on the inner most
-                                loop for the water vapour solver.
+    Args:
+        state (:class:`State`): the model's state object, through which the
+            prognostic variables are accessed.
+        theta_e (:class:`ufl.Expr`): expression for the desired wet equivalent
+            potential temperature field.
+        mr_t (:class:`ufl.Expr`): expression for the total moisture content.
+        exner0 (:class:`Function`, optional): the hydrostatically-balanced Exner
+            pressure field. If provided, then the Exner pressure computed as
+            part of this routine will be stored in this function. Defaults to
+            None.
+        top (bool, optional): whether the pressure boundary condition is defined
+            on the top boundary or the bottom. True denotes the top. Defaults to
+            False.
+        exner_boundary (:class:`ufl.Expr`, optional): the Exner pressure field
+            on the boundary defining the boundary condition. Defaults to
+            `Constant(1.0)`.
+        max_outer_solve_count (int, optional): maximum number of outer solves
+            to perform. Defaults to 40.
+        max_theta_solve_count (int, optional): maximum number of solves for the
+            theta_vd field, per outer loop. Defaults to 5.
+        max_inner_solve_count (int, optional): maximum number of inner solves,
+            for the moisture fields, per theta solve. Defaults to 3.
+
+    Raises:
+        RuntimeError: if the prognostic fields have not converged to give the
+            specified profile to the desired tolerance, within the maximum
+            number of iterations.
     """
 
     theta0 = state.fields('theta')
@@ -393,25 +409,43 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
                                     max_outer_solve_count=40,
                                     max_inner_solve_count=20):
     """
-    Given vertical profiles for dry potential temperature
-    and relative humidity compute hydrostatically balanced
-    virtual potential temperature, dry density and water vapour profiles.
+    Computes hydrostatic bal. for a moist unsaturated, compressible atmosphere.
+
+    Given vertical profiles for dry potential temperature and relative humidity,
+    computes hydrostatically balanced virtual dry potential temperature, dry
+    density and water vapour profiles.
 
     The general strategy is to split up the solving into two steps:
     1) finding rho to balance the theta profile
-    2) finding theta_v and r_v to get back theta_d and H
-    We iteratively solve these steps until we (hopefully)
-    converge to a solution.
+    2) finding theta_v and r_v to get back theta_d and H, using a fixed-point
+       iteration.
+    These steps are iterated until we (hopefully) converge to a solution.
 
-    :arg state: The :class:`State` object.
-    :arg theta_d: The initial dry potential temperature profile.
-    :arg H: The relative humidity profile.
-    :arg exner0: Optional function to put exner pressure into.
-    :arg top: If True, set a boundary condition at the top, otherwise
-              it will be at the bottom.
-    :arg exner_boundary: The value of exner on the specified boundary.
-    :arg max_outer_solve_count: Max number of iterations for outer loop of balance solver.
-    :arg max_inner_solve_count: Max number of iterations for inner loop of balanace solver.
+    Args:
+        state (:class:`State`): the model's state object, through which the
+            prognostic variables are accessed.
+        theta_d (:class:`ufl.Expr`): the specified dry potential temperature
+            field.
+        H (:class:`ufl.Expr`): the specified relative humidity field.
+        exner0 (:class:`Function`, optional): the hydrostatically-balanced Exner
+            pressure field. If provided, then the Exner pressure computed as
+            part of this routine will be stored in this function. Defaults to
+            None.
+        top (bool, optional): whether the pressure boundary condition is defined
+            on the top boundary or the bottom. True denotes the top. Defaults to
+            False.
+        exner_boundary (:class:`ufl.Expr`, optional): the Exner pressure field
+            on the boundary defining the boundary condition. Defaults to
+            `Constant(1.0)`.
+        max_outer_solve_count (int, optional): maximum number of outer solves
+            to perform. Defaults to 40.
+        max_inner_solve_count (int, optional): maximum number of inner solves,
+            for the moisture fields, per outer solve. Defaults to 20.
+
+    Raises:
+        RuntimeError: if the prognostic fields have not converged to give the
+            specified profile to the desired tolerance, within the maximum
+            number of iterations.
     """
 
     theta0 = state.fields('theta')
