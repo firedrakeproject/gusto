@@ -14,7 +14,7 @@ from gusto.recovery import Recoverer, Boundary_Method
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
-           "compressible_hydrostatic_balance", "remove_initial_w", "calculate_exner0",
+           "compressible_hydrostatic_balance", "remove_initial_w",
            "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 # TODO: maybe coordinate transforms could go elsewhere

@@ -61,7 +61,7 @@ class AdvectionEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  ufamily=None, udegree=None, Vu=None, **kwargs):
         """
-         Args:
+        Args:
             state (:class:`State`): the model's state object.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
@@ -101,7 +101,7 @@ class ContinuityEquation(PrognosticEquation):
     def __init__(self, state, function_space, field_name,
                  ufamily=None, udegree=None, Vu=None, **kwargs):
         """
-         Args:
+        Args:
             state (:class:`State`): the model's state object.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
@@ -169,7 +169,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
                  ufamily=None, udegree=None, Vu=None, diffusion_parameters=None,
                  **kwargs):
         """
-         Args:
+        Args:
             state (:class:`State`): the model's state object.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
