@@ -25,7 +25,6 @@ for nints in range(1,3):
     state.fields("f").interpolate(f_init)
     state.fields("u", V)
 
-    print(nints)
     outfile = File("out%i.pvd" % nints)
     tmax = nints * dt
     scheme = Heun(state, subcycles=dt_ratio)

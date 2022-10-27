@@ -412,7 +412,6 @@ class Parareal(Timestepper):
 
         self.x.initialise(state)
         name = self.equation.field_name
-        #print("this is the initial value", self.x(0)(name).dat.data.min(), self.x(0)(name).dat.data.max())
 
         # compute first guess from coarse scheme
         for n in range(self.n_intervals):
