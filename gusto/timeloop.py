@@ -71,8 +71,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             for field in self.x.np1:
                 state.fields(field.name()).assign(field)
-                print("JEMMA: in timeloop:")
-                print(state.fields(field.name()).dat.data.min(), state.fields(field.name()).dat.data.max())
 
             state.t.assign(state.t + state.dt)
 
@@ -424,7 +422,6 @@ class Parareal(Timestepper):
             self.xG(n)(name).assign(self.x(n)(name))
 
         for k in range(self.maxk):
-            print("iteration: ", k)
 
             # apply fine scheme in each interval using previously
             # calculated coarse data
@@ -442,22 +439,11 @@ class Parareal(Timestepper):
                 self.scheme.apply(xG, xn)
                 xnp1 = self.x(n+1)(name)
                 xnp1.assign(xG - self.xG_km1 + xF)
-                print(n, self.n_intervals)
-                if n == (self.n_intervals-1):
-                    print("this is the outcome of F at the end of interval: ", n, xF.dat.data.min(), xF.dat.data.max())
-                    print("this is the input value of G at the beginning of interval: ", n, xn.dat.data.min(), xn.dat.data.max())
-                    print("this is the previous outcome of G at the end of interval: ", n, self.xG_km1.dat.data.min(), self.xG_km1.dat.data.max())
-                    print("this is the outcome of G at the end of interval: ", n, xG.dat.data.min(), xG.dat.data.max())
-                    print("this is the corrected value at the end of interval: ", n, xnp1.dat.data.min(), xnp1.dat.data.max())
 
         # think about output! need at different iterations or just compute
         # contraction factor to show convergence
         for n in range(1, self.n_intervals+1):
             state.fields(name).assign(self.x(n)(name))
-            print("final fields:")
-            print(n, state.fields(name).dat.data.min(), state.fields(name).dat.data.max())
-            xa = Function(self.x(n)(name).function_space()).assign(state.fields(name)-self.xF(n-1)(name))
-            print(xa.dat.data.min(), xa.dat.data.max(), errornorm(state.fields(name), self.xF(n-1)(name)))
 
             with timed_stage("Dump output"):
                 state.dump(float(n*state.dt))
