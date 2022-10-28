@@ -3,7 +3,7 @@
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, SpatialCoordinate, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Function, Constant, assemble, \
+    Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, \
@@ -16,6 +16,7 @@ from gusto.recovery import Recoverer, Boundary_Method
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
            "compressible_hydrostatic_balance", "remove_initial_w",
            "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
+
 
 # TODO: maybe coordinate transforms could go elsewhere
 def latlon_coords(mesh):
@@ -133,6 +134,7 @@ def incompressible_hydrostatic_balance(state, b0, p0, top=False, params=None):
 
     v, pprime = w1.split()
     p0.project(pprime)
+
 
 def compressible_hydrostatic_balance(state, theta0, rho0, exner0=None,
                                      top=False, exner_boundary=Constant(1.0),

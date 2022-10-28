@@ -353,7 +353,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return residual
 
-
     def linearise_equation_set(self):
         """
         Linearises the equation set.
@@ -439,7 +438,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     self.terms_to_linearise[tracer.name] = []
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
-
 
     def generate_tracer_transport_terms(self, state, active_tracers):
         """
