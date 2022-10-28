@@ -155,20 +155,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        self.equation_set = equation_set
-
         if physics_list is not None:
             self.physics_list = physics_list
         else:
             self.physics_list = []
 
-        schemes = []
-        self.transport_schemes = []
         self.active_transport = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            apply_bcs = False
-            schemes.append((scheme, apply_bcs, transport))
             assert scheme.field_name in equation_set.field_names
             self.active_transport.append((scheme.field_name, scheme))
 
@@ -176,12 +170,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
                 assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-                apply_bcs = True
                 assert scheme.field_name in equation_set.field_names
-                schemes.append((scheme, apply_bcs, diffusion))
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        super().__init__(equation_set, tuple(schemes), state)
+        super().__init__(equation_set, state)
 
         if auxiliary_equations_and_schemes is not None:
             for eqn, scheme in auxiliary_equations_and_schemes:
@@ -231,13 +223,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
     def setup_fields(self):
-        # TODO: check this
-        self.x.add_fields(self.equation_set, time_levels=("star", "p"))
-        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.x = TimeLevelFields(self.equation, 1)
+        self.x.add_fields(self.equation, levels=("star", "p"))
 
     def setup_scheme(self):
-        # TODO: make this work
-        self.scheme.setup(self.equation, self.transporting_velocity)
+        apply_bcs = False
+        for _, scheme in self.active_transport:
+            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, transport)
+        apply_bcs = True
+        for _, scheme in self.diffusion_schemes:
+            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, diffusion)
 
     def copy_active_tracers(self, x_in, x_out):
         """
