@@ -313,10 +313,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
 class PrescribedTransport(Timestepper):
 
-    def __init__(self, equation, method, state, physics_list=None,
+    def __init__(self, equation, scheme, state, physics_list=None,
                  prescribed_transporting_velocity=None):
 
-        super().__init__(equation, method, state)
+        super().__init__(equation, scheme, state)
 
         if physics_list is not None:
             self.physics_list = physics_list

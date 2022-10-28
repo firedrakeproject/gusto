@@ -50,9 +50,7 @@ def run_advection_diffusion(tmpdir):
     f_end = state.fields('f_end', V).interpolate(f_end_expr)
 
     # Time stepper
-    method = ((SSPRK3(state), False, transport),
-              (BackwardEuler(state), False, diffusion))
-    timestepper = PrescribedTransport(equation, method, state)
+    timestepper = PrescribedTransport(equation, SSPRK3(state), state)
     timestepper.run(0, tmax=tmax)
 
     error = norm(state.fields('f') - f_end) / norm(f_end)
@@ -62,7 +60,7 @@ def run_advection_diffusion(tmpdir):
 
 def test_advection_diffusion(tmpdir):
 
-    tol = 0.01
+    tol = 0.015
     error = run_advection_diffusion(tmpdir)
     assert error < tol, 'The error in the advection-diffusion ' + \
         'equation is greater than the permitted tolerance'
