@@ -120,12 +120,13 @@ class TimeLevelFields(object):
         else:
             previous_levels = ["nm%i" % n for n in range(nlevels-1, 0, -1)]
         levels = tuple(previous_levels) + default_levels
+        self.levels = levels
 
         self.add_fields(equation, levels)
         self.previous = [getattr(self, level) for level in previous_levels]
         self.previous.append(getattr(self, "n"))
 
-    def add_fields(self, equation, levels):
+    def add_fields(self, equation, levels=None):
         if levels is None:
             levels = self.levels
         for level in levels:
