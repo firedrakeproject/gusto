@@ -502,7 +502,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            self.apply_cycle(self.x0, self.x1)
+            self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
 
