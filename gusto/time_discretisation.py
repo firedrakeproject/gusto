@@ -477,7 +477,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         else:
             self.dt = self.dt
             self.ncycles = 1
-        self.x = [Function(self.fs)]*(self.ncycles+1)
+        self.x0 = Function(self.fs)
+        self.x1 = Function(self.fs)
 
     @abstractmethod
     def apply_cycle(self, x_out, x_in):
@@ -499,11 +500,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
-        self.x[0].assign(x_in)
+        self.x0.assign(x_in)
         for i in range(self.ncycles):
-            self.apply_cycle(self.x[i+1], self.x[i])
-            self.x[i].assign(self.x[i+1])
-        x_out.assign(self.x[self.ncycles-1])
+            self.apply_cycle(self.x0, self.x1)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
 
 
 class ForwardEuler(ExplicitTimeDiscretisation):
