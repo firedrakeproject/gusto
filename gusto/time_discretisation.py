@@ -746,7 +746,7 @@ class Heun(ExplicitTimeDiscretisation):
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
