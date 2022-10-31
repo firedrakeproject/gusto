@@ -17,7 +17,7 @@ from gusto.limiters import ThetaLimiter, NoLimiter
 from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, as_vector, BrokenElement,
-                       FunctionSpace, Constant, pi, Projector, exp)
+                       FunctionSpace, Constant, pi, Projector, exp, File)
 from gusto import thermodynamics
 from math import gamma
 from enum import Enum
@@ -571,11 +571,16 @@ class BouchutForcing(object):
 
         # define saturation function based on parameters
         q_s = q_0 * exp(-alpha*(self.D-H)/H)
+        self.saturation = Function(VD)
 
         self.source_interpolator = Interpolator(conditional(
             self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/tau, 0), VQ)
+        self.saturation_interpolator = Interpolator(q_s, VD)
+        self.outfile = File("saturation.pvd")
 
     def evaluate(self, x_in, dt):
         self.Q.assign(x_in.split()[self.VQ_idx])
         self.D.assign(x_in.split()[self.VD_idx])
         self.source.assign(self.source_interpolator.interpolate())
+        self.saturation.assign(self.saturation_interpolator.interpolate())
+        self.outfile.write(self.saturation)

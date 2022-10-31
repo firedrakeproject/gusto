@@ -8,7 +8,7 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, Min)
 
 day = 24*60*60
-dt = 900
+dt = 300
 tmax = 5*dt
 
 # set up shallow water parameters
@@ -23,7 +23,7 @@ mesh.init_cell_orientations(x)
 
 # set up moist convective shallow water parameters
 q_0 = 3.
-alpha = 60.
+alpha = -0.6
 tau = 200.
 gamma = 5.
 q_g = 3
@@ -75,7 +75,8 @@ uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
 g = parameters.g
 Rsq = R**2
 Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
-Qexpr = q_g * Constant(1 - 1e-4)
+Qexpr = Constant(2.5)
+# Qexpr = q_g * Constant(1 - 1e-4)
 
 u0 = state.fields('u')
 D0 = state.fields('D')
@@ -83,6 +84,7 @@ Q0 = state.fields("Q_mixing_ratio")
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 Q0.interpolate(Qexpr)
+
 
 # Add Bouchut condensation forcing
 BouchutForcing(eqns, parameters)
