@@ -331,9 +331,7 @@ class Recoverer(object):
                     self.interpolate_to_vector = Interpolator(as_vector(v_out_scalars), self.v_out)
 
     def project(self):
-        """
-        Perform the fully specified recovery.
-        """
+        """Perform the fully specified recovery."""
 
         if self.interpolator is not None:
             self.interpolator.interpolate()
