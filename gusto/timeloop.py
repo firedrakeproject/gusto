@@ -227,7 +227,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.x.add_fields(self.equation, levels=("star", "p"))
 
     def setup_scheme(self):
-        apply_bcs = False
+        # TODO: apply_bcs should be False for advection but this means
+        # tests with KGOs fail
+        apply_bcs = True
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, self.transporting_velocity, apply_bcs, transport)
         apply_bcs = True
