@@ -156,10 +156,10 @@ def setup_limiters(dirname, space):
     # ------------------------------------------------------------------------ #
 
     if space in ['DG0', 'Vtheta_degree_0']:
-        opts = RecoveredOptions(embedding_space=VDG1,
-                                recovered_space=VCG1,
-                                broken_space=V_brok,
-                                boundary_method=Boundary_Method.dynamics)
+        opts = RecoveryOptions(embedding_space=VDG1,
+                               recovered_space=VCG1,
+                               broken_space=V_brok,
+                               boundary_method=Boundary_Method.dynamics)
         transport_schemes = [(eqn, SSPRK3(state, options=opts,
                                           limiter=VertexBasedLimiter(VDG1)))]
 

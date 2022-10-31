@@ -13,70 +13,10 @@ from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Interpolator, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval)
-from firedrake.utils import cached_property
-
-from gusto import kernels
+from gusto.recovery import Averager
+from gusto.recovery import recovery_kernels as kernels
 
 __all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
-
-
-class Averager(object):
-    """
-    Computes a continuous field from a broken space through averaging.
-
-    This object restores the continuity from a field in a discontinuous or
-    broken function space. The target function space must have the same DoFs per
-    cell as the source function space. Then the value of the continuous field
-    at a particular DoF is the average of the corresponding DoFs from the
-    discontinuous space.
-    """
-
-    def __init__(self, v, v_out):
-        """
-        Args:
-            v (:class:`Function`): the (discontinuous) field to average. Can
-                also be a :class:`ufl.Expr`.
-            v_out (:class:`Function`): the (continuous) field to compute.
-
-        Raises:
-            RuntimeError: the geometric shape of the two fields must be equal.
-            RuntimeError: the number of DoFs per cell must be equal.
-        """
-
-        if not isinstance(v, (ufl.core.expr.Expr, function.Function)):
-            raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v))
-
-        # Check shape values
-        if v.ufl_shape != v_out.ufl_shape:
-            raise RuntimeError('Shape mismatch between source %s and target function spaces %s in project' % (v.ufl_shape, v_out.ufl_shape))
-
-        self._same_fspace = (isinstance(v, function.Function) and v.function_space() == v_out.function_space())
-        self.v = v
-        self.v_out = v_out
-        self.V = v_out.function_space()
-
-        # Check the number of local dofs
-        if self.v_out.function_space().finat_element.space_dimension() != self.v.function_space().finat_element.space_dimension():
-            raise RuntimeError("Number of local dofs for each field must be equal.")
-
-        self.average_kernel = kernels.Average(self.V)
-
-    @cached_property
-    def _weighting(self):
-        """Generate the weights to be used in the averaging."""
-        w = Function(self.V)
-
-        weight_kernel = kernels.AverageWeightings(self.V)
-        weight_kernel.apply(w)
-
-        return w
-
-    def project(self):
-        """Apply the recovery."""
-        # Ensure that the function being populated is zeroed out
-        self.v_out.dat.zero()
-        self.average_kernel.apply(self.v_out, self._weighting, self.v)
-        return self.v_out
 
 
 class Boundary_Method(Enum):
@@ -203,12 +143,12 @@ class Boundary_Recoverer(object):
             self.output = Function(DG1)
             self.on_exterior = find_domain_boundaries(mesh)
 
-            self.gaussian_elimination_kernel = kernels.GaussianElimination(DG1)
+            self.gaussian_elimination_kernel = kernels.BoundaryGaussianElimination(DG1)
 
         elif self.method == Boundary_Method.physics:
 
-            self.bottom_kernel = kernels.PhysicsRecoveryBottom()
-            self.top_kernel = kernels.PhysicsRecoveryTop()
+            self.bottom_kernel = kernels.BoundaryPhysicsRecoveryBottom()
+            self.top_kernel = kernels.BoundaryPhysicsRecoveryTop()
 
     def apply(self):
         """Applies the boundary recovery process."""

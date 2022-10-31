@@ -13,7 +13,7 @@ from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
 from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
+from gusto.configuration import logger, EmbeddedDGOptions, RecoveryOptions
 from firedrake import (Interpolator, conditional, Function,
                        min_value, max_value, as_vector, BrokenElement,
                        FunctionSpace, Constant, pi, Projector)
@@ -219,10 +219,10 @@ class Fallout(Physics):
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
             boundary_method = Boundary_Method.dynamics
-            advect_options = RecoveredOptions(embedding_space=VDG1,
-                                              recovered_space=VCG1,
-                                              broken_space=Vbrok,
-                                              boundary_method=boundary_method)
+            advect_options = RecoveryOptions(embedding_space=VDG1,
+                                             recovered_space=VCG1,
+                                             broken_space=Vbrok,
+                                             boundary_method=boundary_method)
         else:
             advect_options = EmbeddedDGOptions()
 

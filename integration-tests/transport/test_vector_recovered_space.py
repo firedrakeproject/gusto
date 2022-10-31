@@ -34,10 +34,10 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
         Vec_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
         Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
-        rec_opts = RecoveredOptions(embedding_space=Vec_DG1,
-                                    recovered_space=Vec_CG1,
-                                    broken_space=Vu_brok,
-                                    boundary_method=Boundary_Method.dynamics)
+        rec_opts = RecoveryOptions(embedding_space=Vec_DG1,
+                                   recovered_space=Vec_CG1,
+                                   broken_space=Vu_brok,
+                                   boundary_method=Boundary_Method.dynamics)
     else:
         raise NotImplementedError(
             f'Recovered spaces for geometry {geometry} have not been implemented')

@@ -5,7 +5,7 @@ A test of the AverageWeightings kernel used for the Averager.
 from firedrake import (IntervalMesh, Function, RectangleMesh,
                        VectorFunctionSpace, SpatialCoordinate)
 
-from gusto import kernels
+from gusto.recovery import AverageWeightings
 import numpy as np
 import pytest
 
@@ -96,7 +96,7 @@ def test_average(geometry, mesh):
 
     true_values = setup_values(geometry, true_values)
 
-    kernel = kernels.AverageWeightings(vec_CG1)
+    kernel = AverageWeightings(vec_CG1)
     kernel.apply(weights)
 
     tolerance = 1e-12

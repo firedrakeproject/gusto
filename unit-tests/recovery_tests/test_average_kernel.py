@@ -5,7 +5,7 @@ A test of the Average kernel used for the Averager.
 from firedrake import (IntervalMesh, Function, RectangleMesh, SpatialCoordinate,
                        VectorFunctionSpace, FiniteElement)
 
-from gusto import kernels
+from gusto.recovery import AverageKernel
 import numpy as np
 import pytest
 
@@ -102,7 +102,7 @@ def test_average(geometry, mesh):
     DG0_field, weights, true_values, CG_index = setup_values(geometry, DG0_field, weights)
 
     DG1_field.interpolate(DG0_field)
-    kernel = kernels.Average(vec_CG1)
+    kernel = AverageKernel(vec_CG1)
     kernel.apply(CG_field, weights, DG1_field)
 
     tolerance = 1e-12

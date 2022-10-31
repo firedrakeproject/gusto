@@ -79,17 +79,17 @@ def setup_unsaturated(dirname, recovered):
         Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
         Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
-        u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                                  recovered_space=Vu_CG1,
-                                  broken_space=Vu,
-                                  boundary_method=Boundary_Method.dynamics)
-        rho_opts = RecoveredOptions(embedding_space=VDG1,
-                                    recovered_space=VCG1,
-                                    broken_space=Vr,
-                                    boundary_method=Boundary_Method.dynamics)
-        theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                      recovered_space=VCG1,
-                                      broken_space=Vt_brok)
+        u_opts = RecoveryOptions(embedding_space=Vu_DG1,
+                                 recovered_space=Vu_CG1,
+                                 broken_space=Vu,
+                                 boundary_method=Boundary_Method.dynamics)
+        rho_opts = RecoveryOptions(embedding_space=VDG1,
+                                   recovered_space=VCG1,
+                                   broken_space=Vr,
+                                   boundary_method=Boundary_Method.dynamics)
+        theta_opts = RecoveryOptions(embedding_space=VDG1,
+                                     recovered_space=VCG1,
+                                     broken_space=Vt_brok)
     else:
         rho_opts = None
         theta_opts = EmbeddedDGOptions()

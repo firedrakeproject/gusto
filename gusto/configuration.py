@@ -10,7 +10,7 @@ from firedrake import sqrt, Constant
 
 __all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
            "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
-           "logger", "EmbeddedDGOptions", "RecoveredOptions", "SUPGOptions",
+           "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
            "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
@@ -147,13 +147,17 @@ class EmbeddedDGOptions(AdvectionOptions):
     embedding_space = None
 
 
-class RecoveredOptions(AdvectionOptions):
+# TODO: maybe we should move this elsewhere?
+class RecoveryOptions(AdvectionOptions):
 
-    name = "recovered"
+    name = "recovery"
     embedding_space = None
     recovered_space = None
-    broken_space = None
     boundary_method = None
+    injection_method = 'broken'
+    project_high_method = 'broken'
+    project_low_method = 'broken'
+    broken_method = 'project'
 
 
 class SUPGOptions(AdvectionOptions):
