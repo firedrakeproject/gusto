@@ -98,6 +98,7 @@ class Boundary_Recoverer(object):
             cell = mesh.ufl_cell().cellname()
             DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
         DG1 = FunctionSpace(mesh, DG1_element)
+        broken_CG1 = FunctionSpace(mesh, BrokenElement(CG1.ufl_element()))
 
         self.num_ext = find_domain_boundaries(mesh)
 
@@ -105,7 +106,7 @@ class Boundary_Recoverer(object):
         if self.method == Boundary_Method.dynamics:
             if v_CG1.function_space() != CG1:
                 raise ValueError("This boundary recovery method requires v1 to be in CG1.")
-            if v_DG1.function_space() != DG1:
+            if v_DG1.function_space() != DG1 and v_DG1.function_space() != broken_CG1:
                 raise ValueError("This boundary recovery method requires v_out to be in DG1.")
             if eff_coords is None:
                 raise ValueError('Need eff_coords field for dynamics boundary methods')

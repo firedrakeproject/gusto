@@ -3,7 +3,7 @@ This file provides an object for reconstructing a discontinuous field in a
 higher-order function space.
 """
 
-from firedrake import (Projector, Function, Interpolator)
+from firedrake import (Projector, Function, Interpolator, FunctionSpace, BrokenElement)
 from .recovery import Recoverer
 
 
@@ -31,7 +31,7 @@ class ReversibleRecoverer(object):
         self.q_rec_high = Function(target_field.function_space())
 
         # TODO: what if this is a vector element?
-        mesh = self.opts.recovered_space.mesh
+        mesh = self.opts.recovered_space.mesh()
         rec_elt = self.opts.recovered_space.ufl_element()
         V_broken = FunctionSpace(mesh, BrokenElement(rec_elt))
 

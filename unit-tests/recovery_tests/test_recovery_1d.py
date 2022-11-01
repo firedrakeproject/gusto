@@ -46,7 +46,8 @@ def expr(geometry, mesh):
 
 
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
-def test_1D_recovery(geometry, mesh, expr):
+@pytest.mark.parametrize("recovery", ["simple", "reversible"])
+def test_1D_recovery(geometry, mesh, expr, recovery):
 
     # horizontal base spaces
     cell = mesh.ufl_cell().cellname()
@@ -59,19 +60,30 @@ def test_1D_recovery(geometry, mesh, expr):
     DG0 = FunctionSpace(mesh, "DG", 0)
     CG1 = FunctionSpace(mesh, "CG", 1)
 
-    # our actual theta and rho and v
-    rho_CG1_true = Function(CG1).interpolate(expr)
-
     # make the initial fields by projecting expressions into the lowest order spaces
     rho_DG0 = Function(DG0).interpolate(expr)
-    rho_CG1 = Function(CG1)
 
     # make the recoverers and do the recovery
-    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
+    if recovery == "simple":
+        rho_CG1 = Function(CG1)
+        rho_CG1_true = Function(CG1).interpolate(expr)
+        rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
+        rho_recoverer.project()
 
-    rho_recoverer.project()
+        rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
 
-    rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
+    else:
+        rec_opts = RecoveryOptions(embedding_space=DG1,
+                                   recovered_space=CG1,
+                                   injection_method='interpolate',
+                                   project_high_method='interpolate',
+                                   project_low_method='project',
+                                   boundary_method=Boundary_Method.dynamics)
+        rho_DG1 = Function(DG1)
+        rho_DG1_true = Function(DG1).interpolate(expr)
+        rho_recoverer = ReversibleRecoverer(rho_DG0, rho_DG1, rec_opts)
+        rho_recoverer.project()
+        rho_diff = errornorm(rho_DG1, rho_DG1_true) / norm(rho_DG1_true)
 
     tolerance = 1e-7
     error_message = ("""
