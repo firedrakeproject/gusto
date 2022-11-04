@@ -4,6 +4,7 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        FiniteElement, as_vector, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
+import numpy as np
 
 tophat = False
 triangle = False
@@ -39,9 +40,9 @@ for dx, dt in dx_dt.items():
     if tophat:
         dirname = "convergence_test_forced_advection_hat_dx%s_dt%s" % (dx, dt)
     elif triangle:
-        dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
+        dirname = "converence_test_forced_advection_triangle_split_RK4_FE_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_trig_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_split_RK4_FE_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -106,11 +107,15 @@ for dx, dt in dx_dt.items():
     r_exact.interpolate(r_expr)
 
     # add instant rain forcing
-    [InstantRain(meqn, msat)]
+    # [InstantRain(meqn, msat)]
+    physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
 
     # build time stepper
+    # stepper = PrescribedTransport(state,
+    #                                ((meqn, RK4(state)),))
     stepper = PrescribedTransport(state,
-                                  ((meqn, RK4(state)),))
+                                  ((meqn, ((RK4(state), transport),)),),
+                                  physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=tmax)
 
@@ -127,6 +132,10 @@ for dx, dt in dx_dt.items():
     error_norms.append(L2_error)
     dx_list.append(dx)
     dt_list.append(dt)
+
+np.save('dt.npy', dt_list)
+np.save('dx.npy', dx_list)
+np.save('error.npy', error_norms)
 
 plt.plot(dt_list, error_norms)
 plt.xlabel("dt")

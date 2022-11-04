@@ -30,7 +30,7 @@ if tophat:
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "forced_advection_trig"
+    dirname = "forced_advection_trig_split_scheme"
 
 dt = 0.005
 delta_x = 0.05
@@ -95,10 +95,14 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-InstantRain(meqn, msat)
+physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+# InstantRain(meqn, msat)
 
 # build time stepper
+# stepper = PrescribedTransport(state,
+#                               ((meqn, RK4(state)),))
 stepper = PrescribedTransport(state,
-                              ((meqn, RK4(state)),))
+                              ((meqn, ((SSPRK3(state), transport),)),),
+                              physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=tmax)
