@@ -575,12 +575,12 @@ class BouchutForcing(object):
 
         self.source_interpolator = Interpolator(conditional(
             self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/tau, 0), VQ)
-        self.saturation_interpolator = Interpolator(q_s, VD)
-        self.outfile = File("saturation.pvd")
+        # self.saturation_interpolator = Interpolator(q_s, VD)
+        # self.outfile = File("saturation.pvd")
 
     def evaluate(self, x_in, dt):
         self.Q.assign(x_in.split()[self.VQ_idx])
         self.D.assign(x_in.split()[self.VD_idx])
         self.source.assign(self.source_interpolator.interpolate())
-        self.saturation.assign(self.saturation_interpolator.interpolate())
-        self.outfile.write(self.saturation)
+        # self.saturation.assign(self.saturation_interpolator.interpolate())
+        # self.outfile.write(self.saturation)
