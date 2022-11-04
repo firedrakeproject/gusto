@@ -12,27 +12,35 @@ import ufl
 from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Interpolator, Projector,
                        SpatialCoordinate, TensorProductElement,
-                       VectorFunctionSpace, as_vector, function, interval)
+                       VectorFunctionSpace, as_vector, function, interval,
+                       VectorElement, BrokenElement)
 from gusto.recovery import Averager
-from gusto.recovery import recovery_kernels as kernels
+from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
+                               BoundaryGaussianElimination)
 
-__all__ = ["Averager", "Boundary_Method", "Boundary_Recoverer", "Recoverer"]
+
+__all__ = ["BoundaryMethod", "BoundaryRecoverer", "Recoverer"]
 
 
-class Boundary_Method(Enum):
+class BoundaryMethod(Enum):
     """
     Method for correcting the recovery at the domain boundaries.
 
     An enumerator object encoding methods for correcting boundary recovery:
-    dynamics: which corrects a field recovered into CG1.
-    physics: corrects a field recovered into the lowest-order temperature space.
+    extruded: which corrects a scalar field on an extruded mesh at the top and
+              bottom boundaries.
+    hcurl: this corrects the recovery of a HDiv field into a HCurl space at the
+           top and bottom boundaries of an extruded mesh.
+    taylor: uses a Taylor expansion to correct the field at all the boundaries
+            of the domain. Should only be used in Cartesian domains.
     """
 
-    dynamics = 0
-    physics = 1
+    extruded = 0
+    hcurl = 1
+    taylor = 2
 
 
-class Boundary_Recoverer(object):
+class BoundaryRecoverer(object):
     """
     Corrects values in domain boundary cells that have been recovered.
 
@@ -47,124 +55,112 @@ class Boundary_Recoverer(object):
     This is only implemented to recover to the CG1 function space.
     """
 
-    def __init__(self, v_CG1, v_DG1, method=Boundary_Method.physics, eff_coords=None):
+    def __init__(self, x_inout, method=BoundaryMethod.extruded, eff_coords=None):
         """
         Args:
             v_CG1 (:class:`Function`): the continuous function after the first
                 recovery is performed. Should be in a first-order continuous
                 :class:`FunctionSpace`. This is already correct on the interior
-                of the domain.
-            v_DG1 (:class:`Function`): the function to be output. Should be in a
-                discontinuous first-order :class:`FunctionSpace`.
-            method (:class:`Boundary_Method`, optional): enumerator specifying
-                the method to use. Defaults to `Boundary_Method.physics`.
+                of the domain. It will be returned with corrected values.
+            method (:class:`BoundaryMethod`, optional): enumerator specifying
+                the method to use. Defaults to `BoundaryMethod.extruded`.
             eff_coords (:class:`Function`, optional): the effective coordinates
                 corresponding to the initial recovery process. Should be in the
                 :class:`VectorFunctionSpace` corresponding to the space of the
-                `v_DG1` variable. This must be provided for the dynamics
+                `v_DG1` variable. This must be provided for the Taylor expansion
                 boundary method. Defaults to None.
 
         Raises:
             ValueError: if the `v_CG1` field is in a space that is not CG1 when
-                using the dynamics boundary method.
+                using the Taylor boundary method.
             ValueError: if the `v_DG1` field is in a space that is not the DG1
-                equispaced space when using the dynamics boundary method.
+                equispaced space when using the Taylor boundary method.
             ValueError: if the effective coordinates are not provided when using
-                the dynamics boundary method.
-            ValueError: using the physics boundary method with a non-extruded
-                mesh.
-            ValueError: using the physics boundary method `v_CG1` in the
-                DG0 x CG1 tensor product space.
-            ValueError: using the physics boundary method `v_DG1` in the
-                DG0 x DG1 tensor product space.
+                the Taylor expansion boundary method.
+            ValueError: using the extruded or hcurl boundary methods with a
+                non-extruded mesh.
         """
 
-        self.v_DG1 = v_DG1
-        self.v_CG1 = v_CG1
-        self.v_DG1_old = Function(v_DG1.function_space())
+        self.x_inout = x_inout
+        self.method = method
         self.eff_coords = eff_coords
 
-        self.method = method
-        mesh = v_CG1.function_space().mesh()
-        DG0 = FunctionSpace(mesh, "DG", 0)
-        CG1 = FunctionSpace(mesh, "CG", 1)
+        V_inout = x_inout.function_space()
+        mesh = V_inout.mesh()
 
-        if DG0.extruded:
-            cell = mesh._base_mesh.ufl_cell().cellname()
-            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-            DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-        else:
-            cell = mesh.ufl_cell().cellname()
-            DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
-        DG1 = FunctionSpace(mesh, DG1_element)
-        broken_CG1 = FunctionSpace(mesh, BrokenElement(CG1.ufl_element()))
-
-        self.num_ext = find_domain_boundaries(mesh)
-
-        # check function spaces of functions
-        if self.method == Boundary_Method.dynamics:
-            if v_CG1.function_space() != CG1:
+        # -------------------------------------------------------------------- #
+        # Checks
+        # -------------------------------------------------------------------- #
+        if self.method == BoundaryMethod.taylor:
+            CG1 = FunctionSpace(mesh, "CG", 1)
+            if x_inout.function_space() != CG1:
                 raise ValueError("This boundary recovery method requires v1 to be in CG1.")
-            if v_DG1.function_space() != DG1 and v_DG1.function_space() != broken_CG1:
-                raise ValueError("This boundary recovery method requires v_out to be in DG1.")
             if eff_coords is None:
-                raise ValueError('Need eff_coords field for dynamics boundary methods')
+                raise ValueError('Need eff_coords field for Taylor expansion boundary method')
 
-        elif self.method == Boundary_Method.physics:
+        elif self.method in [BoundaryMethod.extruded, BoundaryMethod.hcurl]:
             # check that mesh is valid -- must be an extruded mesh
-            if not DG0.extruded:
-                raise ValueError('The physics boundary method only works on extruded meshes')
-            # check that function spaces are valid
-            sub_elements = v_CG1.function_space().ufl_element().sub_elements()
-            if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
-                    or sub_elements[1].family() != 'Lagrange'
-                    or v_CG1.function_space().ufl_element().degree() != (0, 1)):
-                raise ValueError("This boundary recovery method requires v_CG1 to be in DG0xCG1 TensorProductSpace.")
+            if not V_inout.extruded:
+                raise ValueError('The extruded boundary method only works on extruded meshes')
 
-            brok_elt = v_DG1.function_space().ufl_element()
-            if (brok_elt.degree() != (0, 1)
-                or (type(brok_elt) is not BrokenElement
-                    and (brok_elt.sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
-                         or brok_elt.sub_elements[1].family() != 'Discontinuous Lagrange'))):
-                raise ValueError("This boundary recovery method requires v_DG1 to be in the broken DG0xCG1 TensorProductSpace.")
         else:
             raise ValueError("Boundary method should be a Boundary Method Enum object.")
 
-        vec_DG1 = VectorFunctionSpace(DG0.mesh(), DG1_element)
-        x = SpatialCoordinate(DG0.mesh())
-        self.interpolator = Interpolator(self.v_CG1, self.v_DG1)
 
-        if self.method == Boundary_Method.dynamics:
+        # -------------------------------------------------------------------- #
+        # Initalisation for different boundary methods
+        # -------------------------------------------------------------------- #
 
-            # STRATEGY
-            # obtain a coordinate field for all the nodes
-            self.act_coords = Function(vec_DG1).project(x)  # actual coordinates
+        if self.method == BoundaryMethod.extruded:
+            # create field to temporarily hold values
+            self.x_tmp = Function(V_inout)
+            self.kernel = BoundaryRecoveryExtruded(V_inout)
+
+        elif self.method == BoundaryMethod.hcurl:
+            # create field to temporarily hold values
+            self.x_tmp = Function(V_inout)
+            self.kernel = BoundaryRecoveryHCurl(V_inout)
+
+        elif self.method == BoundaryMethod.taylor:
+            # Create DG1 space ----------------------------------------------- #
+            if V_inout.extruded:
+                cell = mesh._base_mesh.ufl_cell().cellname()
+                DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+                DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+                DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+            else:
+                cell = mesh.ufl_cell().cellname()
+                DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+
+            vec_DG1 = VectorFunctionSpace(mesh, DG1_element)
+
+            # Create coordinates --------------------------------------------- #
+            coords = SpatialCoordinate(mesh)
+            self.act_coords = Function(vec_DG1).project(coords)  # actual coordinates
             self.eff_coords = eff_coords  # effective coordinates
-            self.output = Function(DG1)
             self.on_exterior = find_domain_boundaries(mesh)
+            self.num_ext = find_domain_boundaries(mesh)
 
-            self.gaussian_elimination_kernel = kernels.BoundaryGaussianElimination(DG1)
+            # Make operators used in process --------------------------------- #
+            V_broken = FunctionSpace(mesh, BrokenElement(V_inout.ufl_element()))
+            self.x_DG1_wrong = Function(V_broken)
+            self.x_DG1_correct = Function(V_broken)
+            self.interpolator = Interpolator(self.x_inout, self.x_DG1_wrong)
+            self.averager = Averager(self.x_DG1_correct, self.x_inout)
+            self.kernel = BoundaryGaussianElimination(V_broken)
 
-        elif self.method == Boundary_Method.physics:
-
-            self.bottom_kernel = kernels.BoundaryPhysicsRecoveryBottom()
-            self.top_kernel = kernels.BoundaryPhysicsRecoveryTop()
 
     def apply(self):
         """Applies the boundary recovery process."""
-        self.interpolator.interpolate()
-        if self.method == Boundary_Method.physics:
-            self.bottom_kernel.apply(self.v_DG1, self.v_CG1)
-            self.top_kernel.apply(self.v_DG1, self.v_CG1)
+        if self.method == BoundaryMethod.taylor:
+            self.interpolator.interpolate()
+            self.kernel.apply(self.x_DG1_wrong, self.x_DG1_correct,
+                              self.act_coords, self.eff_coords, self.num_ext)
+            self.averager.project()
 
         else:
-            self.v_DG1_old.assign(self.v_DG1)
-            self.gaussian_elimination_kernel.apply(self.v_DG1_old,
-                                                   self.v_DG1,
-                                                   self.act_coords,
-                                                   self.eff_coords,
-                                                   self.num_ext)
+            self.x_tmp.assign(self.x_inout)
+            self.kernel.apply(self.x_inout, self.x_tmp)
 
 
 class Recoverer(object):
@@ -172,22 +168,24 @@ class Recoverer(object):
     Recovers a field from a low-order space to a higher-order space.
 
     An object that 'recovers' a field from a low-order space (e.g. DG0) into a
-    higher-order space (e.g. CG1). This encompasses the process of interpolating
-    first to a the right space before using the :class:`Averager` object, and
-    if specified this also coordinates the boundary recovery process.
+    higher-order space (e.g. CG1). This first interpolates or projects the field
+    into the broken (fully-discontinuous) form of the target higher-order space,
+    then uses the :class:`Averager` to restore continuity. This may not be
+    accurate at domain boundaries, so if specified, the field will then be
+    corrected using the :class:`BoundaryRecoverer`.
     """
 
-    def __init__(self, v_in, v_out, VDG=None, boundary_method=None):
+    def __init__(self, x_in, x_out, method='interpolate', boundary_method=None):
         """
         Args:
-            v_in (:class:`Function`): the field or :class:`ufl.Expr` to project.
+            x_in (:class:`Function`): the field or :class:`ufl.Expr` to project.
                 For instance this could be in the DG0 space.
-            v_out (:class:`Function`): to field to put the result in. This could
+            x_out (:class:`Function`): to field to put the result in. This could
                 for instance lie in the CG1 space.
-            VDG (:class:`FunctionSpace`, optional): if specified, `v_in` is
-                interpolated to this space first before the recovery happens.
-                Defaults to None.
-            boundary_method (:class:`Boundary_Method`, optional): enumerator
+            method (str, optional): method for obtaining the field in the broken
+                space. Must be 'interpolate' or 'project'. Defaults to
+                'interpolate'.
+            boundary_method (:class:`BoundaryMethod`, optional): enumerator
                 specifying the boundary method to use. Defaults to None.
 
         Raises:
@@ -196,100 +194,114 @@ class Recoverer(object):
         """
 
         # check if v_in is valid
-        if not isinstance(v_in, (ufl.core.expr.Expr, function.Function)):
-            raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(v_in))
+        if not isinstance(x_in, (ufl.core.expr.Expr, function.Function)):
+            raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(x_in))
 
-        self.v_in = v_in
-        self.v_out = v_out
-        self.V = v_out.function_space()
-        if VDG is not None:
-            self.v = Function(VDG)
-            self.interpolator = Interpolator(v_in, self.v)
+        self.x_out = x_out
+        V_out = x_out.function_space()
+        mesh = V_out.mesh()
+        rec_elt = V_out.ufl_element()
+
+        # -------------------------------------------------------------------- #
+        # Set up broken space
+        # -------------------------------------------------------------------- #
+        self.vector_function_space = isinstance(rec_elt, VectorElement)
+        if self.vector_function_space:
+            # VectorElement has to be on the outside
+            # so first need to get underlying finite element
+            brok_elt = VectorElement(BrokenElement(rec_elt.sub_elements()[0]))
         else:
-            self.v = v_in
-            self.interpolator = None
+            # Otherwise we can immediately get broken element
+            brok_elt = BrokenElement(rec_elt)
+        V_brok = FunctionSpace(mesh, brok_elt)
 
-        self.VDG = VDG
+        # -------------------------------------------------------------------- #
+        # Set up interpolation / projection
+        # -------------------------------------------------------------------- #
+        x_brok = Function(V_brok)
+
+        self.method = method
+        if method == 'interpolate':
+            self.broken_op = Interpolator(x_in, x_brok)
+        elif method == 'project':
+            self.broken_op = Projector(x_in, x_brok)
+        else:
+            raise ValueError(f'Valid methods are "interpolate" or "project", not {method}')
+
+        self.averager = Averager(x_brok, self.x_out)
+
+        # -------------------------------------------------------------------- #
+        # Set up boundary recovery
+        # -------------------------------------------------------------------- #
         self.boundary_method = boundary_method
-        self.averager = Averager(self.v, self.v_out)
 
         # check boundary method options are valid
         if boundary_method is not None:
-            if boundary_method != Boundary_Method.dynamics and boundary_method != Boundary_Method.physics:
-                raise ValueError("Boundary method must be a Boundary_Method Enum object.")
-            if VDG is None:
-                raise ValueError("If boundary_method is specified, VDG also needs specifying.")
+            if boundary_method not in [BoundaryMethod.extruded, BoundaryMethod.taylor, BoundaryMethod.hcurl]:
+                raise TypeError("Boundary method must be a BoundaryMethod Enum object.")
 
             # now specify things that we'll need if we are doing boundary recovery
-            if boundary_method == Boundary_Method.physics:
+            if boundary_method == BoundaryMethod.extruded:
                 # check dimensions
-                if self.V.value_size != 1:
+                if self.vector_function_space:
                     raise ValueError('This method only works for scalar functions.')
-                self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v, method=Boundary_Method.physics)
+                self.boundary_recoverer = BoundaryRecoverer(self.x_out, method=BoundaryMethod.extruded)
+
+            elif boundary_method == BoundaryMethod.hcurl:
+                self.boundary_recoverer = BoundaryRecoverer(self.x_out, method=BoundaryMethod.hcurl)
+
             else:
 
-                mesh = self.V.mesh()
-                # this ensures we get the pure function space, not an indexed function space
-                V0 = FunctionSpace(mesh, self.v_in.function_space().ufl_element())
-                CG1 = FunctionSpace(mesh, "CG", 1)
-                eff_coords = find_eff_coords(V0)
+                eff_coords = find_eff_coords(x_in.function_space())
 
-                if V0.extruded:
-                    cell = mesh._base_mesh.ufl_cell().cellname()
-                    DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-                    DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-                    DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+                # For scalar functions, just set up boundary recoverer and return field into x_brok
+                if not self.vector_function_space:
+                    self.boundary_recoverer = BoundaryRecoverer(self.x_out,
+                                                                method=BoundaryMethod.taylor,
+                                                                eff_coords=eff_coords)
+
                 else:
-                    cell = mesh.ufl_cell().cellname()
-                    DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
-                DG1 = FunctionSpace(mesh, DG1_element)
-
-                if self.V.value_size == 1:
-
-                    self.boundary_recoverer = Boundary_Recoverer(self.v_out, self.v,
-                                                                 method=Boundary_Method.dynamics,
-                                                                 eff_coords=eff_coords)
-                else:
+                    # Must set up scalar functions for each component
+                    CG1 = FunctionSpace(mesh, "CG", 1)
 
                     # now, break the problem down into components
-                    v_scalars = []
-                    v_out_scalars = []
+                    x_out_scalars = []
                     self.boundary_recoverers = []
-                    self.project_to_scalars_CG = []
+                    self.interpolate_to_scalars = []
                     self.extra_averagers = []
-                    for i in range(self.V.value_size):
-                        v_scalars.append(Function(DG1))
-                        v_out_scalars.append(Function(CG1))
-                        self.project_to_scalars_CG.append(Projector(self.v_out[i], v_out_scalars[i]))
-                        self.boundary_recoverers.append(Boundary_Recoverer(v_out_scalars[i], v_scalars[i],
-                                                                           method=Boundary_Method.dynamics,
-                                                                           eff_coords=eff_coords[i]))
-                        # need an extra averager that works on the scalar fields rather than the vector one
-                        self.extra_averagers.append(Averager(v_scalars[i], v_out_scalars[i]))
-
                     # the boundary recoverer needs to be done on a scalar fields
                     # so need to extract component and restore it after the boundary recovery is done
-                    self.interpolate_to_vector = Interpolator(as_vector(v_out_scalars), self.v_out)
+                    for i in range(V_out.value_size):
+                        x_out_scalars.append(Function(CG1))
+                        self.interpolate_to_scalars.append(Interpolator(self.x_out[i], x_out_scalars[i]))
+                        self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
+                                                                          method=BoundaryMethod.taylor,
+                                                                          eff_coords=eff_coords[i]))
+                    self.interpolate_to_vector = Interpolator(as_vector(x_out_scalars), self.x_out)
 
     def project(self):
-        """
-        Perform the fully specified recovery.
-        """
+        """Perform the whole recovery step."""
 
-        if self.interpolator is not None:
-            self.interpolator.interpolate()
+        # Initial averaging step
+        self.broken_op.project() if self.method == 'project' else self.broken_op.interpolate()
         self.averager.project()
+
+        # Boundary recovery
         if self.boundary_method is not None:
-            if self.V.value_size > 1:
-                for i in range(self.V.value_size):
-                    self.project_to_scalars_CG[i].project()
-                    self.boundary_recoverers[i].apply()
-                    self.extra_averagers[i].project()
+            # For vector elements, treat each component separately
+            if self.vector_function_space:
+                for (interpolate_to_scalar, boundary_recoverer) \
+                        in zip(self.interpolate_to_scalars, self.boundary_recoverers):
+                    interpolate_to_scalar.interpolate()
+                    # Correct at boundaries
+                    boundary_recoverer.apply()
+                # Combine the components to obtain the vector field
                 self.interpolate_to_vector.interpolate()
             else:
+                # Extrapolate at boundaries
                 self.boundary_recoverer.apply()
-                self.averager.project()
-        return self.v_out
+
+        return self.x_out
 
 
 def find_eff_coords(V0):
@@ -298,7 +310,7 @@ def find_eff_coords(V0):
 
     Takes a function in a space `V0` and returns the effective coordinates,
     in an equispaced vector DG1 space, of a recovery into a CG1 field. This is
-    for use with the :class:`Boundary_Recoverer`, as it facilitates the Gaussian
+    for use with the :class:`BoundaryRecoverer`, as it facilitates the Gaussian
     elimination used to get second-order recovery at boundaries. If `V0` is a
     vector function space, this returns an array of coordinates for each
     component. Geocentric Cartesian coordinates are returned.

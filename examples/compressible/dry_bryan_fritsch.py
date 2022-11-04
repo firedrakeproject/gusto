@@ -109,11 +109,11 @@ Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 u_opts = RecoveryOptions(embedding_space=Vu_DG1,
                          recovered_space=Vu_CG1,
                          broken_space=Vu_brok,
-                         boundary_method=Boundary_Method.dynamics)
+                         boundary_method=BoundaryMethod.dynamics)
 rho_opts = RecoveryOptions(embedding_space=VDG1,
                            recovered_space=VCG1,
                            broken_space=Vr,
-                           boundary_method=Boundary_Method.dynamics)
+                           boundary_method=BoundaryMethod.dynamics)
 theta_opts = RecoveryOptions(embedding_space=VDG1,
                              recovered_space=VCG1,
                              broken_space=Vt_brok)

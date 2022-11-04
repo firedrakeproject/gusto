@@ -37,7 +37,7 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
         rec_opts = RecoveryOptions(embedding_space=Vec_DG1,
                                    recovered_space=Vec_CG1,
                                    broken_space=Vu_brok,
-                                   boundary_method=Boundary_Method.dynamics)
+                                   boundary_method=BoundaryMethod.dynamics)
     else:
         raise NotImplementedError(
             f'Recovered spaces for geometry {geometry} have not been implemented')

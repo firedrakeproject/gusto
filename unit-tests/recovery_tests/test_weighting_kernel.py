@@ -5,7 +5,7 @@ A test of the AverageWeightings kernel used for the Averager.
 from firedrake import (IntervalMesh, Function, RectangleMesh,
                        VectorFunctionSpace, SpatialCoordinate)
 
-from gusto.recovery import AverageWeightings
+from gusto.recovery.recovery_kernels import AverageWeightings
 import numpy as np
 import pytest
 

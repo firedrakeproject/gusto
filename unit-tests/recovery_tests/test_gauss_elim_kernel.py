@@ -5,7 +5,7 @@ A test of the Gaussian elimination kernel used for the BoundaryRecoverer.
 from firedrake import (IntervalMesh, FunctionSpace, Function, RectangleMesh,
                        VectorFunctionSpace, FiniteElement, SpatialCoordinate)
 
-from gusto.recovery import BoundaryGaussianElimination
+from gusto.recovery.recovery_kernels import BoundaryGaussianElimination
 import numpy as np
 import pytest
 

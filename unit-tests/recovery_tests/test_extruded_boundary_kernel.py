@@ -1,13 +1,12 @@
 """
-A test of the BoundaryPhysicsRecoveryTop and BoundaryPhysicsRecoveryBottom
-kernels, which are used for the BoundaryRecoverer with the physics boundary
-recovery method.
+A test of the BoundaryRecoveryExtruded kernel, which is used for the
+BoundaryRecoverer on extruded meshes with scalar fields.
 """
 
 from firedrake import (IntervalMesh, Function, BrokenElement, VectorElement,
                        FunctionSpace, FiniteElement, ExtrudedMesh,
                        interval, TensorProductElement, SpatialCoordinate)
-from gusto.recovery import BoundaryPhysicsRecoveryTop, BoundaryPhysicsRecoveryBottom
+from gusto.recovery.recovery_kernels import BoundaryRecoveryExtruded
 import numpy as np
 import pytest
 
@@ -99,7 +98,7 @@ def test_physics_recovery_kernels(boundary):
 
     initial_field, true_field, boundary_index = setup_values(boundary, initial_field, true_field)
 
-    kernel = BoundaryPhysicsRecoveryTop() if boundary == "top" else BoundaryPhysicsRecoveryBottom()
+    kernel = BoundaryRecoveryExtruded(Vt)
     kernel.apply(new_field, initial_field)
 
     tolerance = 1e-12

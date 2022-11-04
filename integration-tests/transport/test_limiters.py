@@ -159,7 +159,7 @@ def setup_limiters(dirname, space):
         opts = RecoveryOptions(embedding_space=VDG1,
                                recovered_space=VCG1,
                                broken_space=V_brok,
-                               boundary_method=Boundary_Method.dynamics)
+                               boundary_method=BoundaryMethod.dynamics)
         transport_schemes = [(eqn, SSPRK3(state, options=opts,
                                           limiter=VertexBasedLimiter(VDG1)))]
 

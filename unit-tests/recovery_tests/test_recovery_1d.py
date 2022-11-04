@@ -7,7 +7,7 @@ This is tested for:
 """
 
 from firedrake import (PeriodicIntervalMesh, IntervalMesh,
-                       SpatialCoordinate, FiniteElement, FunctionSpace,
+                       SpatialCoordinate, FunctionSpace,
                        Function, norm, errornorm)
 from gusto import *
 import numpy as np
@@ -46,15 +46,7 @@ def expr(geometry, mesh):
 
 
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
-@pytest.mark.parametrize("recovery", ["simple", "reversible"])
-def test_1D_recovery(geometry, mesh, expr, recovery):
-
-    # horizontal base spaces
-    cell = mesh.ufl_cell().cellname()
-
-    # DG1
-    DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    DG1 = FunctionSpace(mesh, DG1_elt)
+def test_1D_recovery(geometry, mesh, expr):
 
     # spaces
     DG0 = FunctionSpace(mesh, "DG", 0)
@@ -64,30 +56,16 @@ def test_1D_recovery(geometry, mesh, expr, recovery):
     rho_DG0 = Function(DG0).interpolate(expr)
 
     # make the recoverers and do the recovery
-    if recovery == "simple":
-        rho_CG1 = Function(CG1)
-        rho_CG1_true = Function(CG1).interpolate(expr)
-        rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-        rho_recoverer.project()
+    rho_CG1 = Function(CG1)
+    rho_CG1_true = Function(CG1).interpolate(expr)
+    rho_recoverer = Recoverer(rho_DG0, rho_CG1, boundary_method=BoundaryMethod.taylor)
+    rho_recoverer.project()
 
-        rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
-
-    else:
-        rec_opts = RecoveryOptions(embedding_space=DG1,
-                                   recovered_space=CG1,
-                                   injection_method='interpolate',
-                                   project_high_method='interpolate',
-                                   project_low_method='project',
-                                   boundary_method=Boundary_Method.dynamics)
-        rho_DG1 = Function(DG1)
-        rho_DG1_true = Function(DG1).interpolate(expr)
-        rho_recoverer = ReversibleRecoverer(rho_DG0, rho_DG1, rec_opts)
-        rho_recoverer.project()
-        rho_diff = errornorm(rho_DG1, rho_DG1_true) / norm(rho_DG1_true)
+    rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
 
     tolerance = 1e-7
     error_message = ("""
                      Incorrect recovery for {variable} with {boundary} boundary method
                      on {geometry} 1D domain
                      """)
-    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='dynamics', geometry=geometry)
+    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='taylor', geometry=geometry)

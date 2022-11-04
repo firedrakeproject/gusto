@@ -8,7 +8,7 @@ with "apply" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
@@ -90,7 +90,7 @@ class Condensation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.physics
         else:
             boundary_method = None
         Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
@@ -218,7 +218,7 @@ class Fallout(Physics):
             VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
             Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            boundary_method = Boundary_Method.dynamics
+            boundary_method = BoundaryMethod.dynamics
             advect_options = RecoveryOptions(embedding_space=VDG1,
                                              recovered_space=VCG1,
                                              broken_space=Vbrok,
@@ -415,7 +415,7 @@ class Evaporation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.physics
         else:
             boundary_method = None
         Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))

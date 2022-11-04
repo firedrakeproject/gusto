@@ -105,88 +105,131 @@ class AverageWeightings(object):
                  {"w": (w, INC)},
                  is_loopy_kernel=True)
 
-class BoundaryPhysicsRecoveryTop():
+class BoundaryRecoveryExtruded():
     """
-    Performs the "physics" boundary recovery at the domain's top boundary.
+    Performs the "extruded" boundary recovery at the top and bottom boundaries.
 
-    A kernel for improving the accuracy at the top boundary of the domain for
-    the operator for recovering a field from the lowest-order density space to
-    the lowest-order temperature space. The kernel is called as part of the
-    "physics" method of the :class:`BoundaryRecovery` operator.
+    A kernel for improving the accuracy at the top and bottom boundaries of the
+    domain for the operator for recovering a scalar field on an extruded mesh.
+    The kernel is called as part of the "extruded" method of the
+    :class:`BoundaryRecovery` operator.
     """
 
-    def __init__(self):
+    def __init__(self, V):
 
-        domain = ("{[i]: 0 <= i < 1}")
+        # Number of DoFs for horizontal sub-element
+        # TODO: there should be a better way of getting this!
+        shapes = {'nDOFs_base': int(V.finat_element.space_dimension() / 2)}
 
-        # CG1 is the uncorrected field that has been originally recovered
-        # DG1 is the corrected output field
-        instrs = (
-            """
-            DG1[0] = CG1[0]
-            DG1[1] = -CG1[0] + 2 * CG1[1]
-            """)
+        domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
 
-        self._kernel = (domain, instrs)
+        # x_in is the uncorrected field that has been originally recovered
+        # x_out is the corrected output field
+        top_instrs = (
+                      """
+                      for i
+                          x_out[2*i] = x_in[2*i]
+                          x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
+                      end
+                      """)
 
-    def apply(self, v_DG1, v_CG1):
+        bot_instrs = (
+                      """
+                      for i
+                          x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
+                          x_out[2*i+1] = x_in[2*i+1]
+                      end
+                      """)
+
+        self._top_kernel = (domain, top_instrs)
+        self._bot_kernel = (domain, bot_instrs)
+
+    def apply(self, x_out, x_in):
         """
         Performs the par loop.
 
         Args:
-            v_DG1 (:class:`Function`): the target field to be corrected. It
-                should be in a discontinuous :class:`FunctionSpace`.
-            v_CG1 (:class:`Function`): the uncorrected field (after the initial
-                recovery process). It should be in a continuous
+            x_out (:class:`Function`): the target field to be corrected. It
+                should be in a continuous :class:`FunctionSpace`.
+            x_in (:class:`Function`): the uncorrected field (after the initial
+                recovery process). It should be in the same continuous
                 :class:`FunctionSpace`.
         """
-        par_loop(self._kernel, dx,
-                 args={"DG1": (v_DG1, WRITE),
-                       "CG1": (v_CG1, READ)},
+        par_loop(self._top_kernel, dx,
+                 args={"x_out": (x_out, WRITE),
+                       "x_in": (x_in, READ)},
                  is_loopy_kernel=True,
                  iteration_region=ON_TOP)
+        par_loop(self._bot_kernel, dx,
+                 args={"x_out": (x_out, WRITE),
+                       "x_in": (x_in, READ)},
+                 is_loopy_kernel=True,
+                 iteration_region=ON_BOTTOM)
 
 
-class BoundaryPhysicsRecoveryBottom():
+class BoundaryRecoveryHCurl():
     """
-    Performs the "physics" boundary recovery at the domain's bottom boundary.
+    Performs the "hcurl" boundary recovery at the top and bottom boundaries.
 
-    A kernel for improving the accuracy at the bottom boundary of the domain for
-    the operator for recovering a field from the lowest-order density space to
-    the lowest-order temperature space. The kernel is called as part of the
-    "physics" method of the :class:`BoundaryRecovery` operator.
+    A kernel for improving the accuracy at the top and bottom boundaries of the
+    domain for the operator for recovering a vector HDiv field to a HCurl field
+    on an extruded mesh. The kernel is called as part of the "hcurl" method of
+    the :class:`BoundaryRecovery` operator.
     """
 
-    def __init__(self):
+    def __init__(self, V):
 
-        domain = ("{[i]: 0 <= i < 1}")
+        # Number of DoFs for horizontal sub-element
+        # TODO: there should be a better way of getting this!
+        shapes = {'nDOFs_base': int(V.finat_element.space_dimension() / 3)}
 
-        # CG1 is the uncorrected field that has been originally recovered
-        # DG1 is the corrected output field
-        instrs = (
-            """
-            DG1[0] = 2 * CG1[0] - CG1[1]
-            DG1[1] = CG1[1]
-            """)
+        domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
 
-        self._kernel = (domain, instrs)
+        # x_in is the uncorrected field that has been originally recovered
+        # x_out is the corrected output field
+        top_instrs = (
+                      """
+                      for i
+                          x_out[2*i] = x_in[2*i]
+                          x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
+                          x_out[2*{nDOFs_base}+i] = x_in[2*{nDOFs_base}+i]
+                      end
+                      """).format(**shapes)
 
-    def apply(self, v_DG1, v_CG1):
+        bot_instrs = (
+                      """
+                      for i
+                          x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
+                          x_out[2*i+1] = x_in[2*i+1]
+                          x_out[2*{nDOFs_base}+i] = x_in[2*{nDOFs_base}+i]
+                      end
+                      """).format(**shapes)
+
+        self._top_kernel = (domain, top_instrs)
+        self._bot_kernel = (domain, bot_instrs)
+
+    def apply(self, x_out, x_in):
         """
         Performs the par loop.
 
         Args:
-            v_DG1 (:class:`Function`): the target field to be corrected. It
-                should be in a discontinuous :class:`FunctionSpace`.
-            v_CG1 (:class:`Function`): the uncorrected field (after the initial
-                recovery process). It should be in a continuous
+            x_out (:class:`Function`): the target field to be corrected. It
+                should be in a continuous :class:`FunctionSpace`.
+            x_in (:class:`Function`): the uncorrected field (after the initial
+                recovery process). It should be in the same continuous
                 :class:`FunctionSpace`.
         """
-        par_loop(self._kernel, dx,
-                 args={"DG1": (v_DG1, WRITE),
-                       "CG1": (v_CG1, READ)},
+        par_loop(self._top_kernel, dx,
+                 args={"x_out": (x_out, WRITE),
+                       "x_in": (x_in, READ)},
+                 is_loopy_kernel=True,
+                 iteration_region=ON_TOP)
+        par_loop(self._bot_kernel, dx,
+                 args={"x_out": (x_out, WRITE),
+                       "x_in": (x_in, READ)},
                  is_loopy_kernel=True,
                  iteration_region=ON_BOTTOM)
+
 
 class BoundaryGaussianElimination(object):
     """

@@ -5,7 +5,7 @@ A test of the Average kernel used for the Averager.
 from firedrake import (IntervalMesh, Function, RectangleMesh, SpatialCoordinate,
                        VectorFunctionSpace, FiniteElement)
 
-from gusto.recovery import AverageKernel
+from gusto.recovery.recovery_kernels import AverageKernel
 import numpy as np
 import pytest
 

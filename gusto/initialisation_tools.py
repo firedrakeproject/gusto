@@ -13,7 +13,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     BrokenElement, errornorm, zero
 from gusto import thermodynamics
 from gusto.configuration import logger
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
@@ -270,7 +270,7 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
 
     v_deg = Vr.ufl_element().degree()[1]
     if v_deg == 0:
-        boundary_method = Boundary_Method.physics
+        boundary_method = BoundaryMethod.physics
     else:
         boundary_method = None
     rho_h = Function(Vr)
@@ -382,7 +382,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
 
     v_deg = Vr.ufl_element().degree()[1]
     if v_deg == 0:
-        method = Boundary_Method.physics
+        method = BoundaryMethod.physics
     else:
         method = None
     rho_h = Function(Vr)
