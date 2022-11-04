@@ -9,7 +9,7 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
 
 day = 24*60*60
 dt = 300
-tmax = 5*dt
+tmax = 50*day
 
 # set up shallow water parameters
 R = 6371220.
@@ -33,12 +33,15 @@ parameters = ConvectiveMoistShallowWaterParameters(H=H, gamma=gamma, tau=tau,
 
 dirname = "moist_williamson5_blob"
 
+ndumps = 50
+dumpfreq = int(tmax / (ndumps*dt))
+
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D'],
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           log_level='INFO')
 
-diagnostic_fields = [Sum('D', 'topography')]
+diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
 
 state = State(mesh,
               dt=dt,
@@ -94,10 +97,14 @@ Q0.interpolate(conditional(r1 < br, 3*q1expr, b))
 
 # Add Bouchut condensation forcing
 BouchutForcing(eqns, parameters)
+#physics_schemes = [(BouchutForcing(eqns, parameters), ForwardEuler(state))]
 
 # Build time stepper
 stepper = Timestepper(state, ((eqns, RK4(state)),))
+#stepper = Timestepper(state,
+#			((eqns, ((SSPRK3(state), transport),)),),
+#                       physics_schemes=physics_schemes)
 
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=tmax)
 
 
