@@ -105,6 +105,6 @@ stepper = Timestepper(state, ((eqns, RK4(state)),))
 #			((eqns, ((SSPRK3(state), transport),)),),
 #                       physics_schemes=physics_schemes)
 
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=0, tmax=5*dt)
 
 
