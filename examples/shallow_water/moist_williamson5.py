@@ -1,11 +1,11 @@
 """
-A moist version of the Wiliamson 5 shallow water test cases (flow over
+A moist version of the Williamson 5 shallow water test cases (flow over
 topography). The moist shallow water framework is that of Bouchut et al.
 """
 
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, Min)
+                       as_vector, pi, sqrt, Min, exp, conditional, cos, acos)
 
 day = 24*60*60
 dt = 300
@@ -31,7 +31,7 @@ q_g = 3
 parameters = ConvectiveMoistShallowWaterParameters(H=H, gamma=gamma, tau=tau,
                                                    q_0=q_0, alpha=alpha)
 
-dirname = "moist_williamson5"
+dirname = "moist_williamson5_blob"
 
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D'],
@@ -68,22 +68,28 @@ eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, bexpr=bexpr,
                              active_tracers=[moisture_variable])
 
 # interpolate initial conditions; velocity and height are the same as in
-# the dry case and the moisture field is initialised as a constant just below
-# saturation
+# the dry case
 u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
 uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
 g = parameters.g
 Rsq = R**2
 Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
-Qexpr = Constant(2.5)
-# Qexpr = q_g * Constant(1 - 1e-4)
+# initial moisture is cosine blob from deformational test
+q_max = 1
+b = 0.1
+c = 0.9
+lamda_1 = 7*pi/6
+theta_c = pi/6
+br = R/4
+r1 = R * acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda - lamda_1))
+q1expr = b + c * (q_max/2)*(1 + cos(pi*r1/br))
 
 u0 = state.fields('u')
 D0 = state.fields('D')
 Q0 = state.fields("Q_mixing_ratio")
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-Q0.interpolate(Qexpr)
+Q0.interpolate(conditional(r1 < br, 3*q1expr, b))
 
 
 # Add Bouchut condensation forcing
