@@ -169,7 +169,7 @@ class EmbeddedDGOptions(TransportOptions):
     embedding_space = None
 
 
-class RecoveryOptions(AdvectionOptions):
+class RecoveryOptions(TransportOptions):
     """Specifies options for a recovery wrapper method."""
 
     name = "recovered"
