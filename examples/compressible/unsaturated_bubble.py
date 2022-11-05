@@ -180,14 +180,13 @@ state.set_reference_profiles([('rho', rho_b),
                               ('vapour_mixing_ratio', water_vb)])
 
 # Set up transport schemes
-u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                          recovered_space=Vu_CG1,
-                          boundary_method=BoundaryMethod.taylor)
-rho_opts = RecoveredOptions(embedding_space=VDG1,
-                            recovered_space=VCG1,
-                            boundary_method=BoundaryMethod.taylor)
-theta_opts = RecoveredOptions(embedding_space=VDG1,
-                              recovered_space=VCG1)
+u_opts = RecoveryOptions(embedding_space=Vu_DG1,
+                         recovered_space=Vu_CG1,
+                         boundary_method=BoundaryMethod.taylor)
+rho_opts = RecoveryOptions(embedding_space=VDG1,
+                           recovered_space=VCG1,
+                           boundary_method=BoundaryMethod.taylor)
+theta_opts = RecoveryOptions(embedding_space=VDG1, recovered_space=VCG1)
 limiter = VertexBasedLimiter(VDG1)
 
 transported_fields = [SSPRK3(state, "u", options=u_opts),

@@ -109,16 +109,11 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-physics_boundary_method = None
-
 # find perturbed water_v
 w_v = Function(Vt)
 phi = TestFunction(Vt)
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(
-    rho0, rho_averaged,
-    VDG=FunctionSpace(mesh, BrokenElement(Vt.ufl_element())),
-    boundary_method=physics_boundary_method)
+rho_recoverer = Recoverer(rho0, rho_averaged)
 rho_recoverer.project()
 
 exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
