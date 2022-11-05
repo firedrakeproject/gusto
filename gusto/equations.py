@@ -462,7 +462,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         no_tracer_transported = True
 
         for i, tracer in enumerate(active_tracers):
-            if tracer.transport_flag:
+            if tracer.transport_eqn != TransportEquationType.no_transport:
                 idx = self.field_names.index(tracer.name)
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
@@ -874,7 +874,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             mr_v = zero_expr
 
             for tracer in active_tracers:
-                if tracer.is_moisture:
+                if tracer.chemical == 'H2O':
                     if tracer.variable_type == TracerVariableType.mixing_ratio:
                         idx = self.field_names.index(tracer.name)
                         if tracer.phase == Phases.gas:
