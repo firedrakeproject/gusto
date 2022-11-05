@@ -262,6 +262,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif options.project_low_method == 'recover':
                 self.x_out_projector = Recoverer(self.xdg_out, self.x_projected, method=options.broken_method)
 
+            if self.limiter is not None and options.project_low_method != 'recover':
+                logger.warning('A limiter has been requested for a recovered transport scheme, but the method for projecting back is not recovery')
+
         # setup required functions
         self.dq = Function(self.fs)
         self.q1 = Function(self.fs)
