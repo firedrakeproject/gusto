@@ -36,16 +36,14 @@ class ReversibleRecoverer(object):
 
         # Does recovery by first projecting into broken space then averaging
         self.recoverer = Recoverer(self.q_low, self.q_recovered,
-                                   # TODO: should there be a separate option to control this method?
-                                   method=self.opts.project_high_method,
+                                   method=self.opts.broken_method,
                                    boundary_method=self.opts.boundary_method)
 
         # Obtain the recovered field in the higher order space
         self.interp_high = False
         if self.opts.project_high_method == 'recover':
             self.projector_high = Recoverer(self.q_recovered, self.q_rec_high,
-                                            # TODO: should there be a separate option to control this method?
-                                            method=self.opts.project_high_method,
+                                            method=self.opts.broken_method,
                                             boundary_method=self.opts.boundary_method)
         elif self.opts.project_high_method == 'project':
             self.projector_high = Projector(self.q_recovered, self.q_rec_high)
@@ -53,16 +51,15 @@ class ReversibleRecoverer(object):
             self.projector_high = Interpolator(self.q_recovered, self.q_rec_high)
             self.interp_high = True
         else:
-            raise ValueError(f'Method {self.opts.project_high_method} '+
-                             f'for projection to higher space not valid')
+            raise ValueError(f'Method {self.opts.project_high_method} '
+                             + 'for projection to higher space not valid')
 
         # Obtain the correction in the lower order space
         self.interp_low = False
         if self.opts.project_low_method == 'recover':
             # No boundary method as this is not recovery to higher order space
             self.projector_low = Recoverer(self.q_rec_high, self.q_corr_low,
-                                           # TODO: should there be a separate option to control this method?
-                                           method=self.opts.project_high_method,
+                                           method=self.opts.broken_method,
                                            boundary_method=None)
         elif self.opts.project_low_method == 'project':
             self.projector_low = Projector(self.q_rec_high, self.q_corr_low)
@@ -70,16 +67,15 @@ class ReversibleRecoverer(object):
             self.projector_low = Interpolator(self.q_rec_high, self.q_corr_low)
             self.interp_low = True
         else:
-            raise ValueError(f'Method {self.opts.project_low_method} '+
-                             f'for projection to lower space not valid')
+            raise ValueError(f'Method {self.opts.project_low_method} '
+                             + 'for projection to lower space not valid')
 
         # Final injection operator
         # Should identify low order field in higher order space
         self.interp_inj = False
         if self.opts.injection_method == 'recover':
             self.injector = Recoverer(self.q_corr_low, self.q_corr_high,
-                                      # TODO: should there be a separate option to control this method?
-                                      method=self.opts.project_high_method,
+                                      method=self.opts.broken_method,
                                       boundary_method=self.opts.boundary_method)
         elif self.opts.injection_method == 'project':
             self.injector = Projector(self.q_corr_low, self.q_corr_high)

@@ -80,7 +80,7 @@ def test_3D_spherical_recovery(element, mesh):
     # expressions
     xyz = SpatialCoordinate(mesh)
     r = sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
-    scalar_expr =  np.random.randn() + np.random.randn() * r
+    scalar_expr = np.random.randn() + np.random.randn() * r
     u0 = np.random.randn()
     vector_expr = as_vector([-u0*xyz[1], u0*xyz[0], 0.0])
 
@@ -127,8 +127,8 @@ def test_3D_spherical_recovery(element, mesh):
     assert rho_diff < tolerance, error_message.format(variable='rho', boundary='extruded',
                                                       element=element)
     assert v_diff_good < 0.75*v_diff_bad, error_message.format(variable='v', boundary='hcurl',
-                                                          element=element)
+                                                               element=element)
     assert theta_diff < tolerance, error_message.format(variable='rho', boundary='no',
-                                                     element=element)
+                                                        element=element)
     assert rho_Vt_diff < tolerance, error_message.format(variable='rho', boundary='physics',
                                                          element=element)

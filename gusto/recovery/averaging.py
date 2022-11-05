@@ -72,4 +72,3 @@ class Averager(object):
         self.v_out.dat.zero()
         self.average_kernel.apply(self.v_out, self._weighting, self.v)
         return self.v_out
-

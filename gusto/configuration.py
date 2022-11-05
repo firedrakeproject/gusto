@@ -147,17 +147,16 @@ class EmbeddedDGOptions(AdvectionOptions):
     embedding_space = None
 
 
-# TODO: maybe we should move this elsewhere?
 class RecoveryOptions(AdvectionOptions):
 
-    name = "recovery"
+    name = "recovered"
     embedding_space = None
     recovered_space = None
     boundary_method = None
-    injection_method = 'broken'
-    project_high_method = 'broken'
-    project_low_method = 'broken'
-    broken_method = 'project'
+    injection_method = 'interpolate'
+    project_high_method = 'interpolate'
+    project_low_method = 'project'
+    broken_method = 'interpolate'
 
 
 class SUPGOptions(AdvectionOptions):

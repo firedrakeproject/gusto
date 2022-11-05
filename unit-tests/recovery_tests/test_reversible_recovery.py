@@ -99,7 +99,6 @@ def test_reversible_recovery(geometry, mesh, method):
         u_low_back = Function(Vu_low)
         u_high = Function(Vu_high)
 
-
     # set recovery options
     scalar_rec_opts = RecoveryOptions(embedding_space=DG1,
                                       recovered_space=CG1,
@@ -116,7 +115,8 @@ def test_reversible_recovery(geometry, mesh, method):
                                           recovered_space=Vu_hcurl,
                                           injection_method='recover',
                                           project_high_method='project',
-                                          project_low_method='project')
+                                          project_low_method='project',
+                                          broken_method='project')
 
         vector_recoverer = ReversibleRecoverer(u_low, u_high, vector_rec_opts)
         vector_back_operator = low_projector('project', u_high, u_low_back)
@@ -146,7 +146,6 @@ def test_reversible_recovery(geometry, mesh, method):
                                                     variable='scalar',
                                                     geometry=geometry,
                                                     method=method)
-
 
     if geometry != 'interval' and method == 'project':
         vector_recoverer.project()

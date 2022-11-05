@@ -13,7 +13,7 @@ from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Interpolator, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
-                       VectorElement, BrokenElement)
+                       VectorElement)
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
                                BoundaryGaussianElimination)
@@ -106,7 +106,6 @@ class BoundaryRecoverer(object):
         else:
             raise ValueError("Boundary method should be a Boundary Method Enum object.")
 
-
         # -------------------------------------------------------------------- #
         # Initalisation for different boundary methods
         # -------------------------------------------------------------------- #
@@ -148,7 +147,6 @@ class BoundaryRecoverer(object):
             self.interpolator = Interpolator(self.x_inout, self.x_DG1_wrong)
             self.averager = Averager(self.x_DG1_correct, self.x_inout)
             self.kernel = BoundaryGaussianElimination(V_broken)
-
 
     def apply(self):
         """Applies the boundary recovery process."""

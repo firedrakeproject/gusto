@@ -10,7 +10,7 @@ from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace)
+                       FunctionSpace, VectorFunctionSpace)
 import sys
 
 dt = 1.0
@@ -101,22 +101,17 @@ state.set_reference_profiles([('rho', rho_b),
 # Set up transport schemes
 VDG1 = state.spaces("DG1_equispaced")
 VCG1 = FunctionSpace(mesh, "CG", 1)
-Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
 u_opts = RecoveryOptions(embedding_space=Vu_DG1,
                          recovered_space=Vu_CG1,
-                         broken_space=Vu_brok,
-                         boundary_method=BoundaryMethod.dynamics)
+                         boundary_method=BoundaryMethod.taylor)
 rho_opts = RecoveryOptions(embedding_space=VDG1,
                            recovered_space=VCG1,
-                           broken_space=Vr,
-                           boundary_method=BoundaryMethod.dynamics)
+                           boundary_method=BoundaryMethod.taylor)
 theta_opts = RecoveryOptions(embedding_space=VDG1,
-                             recovered_space=VCG1,
-                             broken_space=Vt_brok)
+                             recovered_space=VCG1)
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
                       SSPRK3(state, "theta", options=theta_opts),

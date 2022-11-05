@@ -3,7 +3,7 @@ A test of the BoundaryRecoveryExtruded kernel, which is used for the
 BoundaryRecoverer on extruded meshes with scalar fields.
 """
 
-from firedrake import (IntervalMesh, Function, BrokenElement, VectorElement,
+from firedrake import (IntervalMesh, Function, VectorElement,
                        FunctionSpace, FiniteElement, ExtrudedMesh,
                        interval, TensorProductElement, SpatialCoordinate)
 from gusto.recovery.recovery_kernels import BoundaryRecoveryExtruded
@@ -80,7 +80,7 @@ def set_val_at_point(coord_field, coords, field=None, new_value=None):
 
 
 @pytest.mark.parametrize("boundary", ["top", "bottom"])
-def test_physics_recovery_kernels(boundary):
+def test_extruded_recovery_kernels(boundary):
 
     m = IntervalMesh(3, 3)
     mesh = ExtrudedMesh(m, layers=3, layer_height=1.0)
@@ -90,11 +90,10 @@ def test_physics_recovery_kernels(boundary):
     vert_elt = FiniteElement("CG", interval, 1)
     theta_elt = TensorProductElement(hori_elt, vert_elt)
     Vt = FunctionSpace(mesh, theta_elt)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(theta_elt))
 
     initial_field = Function(Vt)
-    true_field = Function(Vt_brok)
-    new_field = Function(Vt_brok)
+    true_field = Function(Vt)
+    new_field = Function(Vt)
 
     initial_field, true_field, boundary_index = setup_values(boundary, initial_field, true_field)
 

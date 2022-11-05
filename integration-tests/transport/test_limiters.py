@@ -8,7 +8,7 @@ should have produced no new maxima or minima.
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, pi, SpatialCoordinate,
                        ExtrudedMesh, FunctionSpace, Function, norm,
-                       conditional, sqrt, BrokenElement)
+                       conditional, sqrt)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import numpy as np
 import pytest
@@ -42,14 +42,12 @@ def setup_limiters(dirname, space):
 
     if space == 'DG0':
         V = state.spaces('DG', 'DG', 0)
-        V_brok = V
         VCG1 = FunctionSpace(mesh, 'CG', 1)
         VDG1 = state.spaces('DG1_equispaced')
     elif space == 'DG1_equispaced':
         V = state.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_0':
         V = state.spaces('theta', degree=0)
-        V_brok = FunctionSpace(mesh, BrokenElement(V.ufl_element()))
         VCG1 = FunctionSpace(mesh, 'CG', 1)
         VDG1 = state.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_1':
@@ -158,8 +156,8 @@ def setup_limiters(dirname, space):
     if space in ['DG0', 'Vtheta_degree_0']:
         opts = RecoveryOptions(embedding_space=VDG1,
                                recovered_space=VCG1,
-                               broken_space=V_brok,
-                               boundary_method=BoundaryMethod.dynamics)
+                               project_low_method='recover',
+                               boundary_method=BoundaryMethod.taylor)
         transport_schemes = [(eqn, SSPRK3(state, options=opts,
                                           limiter=VertexBasedLimiter(VDG1)))]
 

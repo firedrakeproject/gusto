@@ -12,6 +12,7 @@ tested.
 from firedrake import dx
 from firedrake.parloops import par_loop, READ, WRITE
 
+
 class LimitMidpoints():
     """
     Limits the vertical midpoint values for the degree 1 temperature space.

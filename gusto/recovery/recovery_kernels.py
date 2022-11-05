@@ -11,6 +11,7 @@ from firedrake import dx
 from firedrake.parloops import par_loop, READ, INC, WRITE
 from pyop2 import ON_TOP, ON_BOTTOM
 
+
 class AverageKernel(object):
     """
     Evaluates values at DoFs shared between elements using averaging.
@@ -105,6 +106,7 @@ class AverageWeightings(object):
                  {"w": (w, INC)},
                  is_loopy_kernel=True)
 
+
 class BoundaryRecoveryExtruded():
     """
     Performs the "extruded" boundary recovery at the top and bottom boundaries.
@@ -117,24 +119,26 @@ class BoundaryRecoveryExtruded():
 
     def __init__(self, V):
 
-        # Number of DoFs for horizontal sub-element
-        # TODO: there should be a better way of getting this!
+        # Assumptions about DoF ordering:
+        # - on an extruded mesh, DoFs are ordered up a column
+
+        vert_degree = V.finat_element.degree
+        assert vert_degree[1] == 1, 'Extruded boundary recovery only ' + \
+            'appropriate when horizontal component has degree 1 in the vertical'
         shapes = {'nDOFs_base': int(V.finat_element.space_dimension() / 2)}
 
         domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
 
         # x_in is the uncorrected field that has been originally recovered
         # x_out is the corrected output field
-        top_instrs = (
-                      """
+        top_instrs = ("""
                       for i
                           x_out[2*i] = x_in[2*i]
                           x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
                       end
                       """)
 
-        bot_instrs = (
-                      """
+        bot_instrs = ("""
                       for i
                           x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
                           x_out[2*i+1] = x_in[2*i+1]
@@ -174,34 +178,48 @@ class BoundaryRecoveryHCurl():
     A kernel for improving the accuracy at the top and bottom boundaries of the
     domain for the operator for recovering a vector HDiv field to a HCurl field
     on an extruded mesh. The kernel is called as part of the "hcurl" method of
-    the :class:`BoundaryRecovery` operator.
+    the :class:`BoundaryRecovery` operator. Only the horizontal component of the
+    HCurl field should be adjusted.
     """
 
     def __init__(self, V):
 
-        # Number of DoFs for horizontal sub-element
-        # TODO: there should be a better way of getting this!
-        shapes = {'nDOFs_base': int(V.finat_element.space_dimension() / 3)}
+        # Assumptions about DoF ordering:
+        # - on an extruded mesh, DoFs are ordered up a column
+        # - horizontal DoFs of a HCurl space are before vertical ones
+        # - there is one horizontal DoF per edge of the base cell
 
-        domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
+        hori_component_degree = V.finat_element.elements[0].degree
+        assert hori_component_degree[1] == 1, 'HCurl boundary recovery only ' + \
+            'appropriate when horizontal component has degree 1 in the vertical'
+
+        # When degree is 1 in the vertical, num hori DoFs per layer is total / 2
+        shapes = {'ndofs_hori_base': int(V.finat_element.elements[0].space_dimension() / 2),
+                  'ndofs_vert': V.finat_element.elements[1].space_dimension()}
+
+        domain = "{{[i,j]: 0 <= i < {ndofs_hori_base} and 0 <= j < {ndofs_vert}}}".format(**shapes)
 
         # x_in is the uncorrected field that has been originally recovered
         # x_out is the corrected output field
-        top_instrs = (
-                      """
+        top_instrs = ("""
                       for i
                           x_out[2*i] = x_in[2*i]
                           x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
-                          x_out[2*{nDOFs_base}+i] = x_in[2*{nDOFs_base}+i]
+                      end
+
+                      for j
+                          x_out[2*{ndofs_hori_base}+j] = x_in[2*{ndofs_hori_base}+j]
                       end
                       """).format(**shapes)
 
-        bot_instrs = (
-                      """
+        bot_instrs = ("""
                       for i
                           x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
                           x_out[2*i+1] = x_in[2*i+1]
-                          x_out[2*{nDOFs_base}+i] = x_in[2*{nDOFs_base}+i]
+                      end
+
+                      for j
+                          x_out[2*{ndofs_hori_base}+j] = x_in[2*{ndofs_hori_base}+j]
                       end
                       """).format(**shapes)
 

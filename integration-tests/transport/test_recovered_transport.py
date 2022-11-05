@@ -39,8 +39,7 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
     # Declare transport scheme
     recovery_opts = RecoveryOptions(embedding_space=VDG1,
                                     recovered_space=VCG1,
-                                    broken_space=VDG0,
-                                    boundary_method=BoundaryMethod.dynamics)
+                                    boundary_method=BoundaryMethod.taylor)
 
     transport_scheme = [(eqn, SSPRK3(state, options=recovery_opts))]
 

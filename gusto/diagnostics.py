@@ -1,7 +1,7 @@
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, BrokenElement, \
+    ds, ds_b, ds_v, ds_t, dS_v, div, avg, jump, DirichletBC, \
     TensorFunctionSpace, SpatialCoordinate, VectorFunctionSpace, as_vector
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -485,10 +485,9 @@ class ThermodynamicDiagnostic(DiagnosticField):
     def setup(self, state):
         if not self._initialised:
             space = state.fields("theta").function_space()
-            broken_space = FunctionSpace(state.mesh, BrokenElement(space.ufl_element()))
             h_deg = space.ufl_element().degree()[0]
             v_deg = space.ufl_element().degree()[1]-1
-            boundary_method = BoundaryMethod.physics if (v_deg == 0 and h_deg == 0) else None
+            boundary_method = BoundaryMethod.extruded if (v_deg == 0 and h_deg == 0) else None
             super().setup(state, space=space)
 
             # now let's attach all of our fields
@@ -496,7 +495,7 @@ class ThermodynamicDiagnostic(DiagnosticField):
             self.rho = state.fields("rho")
             self.theta = state.fields("theta")
             self.rho_averaged = Function(space)
-            self.recoverer = Recoverer(self.rho, self.rho_averaged, VDG=broken_space, boundary_method=boundary_method)
+            self.recoverer = Recoverer(self.rho, self.rho_averaged, boundary_method=boundary_method)
             try:
                 self.r_v = state.fields("vapour_mixing_ratio")
             except NotImplementedError:
