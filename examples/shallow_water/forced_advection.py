@@ -5,8 +5,8 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 tophat = False
-triangle = False
-trig = True
+triangle = True
+trig = False
 
 u_max = 1
 if tophat:
@@ -37,7 +37,7 @@ x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=100)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,

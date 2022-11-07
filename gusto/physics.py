@@ -489,15 +489,16 @@ class Evaporation(Physics):
 class InstantRain(object):
     """
     The process of converting moisture above the saturation curve to rain.
-    :arg state: :class:`.State.` object.
+    :arg equation: the equation set to apply the scheme to
     :arg saturation_curve: the saturation function,
         above which excess moisture is converted to
         rain
     """
 
-    def __init__(self, equation, saturation_curve):
+    def __init__(self, equation, saturation_curve, vapour="water_v"):
 
-        self.Vm_idx = equation.field_names.index("water_v")
+        assert vapour in equation.field_names, f"Field {vapour} does not exist in the equation set"
+        self.Vm_idx = equation.field_names.index(vapour)
         Vr_idx = equation.field_names.index("rain_mixing_ratio")
 
         # obtain function space and functions
