@@ -6,9 +6,9 @@ from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
 import numpy as np
 
-tophat = False
+tophat = True
 triangle = False
-trig = True
+trig = False
 
 # set up resolution and timestepping parameters for convergence test
 dx_dt = {0.05: 0.005, 0.1: 0.01, 0.2: 0.02, 0.25: 0.025, 0.5: 0.05}
@@ -40,9 +40,9 @@ for dx, dt in dx_dt.items():
     if tophat:
         dirname = "convergence_test_forced_advection_hat_dx%s_dt%s" % (dx, dt)
     elif triangle:
-        dirname = "converence_test_forced_advection_triangle_split_RK4_FE_dx%s_dt%s" % (dx, dt)
+        dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_trig_split_RK4_FE_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -107,15 +107,15 @@ for dx, dt in dx_dt.items():
     r_exact.interpolate(r_expr)
 
     # add instant rain forcing
-    # [InstantRain(meqn, msat)]
-    physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+    [InstantRain(meqn, msat)]
+    # physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
 
     # build time stepper
-    # stepper = PrescribedTransport(state,
-    #                                ((meqn, RK4(state)),))
     stepper = PrescribedTransport(state,
-                                  ((meqn, ((RK4(state), transport),)),),
-                                  physics_schemes=physics_schemes)
+                                   ((meqn, RK4(state)),))
+    # stepper = PrescribedTransport(state,
+    #                               ((meqn, ((RK4(state), transport),)),),
+    #                               physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=tmax)
 
