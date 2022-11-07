@@ -8,7 +8,7 @@ what type of variable the tracer is, what phase it is, etc).
 """
 
 from enum import Enum
-from gusto.configuration import TransportEquationType
+from gusto.configuration import TransportEquationType, logger
 
 __all__ = ["TracerVariableType", "Phases", "ActiveTracer",
            "WaterVapour", "CloudWater", "Rain"]
@@ -50,54 +50,45 @@ class ActiveTracer(object):
     :class:`MixedFunctionSpace` as these variables interact with the other
     prognostic variables.
     """
-    def __init__(self, name, space, variable_type, transport_flag=True,
+    def __init__(self, name, space, variable_type,
                  transport_eqn=TransportEquationType.advective,
-                 phase=Phases.gas, is_moisture=False):
+                 phase=Phases.gas, chemical=None):
         """
         Args:
             name (str): the name for the variable.
             space (str): the name of the :class:`FunctionSpace` for the tracer.
             variable_type (:class:`TracerVariableType`): enumerator indicating
                 the type of tracer variable (e.g. mixing ratio or density).
-            transport_flag (bool, optional): whether this tracer is to be
-                transported or not. Defaults to True.
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
             phase (:class:`Phases`, optional): enumerator indicating the phase
                 of the tracer variable. Defaults to `Phases.gas`.
-            is_moisture (bool, optional): whether the tracer is a water variable
-                or not. Defaults to False.
+            chemical (str, optional): string to describe the chemical that this
+                active tracer describes. Defaults to None.
 
         Raises:
-            ValueError: if the `transport_eqn` is `no_transport` but
-                `transport_flag` is True.
-            ValueError: if `transport_flag` is False but `transport_eqn` is not
-                `no_transport`.
             NotImplementedError: if `variable_type` is not `mixing_ratio`.
         """
 
-        if transport_flag and transport_eqn == TransportEquationType.no_transport:
-            raise ValueError('If tracer is to be transported, transport_eqn must be specified')
-        elif not transport_flag and transport_eqn != TransportEquationType.no_transport:
-            raise ValueError('If tracer is not to be transported, transport_eqn must be no_transport')
-
         self.name = name
         self.space = space
-        self.transport_flag = transport_flag
         self.transport_eqn = transport_eqn
         self.variable_type = variable_type
         self.phase = phase
-        self.is_moisture = is_moisture
+        self.chemical = chemical
         if self.variable_type != TracerVariableType.mixing_ratio:
             raise NotImplementedError('Only mixing ratio tracers are currently implemented')
+
+        if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
+            logger.warning('Active tracer initialised which describes a '
+                           + 'density but solving the advective transport eqn')
 
 
 class WaterVapour(ActiveTracer):
     """An object encoding the details of water vapour as a tracer."""
     def __init__(self, name='vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_flag=True,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
@@ -107,21 +98,18 @@ class WaterVapour(ActiveTracer):
             variable_type (:class:`TracerVariableType`, optional): enumerator
                 indicating the type of tracer variable (e.g. mixing ratio or
                 density). Defaults to `TracerVariableType.mixing_ratio`.
-            transport_flag (bool, optional): whether this tracer is to be
-                transported or not. Defaults to True.
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
-                         transport_flag, phase=Phases.gas, is_moisture=True)
+                         transport_eqn=transport_eqn, phase=Phases.gas, chemical='H2O')
 
 
 class CloudWater(ActiveTracer):
     """An object encoding the details of cloud water as a tracer."""
     def __init__(self, name='cloud_liquid', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_flag=True,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
@@ -131,21 +119,18 @@ class CloudWater(ActiveTracer):
             variable_type (:class:`TracerVariableType`, optional): enumerator
                 indicating the type of tracer variable (e.g. mixing ratio or
                 density). Defaults to `TracerVariableType.mixing_ratio`.
-            transport_flag (bool, optional): whether this tracer is to be
-                transported or not. Defaults to True.
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
-                         transport_flag, phase=Phases.liquid, is_moisture=True)
+                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
 
 
 class Rain(ActiveTracer):
     """An object encoding the details of rain as a tracer."""
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_flag=True,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
@@ -155,11 +140,9 @@ class Rain(ActiveTracer):
             variable_type (:class:`TracerVariableType`, optional): enumerator
                 indicating the type of tracer variable (e.g. mixing ratio or
                 density). Defaults to `TracerVariableType.mixing_ratio`.
-            transport_flag (bool, optional): whether this tracer is to be
-                transported or not. Defaults to True.
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}_{variable_type.name}', space, variable_type,
-                         transport_flag, phase=Phases.liquid, is_moisture=True)
+                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')

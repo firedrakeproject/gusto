@@ -45,8 +45,6 @@ def setup_limiters(dirname, space):
         V_brok = V
         VCG1 = FunctionSpace(mesh, 'CG', 1)
         VDG1 = state.spaces('DG1_equispaced')
-    elif space == 'DG1':
-        V = FunctionSpace(mesh, "DG", 1)
     elif space == 'DG1_equispaced':
         V = state.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_0':
@@ -165,9 +163,6 @@ def setup_limiters(dirname, space):
         transport_schemes = [(eqn, SSPRK3(state, options=opts,
                                           limiter=VertexBasedLimiter(VDG1)))]
 
-    elif space == 'DG1':
-        transport_schemes = [(eqn, SSPRK3(state, limiter=DG1Limiter(V)))]
-
     elif space == 'DG1_equispaced':
         transport_schemes = [(eqn, SSPRK3(state, limiter=VertexBasedLimiter(V)))]
 
@@ -184,7 +179,7 @@ def setup_limiters(dirname, space):
 
 
 @pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1',
-                                   'DG0', 'DG1_equispaced', 'DG1'])
+                                   'DG0', 'DG1_equispaced'])
 def test_limiters(tmpdir, space):
 
     # Setup and run
