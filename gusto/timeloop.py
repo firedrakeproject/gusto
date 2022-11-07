@@ -138,6 +138,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     with Strang splitting and auxilliary semi-Lagrangian transport.
 
     Args:
+        equation_set (:class:`PrognosticEquationSet`): the prognostic
+            equation set to be solved
         state (:class:`State`) the model's state object
         transport_schemes: iterable of ``(field_name, scheme)`` pairs
             indicating the name of the field (str) to transport, and the
