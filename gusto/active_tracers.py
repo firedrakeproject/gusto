@@ -80,8 +80,7 @@ class ActiveTracer(object):
         if self.variable_type != TracerVariableType.mixing_ratio:
             raise NotImplementedError('Only mixing ratio tracers are currently implemented')
 
-        if (variable_type == TracerVariableType.density
-            and transport_eqn == TransportEquationType.advective):
+        if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '
                            + 'density but solving the advective transport eqn')
 
