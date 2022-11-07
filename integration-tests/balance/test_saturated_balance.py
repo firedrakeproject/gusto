@@ -59,7 +59,6 @@ def setup_saturated(dirname, recovered):
 
     # spaces
     Vt = theta0.function_space()
-    Vr = rho0.function_space()
 
     # Isentropic background state
     Tsurf = Constant(300.)

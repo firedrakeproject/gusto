@@ -12,8 +12,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        NonlinearVariationalProblem,
                        NonlinearVariationalSolver, TestFunction, dx,
                        TrialFunction, Function,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, BrokenElement)
+                       LinearVariationalProblem, LinearVariationalSolver)
 import sys
 
 dt = 1.0
