@@ -1,3 +1,5 @@
+"""Classes for controlling the timestepping loop."""
+
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector
 from pyop2.profiling import timed_stage
@@ -14,8 +16,15 @@ __all__ = ["Timestepper", "SemiImplicitQuasiNewton",
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
+    """Base class for timesteppers."""
 
     def __init__(self, equation, state):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation.
+            state (:class:`State`): the model's state object
+        """
+
         self.equation = equation
         self.state = state
 
@@ -43,9 +52,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
     def run(self, t, tmax, pickup=False):
         """
-        This is the timeloop. After completing the semi implicit step
-        any passively transported fields are updated, implicit diffusion and
-        physics updates are applied (if required).
+        Runs the model for the sepcified time.
+
+        Args:
+            t (float): the state time of the run
+            tmax (float): the end time of the run
+            pickup: (bool): specify whether to pickup from a previous run
         """
 
         state = self.state
@@ -85,16 +97,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
 class Timestepper(BaseTimestepper):
     """
-    Basic timestepping class for Gusto
+    Basic timestepping class implemeting a timestep that involves
+    applying a single scheme to a single prognostic equation.
 
-    :arg state: a :class:`.State` object
-    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to transport, and the
-        :class:`~.TimeDiscretisation` to use.
-    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
-    :arg physics_list: optional list of classes that implement `physics` schemes
+    Args:
+        equation (:class:`PrognosticEquation`): the prognostic equation
+        scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+            the prognostic equation
+        state (:class:`State`): the model's state object
     """
 
     def __init__(self, equation, scheme, state):
@@ -124,21 +134,21 @@ class Timestepper(BaseTimestepper):
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
     """
-    This class implements a Crank-Nicolson discretisation, with Strang
-    splitting and auxilliary semi-Lagrangian transport.
+    This class implements a semi-implicit quasi-Newton discretisation,
+    with Strang splitting and auxilliary semi-Lagrangian transport.
 
-    :arg state: a :class:`.State` object
-    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to transport, and the
-        :class:`~.TimeDiscretisation` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
-    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
+    Args:
+        state (:class:`State`) the model's state object
+        transport_schemes: iterable of ``(field_name, scheme)`` pairs
+            indicating the name of the field (str) to transport, and the
+            :class:`TimeDiscretisation` to use
+        auxiliary_equations_and_schemes
+        linear_solver: a :class:`.TimesteppingSolver` object
+        diffusion_schemes: optional iterable of ``(field_name, scheme)``
         pairs indicating the fields to diffuse, and the
         :class:`~.Diffusion` to use.
-    :arg physics_list: optional list of classes that implement `physics` schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a
-         function that returns the field as a function of time.
+        physics_list: optional list of classes that implement `physics` schemes
+
     :kwargs: maxk is the number of outer iterations, maxi is the number of inner
              iterations and alpha is the offcentering parameter
     """
