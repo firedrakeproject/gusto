@@ -14,7 +14,7 @@ def test_tracer_classes():
                       TransportEquationType.no_transport]
     variable_types = [TracerVariableType.mixing_ratio]
 
-    for name, space, transport_eqn in  zip(names, spaces, transport_eqns):
+    for name, space, transport_eqn in zip(names, spaces, transport_eqns):
 
         # Test active tracer class
         for variable_type in variable_types:
