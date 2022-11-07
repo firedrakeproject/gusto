@@ -69,15 +69,15 @@ class DG1Limiter(object):
         Raises:
              AssertionError: If the field is not in the correct space.
          """
-         assert field.function_space() == self.space, \
-             "Given field does not belong to this object's function space"
+        assert field.function_space() == self.space, \
+            "Given field does not belong to this object's function space"
 
-         # Obtain field in equispaced DG space
-         self.field_equispaced.interpolate(field)
-         # Use vertex based limiter on DG1 field
-         self.vertex_limiter.apply(self.field_equispaced)
-         # Return to original space
-         field.interpolate(self.field_equispaced)
+        # Obtain field in equispaced DG space
+        self.field_equispaced.interpolate(field)
+        # Use vertex based limiter on DG1 field
+        self.vertex_limiter.apply(self.field_equispaced)
+        # Return to original space
+        field.interpolate(self.field_equispaced)
 
 
 class ThetaLimiter(object):
