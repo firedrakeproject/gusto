@@ -1,6 +1,4 @@
-"""
-Some simple tools for making model configuration nicer.
-"""
+"""Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
 import logging
@@ -20,6 +18,12 @@ logger = logging.getLogger("gusto")
 
 
 def set_log_handler(comm):
+    """
+    Sets the handler for logging.
+
+    Args:
+        comm (:class:`MPI.Comm`): MPI communicator.
+    """
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
     if logger.hasHandlers():
@@ -31,18 +35,23 @@ def set_log_handler(comm):
 
 
 class IntegrateByParts(Enum):
+    """Enumerator for setting the number of times to integrate by parts."""
+
     NEVER = 0
     ONCE = 1
     TWICE = 2
 
 
 class TransportEquationType(Enum):
-    """
-    An Enum object which stores the types of the transport equation. For
-    transporting velocity 'u' and transported quantity 'q', these equations are:
+    u"""
+    Enumerator for describing types of transport equation.
 
-    advective: dq / dt + dot(u, grad(q)) = 0
-    conservative: dq / dt + div(q*u) = 0
+    For transporting velocity 'u' and transported quantity 'q', different types
+    of transport equation include:
+
+    advective: ∂q/∂t + (u.∇)q = 0
+    conservative: ∂q/∂t + ∇.(u*q) = 0
+    vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     """
 
     no_transport = 702
@@ -52,14 +61,32 @@ class TransportEquationType(Enum):
 
 
 class Configuration(object):
+    """A base configuration object, for storing aspects of the model."""
 
     def __init__(self, **kwargs):
-
+        """
+        Args:
+            **kwargs: attributes and their values to be stored in the object.
+        """
         for name, value in kwargs.items():
             self.__setattr__(name, value)
 
     def __setattr__(self, name, value):
-        """Cause setting an unknown attribute to be an error"""
+        """
+        Sets the model configuration attributes.
+
+        When attributes are provided as floats or integers, these are converted
+        to Firedrake :class:`Constant` objects, other than a handful of special
+        integers (dumpfreq, pddumpfreq, chkptfreq and log_level).
+
+        Args:
+            name: the attribute's name.
+            value: the value to provide to the attribute.
+
+        Raises:
+            AttributeError: if the :class:`Configuration` object does not have
+                this attribute pre-defined.
+        """
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
 
@@ -72,10 +99,7 @@ class Configuration(object):
 
 
 class OutputParameters(Configuration):
-
-    """
-    Output parameters for Gusto
-    """
+    """Parameters for controlling outputting."""
 
     #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
     #: default value "warning"
@@ -104,10 +128,8 @@ class OutputParameters(Configuration):
 
 
 class CompressibleParameters(Configuration):
+    """Physical parameters for the Compressible Euler equations."""
 
-    """
-    Physical parameters for Compressible Euler
-    """
     g = 9.810616
     N = 0.01  # Brunt-Vaisala frequency (1/s)
     cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
@@ -128,10 +150,8 @@ class CompressibleParameters(Configuration):
 
 
 class ShallowWaterParameters(Configuration):
+    """Physical parameters for the shallow-water equations."""
 
-    """
-    Physical parameters for 3d Compressible Euler
-    """
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
@@ -148,20 +168,23 @@ class ConvectiveMoistShallowWaterParameters(ShallowWaterParameters):
     alpha = None  # exponential factor in the saturation humidity expr
 
 
-class AdvectionOptions(Configuration, metaclass=ABCMeta):
+class TransportOptions(Configuration, metaclass=ABCMeta):
+    """Base class for specifying options for a transport scheme."""
 
     @abstractproperty
     def name(self):
         pass
 
 
-class EmbeddedDGOptions(AdvectionOptions):
+class EmbeddedDGOptions(TransportOptions):
+    """Specifies options for an embedded DG method."""
 
     name = "embedded_dg"
     embedding_space = None
 
 
-class RecoveredOptions(AdvectionOptions):
+class RecoveredOptions(TransportOptions):
+    """Specifies options for a recovered wrapper method."""
 
     name = "recovered"
     embedding_space = None
@@ -170,7 +193,8 @@ class RecoveredOptions(AdvectionOptions):
     boundary_method = None
 
 
-class SUPGOptions(AdvectionOptions):
+class SUPGOptions(TransportOptions):
+    """Specifies options for an SUPG scheme."""
 
     name = "supg"
     tau = None
@@ -179,6 +203,7 @@ class SUPGOptions(AdvectionOptions):
 
 
 class SpongeLayerParameters(Configuration):
+    """Specifies parameters describing a 'sponge' (damping) layer."""
 
     H = None
     z_level = None
@@ -186,6 +211,7 @@ class SpongeLayerParameters(Configuration):
 
 
 class DiffusionParameters(Configuration):
+    """Parameters for a diffusion term with an interior penalty method."""
 
     kappa = None
     mu = None
