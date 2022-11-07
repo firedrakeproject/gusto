@@ -59,7 +59,6 @@ class DG1Limiter(object):
         self.vertex_limiter = VertexBasedLimiter(DG1_equispaced)
         self.field_equispaced = Function(DG1_equispaced)
 
-
     def apply(self, field):
         """
         The application of the limiter to the field.
