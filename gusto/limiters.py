@@ -10,7 +10,61 @@ from firedrake import (BrokenElement, Function, FunctionSpace, interval,
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.kernels import LimitMidpoints
 
-__all__ = ["ThetaLimiter", "NoLimiter"]
+import numpy as np
+
+__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter"]
+
+
+class DG1Limiter(object):
+    """
+    A vertex-based limiter for the degree 1 discontinuous Galerkin space.
+
+    A vertex based limiter for fields in the DG1 space. This wraps around the
+    vertex-based limiter implemented in Firedrake, but ensures that this is done
+    in the space using the appropriate "equispaced" elements.
+    """
+
+    def __init__(self, space):
+        """
+        Args:
+            space (:class:`FunctionSpace`): the space in which the transported
+                variables lies. It should be the DG1 space.
+
+        Raises:
+            ValueError: If the space is not appropriate for the limiter.
+        """
+
+        self.space = space
+        mesh = space.mesh()
+
+        # check that space is DG1
+        degree = space.ufl_element().degree()
+        if (space.ufl_element().sobolev_space().name != 'L2'
+            or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
+                and degree != 1)):
+            raise ValueError('DG1 limiter can only be applied to DG1 space')
+
+        # Create equispaced DG1 space needed for limiting
+        if space.extruded:
+            cell = mesh._base_mesh.ufl_cell().cellname()
+            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+            DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        else:
+            cell = mesh.ufl_cell().cellname()
+            DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+
+        DG1_equispaced = FunctionSpace(mesh, DG1_element)
+
+        self.vertex_limiter = VertexBasedLimiter(DG1_equispaced)
+        self.field_equispaced = Function(DG1_equispaced)
+
+    def apply(self, field):
+        """
+        The application of the limiter to the field.
+
+        Args:
+            field (:class:`Function`): the field to apply the limiter to.
 
 
 class ThetaLimiter(object):
