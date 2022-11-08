@@ -30,7 +30,7 @@ if tophat:
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "forced_advection_trig_split_scheme"
+    dirname = "forced_advection_trig"
 
 dt = 0.005
 delta_x = 0.05
@@ -69,7 +69,7 @@ msat = Function(VD)
 msat.interpolate(msat_expr)
 
 # set up advection equation
-rain = Rain(space='tracer', transport_flag=False, transport_eqn=TransportEquationType.no_transport)
+rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
 meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
                                active_tracers=[rain])
 state.fields("u").project(as_vector([u_max]))

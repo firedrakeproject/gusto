@@ -81,7 +81,7 @@ for dx, dt in dx_dt.items():
     msat.interpolate(msat_expr)
 
     # set up advection equation
-    rain = Rain(space='tracer', transport_flag=False, transport_eqn=TransportEquationType.no_transport)
+    rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
     meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
                                    active_tracers=[rain])
     state.fields("u").project(as_vector([u_max]))
