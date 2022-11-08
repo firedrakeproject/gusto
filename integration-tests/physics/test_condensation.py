@@ -89,11 +89,11 @@ def run_cond_evap(dirname, process):
 
     # Have empty problem as only thing is condensation / evaporation
     problem = []
-    physics_list = [Condensation(state)]
+    physics_schemes = [(Condensation(state), ForwardEuler(state))]
 
     # build time stepper
     stepper = PrescribedTransport(state, problem,
-                                  physics_list=physics_list)
+                                  physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=tmax)
 

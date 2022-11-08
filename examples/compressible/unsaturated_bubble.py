@@ -208,12 +208,14 @@ transported_fields = [SSPRK3(state, "u", options=u_opts),
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define condensation
-physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
-                Condensation(state)]
+physics_schemes = [(Fallout(state), ForwardEuler(state)),
+                   (Coalescence(state), ForwardEuler(state)),
+                   (Evaporation(state), ForwardEuler(state)),
+                   (Condensation(state), ForwardEuler(state))]
 
 # build time stepper
 stepper = CrankNicolson(state, eqns, transported_fields,
                         linear_solver=linear_solver,
-                        physics_list=physics_list)
+                        physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=tmax)

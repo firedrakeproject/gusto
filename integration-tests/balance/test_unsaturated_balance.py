@@ -106,12 +106,12 @@ def setup_unsaturated(dirname, recovered):
     linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state)]
+    physics_schemes = [(Condensation(state), ForwardEuler(state))]
 
     # build time stepper
     stepper = CrankNicolson(state, eqns, transported_fields,
                             linear_solver=linear_solver,
-                            physics_list=physics_list)
+                            physics_schemes=physics_schemes)
 
     return stepper, tmax
 

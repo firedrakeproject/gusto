@@ -327,15 +327,21 @@ class Coalescence(Physics):
                 process in the parametrisation. Defaults to True.
         """
 
-        # obtain our fields
-        self.water_c = state.fields('cloud_water')
+        # Check that fields exist
+        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
+        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
+
+        self.cloud_idx = equation.field_names.index(cloud_name)
+        self.rain_idx = equation.field_names.index(rain_name)
+        self.cloud_water = state.fields('cloud_water')
         self.rain = state.fields('rain')
 
-        # declare function space
-        Vt = self.water_c.function_space()
+        # declare function space and source field
+        Vt = self.cloud_water.function_space()
+        self.source = Function(Vt)
 
         # define some parameters as attributes
-        dt = state.dt
+        self.dt = state.dt
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
         a = Constant(0.001)  # min cloud conc in kg/kg
@@ -350,32 +356,39 @@ class Coalescence(Physics):
         if accumulation:
             accu_rate = k_2 * self.water_c * self.rain ** b
 
-        # make coalescence rate function, that needs to be the same for all updates in one time step
-        coalesce_rate = Function(Vt)
+        # TODO: check if dt factor is needed
+        # Expression for rain increment, with conditionals to prevent negative values
+        rain_expr = conditional(self.rain < 0.0,  # if rain is negative do only accretion
+                                conditional(accr_rate < 0.0,
+                                            0.0,
+                                            min_value(accr_rate, self.cloud_water / self.dt)),
+                                # don't turn rain back into cloud
+                                conditional(accr_rate + accu_rate < 0.0,
+                                            0.0,
+                                            # if accretion rate is negative do only accumulation
+                                            conditional(accr_rate < 0.0,
+                                                        min_value(accu_rate, self.cloud_water / self.dt),
+                                                        min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        # adjust coalesce rate using min_value so negative cloud concentration doesn't occur
-        self.lim_coalesce_rate = Interpolator(conditional(self.rain < 0.0,  # if rain is negative do only accretion
-                                                          conditional(accr_rate < 0.0,
-                                                                      0.0,
-                                                                      min_value(accr_rate, self.water_c / dt)),
-                                                          # don't turn rain back into cloud
-                                                          conditional(accr_rate + accu_rate < 0.0,
-                                                                      0.0,
-                                                                      # if accretion rate is negative do only accumulation
-                                                                      conditional(accr_rate < 0.0,
-                                                                                  min_value(accu_rate, self.water_c / dt),
-                                                                                  min_value(accr_rate + accu_rate, self.water_c / dt)))),
-                                              coalesce_rate)
+        self.source_interpolator(rain_expr, self.source)
 
-        # tell the prognostic fields what to update to
-        self.water_c_new = Interpolator(self.water_c - dt * coalesce_rate, Vt)
-        self.rain_new = Interpolator(self.rain + dt * coalesce_rate, Vt)
+        # Add term to equation's residual
+        test_cl = equation.tests[self.cloud_idx]
+        test_r = equation.tests[self.rain_idx]
+        equation.residual += physics(subject(test_cl * self.source * dx
+                                             - test_r * self.source * dx,
+                                             equation.X),
+                                     self.evaluate)
 
-    def apply(self):
+
+    def evaluate(self, x_in, dt):
         """Applies the coalescence process."""
-        self.lim_coalesce_rate.interpolate()
-        self.rain.assign(self.rain_new.interpolate())
-        self.water_c.assign(self.water_c_new.interpolate())
+        # Update the values of internal variables
+        self.dt.assign(dt)
+        self.rain.assign(x_in.split()[self.rain_idx])
+        self.cloud_water.assign(x_in.split()[self.cloud_idx])
+        # Evaluate the source
+        self.source.assign(self.source_interpolator.interpolate())
 
 
 class Evaporation(Physics):
