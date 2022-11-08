@@ -31,14 +31,14 @@ q_g = 3
 parameters = ConvectiveMoistShallowWaterParameters(H=H, gamma=gamma, tau=tau,
                                                    q_0=q_0, alpha=alpha)
 
-dirname = "moist_williamson5_blob"
+dirname = "moist_williamson5_check_conservative"
 
 ndumps = 50
 dumpfreq = int(tmax / (ndumps*dt))
 
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D'],
-                          dumpfreq=dumpfreq,
+                          dumpfreq=1,
                           log_level='INFO')
 
 diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
@@ -64,8 +64,7 @@ bexpr = 2000 * (1 - r/R0)
 
 moisture_variable = WaterVapour(name="Q", space="DG",
                                 variable_type=TracerVariableType.mixing_ratio,
-                                transport_flag=True,
-                                transport_eqn=TransportEquationType.advective)
+                                transport_eqn=TransportEquationType.conservative)
 
 eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, bexpr=bexpr,
                              active_tracers=[moisture_variable])
