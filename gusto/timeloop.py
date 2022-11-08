@@ -35,27 +35,31 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         return NotImplementedError
 
     def setup_timeloop(self):
+        """Sets up the fields and scheme used in the timeloop"""
         self.setup_fields()
         self.setup_scheme()
 
     @abstractmethod
     def setup_fields(self):
+        """Set up required fields. Must be implemented in child classes"""
         pass
 
     @abstractmethod
     def setup_scheme(self):
+        """Set up required scheme(s). Must be implemented in child classes"""
         pass
 
     @abstractmethod
     def timestep(self):
+        """Defines the timestep. Must be implemented in child classes"""
         return NotImplementedError
 
     def run(self, t, tmax, pickup=False):
         """
-        Runs the model for the sepcified time.
+        Runs the model for the specified time, from t to tmax
 
         Args:
-            t (float): the state time of the run
+            t (float): the start time of the run
             tmax (float): the end time of the run
             pickup: (bool): specify whether to pickup from a previous run
         """
@@ -97,17 +101,17 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
 class Timestepper(BaseTimestepper):
     """
-    Basic timestepping class implemeting a timestep that involves
-    applying a single scheme to a single prognostic equation.
-
-    Args:
-        equation (:class:`PrognosticEquation`): the prognostic equation
-        scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
-            the prognostic equation
-        state (:class:`State`): the model's state object
+    Implements a timeloop by applying a scheme to a prognostic equation.
     """
 
     def __init__(self, equation, scheme, state):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            state (:class:`State`): the model's state object
+        """
         self.scheme = scheme
         super().__init__(equation=equation, state=state)
 
@@ -134,25 +138,8 @@ class Timestepper(BaseTimestepper):
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
     """
-    This class implements a semi-implicit quasi-Newton discretisation,
+    Implements a semi-implicit quasi-Newton discretisation,
     with Strang splitting and auxilliary semi-Lagrangian transport.
-
-    Args:
-        equation_set (:class:`PrognosticEquationSet`): the prognostic
-            equation set to be solved
-        state (:class:`State`) the model's state object
-        transport_schemes: iterable of ``(field_name, scheme)`` pairs
-            indicating the name of the field (str) to transport, and the
-            :class:`TimeDiscretisation` to use
-        auxiliary_equations_and_schemes
-        linear_solver: a :class:`.TimesteppingSolver` object
-        diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indicating the fields to diffuse, and the
-        :class:`~.Diffusion` to use.
-        physics_list: optional list of classes that implement `physics` schemes
-
-    :kwargs: maxk is the number of outer iterations, maxi is the number of inner
-             iterations and alpha is the offcentering parameter
     """
 
     def __init__(self, equation_set, state, transport_schemes,
@@ -160,6 +147,26 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  linear_solver=None,
                  diffusion_schemes=None,
                  physics_list=None, **kwargs):
+
+        """
+        Args:
+            equation_set (:class:`PrognosticEquationSet`): the prognostic
+                equation set to be solved
+            state (:class:`State`) the model's state object
+            transport_schemes: iterable of ``(field_name, scheme)`` pairs
+                indicating the name of the field (str) to transport, and the
+                :class:`TimeDiscretisation` to use
+            auxiliary_equations_and_schemes
+            linear_solver: a :class:`.TimesteppingSolver` object
+            diffusion_schemes: optional iterable of ``(field_name, scheme)``
+                pairs indicating the fields to diffuse, and the
+                :class:`~.Diffusion` to use.
+            physics_list: optional list of classes that implement `physics`
+                schemes
+
+        :kwargs: maxk is the number of outer iterations, maxi is the number
+            of inner iterations and alpha is the offcentering parameter
+    """
 
         self.maxk = kwargs.pop("maxk", 4)
         self.maxi = kwargs.pop("maxi", 1)
@@ -229,16 +236,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     @property
     def transporting_velocity(self):
+        """Computes ubar=(1-alpha)*un + alpha*unp1"""
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
     def setup_fields(self):
+        """Sets up time levels n, star, p and np1"""
         self.x = TimeLevelFields(self.equation, 1)
         self.x.add_fields(self.equation, levels=("star", "p"))
 
     def setup_scheme(self):
+        """Sets up transport and diffusion schemes"""
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
@@ -262,6 +272,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             x_out(name).assign(x_in(name))
 
     def timestep(self):
+        """Defines the timestep"""
         xn = self.x.n
         xnp1 = self.x.np1
         xstar = self.x.star
