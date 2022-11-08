@@ -15,7 +15,7 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
 from gusto.configuration import (logger, DEBUG, TransportEquationType,
-                                 EmbeddedDGOptions, RecoveredOptions)
+                                 EmbeddedDGOptions, RecoveryOptions)
 from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
                           transport, ibp_label, replace_subject, replace_test_function)
 from gusto.recovery import Recoverer, ReversibleRecoverer
@@ -771,7 +771,7 @@ class BackwardEuler(TimeDiscretisation):
     """
     def __init__(self, state, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
-        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(state=state, field_name=field_name,
                          solver_parameters=solver_parameters,
@@ -843,7 +843,7 @@ class ThetaMethod(TimeDiscretisation):
         # check be on the provided value?
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
-        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
@@ -925,7 +925,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
 
     def __init__(self, state, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
-        if isinstance(options, (EmbeddedDGOptions, RecoveredOptions)):
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(state=state, field_name=field_name,
                          solver_parameters=solver_parameters,
