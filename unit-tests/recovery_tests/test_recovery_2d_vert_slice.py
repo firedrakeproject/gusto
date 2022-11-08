@@ -12,7 +12,7 @@ This is tested for:
 from firedrake import (PeriodicIntervalMesh, IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, FiniteElement, HDiv, FunctionSpace,
                        TensorProductElement, Function, interval, norm, errornorm,
-                       VectorFunctionSpace, BrokenElement, as_vector)
+                       VectorFunctionSpace, as_vector)
 from gusto import *
 import numpy as np
 import pytest
@@ -72,18 +72,10 @@ def test_vertical_slice_recovery(geometry, mesh, expr):
     theta_element = TensorProductElement(w_hori, w_vert)
     v_element = u_element + w_element
 
-    # DG1
-    DG1_hori = FiniteElement("DG", cell, 1, variant="equispaced")
-    DG1_vert = FiniteElement("DG", interval, 1, variant="equispaced")
-    DG1_elt = TensorProductElement(DG1_hori, DG1_vert)
-    DG1 = FunctionSpace(mesh, DG1_elt)
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
-
     # spaces
     DG0 = FunctionSpace(mesh, "DG", 0)
     CG1 = FunctionSpace(mesh, "CG", 1)
     Vt = FunctionSpace(mesh, theta_element)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(theta_element))
     Vu = FunctionSpace(mesh, v_element)
     vec_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
@@ -103,10 +95,10 @@ def test_vertical_slice_recovery(geometry, mesh, expr):
     rho_Vt = Function(Vt)
 
     # make the recoverers and do the recovery
-    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    theta_recoverer = Recoverer(theta_Vt, theta_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=vec_DG1, boundary_method=Boundary_Method.dynamics)
-    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, VDG=Vt_brok, boundary_method=Boundary_Method.physics)
+    rho_recoverer = Recoverer(rho_DG0, rho_CG1, boundary_method=BoundaryMethod.taylor)
+    theta_recoverer = Recoverer(theta_Vt, theta_CG1, boundary_method=BoundaryMethod.taylor)
+    v_recoverer = Recoverer(v_Vu, v_CG1, boundary_method=BoundaryMethod.taylor)
+    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, boundary_method=BoundaryMethod.extruded)
 
     rho_recoverer.project()
     theta_recoverer.project()
@@ -120,7 +112,7 @@ def test_vertical_slice_recovery(geometry, mesh, expr):
 
     tolerance = 1e-7
     error_message = 'Incorrect recovery for {variable} with {boundary} boundary method on {geometry} vertical slice'
-    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='dynamics', geometry=geometry)
-    assert theta_diff < tolerance, error_message.format(variable='theta', boundary='dynamics', geometry=geometry)
-    assert v_diff < tolerance, error_message.format(variable='v', boundary='dynamics', geometry=geometry)
+    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='taylor', geometry=geometry)
+    assert theta_diff < tolerance, error_message.format(variable='theta', boundary='taylor', geometry=geometry)
+    assert v_diff < tolerance, error_message.format(variable='v', boundary='taylor', geometry=geometry)
     assert rho_Vt_diff < tolerance, error_message.format(variable='rho', boundary='physics', geometry=geometry)

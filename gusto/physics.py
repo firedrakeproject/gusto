@@ -8,14 +8,14 @@ with "apply" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
 from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
+from gusto.configuration import logger, EmbeddedDGOptions, RecoveryOptions
 from firedrake import (Interpolator, conditional, Function,
-                       min_value, max_value, as_vector, BrokenElement,
+                       min_value, max_value, as_vector,
                        FunctionSpace, Constant, pi, Projector)
 from gusto import thermodynamics
 from math import gamma
@@ -90,12 +90,11 @@ class Condensation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.extruded
         else:
             boundary_method = None
-        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.dt
@@ -217,12 +216,10 @@ class Fallout(Physics):
         if v_deg == 0 and h_deg == 0:
             VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
-            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            boundary_method = Boundary_Method.dynamics
-            advect_options = RecoveredOptions(embedding_space=VDG1,
-                                              recovered_space=VCG1,
-                                              broken_space=Vbrok,
-                                              boundary_method=boundary_method)
+            boundary_method = BoundaryMethod.taylor
+            advect_options = RecoveryOptions(embedding_space=VDG1,
+                                             recovered_space=VCG1,
+                                             boundary_method=boundary_method)
         else:
             advect_options = EmbeddedDGOptions()
 
@@ -415,12 +412,11 @@ class Evaporation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.extruded
         else:
             boundary_method = None
-        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.dt

@@ -1,5 +1,5 @@
 """
-Test whether the boundary recovery is working in on 2D horizontal Cartesian meshes.
+Test whether the boundary recovery is working on 2D horizontal Cartesian meshes.
 To be working, a linearly varying field should be exactly recovered.
 
 This is tested for:
@@ -8,7 +8,7 @@ This is tested for:
 """
 
 from firedrake import (PeriodicRectangleMesh, RectangleMesh,
-                       SpatialCoordinate, FiniteElement, FunctionSpace,
+                       SpatialCoordinate, FunctionSpace,
                        Function, norm, errornorm,
                        VectorFunctionSpace, as_vector)
 from gusto import *
@@ -70,14 +70,6 @@ def test_2D_cartesian_recovery(geometry, element, mesh, expr):
 
     family = "RTCF" if element == "quadrilateral" else "BDM"
 
-    # horizontal base spaces
-    cell = mesh.ufl_cell().cellname()
-
-    # DG1
-    DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    DG1 = FunctionSpace(mesh, DG1_elt)
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
-
     # spaces
     DG0 = FunctionSpace(mesh, "DG", 0)
     CG1 = FunctionSpace(mesh, "CG", 1)
@@ -95,8 +87,8 @@ def test_2D_cartesian_recovery(geometry, element, mesh, expr):
     v_CG1 = Function(vec_CG1)
 
     # make the recoverers and do the recovery
-    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=vec_DG1, boundary_method=Boundary_Method.dynamics)
+    rho_recoverer = Recoverer(rho_DG0, rho_CG1, boundary_method=BoundaryMethod.taylor)
+    v_recoverer = Recoverer(v_Vu, v_CG1, boundary_method=BoundaryMethod.taylor)
 
     rho_recoverer.project()
     v_recoverer.project()
@@ -108,5 +100,5 @@ def test_2D_cartesian_recovery(geometry, element, mesh, expr):
                      Incorrect recovery for {variable} with {boundary} boundary method
                      on {geometry} 2D Cartesian plane with {element} elements
                      """)
-    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='dynamics', geometry=geometry, element=element)
-    assert v_diff < tolerance, error_message.format(variable='v', boundary='dynamics', geometry=geometry, element=element)
+    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='taylor', geometry=geometry, element=element)
+    assert v_diff < tolerance, error_message.format(variable='v', boundary='taylor', geometry=geometry, element=element)

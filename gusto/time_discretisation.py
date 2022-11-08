@@ -17,7 +17,7 @@ import ufl
 from gusto.configuration import logger, DEBUG, TransportEquationType
 from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
                           transport, ibp_label, replace_subject, replace_test_function)
-from gusto.recovery import Recoverer
+from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
@@ -240,6 +240,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 map_if_true=replace_test_function(new_test))
 
         if self.discretisation_option == "embedded_dg":
+            self.interp_back = False
             if self.limiter is None:
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected,
                                                  solver_parameters=parameters)
@@ -249,18 +250,20 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if self.discretisation_option == "recovered":
             # set up the necessary functions
             self.x_in = Function(self.state.fields(self.field_name).function_space())
-            x_rec = Function(options.recovered_space)
-            x_brok = Function(options.broken_space)
 
-            # set up interpolators and projectors
-            self.x_rec_projector = Recoverer(self.x_in, x_rec, VDG=self.fs, boundary_method=options.boundary_method)  # recovered function
-            self.x_brok_projector = Projector(x_rec, x_brok)  # function projected back
-            self.xdg_interpolator = Interpolator(self.x_in + x_rec - x_brok, self.xdg_in)
-            if self.limiter is not None:
-                self.x_brok_interpolator = Interpolator(self.xdg_out, x_brok)
-                self.x_out_projector = Recoverer(x_brok, self.x_projected)
-            else:
+            # Operator to recover to higher discontinuous space
+            self.x_recoverer = ReversibleRecoverer(self.x_in, self.xdg_in, options)
+
+            self.interp_back = (options.project_low_method == 'interpolate')
+            if options.project_low_method == 'interpolate':
+                self.x_out_projector = Interpolator(self.xdg_out, self.x_projected)
+            elif options.project_low_method == 'project':
                 self.x_out_projector = Projector(self.xdg_out, self.x_projected)
+            elif options.project_low_method == 'recover':
+                self.x_out_projector = Recoverer(self.xdg_out, self.x_projected, method=options.broken_method)
+
+            if self.limiter is not None and options.project_low_method != 'recover':
+                logger.warning('A limiter has been requested for a recovered transport scheme, but the method for projecting back is not recovery')
 
         # setup required functions
         self.dq = Function(self.fs)
@@ -288,9 +291,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         elif discretisation_option == "recovered":
             self.x_in.assign(x_in)
-            self.x_rec_projector.project()
-            self.x_brok_projector.project()
-            self.xdg_interpolator.interpolate()
+            self.x_recoverer.project()
 
         else:
             raise ValueError(
@@ -310,9 +311,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             x_out (:class:`Function`): the outgoing field to be computed.
             discretisation_option (str): specifies the "wrapper" method.
         """
-        if discretisation_option == "recovered" and self.limiter is not None:
-            self.x_brok_interpolator.interpolate()
-        self.x_out_projector.project()
+        self.x_out_projector.interpolate() if self.interp_back else self.x_out_projector.project()
         x_out.assign(self.x_projected)
 
     @abstractproperty
