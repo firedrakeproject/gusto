@@ -54,9 +54,9 @@ def setup_saturated(dirname, recovered):
     u0 = state.fields("u")
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("vapour_mixing_ratio")
-    water_c0 = state.fields("cloud_liquid_mixing_ratio")
-    moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
+    water_v0 = state.fields("water_vapour")
+    water_c0 = state.fields("cloud_water")
+    moisture = ['water_vapour', 'cloud_water']
 
     # spaces
     Vu = u0.function_space()
@@ -110,8 +110,8 @@ def setup_saturated(dirname, recovered):
 
     transported_fields = [SSPRK3(state, 'rho', options=rho_opts),
                           SSPRK3(state, 'theta', options=theta_opts),
-                          SSPRK3(state, 'vapour_mixing_ratio', options=wv_opts),
-                          SSPRK3(state, 'cloud_liquid_mixing_ratio', options=wc_opts)]
+                          SSPRK3(state, 'water_vapour', options=wv_opts),
+                          SSPRK3(state, 'cloud_water', options=wc_opts)]
 
     if recovered:
         transported_fields.append(SSPRK3(state, 'u', options=u_opts))

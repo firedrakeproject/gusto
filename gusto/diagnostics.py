@@ -886,15 +886,15 @@ class ThermodynamicDiagnostic(DiagnosticField):
             self.rho_averaged = Function(space)
             self.recoverer = Recoverer(self.rho, self.rho_averaged, VDG=broken_space, boundary_method=boundary_method)
             try:
-                self.r_v = state.fields("vapour_mixing_ratio")
+                self.r_v = state.fields("water_vapour")
             except NotImplementedError:
                 self.r_v = Constant(0.0)
             try:
-                self.r_c = state.fields("cloud_liquid_mixing_ratio")
+                self.r_c = state.fields("cloud_water")
             except NotImplementedError:
                 self.r_c = Constant(0.0)
             try:
-                self.rain = state.fields("rain_mixing_ratio")
+                self.rain = state.fields("rain")
             except NotImplementedError:
                 self.rain = Constant(0.0)
 
@@ -1183,7 +1183,7 @@ class Precipitation(DiagnosticField):
             space = state.spaces("DG0", "DG", 0)
             super().setup(state, space=space)
 
-            rain = state.fields('rain_mixing_ratio')
+            rain = state.fields('rain')
             rho = state.fields('rho')
             v = state.fields('rainfall_velocity')
             self.phi = TestFunction(space)

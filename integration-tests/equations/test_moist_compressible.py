@@ -40,7 +40,7 @@ def run_moist_compressible(tmpdir):
     # Initial conditions
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    m_v0 = state.fields("vapour_mixing_ratio")
+    m_v0 = state.fields("water_vapour")
 
     # Approximate hydrostatic balance
     x, z = SpatialCoordinate(mesh)
@@ -66,7 +66,7 @@ def run_moist_compressible(tmpdir):
                           SSPRK3(state, "theta")]
 
     # Set up linear solver for the timestepping scheme
-    linear_solver = CompressibleSolver(state, eqn, moisture=['vapour_mixing_ratio'])
+    linear_solver = CompressibleSolver(state, eqn, moisture=['water_vapour'])
 
     # build time stepper
     stepper = CrankNicolson(state, eqn, transported_fields,
@@ -93,7 +93,7 @@ def test_moist_compressible(tmpdir):
     dirname = str(tmpdir)
     state, check_state = run_moist_compressible(dirname)
 
-    for variable in ['u', 'rho', 'theta', 'vapour_mixing_ratio']:
+    for variable in ['u', 'rho', 'theta', 'water_vapour']:
         new_variable = state.fields(variable)
         check_variable = check_state.fields(variable)
         error = norm(new_variable - check_variable) / norm(check_variable)

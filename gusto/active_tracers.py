@@ -87,12 +87,13 @@ class ActiveTracer(object):
 
 class WaterVapour(ActiveTracer):
     """An object encoding the details of water vapour as a tracer."""
-    def __init__(self, name='vapour', space='theta',
+    def __init__(self, name='water_vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
-            name (str, optional): the variable's name. Defaults to 'vapour'.
+            name (str, optional): the variable's name. Defaults to
+                'water_vapour'.
             space (str, optional): the name for the :class:`FunctionSpace` to be
                 used by the variable. Defaults to 'theta'.
             variable_type (:class:`TracerVariableType`, optional): enumerator
@@ -102,18 +103,18 @@ class WaterVapour(ActiveTracer):
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
-        super().__init__(f'{name}_{variable_type.name}', space, variable_type,
+        super().__init__(f'{name}', space, variable_type,
                          transport_eqn=transport_eqn, phase=Phases.gas, chemical='H2O')
 
 
 class CloudWater(ActiveTracer):
     """An object encoding the details of cloud water as a tracer."""
-    def __init__(self, name='cloud_liquid', space='theta',
+    def __init__(self, name='cloud_water', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
-            name (str, optional): the variable name. Default is 'cloud_liquid'.
+            name (str, optional): the variable name. Default is 'cloud_water'.
             space (str, optional): the name for the :class:`FunctionSpace` to be
                 used by the variable. Defaults to 'theta'.
             variable_type (:class:`TracerVariableType`, optional): enumerator
@@ -123,7 +124,7 @@ class CloudWater(ActiveTracer):
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
-        super().__init__(f'{name}_{variable_type.name}', space, variable_type,
+        super().__init__(f'{name}', space, variable_type,
                          transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
 
 
@@ -144,5 +145,5 @@ class Rain(ActiveTracer):
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
         """
-        super().__init__(f'{name}_{variable_type.name}', space, variable_type,
+        super().__init__(f'{name}', space, variable_type,
                          transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')

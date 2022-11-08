@@ -326,7 +326,7 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
 
     theta0 = state.fields('theta')
     rho0 = state.fields('rho')
-    mr_v0 = state.fields('vapour_mixing_ratio')
+    mr_v0 = state.fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
     Vt = theta0.function_space()
@@ -452,7 +452,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
 
     theta0 = state.fields('theta')
     rho0 = state.fields('rho')
-    mr_v0 = state.fields('vapour_mixing_ratio')
+    mr_v0 = state.fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
     Vt = theta0.function_space()

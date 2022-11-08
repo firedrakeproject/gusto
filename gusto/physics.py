@@ -73,12 +73,12 @@ class Condensation(Physics):
         self.iterations = iterations
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('vapour_mixing_ratio')
-        self.water_c = state.fields('cloud_liquid_mixing_ratio')
+        self.water_v = state.fields('water_vapour')
+        self.water_c = state.fields('cloud_water')
         rho = state.fields('rho')
         try:
             # TODO: use the phase flag for the tracers here
-            rain = state.fields('rain_mixing_ratio')
+            rain = state.fields('rain')
             water_l = self.water_c + rain
         except NotImplementedError:
             water_l = self.water_c
@@ -229,8 +229,8 @@ class Fallout(Physics):
 
         # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
         # TODO: check if rain is a mixing ratio
-        advection_equation = AdvectionEquation(state, Vt, "rain_mixing_ratio", outflow=True)
-        self.rain = state.fields("rain_mixing_ratio")
+        advection_equation = AdvectionEquation(state, Vt, "rain", outflow=True)
+        self.rain = state.fields("rain")
 
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
@@ -315,20 +315,21 @@ class Coalescence(Physics):
     This is only implemented for mixing ratio variables.
     """
 
-    def __init__(self, state, accretion=True, accumulation=True):
+    def __init__(self, equation, cloud_name, rain_name, accretion=True, accumulation=True):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            cloud_name (str): name of the cloud variable.
+            rain_name (str): name of the rain variable.
             accretion (bool, optional): whether to include the accretion process
                 in the parametrisation. Defaults to True.
             accumulation (bool, optional): whether to include the accumulation
                 process in the parametrisation. Defaults to True.
         """
-        super().__init__(state)
 
         # obtain our fields
-        self.water_c = state.fields('cloud_liquid_mixing_ratio')
-        self.rain = state.fields('rain_mixing_ratio')
+        self.water_c = state.fields('cloud_water')
+        self.rain = state.fields('rain')
 
         # declare function space
         Vt = self.water_c.function_space()
@@ -399,11 +400,11 @@ class Evaporation(Physics):
 
         # obtain our fields
         self.theta = state.fields('theta')
-        self.water_v = state.fields('vapour_mixing_ratio')
-        self.rain = state.fields('rain_mixing_ratio')
+        self.water_v = state.fields('water_vapour')
+        self.rain = state.fields('rain')
         rho = state.fields('rho')
         try:
-            water_c = state.fields('cloud_liquid_mixing_ratio')
+            water_c = state.fields('cloud_water')
             water_l = self.rain + water_c
         except NotImplementedError:
             water_l = self.rain
@@ -499,7 +500,7 @@ class InstantRain(object):
 
         assert vapour in equation.field_names, f"Field {vapour} does not exist in the equation set"
         self.Vm_idx = equation.field_names.index(vapour)
-        Vr_idx = equation.field_names.index("rain_mixing_ratio")
+        Vr_idx = equation.field_names.index("rain")
 
         # obtain function space and functions
         W = equation.function_space
@@ -551,7 +552,7 @@ class BouchutForcing(object):
         # obtain function spaces and functions
         W = equation.function_space
         self.VD_idx = equation.field_names.index("D")
-        self.VQ_idx = equation.field_names.index("Q_mixing_ratio")
+        self.VQ_idx = equation.field_names.index("Q")
         VD = W.sub(self.VD_idx)
         VQ = W.sub(self.VQ_idx)
 

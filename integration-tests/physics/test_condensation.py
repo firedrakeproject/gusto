@@ -37,7 +37,7 @@ def run_cond_evap(dirname, process):
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=[Sum('vapour_mixing_ratio', 'cloud_liquid_mixing_ratio')])
+                  diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
 
     # spaces
     Vt = state.spaces("theta", degree=1)
@@ -50,8 +50,8 @@ def run_cond_evap(dirname, process):
     # Declare prognostic fields
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("vapour_mixing_ratio", Vt)
-    water_c0 = state.fields("cloud_liquid_mixing_ratio", Vt)
+    water_v0 = state.fields("water_vapour", Vt)
+    water_c0 = state.fields("cloud_water", Vt)
 
     # Set a background state with constant pressure and temperature
     pressure = Function(Vr).interpolate(Constant(100000.))
@@ -106,8 +106,8 @@ def test_cond_evap(tmpdir, process):
     dirname = str(tmpdir)
     state, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname, process)
 
-    water_v = state.fields('vapour_mixing_ratio')
-    water_c = state.fields('cloud_liquid_mixing_ratio')
+    water_v = state.fields('water_vapour')
+    water_c = state.fields('cloud_water')
     theta_vd = state.fields('theta')
     theta_d = Function(theta_vd.function_space())
     theta_d.interpolate(theta_vd/(1 + water_v * state.parameters.R_v / state.parameters.R_d))
@@ -129,7 +129,7 @@ def test_cond_evap(tmpdir, process):
     filename = path.join(dirname, "cond_evap/diagnostics.nc")
     data = Dataset(filename, "r")
 
-    water = data.groups["vapour_mixing_ratio_plus_cloud_liquid_mixing_ratio"]
+    water = data.groups["water_vapour_plus_cloud_water"]
     total = water.variables["total"]
     water_t_0 = total[0]
     water_t_T = total[-1]
