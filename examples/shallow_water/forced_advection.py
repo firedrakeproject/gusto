@@ -5,8 +5,8 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 tophat = False
-triangle = True
-trig = False
+triangle = False
+trig = True
 
 u_max = 1
 if tophat:
@@ -20,13 +20,17 @@ elif trig:
     K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
+if trig:
+    tmax = 85
+else:
+    tmax = 55
 
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "DG1_withlimiter_forced_advection_trig"
+    dirname = "forced_advection_trig"
 
 dt = 0.005
 delta_x = 0.05
@@ -37,7 +41,7 @@ x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=1)
+output = OutputParameters(dirname=dirname, dumpfreq=100)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,
@@ -91,10 +95,14 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-InstantRain(meqn, msat)
+physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+# InstantRain(meqn, msat)
 
 # build time stepper
+# stepper = PrescribedTransport(state,
+#                               ((meqn, RK4(state)),))
 stepper = PrescribedTransport(state,
-                              ((meqn, RK4(state)),))
+                              ((meqn, ((SSPRK3(state), transport),)),),
+                              physics_schemes=physics_schemes)
 
-stepper.run(t=0, tmax=55)
+stepper.run(t=0, tmax=tmax)
