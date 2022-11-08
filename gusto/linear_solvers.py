@@ -12,13 +12,13 @@ from firedrake import (split, LinearVariationalProblem, Constant,
                        dot, grad, Function, VectorSpaceBasis, BrokenElement,
                        FunctionSpace, MixedFunctionSpace, DirichletBC)
 from firedrake.petsc import flatten_parameters
-from firedrake.parloops import par_loop, READ, INC
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.configuration import logger, DEBUG
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.fml.form_manipulation_labelling import Term, drop
+from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -169,7 +169,6 @@ class CompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
-        import numpy as np
 
         state = self.state
         dt = state.dt
@@ -325,24 +324,12 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
-        # TODO: these kernels can be obtained from kernels.py
-        shapes = {"i": Vu.finat_element.space_dimension(),
-                  "j": np.prod(Vu.shape, dtype=int)}
-        weight_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                w[i*{j} + j] += 1.0;
-        """.format(**shapes)
-
         self._weight = Function(Vu)
-        par_loop(weight_kernel, dx, {"w": (self._weight, INC)})
+        weight_kernel = AverageWeightings(Vu)
+        weight_kernel.apply(self._weight)
 
         # Averaging kernel
-        self._average_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                vec_out[i*{j} + j] += vec_in[i*{j} + j]/w[i*{j} + j];
-        """.format(**shapes)
+        self._average_kernel = AverageKernel(Vu)
 
         # HDiv-conforming velocity
         self.u_hdiv = Function(Vu)
@@ -387,10 +374,7 @@ class CompressibleSolver(TimesteppingSolver):
         u1.assign(0.0)
 
         with timed_region("Gusto:HybridProjectHDiv"):
-            par_loop(self._average_kernel, dx,
-                     {"w": (self._weight, READ),
-                      "vec_in": (broken_u, READ),
-                      "vec_out": (u1, INC)})
+            self._average_kernel.apply(u1, self._weight, broken_u)
 
         # Reapply bcs to ensure they are satisfied
         for bc in self.bcs:

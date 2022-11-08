@@ -5,8 +5,7 @@ is working correctly.
 """
 
 from gusto import *
-from firedrake import (as_vector, FunctionSpace, VectorFunctionSpace,
-                       BrokenElement, norm)
+from firedrake import (as_vector, VectorFunctionSpace, norm)
 import pytest
 
 
@@ -32,12 +31,10 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
         VDG1 = state.spaces("DG1_equispaced")
         Vec_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element(), name='Vec_DG1')
         Vec_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
-        Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
-        rec_opts = RecoveredOptions(embedding_space=Vec_DG1,
-                                    recovered_space=Vec_CG1,
-                                    broken_space=Vu_brok,
-                                    boundary_method=Boundary_Method.dynamics)
+        rec_opts = RecoveryOptions(embedding_space=Vec_DG1,
+                                   recovered_space=Vec_CG1,
+                                   boundary_method=BoundaryMethod.taylor)
     else:
         raise NotImplementedError(
             f'Recovered spaces for geometry {geometry} have not been implemented')

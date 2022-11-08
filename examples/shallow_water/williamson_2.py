@@ -32,7 +32,7 @@ for ref_level, dt in ref_dt.items():
 
     dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=3)
+                                 refinement_level=ref_level, degree=1)
     x = SpatialCoordinate(mesh)
     global_normal = x
     mesh.init_cell_orientations(x)
