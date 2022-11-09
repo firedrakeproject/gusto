@@ -28,16 +28,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.equation = equation
         self.state = state
 
-        self.setup_timeloop()
+        self.setup_fields()
+        self.setup_scheme()
 
     @abstractproperty
     def transporting_velocity(self):
         return NotImplementedError
-
-    def setup_timeloop(self):
-        """Sets up the fields and scheme used in the timeloop"""
-        self.setup_fields()
-        self.setup_scheme()
 
     @abstractmethod
     def setup_fields(self):
