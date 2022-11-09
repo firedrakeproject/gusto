@@ -8,7 +8,7 @@ class Fields(object):
     def __init__(self, equation):
         """
         Args:
-            equations (:class:`PrognosticEquation`): an equation object.
+            equation (:class:`PrognosticEquation`): an equation object.
         """
         self.fields = []
         subfield_names = equation.field_names if hasattr(equation, "field_names") else None
@@ -112,8 +112,15 @@ class StateFields(Fields):
 
 
 class TimeLevelFields(object):
+    """Creates the fields required in the :class:`Timestepper` object."""
 
     def __init__(self, equation, nlevels=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): an equation object.
+            nlevels (optional, iterable): an iterable containing the names
+                of the time levels
+        """
         default_levels = ("n", "np1")
         if nlevels is None or nlevels == 1:
             previous_levels = ["nm1"]
@@ -127,6 +134,12 @@ class TimeLevelFields(object):
         self.previous.append(getattr(self, "n"))
 
     def add_fields(self, equation, levels=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): an equation object.
+            levels (optional, iterable): an iterable containing the names
+                of the time levels to be added
+        """
         if levels is None:
             levels = self.levels
         for level in levels:
@@ -137,11 +150,17 @@ class TimeLevelFields(object):
                 setattr(self, level, Fields(equation))
 
     def initialise(self, state):
+        """
+        Initialises the time fields from those currently in state
+
+        Args: state (:class:`State`): the model state object
+        """
         for field in self.n:
             field.assign(state.fields(field.name()))
             self.np1(field.name()).assign(field)
 
     def update(self):
+        """Updates the fields, copying the values to previous time levels"""
         for i in range(len(self.previous)-1):
             xi = self.previous[i]
             xip1 = self.previous[i+1]
