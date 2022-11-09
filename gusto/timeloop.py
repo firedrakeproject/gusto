@@ -264,8 +264,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         are not included in the linear solver. This is determined by whether the
         time derivative term for that tracer has a linearisation.
 
-        :arg x_in:  The input set of fields
-        :arg x_out: The output set of fields
+        Args:
+           x_in:  The input set of fields
+           x_out: The output set of fields
         """
 
         for name in self.tracers_to_copy:
@@ -337,9 +338,22 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
 
 class PrescribedTransport(Timestepper):
-
+    """
+    Implements a timeloop with a prescibed transporting velocity
+    """
     def __init__(self, equation, scheme, state, physics_list=None,
                  prescribed_transporting_velocity=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            state (:class:`State`): the model's state object
+            physics_list: optional list of classes that implement `physics`
+                schemes
+            prescribed_transporting_velocity: (optional) expression specifying
+                the prescribed transporting velocity
+        """
 
         super().__init__(equation, scheme, state)
 
@@ -349,8 +363,9 @@ class PrescribedTransport(Timestepper):
             self.physics_list = []
 
         if prescribed_transporting_velocity is not None:
-            self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
-                                                 self.state.fields('u'))
+            self.velocity_projection = Projector(
+                prescribed_transporting_velocity(self.state.t),
+                self.state.fields('u'))
         else:
             self.velocity_projection = None
 
