@@ -495,16 +495,17 @@ class InstantRain(object):
         rain
     """
 
-    def __init__(self, equation, saturation_curve, vapour="water_v"):
+    def __init__(self, equation, saturation_curve, vapour="water_v", rain=None):
 
-        assert vapour in equation.field_names, f"Field {vapour} does not exist in the equation set"
+        assert vapour in equation.field_names, f"Field {vapour} does not exist"
         self.Vm_idx = equation.field_names.index(vapour)
-        Vr_idx = equation.field_names.index("rain_mixing_ratio")
+        if rain is not None:
+            assert rain in equation.field_names, f"Field {rain} does not exist"
+            Vr_idx = equation.field_names.index(rain)
 
         # obtain function space and functions
         W = equation.function_space
         Vm = W.sub(self.Vm_idx)
-        Vr = W.sub(Vr_idx)
 
         # the source function is the difference between the water
         # vapour and the saturation
@@ -513,11 +514,16 @@ class InstantRain(object):
         self.dt = Constant(0.0)
 
         test_m = equation.tests[self.Vm_idx]
-        test_r = equation.tests[Vr_idx]
-        equation.residual += physics(subject(test_m * self.source * dx
-                                             - test_r * self.source * dx,
+        equation.residual += physics(subject(test_m * self.source * dx,
                                              equation.X),
                                      self.evaluate)
+        # if rain is not none then the excess vapour is being tracked;
+        # otherwise it is not
+        if rain is not None:
+            test_r = equation.tests[Vr_idx]
+            equation.residual -= physics(subject(test_r * self.source * dx,
+                                                 equation.X),
+                                         self.evaluate)
 
         # convert moisture above saturation curve to rain
         self.source_interpolator = Interpolator(conditional(

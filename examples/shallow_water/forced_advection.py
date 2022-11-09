@@ -30,7 +30,7 @@ if tophat:
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "forced_advection_trig"
+    dirname = "forced_advection_trig_temp"
 
 dt = 0.005
 delta_x = 0.05
@@ -95,7 +95,7 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio"), ForwardEuler(state))]
 # InstantRain(meqn, msat)
 
 # build time stepper
