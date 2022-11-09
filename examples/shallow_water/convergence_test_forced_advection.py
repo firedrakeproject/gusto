@@ -107,8 +107,8 @@ for dx, dt in dx_dt.items():
     r_exact.interpolate(r_expr)
 
     # add instant rain forcing
-    [InstantRain(meqn, msat)]
-    # physics_schemes = [(InstantRain(meqn, msat), ForwardEuler(state))]
+    [InstantRain(meqn, msat, rain="rain_mixing_ratio")]
+    # physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio"), ForwardEuler(state))]
 
     # build time stepper
     stepper = PrescribedTransport(state,
