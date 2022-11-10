@@ -74,6 +74,7 @@ class Timestepper(object):
             self.physics_schemes = []
 
         for phys, scheme in self.physics_schemes:
+            # TODO: not sure if this should be True?
             apply_bcs = False
             scheme.setup(eqn, self.transporting_velocity, apply_bcs,
                          physics)

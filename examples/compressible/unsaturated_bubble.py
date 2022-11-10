@@ -209,9 +209,9 @@ linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define condensation
 physics_schemes = [(Fallout(state), ForwardEuler(state)),
-                   (Coalescence(state), ForwardEuler(state)),
+                   (Coalescence(eqns), ForwardEuler(state)),
                    (Evaporation(state), ForwardEuler(state)),
-                   (Condensation(state), ForwardEuler(state))]
+                   (SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
 
 # build time stepper
 stepper = CrankNicolson(state, eqns, transported_fields,

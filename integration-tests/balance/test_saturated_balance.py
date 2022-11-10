@@ -121,7 +121,7 @@ def setup_saturated(dirname, recovered):
     linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
     # add physics
-    physics_schemes = [(Condensation(state), ForwardEuler(state))]
+    physics_schemes = [(SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
 
     # build time stepper
     stepper = CrankNicolson(state, eqns, transported_fields,

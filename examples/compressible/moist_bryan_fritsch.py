@@ -152,7 +152,7 @@ transported_fields = [SSPRK3(state, "rho", options=rho_opts),
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define condensation
-physics_schemes = [(Condensation(state), ForwardEuler(state))]
+physics_schemes = [(SaturationAdjustment(eqns, params), ForwardEuler(state))]
 
 # build time stepper
 stepper = CrankNicolson(state, eqns, transported_fields,

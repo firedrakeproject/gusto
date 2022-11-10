@@ -44,8 +44,8 @@ def run_cond_evap(dirname, process):
     Vr = state.spaces("DG", "DG", degree=1)
 
     # Set up equation -- use compressible to set up these spaces
-    # However the equation itself will be unused
-    _ = CompressibleEulerEquations(state, "CG", 1)
+    tracers = [WaterVapour(), CloudWater()]
+    eqn = CompressibleEulerEquations(state, "CG", 1, active_tracers=tracers)
 
     # Declare prognostic fields
     rho0 = state.fields("rho")
@@ -88,8 +88,8 @@ def run_cond_evap(dirname, process):
     mc_init = Function(Vt).assign(water_c0)
 
     # Have empty problem as only thing is condensation / evaporation
-    problem = []
-    physics_schemes = [(Condensation(state), ForwardEuler(state))]
+    problem = ((eqn, ()),)
+    physics_schemes = [(SaturationAdjustment(eqn, parameters), ForwardEuler(state))]
 
     # build time stepper
     stepper = PrescribedTransport(state, problem,
