@@ -23,7 +23,7 @@ from math import gamma
 from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments", "InstantRain", "BouchutForcing"]
+__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments", "InstantRain"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -536,7 +536,6 @@ class InstantRain(object):
         self.tau = Constant(0.0)
         if parameters is not None:
             self.tau = parameters.tau
-        print(self.tau.values())
 
         # lose vapour above the saturation curve
         equation.residual += physics(subject(test_v * self.source * dx,
@@ -546,7 +545,6 @@ class InstantRain(object):
         # if rain is not none then the excess vapour is being tracked and is
         # added to rain
         if rain is not None:
-            print("accumulating rain")
             test_r = equation.tests[Vr_idx]
             equation.residual -= physics(subject(test_r * self.source * dx,
                                                  equation.X),
@@ -556,8 +554,6 @@ class InstantRain(object):
         if convective_feedback:
             test_D = equation.tests[self.VD_idx]
             gamma = parameters.gamma
-            print(gamma.values())
-            print("feeding back on height")
             equation.residual += physics(subject
                                          (test_D * gamma * self.source * dx,
                                           equation.X),
@@ -574,54 +570,5 @@ class InstantRain(object):
             self.D.assign(x_in.split()[self.VD_idx])
         else:
             self.tau.assign(dt)
-        print(self.tau.values())
         self.water_v.assign(x_in.split()[self.Vv_idx])
-        self.source.assign(self.source_interpolator.interpolate())
-
-
-class BouchutForcing(object):
-    """
-    Forcing for the version of the moist shallow water equations described in
-    Bouchut et al (2009). Condenstation is a sink in the moisture equation and
-    feeds back on directly on the height equation.
-    :arg state: :class:`.State.` object.
-    :arg parameters: the ConvectiveMoistShallowWaterParameters
-    """
-    def __init__(self, equation, parameters, saturation):
-
-        # store moist shallow water parameters
-        tau = parameters.tau
-        gamma = parameters.gamma
-
-        # obtain function spaces and functions
-        W = equation.function_space
-        self.VD_idx = equation.field_names.index("D")
-        self.VQ_idx = equation.field_names.index("Q_mixing_ratio")
-        VD = W.sub(self.VD_idx)
-        VQ = W.sub(self.VQ_idx)
-
-        self.source = Function(VD)
-        self.Q = Function(VQ)
-        self.D = Function(VD)
-
-        # test functions
-        test_D = equation.tests[self.VD_idx]
-        test_Q = equation.tests[self.VQ_idx]
-
-        equation.residual += physics(subject
-                                     (
-                                         + gamma * test_D * self.source * dx
-                                         + test_Q * self.source * dx,
-                                         equation.X),
-                                     self.evaluate)
-
-        # saturation function is now defined in the set-up file
-        q_s = saturation
-
-        self.source_interpolator = Interpolator(conditional(
-            self.Q > q_s, (self.Q - q_s)/tau, 0), VQ)
-
-    def evaluate(self, x_in, dt):
-        self.Q.assign(x_in.split()[self.VQ_idx])
-        self.D.assign(x_in.split()[self.VD_idx])
         self.source.assign(self.source_interpolator.interpolate())
