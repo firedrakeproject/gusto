@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi,
                        FiniteElement, as_vector)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 tophat = False
 triangle = False
@@ -28,7 +27,7 @@ else:
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
-    dirname = "forced_advection_triangle_temp"
+    dirname = "forced_advection_triangle"
 elif trig:
     dirname = "forced_advection_trig_temp"
 
@@ -95,14 +94,15 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio"), ForwardEuler(state))]
-# InstantRain(meqn, msat)
+physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio",
+                                set_tau_to_dt=True), ForwardEuler(state))]
+# InstantRain(meqn, msat, rain="rain_mixing_ratio")
 
 # build time stepper
 # stepper = PrescribedTransport(state,
 #                               ((meqn, RK4(state)),))
 stepper = PrescribedTransport(state,
-                              ((meqn, ((SSPRK3(state), transport),)),),
+                              ((meqn, RK4(state,)),),
                               physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=5*dt)

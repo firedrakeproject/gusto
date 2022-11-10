@@ -501,8 +501,10 @@ class InstantRain(object):
     """
 
     def __init__(self, equation, saturation_curve, vapour="water_v", rain=None,
-                 parameters=None, convective_feedback=False):
+                 parameters=None, convective_feedback=False,
+                 set_tau_to_dt=False):
         self.convective_feedback = convective_feedback
+        self.set_tau_to_dt = set_tau_to_dt
 
         # check for the correct fields
         assert vapour in equation.field_names, f"Field {vapour} does not exist"
@@ -527,14 +529,16 @@ class InstantRain(object):
             test_D = equation.tests[self.VD_idx]
             self.D = Function(VD)
 
-        # the source function is the difference between the water
-        # vapour and saturation
+        # the source function is the difference between the water vapour and
+        # the saturation function
         self.water_v = Function(Vv)
         self.source = Function(Vv)
 
         # tau is the timescale for conversion (may or may not be the timestep)
-        self.tau = Constant(0.0)
-        if parameters is not None:
+        if self.set_tau_to_dt:
+            self.tau = Constant(0)
+        else:
+            assert parameters.tau is not None, "If the relaxation timescale is not dt then you must specify tau"
             self.tau = parameters.tau
 
         # lose vapour above the saturation curve
@@ -568,7 +572,7 @@ class InstantRain(object):
     def evaluate(self, x_in, dt):
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-        else:
+        if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.source.assign(self.source_interpolator.interpolate())
