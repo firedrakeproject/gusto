@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
-                       VectorFunctionSpace, conditional, acos, cos, pi, plot,
-                       FiniteElement, as_vector, errornorm)
+                       VectorFunctionSpace, conditional, acos, cos, pi,
+                       FiniteElement, as_vector)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 
 tophat = False
@@ -28,7 +28,7 @@ else:
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
-    dirname = "forced_advection_triangle"
+    dirname = "forced_advection_triangle_temp"
 elif trig:
     dirname = "forced_advection_trig_temp"
 
@@ -41,7 +41,7 @@ x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=100)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,
@@ -105,4 +105,4 @@ stepper = PrescribedTransport(state,
                               ((meqn, ((SSPRK3(state), transport),)),),
                               physics_schemes=physics_schemes)
 
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=0, tmax=5*dt)
