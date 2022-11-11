@@ -3,7 +3,7 @@
 from abc import ABCMeta
 from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunction, FacetNormal, jump, avg, dS_v,
+                       TrialFunction, FacetNormal, jump, avg, dS_v, dS,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fml.form_manipulation_labelling import Term, all_terms, identity, drop
@@ -544,7 +544,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient]},
                  u_transport_option='vector_invariant_form',
-                 no_normal_flow_bc_ids=None, active_tracers=None):
+                 no_normal_flow_bc_ids=None, active_tracers=None,
+                 thermal=False):
         """
         Args:
             state (:class:`State`): the model's state object.
@@ -571,15 +572,24 @@ class ShallowWaterEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
+            thermal (flag, optional): specifies whether the equations have a
+                thermal or buoyancy variable that feeds back on the momentum.
+                Defaults to False.
 
         Raises:
             NotImplementedError: active tracers are not yet implemented.
         """
 
+        self.thermal = thermal
         field_names = ["u", "D"]
 
         if active_tracers is None:
             active_tracers = []
+
+        if self.thermal:
+            field_names.append("b")
+            # add to the terms_to_linearise dictionary
+            terms_to_linearise["b"] = []
 
         super().__init__(field_names, state, family, degree,
                          terms_to_linearise=terms_to_linearise,
@@ -592,6 +602,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
+
+        if self.thermal:
+            gamma = self.tests[2]
+            b = split(self.X)[2]
+            n = FacetNormal(state.mesh)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -636,6 +651,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Add transport of tracers
         if len(active_tracers) > 0:
             adv_form += self.generate_tracer_transport_terms(state, active_tracers)
+        # Add transport of buoyancy, if thermal shallow water equations
+        if self.thermal:
+            b_adv = prognostic(continuity_form(state, gamma, b), "b")
+            adv_form += subject(b_adv, self.X)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
@@ -646,7 +665,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
-        # Extra Terms (Coriolis and Topography)
+        # Extra Terms (Coriolis, Topography and Thermal)
         # -------------------------------------------------------------------- #
         if fexpr is not None:
             V = FunctionSpace(state.mesh, "CG", 1)
@@ -661,10 +680,28 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += coriolis_form
 
         if bexpr is not None:
-            b = state.fields("topography", state.spaces("DG"))
-            b.interpolate(bexpr)
-            topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
+            topography = state.fields("topography", state.spaces("DG"))
+            topography.interpolate(bexpr)
+            if self.thermal:
+                topography_form = subject(prognostic
+                                          (-topography*div(b*w)*dx
+                                           + jump(b*w, n)*avg(topography)*dS,
+                                           "u"), self.X)
+            else:
+                topography_form = subject(prognostic
+                                          (-g*div(w)*topography*dx, "u"),
+                                          self.X)
             residual += topography_form
+
+        # thermal source terms not involving topography
+        if self.thermal:
+            source_form = subject(prognostic(-D*div(b*w)*dx
+                                             - 0.5*b*div(D*w)*dx
+                                             - 0.5*jump
+                                             (b*w, n)*avg(D)*dS
+                                             + 0.5*jump(D*w, n)*avg(b)*dS,
+                                             "u"), self.X)
+            residual += source_form
 
         # -------------------------------------------------------------------- #
         # Linearise equations
@@ -677,6 +714,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+
+    def _build_spaces(self, state, family, degree):
+        spaces = [space for space in state.spaces.build_compatible_spaces
+                  (family, degree)]
+        if self.thermal:
+            spaces.append(state.spaces("DG"))
+        return spaces
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
