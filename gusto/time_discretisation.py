@@ -14,7 +14,8 @@ from firedrake import (Function, NonlinearVariationalProblem, split,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import logger, DEBUG, TransportEquationType
+from gusto.configuration import (logger, DEBUG, TransportEquationType,
+                                 EmbeddedDGOptions, RecoveryOptions)
 from gusto.labels import (time_derivative, transporting_velocity, prognostic, subject,
                           transport, ibp_label, replace_subject, replace_test_function)
 from gusto.recovery import Recoverer, ReversibleRecoverer
@@ -23,7 +24,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2"]
 
 
 def is_cg(V):
@@ -49,21 +50,21 @@ def is_cg(V):
 
 def embedded_dg(original_apply):
     """Decorator to add steps for embedded DG method."""
-    def get_apply(self, x_in, x_out):
+    def get_apply(self, x_out, x_in):
 
         if self.discretisation_option in ["embedded_dg", "recovered"]:
 
-            def new_apply(self, x_in, x_out):
+            def new_apply(self, x_out, x_in):
 
                 self.pre_apply(x_in, self.discretisation_option)
-                original_apply(self, self.xdg_in, self.xdg_out)
+                original_apply(self, self.xdg_out, self.xdg_in)
                 self.post_apply(x_out, self.discretisation_option)
 
-            return new_apply(self, x_in, x_out)
+            return new_apply(self, x_out, x_in)
 
         else:
 
-            return original_apply(self, x_in, x_out)
+            return original_apply(self, x_out, x_in)
 
     return get_apply
 
@@ -266,8 +267,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 logger.warning('A limiter has been requested for a recovered transport scheme, but the method for projecting back is not recovery')
 
         # setup required functions
-        self.dq = Function(self.fs)
-        self.q1 = Function(self.fs)
+        self.x_out = Function(self.fs)
+        self.x1 = Function(self.fs)
 
     def pre_apply(self, x_in, discretisation_option):
         """
@@ -314,12 +315,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.x_out_projector.interpolate() if self.interp_back else self.x_out_projector.project()
         x_out.assign(self.x_projected)
 
+    @property
+    def nlevels(self):
+        return 1
+
     @abstractproperty
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -329,7 +334,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -407,18 +412,18 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def solver(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.dq, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         pass
 
@@ -475,28 +480,28 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
     @abstractmethod
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         pass
 
     @embedded_dg
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            self.apply_cycle(self.x0, self.x1)
+            self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
 
@@ -519,7 +524,7 @@ class ForwardEuler(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         return super(ForwardEuler, self).rhs
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -527,9 +532,9 @@ class ForwardEuler(ExplicitTimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class SSPRK3(ExplicitTimeDiscretisation):
@@ -567,34 +572,34 @@ class SSPRK3(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.q1.assign(self.dq)
+            self.x1.assign(self.x_out)
 
         elif stage == 1:
             self.solver.solve()
-            self.q1.assign(0.75*x_in + 0.25*self.dq)
+            self.x1.assign(0.75*x_in + 0.25*self.x_out)
 
         elif stage == 2:
             self.solver.solve()
-            self.q1.assign((1./3.)*x_in + (2./3.)*self.dq)
+            self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
 
         if self.limiter is not None:
-            self.limiter.apply(self.q1)
+            self.limiter.apply(self.x1)
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class RK4(ExplicitTimeDiscretisation):
@@ -636,7 +641,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dq, self.idx),
+            map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -646,7 +651,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -665,25 +670,25 @@ class RK4(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.k1.assign(self.dq)
-            self.q1.assign(x_in + 0.5 * self.dt * self.k1)
+            self.k1.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
             self.solver.solve()
-            self.k2.assign(self.dq)
-            self.q1.assign(x_in + 0.5 * self.dt * self.k2)
+            self.k2.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
             self.solver.solve()
-            self.k3.assign(self.dq)
-            self.q1.assign(x_in + self.dt * self.k3)
+            self.k3.assign(self.x_out)
+            self.x1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
             self.solver.solve()
-            self.k4.assign(self.dq)
-            self.q1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+            self.k4.assign(self.x_out)
+            self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -694,11 +699,11 @@ class RK4(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
 
         for i in range(4):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class Heun(ExplicitTimeDiscretisation):
@@ -734,13 +739,13 @@ class Heun(ExplicitTimeDiscretisation):
         """
         if stage == 0:
             self.solver.solve()
-            self.q1.assign(self.dq)
+            self.x1.assign(self.x_out)
 
         elif stage == 1:
             self.solver.solve()
-            self.q1.assign(0.5 * x_in + 0.5 * (self.dq))
+            self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
-    def apply_cycle(self, x_in, x_out):
+    def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
 
@@ -751,10 +756,10 @@ class Heun(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         for i in range(2):
             self.solve_stage(x_in, i)
-        x_out.assign(self.q1)
+        x_out.assign(self.x1)
 
 
 class BackwardEuler(TimeDiscretisation):
@@ -764,13 +769,39 @@ class BackwardEuler(TimeDiscretisation):
     The backward Euler method for operator F is the most simple implicit scheme:
     y^(n+1) = y^n + dt*F[y^(n+1)].
     """
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 limiter=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods. Defaults to None.
+
+        Raises:
+            NotImplementedError: if options is an instance of
+            EmbeddedDGOptions or RecoveryOptions
+        """
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        super().__init__(state=state, field_name=field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
 
     @property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.dq, self.idx))
+            map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -781,22 +812,22 @@ class BackwardEuler(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.q1, self.idx),
+            map_if_true=replace_subject(self.x1, self.idx),
             map_if_false=drop)
 
         return r.form
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class ThetaMethod(TimeDiscretisation):
@@ -831,6 +862,8 @@ class ThetaMethod(TimeDiscretisation):
         # check be on the provided value?
         if theta is None:
             raise ValueError("please provide a value for theta between 0 and 1")
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
@@ -849,7 +882,7 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.dq, self.idx))
+            map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
@@ -860,23 +893,23 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.q1, self.idx))
+            map_if_true=replace_subject(self.x1, self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
         return r.form
 
-    def apply(self, x_in, x_out):
+    def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
-        self.q1.assign(x_in)
+        self.x1.assign(x_in)
         self.solver.solve()
-        x_out.assign(self.dq)
+        x_out.assign(self.x_out)
 
 
 class ImplicitMidpoint(ThetaMethod):
@@ -905,3 +938,130 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(state, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+
+
+class MultilevelTimeDiscretisation(TimeDiscretisation):
+    """Base class for multi-level timesteppers"""
+
+    def __init__(self, state, field_name=None, solver_parameters=None,
+                 limiter=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        super().__init__(state=state, field_name=field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.initial_timesteps = 0
+
+    @abstractproperty
+    def nlevels(self):
+        pass
+
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
+                      *active_labels)
+        for n in range(self.nlevels, 1, -1):
+            setattr(self, "xnm%i" % (n-1), Function(self.fs))
+
+
+class BDF2(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 2
+
+    @property
+    def lhs0(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: self.dt*t)
+
+        return l.form
+
+    @property
+    def rhs0(self):
+        """Set up the time discretisation's right hand side."""
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_false=drop)
+
+        return r.form
+
+    @property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: (2/3)*self.dt*t)
+
+        return l.form
+
+    @property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        xn = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_false=drop)
+        xnm1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xnm1, self.idx),
+            map_if_false=drop)
+
+        r = (4/3.) * xn - (1/3.) * xnm1
+
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-1:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
+
+        self.xnm1.assign(x_in[0])
+        self.x1.assign(x_in[1])
+        solver.solve()
+        x_out.assign(self.x_out)

@@ -158,20 +158,20 @@ def setup_limiters(dirname, space):
                                recovered_space=VCG1,
                                project_low_method='recover',
                                boundary_method=BoundaryMethod.taylor)
-        transport_schemes = [(eqn, SSPRK3(state, options=opts,
-                                          limiter=VertexBasedLimiter(VDG1)))]
+        transport_schemes = SSPRK3(state, options=opts,
+                                   limiter=VertexBasedLimiter(VDG1))
 
     elif space == 'DG1_equispaced':
-        transport_schemes = [(eqn, SSPRK3(state, limiter=VertexBasedLimiter(V)))]
+        transport_schemes = SSPRK3(state, limiter=VertexBasedLimiter(V))
 
     elif space == 'Vtheta_degree_1':
         opts = EmbeddedDGOptions()
-        transport_schemes = [(eqn, SSPRK3(state, options=opts, limiter=ThetaLimiter(V)))]
+        transport_schemes = SSPRK3(state, options=opts, limiter=ThetaLimiter(V))
     else:
         raise NotImplementedError
 
     # build time stepper
-    stepper = PrescribedTransport(state, transport_schemes)
+    stepper = PrescribedTransport(eqn, transport_schemes, state)
 
     return stepper, tmax, state, true_field
 
