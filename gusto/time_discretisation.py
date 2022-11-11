@@ -422,8 +422,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         pass
 
@@ -496,8 +496,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
@@ -590,8 +590,8 @@ class SSPRK3(ExplicitTimeDiscretisation):
         Apply the time discretisation through a single sub-step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         if self.limiter is not None:
             self.limiter.apply(x_in)
@@ -803,8 +803,8 @@ class BackwardEuler(TimeDiscretisation):
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         self.x1.assign(x_in)
         self.solver.solve()
@@ -885,8 +885,8 @@ class ThetaMethod(TimeDiscretisation):
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         self.x1.assign(x_in)
         self.solver.solve()
@@ -1018,8 +1018,8 @@ class BDF2(MultilevelTimeDiscretisation):
         Apply the time discretisation to advance one whole time step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
         """
         if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
