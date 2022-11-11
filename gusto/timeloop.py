@@ -152,13 +152,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             transport_schemes: iterable of ``(field_name, scheme)`` pairs
                 indicating the name of the field (str) to transport, and the
                 :class:`TimeDiscretisation` to use
-            auxiliary_equations_and_schemes
-            linear_solver: a :class:`.TimesteppingSolver` object
+            auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
+                pairs indicating any additional equations to be solved and the
+                scheme to use to solve them. Defaults to None.
+            linear_solver: a :class:`.TimesteppingSolver` object. Defaults to
+                None.
             diffusion_schemes: optional iterable of ``(field_name, scheme)``
                 pairs indicating the fields to diffuse, and the
-                :class:`~.Diffusion` to use.
+                :class:`~.Diffusion` to use. Defaults to None.
             physics_list: optional list of classes that implement `physics`
-                schemes
+                schemes. Defaults to None.
 
         :kwargs: maxk is the number of outer iterations, maxi is the number
             of inner iterations and alpha is the offcentering parameter
