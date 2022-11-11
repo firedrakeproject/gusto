@@ -8,22 +8,22 @@ with "apply" methods.
 """
 
 from abc import ABCMeta, abstractmethod
+from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, Boundary_Method
-from gusto.time_discretisation import SSPRK3
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.equations import AdvectionEquation, CompressibleEulerEquations
-from gusto.labels import subject, physics
-from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
+from gusto.equations import  CompressibleEulerEquations
+from gusto.transport_forms import advection_form
+from gusto.fml import identity, Term
+from gusto.labels import subject, physics, transporting_velocity
 from firedrake import (Interpolator, conditional, Function, dx,
-                       min_value, max_value, as_vector, BrokenElement,
-                       FunctionSpace, Constant, pi, Projector, exp, File)
+                       min_value, max_value, BrokenElement,
+                       FunctionSpace, Constant, pi, Projector, exp)
 from gusto import thermodynamics
+import ufl
 from math import gamma
 from enum import Enum
 
 
-__all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "Evaporation",
+__all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "BouchutForcing"]
 
 
@@ -83,51 +83,67 @@ class SaturationAdjustment(Physics):
         # TODO: we used to have an iterations option, which does not fit with
         # the new FML structure. Could we replicate this by subcycling?
 
+        # TODO: make a check on the variable type of the active tracers
+        # if not a mixing ratio, we need to convert to mixing ratios
+        # this will be easier if we change equations to have dictionary of
+        # active tracer metadata corresponding to variable names
+
         # Check that fields exist
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
 
-        self.cloud_idx = equation.field_names.index(cloud_name)
-        self.vap_idx = equation.field_names.index(vapour_name)
-        Vcl = equation.function_space.sub(self.cloud_idx)
-        Vv = equation.function_space.sub(self.vap_idx)
-        self.cloud_water = Function(Vcl)
-        self.water_vapour = Function(Vv)
+        # Make prognostic for physics scheme
+        self.X = Function(equation.X.function_space())
+        self.equation = equation
+        self.latent_heat = latent_heat
+
+        # Vapour and cloud variables are needed for every form of this scheme
+        cloud_idx = equation.field_names.index(cloud_name)
+        vap_idx = equation.field_names.index(vapour_name)
+        cloud_water = self.X.split()[cloud_idx]
+        water_vapour = self.X.split()[vap_idx]
+
+        # Indices of variables in mixed function space
+        V_idxs = [vap_idx, cloud_idx]
+        V = equation.function_space.sub(vap_idx) # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
         if isinstance(equation, CompressibleEulerEquations):
-            self.rho_idx = equation.field_names.index('rho')
-            self.theta_idx = equation.field_names.index('theta')
-            Vr = equation.function_space.sub(self.rho_idx)
-            Vt = equation.function_space.sub(self.theta_idx)
-            self.rho = Function(Vr)
-            self.theta = Function(Vt)
+            rho_idx = equation.field_names.index('rho')
+            theta_idx = equation.field_names.index('theta')
+            rho = self.X.split()[rho_idx]
+            theta = self.X.split()[theta_idx]
+            if latent_heat:
+                V_idxs.append(theta_idx)
+
+            # need to evaluate rho at theta-points, and do this via recovery
+            # TODO: make this bit of code neater if possible using domain object
+            v_deg = V.ufl_element().degree()[1]
+            boundary_method = Boundary_Method.physics if v_deg == 1 else None
+            V_broken = FunctionSpace(V.mesh(), BrokenElement(V.ufl_element()))
+            rho_averaged = Function(V)
+            # TODO: this will cause an error when combined with new recovery code
+            self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=V_broken, boundary_method=boundary_method)
+
+            exner = thermodynamics.exner_pressure(parameters, rho_averaged, theta)
+            T = thermodynamics.T(parameters, theta, exner, r_v=water_vapour)
+            p = thermodynamics.p(parameters, exner)
+
         else:
             raise NotImplementedError(
                 'Saturation adjustment only implemented for the Compressible Euler equations')
-
-        self.equation = equation
-        self.latent_heat = latent_heat
 
         # -------------------------------------------------------------------- #
         # Calculate saturation curve
         # -------------------------------------------------------------------- #
 
-        # TODO: work out best way to calculate amount of liquid water from
-        # active tracers. Would it be easiest if we have a self.X for the scheme
-        # and then assign x_in to that?
-        liquid_water = self.cloud_water
-
-        # need to evaluate rho at theta-points, and do this via recovery
-        h_deg = self.rho.function_space().ufl_element().degree()[0]
-        v_deg = self.rho.function_space().ufl_element().degree()[1]
-        if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
-        else:
-            boundary_method = None
-        Vt_broken = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-        rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(self.rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+        # Loop through variables to extract all liquid components
+        liquid_water = cloud_water
+        for active_tracer in equation.active_tracers:
+            if (active_tracer.phase == Phases.liquid
+                and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
+                liq_idx = equation.field_names.index(active_tracer.name)
+                liquid_water += self.X.split()[liq_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -140,13 +156,10 @@ class SaturationAdjustment(Physics):
         R_v = parameters.R_v
 
         # make useful fields
-        exner = thermodynamics.exner_pressure(parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(parameters, self.theta, exner, r_v=self.water_vapour)
-        p = thermodynamics.p(parameters, exner)
         L_v = thermodynamics.Lv(parameters, T)
-        R_m = R_d + R_v * self.water_vapour
-        c_pml = cp + c_pv * self.water_vapour + c_pl * liquid_water
-        c_vml = cv + c_vv * self.water_vapour + c_pl * liquid_water
+        R_m = R_d + R_v * water_vapour
+        c_pml = cp + c_pv * water_vapour + c_pl * liquid_water
+        c_vml = cv + c_vv * water_vapour + c_pl * liquid_water
 
         # use Teten's formula to calculate the saturation curve
         sat_expr = thermodynamics.r_sat(parameters, T, p)
@@ -155,43 +168,38 @@ class SaturationAdjustment(Physics):
         # Saturation adjustment expression
         # -------------------------------------------------------------------- #
         # make appropriate condensation rate
-        sat_adj_expr = (self.water_vapour - sat_expr) / self.dt
+        sat_adj_expr = (water_vapour - sat_expr) / self.dt
         if latent_heat:
-            # as condensation/evaporation happens, the temperature changes
+            # As condensation/evaporation happens, the temperature changes
             # so need to take this into account with an extra factor
             sat_adj_expr = sat_adj_expr / (1.0 + ((L_v ** 2.0 * sat_expr)
                                                   / (cp * R_v * T ** 2.0)))
 
         # adjust the rate so that so negative values don't occur
         sat_adj_expr = conditional(sat_adj_expr < 0,
-                                   max_value(sat_adj_expr, -self.cloud_water / self.dt),
-                                   min_value(sat_adj_expr, self.water_vapour / self.dt))
+                                   max_value(sat_adj_expr, -cloud_water / self.dt),
+                                   min_value(sat_adj_expr, water_vapour / self.dt))
+
+        # -------------------------------------------------------------------- #
+        # Factors for multiplying source for different variables
+        # -------------------------------------------------------------------- #
+
+        # Factors need to have same shape as V_idxs
+        factors = [Constant(1.0), Constant(-1.0)]
+        if latent_heat and isinstance(equation, CompressibleEulerEquations):
+            factors.append(-theta * (cv * L_v / (c_vml * cp * T) - R_v * cv * c_pml / (R_m * cp * c_vml)))
 
         # -------------------------------------------------------------------- #
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
-        self.source = Function(Vv)
+        self.source = Function(V)
         self.source_interpolator = Interpolator(sat_adj_expr, self.source)
 
-        test_cl = equation.tests[self.cloud_idx]
-        test_vap = equation.tests[self.vap_idx]
+        tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        equation.residual += physics(subject(test_vap * self.source * dx
-                                             - test_cl * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
-
-        if latent_heat:
-            self.source_theta = Function(Vt)
-            self.source_theta_interpolator = Interpolator(
-                self.theta * self.source
-                * (cv * L_v / (c_vml * cp * T) - R_v * cv * c_pml / (R_m * cp * c_vml)),
-                self.source_theta)
-
-            test_theta = equation.tests[self.theta_idx]
-
-            equation.residual += physics(subject(test_theta * self.source_theta * dx,
+        for test, factor in zip(tests, factors):
+            equation.residual += physics(subject(test * factor * self.source * dx,
                                                  equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
@@ -204,16 +212,11 @@ class SaturationAdjustment(Physics):
         """
         # Update the values of internal variables
         self.dt.assign(dt)
-        self.water_vapour.assign(x_in.split()[self.vap_idx])
-        self.cloud_water.assign(x_in.split()[self.cloud_idx])
+        self.X.assign(x_in)
         if isinstance(self.equation, CompressibleEulerEquations):
-            self.rho.assign(x_in.split()[self.rho_idx])
-            self.theta.assign(x_in.split()[self.theta_idx])
             self.rho_recoverer.project()
         # Evaluate the source
         self.source.assign(self.source_interpolator.interpolate())
-        if self.latent_heat:
-            self.source_theta.assign(self.source_theta_interpolator.interpolate())
 
 
 class AdvectedMoments(Enum):
@@ -249,65 +252,58 @@ class Fallout(Physics):
     for Cartesian geometry.
     """
 
-    def __init__(self, state, moments=AdvectedMoments.M3, limit=True):
+    def __init__(self, equation, rain_name, state, moments=AdvectedMoments.M3):
         """
         Args:
-            state (:class:`State`): the model's state object
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            rain_name (str, optional): name of the rain variable. Defaults to
+                'rain'.
+            state (:class:`State`): the model's state object.
             moments (int, optional): an :class:`AdvectedMoments` enumerator,
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
-            limit (bool, optional): whether to apply a limiter to the transport.
-                Defaults to True.
-
-        Raises:
-            NotImplementedError: the limiter is only implemented for specific
-                spaces (the equispaced DG1 field and the degree 1 temperature
-                space).
         """
-        super().__init__(state)
+        # Check that fields exist
+        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # function spaces
-        Vt = state.spaces("theta")
+        # TODO: check if variable is a mixing ratio
+
+        # Set up rain and velocity
+        self.X = Function(equation.X.function_space())
+
+        rain_idx = equation.field_names.index(rain_name)
+        rain = self.X.split()[rain_idx]
+        test = equation.tests[rain_idx]
+
         Vu = state.spaces("HDiv")
+        v = state.fields('rainfall_velocity', Vu)
 
-        # declare properties of class
-        self.state = state
+        # -------------------------------------------------------------------- #
+        # Create physics term -- which is actually a transport term
+        # -------------------------------------------------------------------- #
+
+        adv_term = advection_form(state, test, rain, outflow=True)
+        # Add rainfall velocity by replacing transport_velocity in term
+        adv_term = adv_term.label_map(identity,
+            map_if_true=lambda t: Term(ufl.replace(
+                        t.form, {t.get(transporting_velocity): v}), t.labels))
+
+        equation.residual += physics(subject(adv_term, equation.X), self.evaluate)
+
+        # -------------------------------------------------------------------- #
+        # Expressions for determining rainfall velocity
+        # -------------------------------------------------------------------- #
         self.moments = moments
-        self.v = state.fields('rainfall_velocity', Vu)
-        self.limit = limit
-
-        # determine whether to do recovered space advection scheme
-        # if horizontal and vertical degrees are 0 do recovered spac
-        h_deg = Vt.ufl_element().degree()[0]
-        v_deg = Vt.ufl_element().degree()[1] - 1
-        if v_deg == 0 and h_deg == 0:
-            VDG1 = state.spaces("DG1_equispaced")
-            VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
-            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            boundary_method = Boundary_Method.dynamics
-            advect_options = RecoveredOptions(embedding_space=VDG1,
-                                              recovered_space=VCG1,
-                                              broken_space=Vbrok,
-                                              boundary_method=boundary_method)
-        else:
-            advect_options = EmbeddedDGOptions()
-
-        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        # TODO: check if rain is a mixing ratio
-        advection_equation = AdvectionEquation(state, Vt, "rain", outflow=True)
-        self.rain = state.fields("rain")
 
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            if state.mesh.geometric_dimension() == 2:
-                self.v.project(as_vector([0, -terminal_velocity]))
-            elif state.mesh.geometric_dimension() == 3:
-                self.v.project(as_vector([0, 0, -terminal_velocity]))
+            v.project(-terminal_velocity*state.k)
         elif moments == AdvectedMoments.M3:
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
-            rho = state.fields('rho')
+            rho_idx = equation.field_names.index('rho')
+            rho = self.X.split()[rho_idx]
             rho_w = Constant(1000.0)  # density of liquid water
             # assume n(D) = n_0 * D^mu * exp(-Lambda*D)
             # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
@@ -322,10 +318,10 @@ class Fallout(Physics):
             # we keep mu in the expressions even though mu = 0
             threshold = Constant(10**-10)  # only do rainfall for r > threshold
             Lambda = (N_r * pi * rho_w * gamma(4 + mu)
-                      / (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
+                      / (6 * gamma(1 + mu) * rho * rain)) ** (1. / 3)
             Lambda0 = (N_r * pi * rho_w * gamma(4 + mu)
                        / (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
-            v_expression = conditional(self.rain > threshold,
+            v_expression = conditional(rain > threshold,
                                        (a * gamma(4 + b + mu)
                                         / (gamma(4 + mu) * Lambda ** b)
                                         * (rho0 / rho) ** g),
@@ -336,34 +332,19 @@ class Fallout(Physics):
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            # TODO: implement for spherical geometry. Raise an error if the
-            # geometry is not Cartesian
-            if state.mesh.geometric_dimension() == 2:
-                self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
-            elif state.mesh.geometric_dimension() == 3:
-                self.determine_v = Projector(as_vector([0, 0, -v_expression]), self.v)
+            self.determine_v = Projector(-v_expression*state.k, v)
 
-        # decide which limiter to use
-        if self.limit:
-            if h_deg == 0 and v_deg == 0:
-                limiter = VertexBasedLimiter(VDG1)
-            elif h_deg == 1 and v_deg == 1:
-                limiter = ThetaLimiter(Vt)
-            else:
-                logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
-                limiter = NoLimiter()
-        else:
-            limiter = None
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source/sink corresponding to the fallout process.
 
-        # sedimentation will happen using a full advection method
-        self.advection_method = SSPRK3(state, options=advect_options, limiter=limiter)
-        self.advection_method.setup(advection_equation, self.v)
-
-    def apply(self):
-        """Applies the precipitation process."""
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.apply(self.rain, self.rain)
 
 
 class Coalescence(Physics):
@@ -394,7 +375,6 @@ class Coalescence(Physics):
             accumulation (bool, optional): whether to include the accumulation
                 process in the parametrisation. Defaults to True.
         """
-
         # Check that fields exist
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
         assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
@@ -467,7 +447,7 @@ class Coalescence(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class Evaporation(Physics):
+class EvaporationOfRain(Physics):
     """
     Represents the evaporation of rain into water vapour.
 

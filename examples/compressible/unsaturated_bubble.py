@@ -208,7 +208,7 @@ transported_fields = [SSPRK3(state, "u", options=u_opts),
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define condensation
-physics_schemes = [(Fallout(state), ForwardEuler(state)),
+physics_schemes = [(Fallout(eqns, 'rain', state), SSPRK3(state, options=theta_opts, limiter=limiter)),
                    (Coalescence(eqns), ForwardEuler(state)),
                    (Evaporation(state), ForwardEuler(state)),
                    (SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
