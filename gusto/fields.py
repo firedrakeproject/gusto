@@ -137,8 +137,8 @@ class TimeLevelFields(object):
         """
         Args:
             equation (:class:`PrognosticEquation`): an equation object.
-            levels (optional, iterable): an iterable containing the names
-                of the time levels to be added
+            levels (iterable, optional): an iterable containing the names
+                of the time levels to be added. Defaults to None.
         """
         if levels is None:
             levels = self.levels
