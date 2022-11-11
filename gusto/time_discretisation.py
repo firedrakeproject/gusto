@@ -485,8 +485,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         Apply the time discretisation through a single sub-step.
 
         Args:
-            x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
         """
         pass
 
@@ -771,6 +771,25 @@ class BackwardEuler(TimeDiscretisation):
     """
     def __init__(self, state, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods. Defaults to None.
+
+        Raises:
+            NotImplementedError: if options is an instance of
+            EmbeddedDGOptions or RecoveryOptions
+        """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(state=state, field_name=field_name,
@@ -922,9 +941,24 @@ class ImplicitMidpoint(ThetaMethod):
 
 
 class MultilevelTimeDiscretisation(TimeDiscretisation):
+    """Base class for multi-level timesteppers"""
 
     def __init__(self, state, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
+        """
+        Args:
+            state (:class:`State`): the model's state object.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(state=state, field_name=field_name,
