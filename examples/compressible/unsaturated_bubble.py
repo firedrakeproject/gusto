@@ -10,7 +10,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm)
+                       FunctionSpace, VectorFunctionSpace, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -63,7 +63,6 @@ moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio", "rain_mixing_rat
 Vu = state.spaces("HDiv")
 Vt = state.spaces("theta")
 Vr = state.spaces("DG")
-Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
@@ -72,9 +71,7 @@ VDG1 = state.spaces("DG1_equispaced")
 VCG1 = FunctionSpace(mesh, "CG", 1)
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
-Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-physics_boundary_method = Boundary_Method.physics
+physics_boundary_method = BoundaryMethod.extruded
 
 # Define constant theta_e and water_t
 Tsurf = 283.0
@@ -114,8 +111,7 @@ H.assign(H + H_pert)
 # now need to find perturbed rho, theta_vd and r_v
 # follow approach used in unsaturated hydrostatic setup
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok,
-                          boundary_method=physics_boundary_method)
+rho_recoverer = Recoverer(rho0, rho_averaged, boundary_method=physics_boundary_method)
 rho_h = Function(Vr)
 w_h = Function(Vt)
 delta = 1.0
@@ -184,17 +180,13 @@ state.set_reference_profiles([('rho', rho_b),
                               ('vapour_mixing_ratio', water_vb)])
 
 # Set up transport schemes
-u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                          recovered_space=Vu_CG1,
-                          broken_space=Vu_brok,
-                          boundary_method=Boundary_Method.dynamics)
-rho_opts = RecoveredOptions(embedding_space=VDG1,
-                            recovered_space=VCG1,
-                            broken_space=Vr,
-                            boundary_method=Boundary_Method.dynamics)
-theta_opts = RecoveredOptions(embedding_space=VDG1,
-                              recovered_space=VCG1,
-                              broken_space=Vt_brok)
+u_opts = RecoveryOptions(embedding_space=Vu_DG1,
+                         recovered_space=Vu_CG1,
+                         boundary_method=BoundaryMethod.taylor)
+rho_opts = RecoveryOptions(embedding_space=VDG1,
+                           recovered_space=VCG1,
+                           boundary_method=BoundaryMethod.taylor)
+theta_opts = RecoveryOptions(embedding_space=VDG1, recovered_space=VCG1)
 limiter = VertexBasedLimiter(VDG1)
 
 transported_fields = [SSPRK3(state, "u", options=u_opts),
