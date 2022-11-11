@@ -136,6 +136,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     """
     Implements a semi-implicit quasi-Newton discretisation,
     with Strang splitting and auxilliary semi-Lagrangian transport.
+
+    The timestep consists of an outer loop applying the transport and an
+    inner loop to perform the quasi-Newton interations for the fast-wave
+    terms.
     """
 
     def __init__(self, equation_set, state, transport_schemes,
