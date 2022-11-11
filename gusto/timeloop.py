@@ -164,8 +164,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             diffusion_schemes: optional iterable of ``(field_name, scheme)``
                 pairs indicating the fields to diffuse, and the
                 :class:`~.Diffusion` to use. Defaults to None.
-            physics_list: optional list of classes that implement `physics`
-                schemes. Defaults to None.
+            physics_list: (list, optional): a list of :class:`Physics`
+                options describing physical parametrisations. Defaults to None.
 
         :kwargs: maxk is the number of outer iterations, maxi is the number
             of inner iterations and alpha is the offcentering parameter
@@ -352,10 +352,14 @@ class PrescribedTransport(Timestepper):
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             state (:class:`State`): the model's state object
-            physics_list: optional list of classes that implement `physics`
-                schemes
-            prescribed_transporting_velocity: (optional) expression specifying
-                the prescribed transporting velocity
+            physics_list: (list, optional): a list of :class:`Physics`
+                options describing physical parametrisations. Defaults to None.
+            prescribed_transporting_velocity (func, optional): a function,
+                with a single argument representing the time, that returns a
+                :class:`ufl.Expr` for the transporting velocity. This allows
+                the transporting velocity field to be updated with time. If
+                `None` is provided then the equation's velocity field is not
+                updated. Defaults to None.
         """
 
         super().__init__(equation, scheme, state)
