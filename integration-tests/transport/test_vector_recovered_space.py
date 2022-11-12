@@ -9,8 +9,8 @@ from firedrake import (as_vector, VectorFunctionSpace, norm)
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(eqn, transport_scheme, state, tmax, f_end):
+    timestepper = PrescribedTransport(eqn, transport_scheme, state)
     timestepper.run(0, tmax)
 
     return norm(state.fields("f") - f_end) / norm(f_end)
@@ -48,11 +48,11 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     state.fields("f").project(f_init)
     state.fields("u").project(setup.uexpr)
 
-    transport_scheme = [(eqn, SSPRK3(state, options=rec_opts))]
+    transport_scheme = SSPRK3(state, options=rec_opts)
 
     f_end = as_vector([setup.f_end]*gdim)
 
     # Run and check error
-    error = run(state, transport_scheme, setup.tmax, f_end)
+    error = run(eqn, transport_scheme, state, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

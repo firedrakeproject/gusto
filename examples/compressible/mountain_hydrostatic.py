@@ -171,8 +171,8 @@ linear_solver = CompressibleSolver(state, eqns, alpha, solver_parameters=params,
                                    overwrite_solver_parameters=True)
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver,
-                        alpha=alpha)
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+                                  linear_solver=linear_solver,
+                                  alpha=alpha)
 
 stepper.run(t=0, tmax=tmax)

@@ -8,8 +8,8 @@ from gusto import *
 from firedrake import sin, cos, norm, pi, as_vector
 
 
-def run(state, transport_scheme, tmax, f_end, prescribed_u):
-    timestepper = PrescribedTransport(state, transport_scheme,
+def run(eqn, transport_scheme, state, tmax, f_end, prescribed_u):
+    timestepper = PrescribedTransport(eqn, transport_scheme, state,
                                       prescribed_transporting_velocity=prescribed_u)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end) / norm(f_end)
@@ -36,9 +36,10 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(u_evaluation(Constant(0.0)))
 
-    transport_scheme = [(eqn, SSPRK3(state))]
+    transport_scheme = SSPRK3(state)
 
     # Run and check error
-    error = run(state, transport_scheme, setup.tmax, setup.f_init, u_evaluation)
+    error = run(eqn, transport_scheme, state, setup.tmax,
+                setup.f_init, u_evaluation)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

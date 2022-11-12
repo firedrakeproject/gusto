@@ -80,6 +80,6 @@ for ref_level, dt in ref_dt.items():
                           SSPRK3(state, "D")]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields)
 
     stepper.run(t=0, tmax=tmax)

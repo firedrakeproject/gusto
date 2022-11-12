@@ -204,8 +204,8 @@ physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
                 Condensation(state)]
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver,
-                        physics_list=physics_list)
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+                                  linear_solver=linear_solver,
+                                  physics_list=physics_list)
 
 stepper.run(t=0, tmax=tmax)
