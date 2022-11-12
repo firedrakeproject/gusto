@@ -132,7 +132,6 @@ class SaturationAdjustment(Physics):
         # -------------------------------------------------------------------- #
         # Calculate saturation curve
         # -------------------------------------------------------------------- #
-
         # Loop through variables to extract all liquid components
         liquid_water = cloud_water
         for active_tracer in equation.active_tracers:
@@ -179,7 +178,6 @@ class SaturationAdjustment(Physics):
         # -------------------------------------------------------------------- #
         # Factors for multiplying source for different variables
         # -------------------------------------------------------------------- #
-
         # Factors need to have same shape as V_idxs
         factors = [Constant(1.0), Constant(-1.0)]
         if latent_heat and isinstance(equation, CompressibleEulerEquations):
@@ -188,14 +186,15 @@ class SaturationAdjustment(Physics):
         # -------------------------------------------------------------------- #
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
-        self.source = Function(V)
-        self.source_interpolator = Interpolator(sat_adj_expr, self.source)
+        self.source = [Function(V) for factor in factors]
+        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+                                     for factor, source in zip(factors, self.source)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, factor in zip(tests, factors):
-            equation.residual += physics(subject(test * factor * self.source * dx,
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
                                                  equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
@@ -212,7 +211,9 @@ class SaturationAdjustment(Physics):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        self.source.assign(self.source_interpolator.interpolate())
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()
+        # self.source.assign(self.source_interpolator.interpolate())
 
 
 class AdvectedMoments(Enum):
@@ -522,7 +523,6 @@ class EvaporationOfRain(Physics):
         # -------------------------------------------------------------------- #
         # Calculate saturation curve
         # -------------------------------------------------------------------- #
-
         # Loop through variables to extract all liquid components
         liquid_water = rain
         for active_tracer in equation.active_tracers:
@@ -575,7 +575,6 @@ class EvaporationOfRain(Physics):
         # -------------------------------------------------------------------- #
         # Factors for multiplying source for different variables
         # -------------------------------------------------------------------- #
-
         # Factors need to have same shape as V_idxs
         factors = [Constant(-1.0), Constant(1.0)]
         if latent_heat and isinstance(equation, CompressibleEulerEquations):
@@ -584,14 +583,15 @@ class EvaporationOfRain(Physics):
         # -------------------------------------------------------------------- #
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
-        self.source = Function(V)
-        self.source_interpolator = Interpolator(evap_rate, self.source)
+        self.source = [Function(V) for factor in factors]
+        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+                                     for factor, source in zip(factors, self.source)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, factor in zip(tests, factors):
-            equation.residual += physics(subject(test * factor * self.source * dx,
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
                                                  equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
