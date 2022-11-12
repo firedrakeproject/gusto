@@ -16,7 +16,7 @@ from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, BrokenElement,
-                       FunctionSpace, Constant, pi, Projector, exp)
+                       FunctionSpace, Constant, pi, Projector)
 from gusto import thermodynamics
 import ufl
 from math import gamma
@@ -24,7 +24,7 @@ from enum import Enum
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
-           "AdvectedMoments", "InstantRain", "BouchutForcing"]
+           "AdvectedMoments", "InstantRain"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -613,100 +613,119 @@ class EvaporationOfRain(Physics):
 
 class InstantRain(object):
     """
-    The process of converting moisture above the saturation curve to rain.
-    :arg equation: the equation set to apply the scheme to
-    :arg saturation_curve: the saturation function,
-        above which excess moisture is converted to
-        rain
-    """
+    The process of converting vapour above the saturation curve to rain.
 
-    def __init__(self, equation, saturation_curve, vapour="water_v"):
+    A scheme to move vapour directly to rain. If convective feedback is true
+    then this process feeds back directly on the height equation. If rain is
+    accumulating then excess vapour is being tracked and stored as rain;
+    otherwise converted vapour is not recorded. The process can happen over the
+    timestep dt or over a specified time interval tau.
+     """
 
-        assert vapour in equation.field_names, f"Field {vapour} does not exist in the equation set"
-        self.Vm_idx = equation.field_names.index(vapour)
-        Vr_idx = equation.field_names.index("rain")
+    def __init__(self, equation, saturation_curve, vapour="water_v", rain=None,
+                 parameters=None, convective_feedback=False,
+                 set_tau_to_dt=False):
+        """
+        Args:
+            equation (:class: 'equation'): the equation set to apply the scheme
+                to.
+            saturation_curve (function): the saturation function, above which
+                excess moisture is converted.
+            vapour (str, optional): a string for the name of the field that is
+                being converted from. Defaults to "water_v".
+            rain (str, optional): a string for the name of the field that is
+                being converted to. Defaults to None.
+            parameters (list, optional): equation parameters. Defaults to None
+                but required if convective_feedback is True.
+            convective_feedback (flag, optional): True if the conversion of
+                vapour affects the height equation. Defaults to False.
+            set_tau_to_dt (flag, optional): True if the timescale for the
+                conversion is equal to the timestep and False if not. If False
+                then the user must provide a timescale, tau, that gets passed to
+                the parameters list.
+        """
 
-        # obtain function space and functions
+        self.convective_feedback = convective_feedback
+        self.set_tau_to_dt = set_tau_to_dt
+
+        # check for the correct fields
+        assert vapour in equation.field_names, f"Field {vapour} does not exist"
+        self.Vv_idx = equation.field_names.index(vapour)
+
+        if rain is not None:
+            assert rain in equation.field_names, f"Field {rain} does not exist"
+
+        if self.convective_feedback:
+            assert "D" in equation.field_names, "Depth field must exist for convective feedback"
+            assert parameters is not None, "You must provide parameters for convective feedback"
+
+        # obtain function space and functions; vapour needed for all cases
         W = equation.function_space
-        Vm = W.sub(self.Vm_idx)
-        Vr = W.sub(Vr_idx)
+        Vv = W.sub(self.Vv_idx)
+        test_v = equation.tests[self.Vv_idx]
 
-        # the source function is the difference between the water
-        # vapour and the saturation
-        self.water_v = Function(Vm)
-        self.source = Function(Vm)
-        self.dt = Constant(0.0)
+        # depth needed if convetive feedback
+        if self.convective_feedback:
+            self.VD_idx = equation.field_names.index("D")
+            VD = W.sub(self.VD_idx)
+            test_D = equation.tests[self.VD_idx]
+            self.D = Function(VD)
 
-        test_m = equation.tests[self.Vm_idx]
-        test_r = equation.tests[Vr_idx]
-        equation.residual += physics(subject(test_m * self.source * dx
-                                             - test_r * self.source * dx,
+        # the source function is the difference between the water vapour and
+        # the saturation function
+        self.water_v = Function(Vv)
+        self.source = Function(Vv)
+
+        # tau is the timescale for conversion (may or may not be the timestep)
+        if self.set_tau_to_dt:
+            self.tau = Constant(0)
+        else:
+            assert parameters.tau is not None, "If the relaxation timescale is not dt then you must specify tau"
+            self.tau = parameters.tau
+
+        # lose vapour above the saturation curve
+        equation.residual += physics(subject(test_v * self.source * dx,
                                              equation.X),
                                      self.evaluate)
 
-        # convert moisture above saturation curve to rain
+        # if rain is not none then the excess vapour is being tracked and is
+        # added to rain
+        if rain is not None:
+            Vr_idx = equation.field_names.index(rain)
+            test_r = equation.tests[Vr_idx]
+            equation.residual -= physics(subject(test_r * self.source * dx,
+                                                 equation.X),
+                                         self.evaluate)
+
+        # if feeding back on the height adjust the height equation
+        if convective_feedback:
+            test_D = equation.tests[self.VD_idx]
+            gamma = parameters.gamma
+            equation.residual += physics(subject
+                                         (test_D * gamma * self.source * dx,
+                                          equation.X),
+                                         self.evaluate)
+
+        # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
             self.water_v > saturation_curve,
-            (1/self.dt)*(self.water_v - saturation_curve),
-            0), Vm)
+            (1/self.tau)*(self.water_v - saturation_curve),
+            0), Vv)
 
     def evaluate(self, x_in, dt):
-        self.dt.assign(dt)
-        self.water_v.assign(x_in.split()[self.Vm_idx])
+        """
+        Evalutes the source term generated by the physics.
+
+        Computes the physics contributions (loss of vapour, accumulation of
+        rain and loss of height due to convection) at each timestep.
+
+        Args:
+            x_in: the current state of the state vector X
+            dt: the timestep
+        """
+        if self.convective_feedback:
+            self.D.assign(x_in.split()[self.VD_idx])
+        if self.set_tau_to_dt:
+            self.tau.assign(dt)
+        self.water_v.assign(x_in.split()[self.Vv_idx])
         self.source.assign(self.source_interpolator.interpolate())
-
-
-class BouchutForcing(object):
-    """
-    Forcing for the version of the moist shallow water equations described in
-    Bouchut et al (2009). Condenstation is a sink in the moisture equation and
-    feeds back on directly on the height equation.
-    :arg state: :class:`.State.` object.
-    :arg parameters: the ConvectiveMoistShallowWaterParameters
-    """
-    def __init__(self, equation, parameters):
-
-        # store moist shallow water parameters
-        alpha = parameters.alpha
-        q_0 = parameters.q_0
-        H = parameters.H
-        tau = parameters.tau
-        gamma = parameters.gamma
-
-        # obtain function spaces and functions
-        W = equation.function_space
-        self.VD_idx = equation.field_names.index("D")
-        self.VQ_idx = equation.field_names.index("Q")
-        VD = W.sub(self.VD_idx)
-        VQ = W.sub(self.VQ_idx)
-
-        self.source = Function(VD)
-        self.Q = Function(VQ)
-        self.D = Function(VD)
-
-        # test functions
-        test_D = equation.tests[self.VD_idx]
-        test_Q = equation.tests[self.VQ_idx]
-
-        equation.residual += physics(subject
-                                     (
-                                         + gamma * test_D * self.source * dx
-                                         + test_Q * self.source * dx,
-                                         equation.X),
-                                     self.evaluate)
-
-        # define saturation function based on parameters
-        q_s = q_0 * exp(-alpha*(self.D-H)/H)
-        self.saturation = Function(VD)
-
-        self.source_interpolator = Interpolator(conditional(
-            self.Q > q_s, (self.Q - q_s) * (self.Q - q_s)/tau, 0), VQ)
-        # self.saturation_interpolator = Interpolator(q_s, VD)
-        # self.outfile = File("saturation.pvd")
-
-    def evaluate(self, x_in, dt):
-        self.Q.assign(x_in.split()[self.VQ_idx])
-        self.D.assign(x_in.split()[self.VD_idx])
-        self.source.assign(self.source_interpolator.interpolate())
-        # self.saturation.assign(self.saturation_interpolator.interpolate())
-        # self.outfile.write(self.saturation)
