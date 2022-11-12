@@ -208,7 +208,8 @@ transported_fields = [SSPRK3(state, "u", options=u_opts),
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define physics schemes
-physics_schemes = [(Fallout(eqns, 'rain', state), SSPRK3(state, options=theta_opts, limiter=limiter)),
+# NB: to use wrapper options with Fallout, need to pass field name to time discretisation
+physics_schemes = [(Fallout(eqns, 'rain', state), SSPRK3(state, field_name='rain', options=theta_opts, limiter=limiter)),
                    (Coalescence(eqns), ForwardEuler(state)),
                    (EvaporationOfRain(eqns, params), ForwardEuler(state)),
                    (SaturationAdjustment(eqns, params), ForwardEuler(state))]

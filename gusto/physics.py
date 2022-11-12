@@ -213,7 +213,6 @@ class SaturationAdjustment(Physics):
         # Evaluate the source
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
-        # self.source.assign(self.source_interpolator.interpolate())
 
 
 class AdvectedMoments(Enum):
@@ -584,7 +583,7 @@ class EvaporationOfRain(Physics):
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
         self.source = [Function(V) for factor in factors]
-        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+        self.source_interpolators = [Interpolator(evap_rate*factor, source)
                                      for factor, source in zip(factors, self.source)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
@@ -608,7 +607,8 @@ class EvaporationOfRain(Physics):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        self.source.assign(self.source_interpolator.interpolate())
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()
 
 
 class InstantRain(object):
