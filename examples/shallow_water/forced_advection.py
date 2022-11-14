@@ -3,9 +3,9 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi,
                        FiniteElement, as_vector)
 
-tophat = False
+tophat = True
 triangle = False
-trig = True
+trig = False
 
 u_max = 1
 if tophat:
@@ -25,11 +25,11 @@ else:
     tmax = 55
 
 if tophat:
-    dirname = "forced_advection_hat"
+    dirname = "forced_advection_hat_temp"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "forced_advection_trig_temp"
+    dirname = "forced_advection_trig"
 
 dt = 0.005
 delta_x = 0.05
@@ -69,10 +69,10 @@ msat.interpolate(msat_expr)
 
 # set up advection equation
 rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
-meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
+meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
                                active_tracers=[rain])
 state.fields("u").project(as_vector([u_max]))
-state.fields("water_v").project(mexpr)
+state.fields("water_vapour").project(mexpr)
 
 # exact rainfall profile (analytically)
 r_exact = state.fields("r_exact", VD)
@@ -94,15 +94,15 @@ r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
 # add instant rain forcing
-physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio",
+physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
                                 set_tau_to_dt=True), ForwardEuler(state))]
-# InstantRain(meqn, msat, rain="rain_mixing_ratio")
+# InstantRain(meqn, msat, rain_name="rain_mixing_ratio")
 
 # build time stepper
 # stepper = PrescribedTransport(state,
 #                               ((meqn, RK4(state)),))
 stepper = PrescribedTransport(state,
-                              ((meqn, RK4(state,)),),
+                              ((meqn, RK4(state)),),
                               physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=5*dt)

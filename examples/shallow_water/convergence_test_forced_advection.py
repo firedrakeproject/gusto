@@ -2,7 +2,6 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi, plot,
                        FiniteElement, as_vector, errornorm)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -82,10 +81,10 @@ for dx, dt in dx_dt.items():
 
     # set up advection equation
     rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
-    meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
+    meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
     state.fields("u").project(as_vector([u_max]))
-    state.fields("water_v").project(mexpr)
+    state.fields("water_vapour").project(mexpr)
 
     # exact rainfall profile (analytically)
     r_exact = state.fields("r_exact", VD)
@@ -107,12 +106,12 @@ for dx, dt in dx_dt.items():
     r_exact.interpolate(r_expr)
 
     # add instant rain forcing
-    [InstantRain(meqn, msat, rain="rain_mixing_ratio")]
-    # physics_schemes = [(InstantRain(meqn, msat, rain="rain_mixing_ratio"), ForwardEuler(state))]
+    [InstantRain(meqn, msat, rain_name="rain_mixing_ratio", set_tau_to_dt=True)]
+    # physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio"), ForwardEuler(state))]
 
     # build time stepper
     stepper = PrescribedTransport(state,
-                                   ((meqn, RK4(state)),))
+                                  ((meqn, RK4(state)),))
     # stepper = PrescribedTransport(state,
     #                               ((meqn, ((RK4(state), transport),)),),
     #                               physics_schemes=physics_schemes)
