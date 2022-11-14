@@ -10,7 +10,7 @@ with "apply" methods.
 from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, Boundary_Method
-from gusto.equations import  CompressibleEulerEquations
+from gusto.equations import CompressibleEulerEquations
 from gusto.transport_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
@@ -101,7 +101,7 @@ class SaturationAdjustment(Physics):
 
         # Indices of variables in mixed function space
         V_idxs = [vap_idx, cloud_idx]
-        V = equation.function_space.sub(vap_idx) # space in which to do the calculation
+        V = equation.function_space.sub(vap_idx)  # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
         if isinstance(equation, CompressibleEulerEquations):
@@ -136,7 +136,7 @@ class SaturationAdjustment(Physics):
         liquid_water = cloud_water
         for active_tracer in equation.active_tracers:
             if (active_tracer.phase == Phases.liquid
-                and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
+                    and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
                 liquid_water += self.X.split()[liq_idx]
 
@@ -281,8 +281,9 @@ class Fallout(Physics):
         adv_term = advection_form(state, test, rain, outflow=True)
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
-            map_if_true=lambda t: Term(ufl.replace(
-                        t.form, {t.get(transporting_velocity): v}), t.labels))
+                                      map_if_true=lambda t: Term(
+                                          ufl.replace(t.form, {t.get(transporting_velocity): v}),
+                                          t.labels))
 
         equation.residual += physics(subject(adv_term, equation.X), self.evaluate)
 
@@ -495,7 +496,7 @@ class EvaporationOfRain(Physics):
 
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
-        V = equation.function_space.sub(rain_idx) # space in which to do the calculation
+        V = equation.function_space.sub(rain_idx)  # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
         if isinstance(equation, CompressibleEulerEquations):
@@ -526,7 +527,7 @@ class EvaporationOfRain(Physics):
         liquid_water = rain
         for active_tracer in equation.active_tracers:
             if (active_tracer.phase == Phases.liquid
-                and active_tracer.chemical == 'H2O' and active_tracer.name != rain_name):
+                    and active_tracer.chemical == 'H2O' and active_tracer.name != rain_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
                 liquid_water += self.X.split()[liq_idx]
 
@@ -563,8 +564,8 @@ class EvaporationOfRain(Physics):
         f = Constant(5.4e5)
         g = Constant(2.55e6)
         h = Constant(0.525)
-        evap_rate = ((1 - water_vapour / sat_expr) * C * (rho_averaged * rain) ** h) \
-                      / (rho_averaged * (f + g / (p * sat_expr)))
+        evap_rate = (((1 - water_vapour / sat_expr) * C * (rho_averaged * rain) ** h)
+                     / (rho_averaged * (f + g / (p * sat_expr))))
 
         # adjust evap rate so negative rain doesn't occur
         evap_rate = conditional(evap_rate < 0, 0.0,
