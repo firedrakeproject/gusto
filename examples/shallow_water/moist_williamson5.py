@@ -17,7 +17,7 @@ H = 5960.
 
 # set up mesh
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=3)
+                             refinement_level=3, degree=1)
 x = SpatialCoordinate(mesh)
 mesh.init_cell_orientations(x)
 
@@ -31,14 +31,14 @@ q_g = 3
 parameters = ConvectiveMoistShallowWaterParameters(H=H, gamma=gamma, tau=tau,
                                                    q_0=q_0, alpha=alpha)
 
-dirname = "moist_williamson5_check_conservative"
+dirname = "moist_williamson5_conservative_IR"
 
 ndumps = 50
 dumpfreq = int(tmax / (ndumps*dt))
 
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D'],
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           log_level='INFO')
 
 diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
@@ -93,9 +93,13 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 Q0.interpolate(conditional(r1 < br, 3*q1expr, b))
 
+# define saturation function
+saturation = q_0 * exp(-alpha*(state.fields("D")-H)/H)
 
 # Add Bouchut condensation forcing
-BouchutForcing(eqns, parameters)
+InstantRain(eqns, saturation, vapour_name="Q_mixing_ratio",
+            parameters=parameters, convective_feedback=True)
+# BouchutForcing(eqns, parameters)
 #physics_schemes = [(BouchutForcing(eqns, parameters), ForwardEuler(state))]
 
 # Build time stepper
@@ -104,6 +108,6 @@ stepper = Timestepper(state, ((eqns, RK4(state)),))
 #			((eqns, ((SSPRK3(state), transport),)),),
 #                       physics_schemes=physics_schemes)
 
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=tmax)
 
 
