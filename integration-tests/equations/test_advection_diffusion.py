@@ -25,9 +25,6 @@ def run_advection_diffusion(tmpdir):
     equation = AdvectionDiffusionEquation(state, V, "f", Vu=Vu,
                                           diffusion_parameters=diffusion_params)
 
-    problem = [(equation, ((SSPRK3(state), transport),
-                           (BackwardEuler(state), diffusion)))]
-
     # Initial conditions
     x = SpatialCoordinate(mesh)
     xc_init = 0.25*L
@@ -53,7 +50,7 @@ def run_advection_diffusion(tmpdir):
     f_end = state.fields('f_end', V).interpolate(f_end_expr)
 
     # Time stepper
-    timestepper = PrescribedTransport(state, problem)
+    timestepper = PrescribedTransport(equation, SSPRK3(state), state)
     timestepper.run(0, tmax=tmax)
 
     error = norm(state.fields('f') - f_end) / norm(f_end)
@@ -63,7 +60,7 @@ def run_advection_diffusion(tmpdir):
 
 def test_advection_diffusion(tmpdir):
 
-    tol = 0.01
+    tol = 0.015
     error = run_advection_diffusion(tmpdir)
     assert error < tol, 'The error in the advection-diffusion ' + \
         'equation is greater than the permitted tolerance'

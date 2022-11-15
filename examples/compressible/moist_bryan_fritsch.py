@@ -12,8 +12,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        NonlinearVariationalProblem,
                        NonlinearVariationalSolver, TestFunction, dx,
                        TrialFunction, Function,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, BrokenElement)
+                       LinearVariationalProblem, LinearVariationalSolver)
 import sys
 
 dt = 1.0
@@ -109,16 +108,11 @@ rho_problem = LinearVariationalProblem(a, L, rho0)
 rho_solver = LinearVariationalSolver(rho_problem)
 rho_solver.solve()
 
-physics_boundary_method = None
-
 # find perturbed water_v
 w_v = Function(Vt)
 phi = TestFunction(Vt)
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(
-    rho0, rho_averaged,
-    VDG=FunctionSpace(mesh, BrokenElement(Vt.ufl_element())),
-    boundary_method=physics_boundary_method)
+rho_recoverer = Recoverer(rho0, rho_averaged)
 rho_recoverer.project()
 
 exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
@@ -155,8 +149,8 @@ linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 physics_schemes = [(SaturationAdjustment(eqns, params), ForwardEuler(state))]
 
 # build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver,
-                        physics_schemes=physics_schemes)
+stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+                                  linear_solver=linear_solver,
+                                  physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=tmax)

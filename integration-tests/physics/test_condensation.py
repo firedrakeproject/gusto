@@ -27,7 +27,6 @@ def run_cond_evap(dirname, process):
     x, z = SpatialCoordinate(mesh)
 
     dt = 2.0
-    tmax = dt
     output = OutputParameters(dirname=dirname+"/cond_evap",
                               dumpfreq=1,
                               dumplist=['u'])
@@ -87,15 +86,14 @@ def run_cond_evap(dirname, process):
     rho0.interpolate(pressure / (temperature*parameters.R_d * (1 + water_v0 * parameters.R_v / parameters.R_d)))
     mc_init = Function(Vt).assign(water_c0)
 
-    # Have empty problem as only thing is condensation / evaporation
-    problem = ((eqn, ()),)
     physics_schemes = [(SaturationAdjustment(eqn, parameters), ForwardEuler(state))]
 
     # build time stepper
-    stepper = PrescribedTransport(state, problem,
+    scheme = ForwardEuler(state)
+    stepper = PrescribedTransport(eqn, scheme, state,
                                   physics_schemes=physics_schemes)
 
-    stepper.run(t=0, tmax=tmax)
+    stepper.run(t=0, tmax=dt)
 
     return state, mv_true, mc_true, theta_d_true, mc_init
 

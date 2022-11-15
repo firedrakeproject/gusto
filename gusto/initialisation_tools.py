@@ -7,10 +7,10 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     sin, cos, sqrt, asin, atan_2, as_vector, Min, Max, FunctionSpace, \
-    BrokenElement, errornorm, zero
+    errornorm, zero
 from gusto import thermodynamics
 from gusto.configuration import logger
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
@@ -341,13 +341,12 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
 
     v_deg = Vr.ufl_element().degree()[1]
     if v_deg == 0:
-        boundary_method = Boundary_Method.physics
+        boundary_method = BoundaryMethod.extruded
     else:
         boundary_method = None
     rho_h = Function(Vr)
-    Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
     rho_averaged = Function(Vt)
-    rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+    rho_recoverer = Recoverer(rho0, rho_averaged, boundary_method=boundary_method)
     w_h = Function(Vt)
     theta_h = Function(Vt)
     theta_e_test = Function(Vt)
@@ -471,13 +470,12 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
 
     v_deg = Vr.ufl_element().degree()[1]
     if v_deg == 0:
-        method = Boundary_Method.physics
+        method = BoundaryMethod.extruded
     else:
         method = None
     rho_h = Function(Vr)
     rho_averaged = Function(Vt)
-    Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
-    rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_broken, boundary_method=method)
+    rho_recoverer = Recoverer(rho0, rho_averaged, boundary_method=method)
     w_h = Function(Vt)
     delta = 1.0
 

@@ -40,7 +40,7 @@ def setup_fallout(dirname):
     active_tracers = [Rain(space='DG1_equispaced')]
     eqn = ForcedAdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1,
                                   active_tracers=active_tracers)
-    problem = [(eqn, ForwardEuler(state))]
+    scheme = ForwardEuler(state)
     state.fields("rho").assign(1.)
 
     physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state))]
@@ -56,8 +56,8 @@ def setup_fallout(dirname):
     rain0.interpolate(rain_expr)
 
     # build time stepper
-    stepper = PrescribedTransport(state, problem,
-                                  physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(eqn, scheme, state,
+                                  physics_scheme=physics_schemes)
 
     return stepper, 10.0
 

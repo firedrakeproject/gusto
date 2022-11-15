@@ -63,8 +63,8 @@ def run_dry_compressible(tmpdir):
     linear_solver = CompressibleSolver(state, eqn)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqn, transported_fields,
-                            linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(eqn, state, transported_fields,
+                                      linear_solver=linear_solver)
 
     # Run
     stepper.run(t=0, tmax=tmax)
@@ -76,7 +76,7 @@ def run_dry_compressible(tmpdir):
                                     checkpoint_pickup_filename=new_path)
     check_state = State(mesh, dt=dt, output=check_output, parameters=parameters)
     check_eqn = CompressibleEulerEquations(check_state, "CG", 1)
-    check_stepper = CrankNicolson(check_state, check_eqn, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_state, [])
     check_stepper.run(t=0, tmax=0, pickup=True)
 
     return state, check_state
