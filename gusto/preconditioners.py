@@ -1,13 +1,12 @@
 """A module containing specialised preconditioners for Gusto applications."""
 
-import numpy as np
-from firedrake import (dot, jump, dx, dS_h, ds_b, ds_t, ds,
+from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
-from firedrake.parloops import par_loop, READ, INC
+from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from pyop2.profiling import timed_region, timed_function
 from pyop2.utils import as_tuple
 
@@ -111,28 +110,13 @@ class VerticalHybridizationPC(PCBase):
         self.unbroken_solution = Function(V)
         self.unbroken_residual = Function(V)
 
-        # Set up transfer kernels to and from the broken velocity space
-        # NOTE: Since this snippet of code is used in a couple places in
-        # in Gusto, might be worth creating a utility function that is
-        # is importable and just called where needed.
-        # TODO: call these kernels from elsewhere
-        shapes = {"i": Vv.finat_element.space_dimension(),
-                  "j": np.prod(Vv.shape, dtype=int)}
-        weight_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                w[i*{j} + j] += 1.0;
-        """.format(**shapes)
-
+        weight_kernel = AverageWeightings(Vv)
         self.weight = Function(Vv)
-        par_loop(weight_kernel, dx, {"w": (self.weight, INC)})
+        weight_kernel.apply(self.weight)
 
         # Averaging kernel
-        self.average_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                vec_out[i*{j} + j] += vec_in[i*{j} + j]/w[i*{j} + j];
-        """.format(**shapes)
+        self.average_kernel = AverageKernel(Vv)
+
         # Original mixed operator replaced with "broken" arguments
         arg_map = {test: TestFunction(V_d),
                    trial: TrialFunction(V_d)}
@@ -347,10 +331,7 @@ class VerticalHybridizationPC(PCBase):
             unbroken_res_hdiv = self.unbroken_residual.split()[self.vidx]
             broken_res_hdiv = self.broken_residual.split()[self.vidx]
             broken_res_hdiv.assign(0)
-            par_loop(self.average_kernel, dx,
-                     {"w": (self.weight, READ),
-                      "vec_in": (unbroken_res_hdiv, READ),
-                      "vec_out": (broken_res_hdiv, INC)})
+            self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
             # Compute the rhs for the multiplier system
             self._assemble_Srhs()
@@ -379,10 +360,7 @@ class VerticalHybridizationPC(PCBase):
             unbroken_hdiv = self.unbroken_solution.split()[self.vidx]
             unbroken_hdiv.assign(0)
 
-            par_loop(self.average_kernel, dx,
-                     {"w": (self.weight, READ),
-                      "vec_in": (broken_hdiv, READ),
-                      "vec_out": (unbroken_hdiv, INC)})
+            self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)
 
             with self.unbroken_solution.dat.vec_ro as v:
                 v.copy(y)

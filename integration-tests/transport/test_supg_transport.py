@@ -8,8 +8,8 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(eqn, transport_scheme, state, tmax, f_end):
+    timestepper = PrescribedTransport(eqn, transport_scheme, state)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end) / norm(f_end)
 
@@ -41,11 +41,11 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
-        transport_scheme = [(eqn, SSPRK3(state, options=opts))]
+        transport_scheme = SSPRK3(state, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
+        transport_scheme = ImplicitMidpoint(state, options=opts)
 
-    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    error = run(eqn, transport_scheme, state, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
@@ -83,11 +83,11 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
         f.project(f_init)
     state.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
-        transport_scheme = [(eqn, SSPRK3(state, options=opts))]
+        transport_scheme = SSPRK3(state, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = [(eqn, ImplicitMidpoint(state, options=opts))]
+        transport_scheme = ImplicitMidpoint(state, options=opts)
 
     f_end = as_vector([setup.f_end]*gdim)
-    error = run(state, transport_scheme, setup.tmax, f_end)
+    error = run(eqn, transport_scheme, state, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

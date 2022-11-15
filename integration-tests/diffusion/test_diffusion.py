@@ -8,9 +8,9 @@ from firedrake import (VectorFunctionSpace, Constant, as_vector, errornorm)
 import pytest
 
 
-def run(state, diffusion_scheme, tmax):
+def run(equation, diffusion_scheme, state, tmax):
 
-    timestepper = Timestepper(state, diffusion_scheme)
+    timestepper = Timestepper(equation, diffusion_scheme, state)
     timestepper.run(0., tmax)
     return timestepper.state.fields("f")
 
@@ -38,10 +38,10 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
     eqn = DiffusionEquation(state, V, "f",
                             diffusion_parameters=diffusion_params)
 
-    diffusion_scheme = [(eqn, BackwardEuler(state))]
+    diffusion_scheme = BackwardEuler(state)
 
     state.fields("f").interpolate(f_init)
-    f_end = run(state, diffusion_scheme, tmax)
+    f_end = run(eqn, diffusion_scheme, state, tmax)
     assert errornorm(f_end_expr, f_end) < tol
 
 
@@ -76,7 +76,7 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
     else:
         state.fields("f").project(f_init)
 
-    diffusion_scheme = [(eqn, BackwardEuler(state))]
+    diffusion_scheme = BackwardEuler(state)
 
-    f_end = run(state, diffusion_scheme, tmax)
+    f_end = run(eqn, diffusion_scheme, state, tmax)
     assert errornorm(f_end_expr, f_end) < tol

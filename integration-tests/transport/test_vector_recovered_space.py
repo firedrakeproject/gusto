@@ -5,13 +5,12 @@ is working correctly.
 """
 
 from gusto import *
-from firedrake import (as_vector, FunctionSpace, VectorFunctionSpace,
-                       BrokenElement, norm)
+from firedrake import (as_vector, VectorFunctionSpace, norm)
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(eqn, transport_scheme, state, tmax, f_end):
+    timestepper = PrescribedTransport(eqn, transport_scheme, state)
     timestepper.run(0, tmax)
 
     return norm(state.fields("f") - f_end) / norm(f_end)
@@ -32,12 +31,10 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
         VDG1 = state.spaces("DG1_equispaced")
         Vec_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element(), name='Vec_DG1')
         Vec_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
-        Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
 
-        rec_opts = RecoveredOptions(embedding_space=Vec_DG1,
-                                    recovered_space=Vec_CG1,
-                                    broken_space=Vu_brok,
-                                    boundary_method=Boundary_Method.dynamics)
+        rec_opts = RecoveryOptions(embedding_space=Vec_DG1,
+                                   recovered_space=Vec_CG1,
+                                   boundary_method=BoundaryMethod.taylor)
     else:
         raise NotImplementedError(
             f'Recovered spaces for geometry {geometry} have not been implemented')
@@ -51,11 +48,11 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     state.fields("f").project(f_init)
     state.fields("u").project(setup.uexpr)
 
-    transport_scheme = [(eqn, SSPRK3(state, options=rec_opts))]
+    transport_scheme = SSPRK3(state, options=rec_opts)
 
     f_end = as_vector([setup.f_end]*gdim)
 
     # Run and check error
-    error = run(state, transport_scheme, setup.tmax, f_end)
+    error = run(eqn, transport_scheme, state, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

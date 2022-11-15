@@ -1,3 +1,6 @@
+"""Classes for controlling the timestepping loop."""
+
+from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
@@ -6,101 +9,55 @@ from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.state import FieldCreator
+from gusto.fields import TimeLevelFields
 
-__all__ = ["TimeLevelFields", "Timestepper", "CrankNicolson", "PrescribedTransport"]
-
-
-class TimeLevelFields(object):
-
-    def __init__(self, state, equations, time_levels=None):
-        default_time_levels = ("nm1", "n", "np1")
-        if time_levels is not None:
-            time_levels = tuple(time_levels) + default_time_levels
-        else:
-            time_levels = default_time_levels
-
-        for level in time_levels:
-            setattr(self, level, FieldCreator(equations))
-
-    def initialise(self, state):
-        for field in self.n:
-            field.assign(state.fields(field.name()))
-            self.np1(field.name()).assign(field)
-
-    def update(self):
-        for field in self.n:
-            self.nm1(field.name()).assign(field)
-            field.assign(self.np1(field.name()))
+__all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
+           "PrescribedTransport"]
 
 
-class Timestepper(object):
-    """
-    Basic timestepping class for Gusto
+class BaseTimestepper(object, metaclass=ABCMeta):
+    """Base class for timesteppers."""
 
-    :arg state: a :class:`.State` object
-    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to transport, and the
-        :class:`~.TimeDiscretisation` to use.
-    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
-    :arg physics_schemes: optional list of classes that implement `physics`
-        schemes
-    """
+    def __init__(self, equation, state):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation.
+            state (:class:`State`): the model's state object
+        """
 
-    def __init__(self, state, problem, apply_bcs=True, physics_schemes=None):
-
+        self.equation = equation
         self.state = state
 
-        self.equations = []
-        self.schemes = []
-        self.equations = [eqn for (eqn, _) in problem]
-        self.setup_timeloop()
-        for eqn, method in problem:
-            if type(method) is tuple:
-                for scheme, *active_labels in method:
-                    scheme.setup(eqn, self.transporting_velocity, apply_bcs,
-                                 *active_labels)
-                    self.schemes.append((eqn.field_name, scheme))
-            else:
-                scheme = method
-                scheme.setup(eqn, self.transporting_velocity)
-                self.schemes.append((eqn.field_name, scheme))
+        self.setup_fields()
+        self.setup_scheme()
 
-        if physics_schemes is not None:
-            self.physics_schemes = physics_schemes
-        else:
-            self.physics_schemes = []
-
-        for phys, scheme in self.physics_schemes:
-            apply_bcs = False
-            scheme.setup(eqn, self.transporting_velocity, apply_bcs,
-                         physics)
-
-    @property
+    @abstractproperty
     def transporting_velocity(self):
-        return "prognostic"
+        return NotImplementedError
 
-    def setup_timeloop(self):
-        self.x = TimeLevelFields(self.state, self.equations)
+    @abstractmethod
+    def setup_fields(self):
+        """Set up required fields. Must be implemented in child classes"""
+        pass
 
+    @abstractmethod
+    def setup_scheme(self):
+        """Set up required scheme(s). Must be implemented in child classes"""
+        pass
+
+    @abstractmethod
     def timestep(self):
-        """
-        Implement the timestep
-        """
-        xn = self.x.n
-        xnp1 = self.x.np1
-
-        for name, scheme in self.schemes:
-            scheme.apply(xn(name), xnp1(name))
-            xn(name).assign(xnp1(name))
+        """Defines the timestep. Must be implemented in child classes"""
+        return NotImplementedError
 
     def run(self, t, tmax, pickup=False):
         """
-        This is the timeloop. After completing the semi implicit step
-        any passively transported fields are updated, implicit diffusion and
-        physics updates are applied (if required).
+        Runs the model for the specified time, from t to tmax
+
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pickup: (bool): specify whether to pickup from a previous run
         """
 
         state = self.state
@@ -124,11 +81,6 @@ class Timestepper(object):
 
             self.timestep()
 
-            with timed_stage("Physics"):
-
-                for _, scheme in self.physics_schemes:
-                    scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
-
             for field in self.x.np1:
                 state.fields(field.name()).assign(field)
 
@@ -143,33 +95,132 @@ class Timestepper(object):
         logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
 
 
-class CrankNicolson(Timestepper):
+class Timestepper(BaseTimestepper):
     """
-    This class implements a Crank-Nicolson discretisation, with Strang
-    splitting and auxilliary semi-Lagrangian transport.
-
-    :arg state: a :class:`.State` object
-    :arg transport_schemes: iterable of ``(field_name, scheme)`` pairs
-        indicating the fields to transport, and the
-        :class:`~.TimeDiscretisation` to use.
-    :arg linear_solver: a :class:`.TimesteppingSolver` object
-    :arg forcing: a :class:`.Forcing` object
-    :arg diffusion_schemes: optional iterable of ``(field_name, scheme)``
-        pairs indictaing the fields to diffusion, and the
-        :class:`~.Diffusion` to use.
-    :arg physics_schemes: optional list of classes that implement `physics`
-        schemes
-    :arg prescribed_fields: an order list of tuples, pairing a field name with a
-         function that returns the field as a function of time.
-    :kwargs: maxk is the number of outer iterations, maxi is the number of inner
-             iterations and alpha is the offcentering parameter
+    Implements a timeloop by applying a scheme to a prognostic equation.
     """
 
-    def __init__(self, state, equation_set, transport_schemes,
+    def __init__(self, equation, scheme, state):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            state (:class:`State`): the model's state object
+        """
+        self.scheme = scheme
+        super().__init__(equation=equation, state=state)
+
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    def setup_scheme(self):
+        self.scheme.setup(self.equation, self.transporting_velocity)
+
+    def timestep(self):
+        """
+        Implement the timestep
+        """
+        xnp1 = self.x.np1
+        name = self.equation.field_name
+        x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
+
+        self.scheme.apply(xnp1(name), *x_in)
+
+
+class SplitPhysicsTimestepper(Timestepper):
+    """
+    Implements a timeloop by applying a scheme to a prognostic equation, with
+    the option of applying a different scheme to the physics.
+    """
+    def __init__(self, equation, scheme, state, physics_schemes=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            state (:class:`State`): the model's state object
+            physics_schemes: (list, optional): a list of :class:`Physics` and
+                :class:`TimeDiscretisation` options describing physical
+                parametrisations and timestepping schemes to use for each.
+                Defaults to None.
+        """
+
+        super().__init__(equation, scheme, state)
+
+        if physics_schemes is not None:
+            self.physics_schemes = physics_schemes
+        else:
+            self.physics_schemes = []
+
+        for phys, scheme in self.physics_schemes:
+            apply_bcs = False
+            scheme.setup(equation, self.transporting_velocity, apply_bcs,
+                         physics)
+
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    def setup_scheme(self):
+        self.scheme.setup(self.equation, self.transporting_velocity)
+
+    def timestep(self):
+
+        super().timestep()
+
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+
+class SemiImplicitQuasiNewton(BaseTimestepper):
+    """
+    Implements a semi-implicit quasi-Newton discretisation,
+    with Strang splitting and auxilliary semi-Lagrangian transport.
+
+    The timestep consists of an outer loop applying the transport and an
+    inner loop to perform the quasi-Newton interations for the fast-wave
+    terms.
+    """
+
+    def __init__(self, equation_set, state, transport_schemes,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
                  physics_schemes=None, **kwargs):
+
+        """
+        Args:
+            equation_set (:class:`PrognosticEquationSet`): the prognostic
+                equation set to be solved
+            state (:class:`State`) the model's state object
+            transport_schemes: iterable of ``(field_name, scheme)`` pairs
+                indicating the name of the field (str) to transport, and the
+                :class:`TimeDiscretisation` to use
+            auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
+                pairs indicating any additional equations to be solved and the
+                scheme to use to solve them. Defaults to None.
+            linear_solver: a :class:`.TimesteppingSolver` object. Defaults to
+                None.
+            diffusion_schemes: optional iterable of ``(field_name, scheme)``
+                pairs indicating the fields to diffuse, and the
+                :class:`~.Diffusion` to use. Defaults to None.
+            physics_schemes: (list, optional): a list of :class:`Physics` and
+                :class:`TimeDiscretisation` options describing physical
+                parametrisations and timestepping schemes to use for each.
+                Defaults to None.
+
+        :kwargs: maxk is the number of outer iterations, maxi is the number
+            of inner iterations and alpha is the offcentering parameter
+    """
 
         self.maxk = kwargs.pop("maxk", 4)
         self.maxi = kwargs.pop("maxi", 1)
@@ -177,24 +228,30 @@ class CrankNicolson(Timestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        schemes = []
-        self.transport_schemes = []
+        if physics_schemes is not None:
+            self.physics_schemes = physics_schemes
+        else:
+            self.physics_schemes = []
+
         self.active_transport = []
         for scheme in transport_schemes:
-            schemes.append((scheme, transport))
+            assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
             self.active_transport.append((scheme.field_name, scheme))
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
+                assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
                 assert scheme.field_name in equation_set.field_names
-                schemes.append((scheme, diffusion))
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        problem = [(equation_set, tuple(schemes))]
+        super().__init__(equation_set, state)
+
         if auxiliary_equations_and_schemes is not None:
-            problem.append(*auxiliary_equations_and_schemes)
+            for eqn, scheme in auxiliary_equations_and_schemes:
+                self.x.add_fields(eqn)
+                scheme.setup(eqn, self.transporting_velocity)
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
                 for eqn, scheme in auxiliary_equations_and_schemes]
@@ -210,10 +267,6 @@ class CrankNicolson(Timestepper):
             # Copy over field if the time derivative term has no linearisation
             if not mass_form.terms[0].has_label(linearisation):
                 self.tracers_to_copy.append(name)
-
-        # TODO: why was this False? Should this be an argument?
-        apply_bcs = True
-        super().__init__(state, problem, apply_bcs, physics_schemes)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -237,14 +290,27 @@ class CrankNicolson(Timestepper):
 
     @property
     def transporting_velocity(self):
+        """Computes ubar=(1-alpha)*un + alpha*unp1"""
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
         return xn('u') + self.alpha*(xnp1('u')-xn('u'))
 
-    def setup_timeloop(self):
-        self.x = TimeLevelFields(self.state, self.equations,
-                                 time_levels=("star", "p"))
+    def setup_fields(self):
+        """Sets up time levels n, star, p and np1"""
+        self.x = TimeLevelFields(self.equation, 1)
+        self.x.add_fields(self.equation, levels=("star", "p"))
+
+    def setup_scheme(self):
+        """Sets up transport and diffusion schemes"""
+        # TODO: apply_bcs should be False for advection but this means
+        # tests with KGOs fail
+        apply_bcs = True
+        for _, scheme in self.active_transport:
+            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, transport)
+        apply_bcs = True
+        for _, scheme in self.diffusion_schemes:
+            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, diffusion)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -252,14 +318,16 @@ class CrankNicolson(Timestepper):
         are not included in the linear solver. This is determined by whether the
         time derivative term for that tracer has a linearisation.
 
-        :arg x_in:  The input set of fields
-        :arg x_out: The output set of fields
+        Args:
+           x_in:  The input set of fields
+           x_out: The output set of fields
         """
 
         for name in self.tracers_to_copy:
             x_out(name).assign(x_in(name))
 
     def timestep(self):
+        """Defines the timestep"""
         xn = self.x.n
         xnp1 = self.x.np1
         xstar = self.x.star
@@ -277,7 +345,7 @@ class CrankNicolson(Timestepper):
             with timed_stage("Transport"):
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xstar(name), xp(name))
+                    scheme.apply(xp(name), xstar(name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
@@ -301,26 +369,55 @@ class CrankNicolson(Timestepper):
 
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
-            scheme.apply(xn(name), xnp1(name))
+            scheme.apply(xnp1(name), xn(name))
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
                 scheme.apply(xnp1(name), xnp1(name))
 
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                scheme.apply(self.x.np1(self.field_name), self.x.np1(self.field_name))
+
 
 class PrescribedTransport(Timestepper):
-
-    def __init__(self, state, problem, physics_schemes=None,
+    """
+    Implements a timeloop with a prescibed transporting velocity
+    """
+    def __init__(self, equation, scheme, state, physics_schemes=None,
                  prescribed_transporting_velocity=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            state (:class:`State`): the model's state object
+            physics_list: (list, optional): a list of :class:`Physics`
+                options describing physical parametrisations. Defaults to None.
+            prescribed_transporting_velocity (func, optional): a function,
+                with a single argument representing the time, that returns a
+                :class:`ufl.Expr` for the transporting velocity. This allows
+                the transporting velocity field to be updated with time. If
+                `None` is provided then the equation's velocity field is not
+                updated. Defaults to None.
+        """
 
-        super().__init__(state, problem,
-                         physics_schemes=physics_schemes)
+        super().__init__(equation, scheme, state)
 
-        equation, _ = problem[0]
-        self.field_name = equation.field_name
+        if physics_schemes is not None:
+            self.physics_schemes = physics_schemes
+        else:
+            self.physics_schemes = []
+
+        for phys, scheme in self.physics_schemes:
+            apply_bcs = False
+            scheme.setup(equation, self.transporting_velocity, apply_bcs,
+                         physics)
+
         if prescribed_transporting_velocity is not None:
-            self.velocity_projection = Projector(prescribed_transporting_velocity(self.state.t),
-                                                 self.state.fields('u'))
+            self.velocity_projection = Projector(
+                prescribed_transporting_velocity(self.state.t),
+                self.state.fields('u'))
         else:
             self.velocity_projection = None
 
@@ -328,8 +425,19 @@ class PrescribedTransport(Timestepper):
     def transporting_velocity(self):
         return self.state.fields('u')
 
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+
+    def setup_scheme(self):
+        self.scheme.setup(self.equation, self.transporting_velocity)
+
     def timestep(self):
         if self.velocity_projection is not None:
             self.velocity_projection.project()
 
         super().timestep()
+
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                # import pdb; pdb.set_trace()
+                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))

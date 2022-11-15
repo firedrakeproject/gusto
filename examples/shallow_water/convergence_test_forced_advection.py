@@ -5,9 +5,11 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
 import matplotlib.pyplot as plt
 import numpy as np
 
-tophat = True
+split_physics = True
+
+tophat = False
 triangle = False
-trig = False
+trig = True
 
 # set up resolution and timestepping parameters for convergence test
 dx_dt = {0.05: 0.005, 0.1: 0.01, 0.2: 0.02, 0.25: 0.025, 0.5: 0.05}
@@ -41,7 +43,7 @@ for dx, dt in dx_dt.items():
     elif triangle:
         dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_trig_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_temp_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -105,19 +107,24 @@ for dx, dt in dx_dt.items():
     r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
     r_exact.interpolate(r_expr)
 
-    # add instant rain forcing
-    [InstantRain(meqn, msat, rain_name="rain_mixing_ratio", set_tau_to_dt=True)]
-    # physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio"), ForwardEuler(state))]
+    # add forcing and set up timestepper
+    if split_physics:
+        physics_schemes = [(InstantRain(meqn, msat,
+                                        rain_name="rain_mixing_ratio",
+                                        set_tau_to_dt=True),
+                            ForwardEuler(state))]
 
-    # build time stepper
-    stepper = PrescribedTransport(state,
-                                  ((meqn, RK4(state)),))
-    # stepper = PrescribedTransport(state,
-    #                               ((meqn, ((RK4(state), transport),)),),
-    #                               physics_schemes=physics_schemes)
+        stepper = PrescribedTransport(meqn, RK4(state), state,
+                                      physics_schemes=physics_schemes)
+    else:
+        InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+                    set_tau_to_dt=True)
+
+        stepper = PrescribedTransport(meqn, RK4(state), state)
 
     stepper.run(t=0, tmax=tmax)
 
+    # plot results
     fig, axes = plt.subplots()
     plot(r_exact, axes=axes, label='exact solution', color='green')
     plot(state.fields("rain_mixing_ratio"), axes=axes, label='rain after advection', color='red')
@@ -132,6 +139,7 @@ for dx, dt in dx_dt.items():
     dx_list.append(dx)
     dt_list.append(dt)
 
+# save results for convergence plot comparison
 np.save('dt.npy', dt_list)
 np.save('dx.npy', dx_list)
 np.save('error.npy', error_norms)

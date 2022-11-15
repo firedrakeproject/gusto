@@ -2,10 +2,11 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi,
                        FiniteElement, as_vector)
+split_physics = False
 
-tophat = True
+tophat = False
 triangle = False
-trig = False
+trig = True
 
 u_max = 1
 if tophat:
@@ -25,11 +26,11 @@ else:
     tmax = 55
 
 if tophat:
-    dirname = "forced_advection_hat_temp"
+    dirname = "forced_advection_hat"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "forced_advection_trig"
+    dirname = "forced_advection_trig_temp"
 
 dt = 0.005
 delta_x = 0.05
@@ -93,16 +94,16 @@ elif trig:
 r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
-# add instant rain forcing
-physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
-                                set_tau_to_dt=True), ForwardEuler(state))]
-# InstantRain(meqn, msat, rain_name="rain_mixing_ratio")
+# add forcing and set up timestepper
+if split_physics:
+    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+                                    set_tau_to_dt=True), ForwardEuler(state))]
 
-# build time stepper
-# stepper = PrescribedTransport(state,
-#                               ((meqn, RK4(state)),))
-stepper = PrescribedTransport(state,
-                              ((meqn, RK4(state)),),
-                              physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(meqn, RK4(state), state,
+                                  physics_schemes=physics_schemes)
+else:
+    InstantRain(meqn, msat, rain_name="rain_mixing_ratio", set_tau_to_dt=True)
+
+    stepper = PrescribedTransport(meqn, RK4(state), state)
 
 stepper.run(t=0, tmax=5*dt)

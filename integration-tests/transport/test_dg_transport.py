@@ -8,8 +8,8 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(eqn, transport_scheme, state, tmax, f_end):
+    timestepper = PrescribedTransport(eqn, transport_scheme, state)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end) / norm(f_end)
 
@@ -29,8 +29,8 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
 
-    transport_scheme = [(eqn, SSPRK3(state))]
-    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    transport_scheme = SSPRK3(state)
+    error = run(eqn, transport_scheme, state, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
@@ -51,8 +51,8 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
                                  udegree=setup.degree)
     state.fields("f").interpolate(f_init)
     state.fields("u").project(setup.uexpr)
-    transport_schemes = [(eqn, SSPRK3(state))]
+    transport_schemes = SSPRK3(state)
     f_end = as_vector([setup.f_end]*gdim)
-    error = run(state, transport_schemes, setup.tmax, f_end)
+    error = run(eqn, transport_schemes, state, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

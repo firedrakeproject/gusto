@@ -25,7 +25,7 @@ q_g = 3
 parameters = ConvectiveMoistShallowWaterParameters(H=H, g=g, gamma=gamma,
                                                    tau=tau, q_0=q_0, alpha=alpha)
 
-dirname = "sw_gaussian_temp_IR_test"
+dirname = "sw_gaussian_temp"
 
 output = OutputParameters(dirname=dirname, dumpfreq=1)
 
@@ -57,11 +57,11 @@ Q0.interpolate(q_g * Constant(1 - 1e-4))
 saturation = q_0 * exp(-alpha*(state.fields("D")-H)/H)
 
 # Add Bouchut condensation forcing
-# BouchutForcing(eqns, parameters, saturation)
-InstantRain(eqns, saturation, vapour="Q_mixing_ratio", parameters=parameters,
+InstantRain(eqns, saturation, vapour_name="Q_mixing_ratio",
+            parameters=parameters,
             convective_feedback=True)
 
 # Build time stepper
-stepper = Timestepper(state, ((eqns, RK4(state)),))
+stepper = Timestepper(eqns, RK4(state), state)
 
 stepper.run(t=0, tmax=5*dt)
