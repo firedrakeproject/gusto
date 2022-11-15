@@ -37,7 +37,8 @@ def setup_fallout(dirname):
                   diagnostic_fields=diagnostic_fields)
 
     Vrho = state.spaces("DG1_equispaced")
-    problem = [(AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1), ForwardEuler(state))]
+    eqn = AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1)
+    scheme = ForwardEuler(state)
     state.fields("rho").assign(1.)
 
     physics_list = [Fallout(state)]
@@ -53,7 +54,7 @@ def setup_fallout(dirname):
     rain0.interpolate(rain_expr)
 
     # build time stepper
-    stepper = PrescribedTransport(state, problem,
+    stepper = PrescribedTransport(eqn, scheme, state,
                                   physics_list=physics_list)
 
     return stepper, 10.0

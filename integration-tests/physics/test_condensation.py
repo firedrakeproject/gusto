@@ -87,15 +87,13 @@ def run_cond_evap(dirname, process):
     rho0.interpolate(pressure / (temperature*parameters.R_d * (1 + water_v0 * parameters.R_v / parameters.R_d)))
     mc_init = Function(Vt).assign(water_c0)
 
-    # Have empty problem as only thing is condensation / evaporation
-    problem = []
-    physics_list = [Condensation(state)]
+    physics = Condensation(state)
 
-    # build time stepper
-    stepper = PrescribedTransport(state, problem,
-                                  physics_list=physics_list)
+    state.setup_diagnostics()
+    state.setup_dump(0, tmax, False)
 
-    stepper.run(t=0, tmax=tmax)
+    physics.apply()
+    state.dump(float(tmax))
 
     return state, mv_true, mc_true, theta_d_true, mc_init
 

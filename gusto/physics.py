@@ -8,15 +8,15 @@ with "apply" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.time_discretisation import SSPRK3
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.equations import AdvectionEquation
 from gusto.labels import subject, physics
 from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import logger, EmbeddedDGOptions, RecoveredOptions
+from gusto.configuration import logger, EmbeddedDGOptions, RecoveryOptions
 from firedrake import (Interpolator, conditional, Function, dx,
-                       min_value, max_value, as_vector, BrokenElement,
+                       min_value, max_value, as_vector,
                        FunctionSpace, Constant, pi, Projector)
 from gusto import thermodynamics
 from math import gamma
@@ -91,12 +91,11 @@ class Condensation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.extruded
         else:
             boundary_method = None
-        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.dt
@@ -218,12 +217,10 @@ class Fallout(Physics):
         if v_deg == 0 and h_deg == 0:
             VDG1 = state.spaces("DG1_equispaced")
             VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
-            Vbrok = FunctionSpace(Vt.mesh(), BrokenElement(Vt.ufl_element()))
-            boundary_method = Boundary_Method.dynamics
-            advect_options = RecoveredOptions(embedding_space=VDG1,
-                                              recovered_space=VCG1,
-                                              broken_space=Vbrok,
-                                              boundary_method=boundary_method)
+            boundary_method = BoundaryMethod.taylor
+            advect_options = RecoveryOptions(embedding_space=VDG1,
+                                             recovered_space=VCG1,
+                                             boundary_method=boundary_method)
         else:
             advect_options = EmbeddedDGOptions()
 
@@ -416,12 +413,11 @@ class Evaporation(Physics):
         h_deg = rho.function_space().ufl_element().degree()[0]
         v_deg = rho.function_space().ufl_element().degree()[1]
         if v_deg == 0 and h_deg == 0:
-            boundary_method = Boundary_Method.physics
+            boundary_method = BoundaryMethod.extruded
         else:
             boundary_method = None
-        Vt_broken = FunctionSpace(state.mesh, BrokenElement(Vt.ufl_element()))
         rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=Vt_broken, boundary_method=boundary_method)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
         # define some parameters as attributes
         dt = state.dt
@@ -497,24 +493,25 @@ class InstantRain(object):
     timestep dt or over a specified time interval tau.
      """
 
-    def __init__(self, equation, saturation_curve, vapour="water_v", rain=None,
-                 parameters=None, convective_feedback=False,
+    def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
+                 rain_name=None, parameters=None, convective_feedback=False,
                  set_tau_to_dt=False):
         """
         Args:
-            equation (:class: 'equation'): the equation set to apply the scheme
+            equation (:class: 'PrognosticEquationSet'): the model's equation.
                 to.
             saturation_curve (function): the saturation function, above which
                 excess moisture is converted.
-            vapour (str, optional): a string for the name of the field that is
-                being converted from. Defaults to "water_v".
-            rain (str, optional): a string for the name of the field that is
-                being converted to. Defaults to None.
-            parameters (list, optional): equation parameters. Defaults to None
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to "water_vapour".
+            rain_name (str, optional): name of the rain variable. Defaults to
+                None.
+            parameters (:class: 'Configuration', optional): an object
+                containing the model's physical parameters. Defaults to None
                 but required if convective_feedback is True.
-            convective_feedback (flag, optional): True if the conversion of
+            convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            set_tau_to_dt (flag, optional): True if the timescale for the
+            set_tau_to_dt (bool, optional): True if the timescale for the
                 conversion is equal to the timestep and False if not. If False
                 then the user must provide a timescale, tau, that gets passed to
                 the parameters list.
@@ -524,11 +521,11 @@ class InstantRain(object):
         self.set_tau_to_dt = set_tau_to_dt
 
         # check for the correct fields
-        assert vapour in equation.field_names, f"Field {vapour} does not exist"
-        self.Vv_idx = equation.field_names.index(vapour)
+        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
+        self.Vv_idx = equation.field_names.index(vapour_name)
 
-        if rain is not None:
-            assert rain in equation.field_names, f"Field {rain} does not exist"
+        if rain_name is not None:
+            assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set "
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
@@ -539,7 +536,7 @@ class InstantRain(object):
         Vv = W.sub(self.Vv_idx)
         test_v = equation.tests[self.Vv_idx]
 
-        # depth needed if convetive feedback
+        # depth needed if convective feedback
         if self.convective_feedback:
             self.VD_idx = equation.field_names.index("D")
             VD = W.sub(self.VD_idx)
@@ -565,8 +562,8 @@ class InstantRain(object):
 
         # if rain is not none then the excess vapour is being tracked and is
         # added to rain
-        if rain is not None:
-            Vr_idx = equation.field_names.index(rain)
+        if rain_name is not None:
+            Vr_idx = equation.field_names.index(rain_name)
             test_r = equation.tests[Vr_idx]
             equation.residual -= physics(subject(test_r * self.source * dx,
                                                  equation.X),
@@ -595,8 +592,9 @@ class InstantRain(object):
         rain and loss of height due to convection) at each timestep.
 
         Args:
-            x_in: the current state of the state vector X
-            dt: the timestep
+            x_in: (:class: 'Function): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])

@@ -10,9 +10,8 @@ __all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
            "TransportEquationType", "OutputParameters",
            "CompressibleParameters", "ShallowWaterParameters",
            "ConvectiveMoistShallowWaterParameters", "logger",
-           "EmbeddedDGOptions",
-           "RecoveredOptions", "SUPGOptions", "SpongeLayerParameters",
-           "DiffusionParameters"]
+           "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+           "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
 
@@ -183,14 +182,17 @@ class EmbeddedDGOptions(TransportOptions):
     embedding_space = None
 
 
-class RecoveredOptions(TransportOptions):
-    """Specifies options for a recovered wrapper method."""
+class RecoveryOptions(TransportOptions):
+    """Specifies options for a recovery wrapper method."""
 
     name = "recovered"
     embedding_space = None
     recovered_space = None
-    broken_space = None
     boundary_method = None
+    injection_method = 'interpolate'
+    project_high_method = 'interpolate'
+    project_low_method = 'project'
+    broken_method = 'interpolate'
 
 
 class SUPGOptions(TransportOptions):

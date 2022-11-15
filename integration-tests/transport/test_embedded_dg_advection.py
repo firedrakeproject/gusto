@@ -8,8 +8,8 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_schemes, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_schemes)
+def run(eqn, transport_schemes, state, tmax, f_end):
+    timestepper = PrescribedTransport(eqn, transport_schemes, state)
     timestepper.run(0, tmax)
     return norm(state.fields("f") - f_end) / norm(f_end)
 
@@ -37,8 +37,8 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     state.fields("f").interpolate(setup.f_init)
     state.fields("u").project(setup.uexpr)
 
-    transport_schemes = [(eqn, SSPRK3(state, options=opts))]
+    transport_schemes = SSPRK3(state, options=opts)
 
-    error = run(state, transport_schemes, setup.tmax, setup.f_end)
+    error = run(eqn, transport_schemes, state, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
