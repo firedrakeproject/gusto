@@ -96,13 +96,13 @@ r_exact.interpolate(r_expr)
 
 # add forcing and set up timestepper
 if split_physics:
-    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(state))]
 
     stepper = PrescribedTransport(meqn, RK4(state), state,
                                   physics_schemes=physics_schemes)
 else:
-    InstantRain(meqn, msat, rain_name="rain_mixing_ratio", set_tau_to_dt=True)
+    InstantRain(meqn, msat, rain_name="rain", set_tau_to_dt=True)
 
     stepper = PrescribedTransport(meqn, RK4(state), state)
 
