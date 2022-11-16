@@ -150,7 +150,12 @@ class SplitPhysicsTimestepper(Timestepper):
                 Defaults to None.
         """
 
-        super().__init__(equation, scheme, state)
+        self.equation = equation
+        self.scheme = scheme
+        self.state = state
+
+        self.setup_fields()
+        self.setup_scheme()
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -169,7 +174,12 @@ class SplitPhysicsTimestepper(Timestepper):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
 
     def setup_scheme(self):
-        self.scheme.setup(self.equation, self.transporting_velocity)
+        from gusto.labels import coriolis, pressure_gradient
+        # Extract labels for all dynamics terms to be our active labels
+        # TODO: find a better way of working out what these should be!
+        # we want active labels corresponding to every term that is not physics
+        active_labels = [transport, diffusion, coriolis, pressure_gradient]
+        self.scheme.setup(self.equation, self.transporting_velocity, *active_labels)
 
     def timestep(self):
 
@@ -231,6 +241,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.physics_schemes = physics_schemes
         else:
             self.physics_schemes = []
+        for _, scheme in self.physics_schemes:
+            assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -301,7 +313,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.x.add_fields(self.equation, levels=("star", "p"))
 
     def setup_scheme(self):
-        """Sets up transport and diffusion schemes"""
+        """Sets up transport, diffusion and physics schemes"""
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
@@ -310,6 +322,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, self.transporting_velocity, apply_bcs, diffusion)
+        for _, scheme in self.physics_schemes:
+            apply_bcs = True
+            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, physics)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -376,7 +391,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
-                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+                scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
 
 class PrescribedTransport(Timestepper):

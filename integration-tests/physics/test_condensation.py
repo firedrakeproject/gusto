@@ -86,12 +86,16 @@ def run_cond_evap(dirname, process):
     rho0.interpolate(pressure / (temperature*parameters.R_d * (1 + water_v0 * parameters.R_v / parameters.R_d)))
     mc_init = Function(Vt).assign(water_c0)
 
+    # Only want time derivatives and physics terms in equation, so drop the rest
+    eqn.residual = eqn.residual.label_map(lambda t: t.has_label(time_derivative),
+                                          map_if_true=identity, map_if_false=drop)
+
     physics_schemes = [(SaturationAdjustment(eqn, parameters), ForwardEuler(state))]
 
     # build time stepper
     scheme = ForwardEuler(state)
-    stepper = PrescribedTransport(eqn, scheme, state,
-                                  physics_schemes=physics_schemes)
+    stepper = SplitPhysicsTimestepper(eqn, scheme, state,
+                                      physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=dt)
 

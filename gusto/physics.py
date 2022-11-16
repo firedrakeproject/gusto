@@ -9,17 +9,16 @@ with "apply" methods.
 
 from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
-from gusto.recovery import Recoverer, Boundary_Method
+from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.transport_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
 from firedrake import (Interpolator, conditional, Function, dx,
-                       min_value, max_value, BrokenElement,
-                       FunctionSpace, Constant, pi, Projector)
+                       min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics
 import ufl
-from math import gamma
+import math
 from enum import Enum
 
 
@@ -112,11 +111,9 @@ class SaturationAdjustment(Physics):
             # need to evaluate rho at theta-points, and do this via recovery
             # TODO: make this bit of code neater if possible using domain object
             v_deg = V.ufl_element().degree()[1]
-            boundary_method = Boundary_Method.physics if v_deg == 1 else None
-            V_broken = FunctionSpace(V.mesh(), BrokenElement(V.ufl_element()))
+            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
             rho_averaged = Function(V)
-            # TODO: this will cause an error when combined with new recovery code
-            self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=V_broken, boundary_method=boundary_method)
+            self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
             exner = thermodynamics.exner_pressure(parameters, rho_averaged, theta)
             T = thermodynamics.T(parameters, theta, exner, r_v=water_vapour)
@@ -311,16 +308,16 @@ class Fallout(Physics):
             g = Constant(0.5)  # scaling of density correction
             # we keep mu in the expressions even though mu = 0
             threshold = Constant(10**-10)  # only do rainfall for r > threshold
-            Lambda = (N_r * pi * rho_w * gamma(4 + mu)
-                      / (6 * gamma(1 + mu) * rho * rain)) ** (1. / 3)
-            Lambda0 = (N_r * pi * rho_w * gamma(4 + mu)
-                       / (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
+            Lambda = (N_r * pi * rho_w * math.gamma(4 + mu)
+                      / (6 * math.gamma(1 + mu) * rho * rain)) ** (1. / 3)
+            Lambda0 = (N_r * pi * rho_w * math.gamma(4 + mu)
+                       / (6 * math.gamma(1 + mu) * rho * threshold)) ** (1. / 3)
             v_expression = conditional(rain > threshold,
-                                       (a * gamma(4 + b + mu)
-                                        / (gamma(4 + mu) * Lambda ** b)
+                                       (a * math.gamma(4 + b + mu)
+                                        / (math.gamma(4 + mu) * Lambda ** b)
                                         * (rho0 / rho) ** g),
-                                       (a * gamma(4 + b + mu)
-                                        / (gamma(4 + mu) * Lambda0 ** b)
+                                       (a * math.gamma(4 + b + mu)
+                                        / (math.gamma(4 + mu) * Lambda0 ** b)
                                         * (rho0 / rho) ** g))
         else:
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
@@ -507,10 +504,9 @@ class EvaporationOfRain(Physics):
             # need to evaluate rho at theta-points, and do this via recovery
             # TODO: make this bit of code neater if possible using domain object
             v_deg = V.ufl_element().degree()[1]
-            boundary_method = Boundary_Method.extruded if v_deg == 1 else None
-            V_broken = FunctionSpace(V.mesh(), BrokenElement(V.ufl_element()))
+            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
             rho_averaged = Function(V)
-            self.rho_recoverer = Recoverer(rho, rho_averaged, VDG=V_broken, boundary_method=boundary_method)
+            self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
             exner = thermodynamics.exner_pressure(parameters, rho_averaged, theta)
             T = thermodynamics.T(parameters, theta, exner, r_v=water_vapour)

@@ -43,7 +43,7 @@ def setup_fallout(dirname):
     scheme = ForwardEuler(state)
     state.fields("rho").assign(1.)
 
-    physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state))]
+    physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state, 'rain'))]
     rain0 = state.fields("rain")
 
     # set up rain
@@ -57,7 +57,7 @@ def setup_fallout(dirname):
 
     # build time stepper
     stepper = PrescribedTransport(eqn, scheme, state,
-                                  physics_scheme=physics_schemes)
+                                  physics_schemes=physics_schemes)
 
     return stepper, 10.0
 
