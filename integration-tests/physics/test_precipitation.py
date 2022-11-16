@@ -27,7 +27,7 @@ def setup_fallout(dirname):
     dt = 0.1
     output = OutputParameters(dirname=dirname+"/fallout",
                               dumpfreq=10,
-                              dumplist=['rain_mixing_ratio'])
+                              dumplist=['rain'])
     parameters = CompressibleParameters()
     diagnostic_fields = [Precipitation()]
     state = State(mesh,
@@ -37,11 +37,14 @@ def setup_fallout(dirname):
                   diagnostic_fields=diagnostic_fields)
 
     Vrho = state.spaces("DG1_equispaced")
-    problem = [(AdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1), ForwardEuler(state))]
+    active_tracers = [Rain(space='DG1_equispaced')]
+    eqn = ForcedAdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1,
+                                  active_tracers=active_tracers)
+    scheme = ForwardEuler(state)
     state.fields("rho").assign(1.)
 
-    physics_list = [Fallout(state)]
-    rain0 = state.fields("rain_mixing_ratio")
+    physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state, 'rain'))]
+    rain0 = state.fields("rain")
 
     # set up rain
     xc = L / 2
@@ -53,8 +56,8 @@ def setup_fallout(dirname):
     rain0.interpolate(rain_expr)
 
     # build time stepper
-    stepper = PrescribedTransport(state, problem,
-                                  physics_list=physics_list)
+    stepper = PrescribedTransport(eqn, scheme, state,
+                                  physics_schemes=physics_schemes)
 
     return stepper, 10.0
 
@@ -72,7 +75,7 @@ def test_fallout_setup(tmpdir):
     filename = path.join(dirname, "fallout/diagnostics.nc")
     data = Dataset(filename, "r")
 
-    rain = data.groups["rain_mixing_ratio"]
+    rain = data.groups["rain"]
     final_rain = rain.variables["total"][-1]
     final_rms_rain = rain.variables["rms"][-1]
 

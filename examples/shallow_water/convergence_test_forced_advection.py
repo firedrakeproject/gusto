@@ -2,8 +2,10 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi, plot,
                        FiniteElement, as_vector, errornorm)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import matplotlib.pyplot as plt
+import numpy as np
+
+split_physics = True
 
 tophat = False
 triangle = False
@@ -28,16 +30,20 @@ elif trig:
     K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
+if trig:
+    tmax = 85
+else:
+    tmax = 55
 
 # loop over range of dx, dt pairs
 for dx, dt in dx_dt.items():
 
     if tophat:
-        dirname = "convergence_test_forced_advection_hat_DG1_limiter_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_hat_dx%s_dt%s" % (dx, dt)
     elif triangle:
-        dirname = "forced_advection_triangle_dx%s_dt%s" % (dx, dt)
+        dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
-        dirname = "convergence_test_forced_advection_trig_DG1_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_trig_temp_dx%s_dt%s" % (dx, dt)
 
     Lx = 100
     nx = int(Lx/dx)
@@ -76,12 +82,11 @@ for dx, dt in dx_dt.items():
     msat.interpolate(msat_expr)
 
     # set up advection equation
-    meqn = AdvectionEquation(state, VD, field_name="water_v", Vu=Vu)
+    rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
+    meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
+                                   active_tracers=[rain])
     state.fields("u").project(as_vector([u_max]))
-    state.fields("water_v").project(mexpr)
-
-    # define rain variable
-    r = state.fields("rain", VD)
+    state.fields("water_vapour").project(mexpr)
 
     # exact rainfall profile (analytically)
     r_exact = state.fields("r_exact", VD)
@@ -102,30 +107,42 @@ for dx, dt in dx_dt.items():
     r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
     r_exact.interpolate(r_expr)
 
-    # add instant rain forcing
-    physics_list = [InstantRain(state, msat)]
+    # add forcing and set up timestepper
+    if split_physics:
+        physics_schemes = [(InstantRain(meqn, msat,
+                                        rain_name="rain_mixing_ratio",
+                                        set_tau_to_dt=True),
+                            ForwardEuler(state))]
 
-    # build time stepper
-    stepper = PrescribedTransport(state,
-                                  ((meqn,
-                                    SSPRK3(state,limiter=VertexBasedLimiter(VD))),),
-                                  physics_list=physics_list)
+        stepper = PrescribedTransport(meqn, RK4(state), state,
+                                      physics_schemes=physics_schemes)
+    else:
+        InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+                    set_tau_to_dt=True)
 
-    stepper.run(t=0, tmax=55)
+        stepper = PrescribedTransport(meqn, RK4(state), state)
 
+    stepper.run(t=0, tmax=tmax)
+
+    # plot results
     fig, axes = plt.subplots()
     plot(r_exact, axes=axes, label='exact solution', color='green')
-    plot(state.fields("rain"), axes=axes, label='rain after advection', color='red')
+    plot(state.fields("rain_mixing_ratio"), axes=axes, label='rain after advection', color='red')
     plt.title("Rainfall profile after advecting")
     plt.legend()
     plt.show()
 
     # calculate L2 error norm
-    r = state.fields("rain")
+    r = state.fields("rain_mixing_ratio")
     L2_error = errornorm(r_exact, r)
     error_norms.append(L2_error)
     dx_list.append(dx)
     dt_list.append(dt)
+
+# save results for convergence plot comparison
+np.save('dt.npy', dt_list)
+np.save('dx.npy', dx_list)
+np.save('error.npy', error_norms)
 
 plt.plot(dt_list, error_norms)
 plt.xlabel("dt")

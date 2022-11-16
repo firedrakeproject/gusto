@@ -32,7 +32,7 @@ for ref_level, dt in ref_dt.items():
 
     dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=3)
+                                 refinement_level=ref_level, degree=1)
     x = SpatialCoordinate(mesh)
     global_normal = x
     mesh.init_cell_orientations(x)
@@ -75,6 +75,6 @@ for ref_level, dt in ref_dt.items():
                           SSPRK3(state, "D", subcycles=2)]
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields)
 
     stepper.run(t=0, tmax=tmax)

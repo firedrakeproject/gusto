@@ -1,8 +1,8 @@
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
-                       VectorFunctionSpace, conditional, acos, cos, pi, plot,
-                       FiniteElement, as_vector, errornorm)
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
+                       VectorFunctionSpace, conditional, acos, cos, pi,
+                       FiniteElement, as_vector)
+split_physics = False
 
 tophat = False
 triangle = False
@@ -20,13 +20,17 @@ elif trig:
     K0 = 0.3
 Csat = 0.75
 Ksat = 0.25
+if trig:
+    tmax = 85
+else:
+    tmax = 55
 
 if tophat:
     dirname = "forced_advection_hat"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
-    dirname = "DG1_withlimiter_forced_advection_trig"
+    dirname = "forced_advection_trig_temp"
 
 dt = 0.005
 delta_x = 0.05
@@ -37,7 +41,7 @@ x = SpatialCoordinate(mesh)[0]
 x1 = 0
 x2 = Lx/4
 
-output = OutputParameters(dirname=dirname, dumpfreq=100)
+output = OutputParameters(dirname=dirname, dumpfreq=1)
 diagnostic_fields = [CourantNumber()]
 
 state = State(mesh,
@@ -65,11 +69,11 @@ msat = Function(VD)
 msat.interpolate(msat_expr)
 
 # set up advection equation
-rain = Rain(space='tracer', transport_flag=False, transport_eqn=TransportEquationType.no_transport)
-meqn = ForcedAdvectionEquation(state, VD, field_name="water_v", Vu=Vu,
+rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
+meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
                                active_tracers=[rain])
 state.fields("u").project(as_vector([u_max]))
-state.fields("water_v").project(mexpr)
+state.fields("water_vapour").project(mexpr)
 
 # exact rainfall profile (analytically)
 r_exact = state.fields("r_exact", VD)
@@ -90,11 +94,16 @@ elif trig:
 r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
 r_exact.interpolate(r_expr)
 
-# add instant rain forcing
-InstantRain(meqn, msat)
+# add forcing and set up timestepper
+if split_physics:
+    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+                                    set_tau_to_dt=True), ForwardEuler(state))]
 
-# build time stepper
-stepper = PrescribedTransport(state,
-                              ((meqn, RK4(state)),))
+    stepper = PrescribedTransport(meqn, RK4(state), state,
+                                  physics_schemes=physics_schemes)
+else:
+    InstantRain(meqn, msat, rain_name="rain_mixing_ratio", set_tau_to_dt=True)
 
-stepper.run(t=0, tmax=55)
+    stepper = PrescribedTransport(meqn, RK4(state), state)
+
+stepper.run(t=0, tmax=5*dt)
