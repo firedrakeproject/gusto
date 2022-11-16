@@ -9,7 +9,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, NonlinearVariationalProblem, split,
                        NonlinearVariationalSolver, Projector, Interpolator,
                        BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, Constant, dot, grad, as_ufl, MixedElement,
+                       TestFunction, Constant, dot, grad, as_ufl,
                        DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
@@ -136,16 +136,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     split_form(t.form)[self.idx].form,
                     t.labels),
                 drop)
-            bcs = equation.bcs[self.field_name]
 
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             self.idx = None
-            if type(self.fs.ufl_element()) is MixedElement:
-                bcs = [bc for _, bcs in equation.bcs.items() for bc in bcs]
-            else:
-                bcs = equation.bcs[self.field_name]
+
+        bcs = equation.bcs[self.field_name]
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(

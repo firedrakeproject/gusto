@@ -27,7 +27,6 @@ def run_cond_evap(dirname, process):
     x, z = SpatialCoordinate(mesh)
 
     dt = 2.0
-    tmax = dt
     output = OutputParameters(dirname=dirname+"/cond_evap",
                               dumpfreq=1,
                               dumplist=['u'])
@@ -37,21 +36,21 @@ def run_cond_evap(dirname, process):
                   dt=dt,
                   output=output,
                   parameters=parameters,
-                  diagnostic_fields=[Sum('vapour_mixing_ratio', 'cloud_liquid_mixing_ratio')])
+                  diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
 
     # spaces
     Vt = state.spaces("theta", degree=1)
     Vr = state.spaces("DG", "DG", degree=1)
 
     # Set up equation -- use compressible to set up these spaces
-    # However the equation itself will be unused
-    _ = CompressibleEulerEquations(state, "CG", 1)
+    tracers = [WaterVapour(), CloudWater()]
+    eqn = CompressibleEulerEquations(state, "CG", 1, active_tracers=tracers)
 
     # Declare prognostic fields
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    water_v0 = state.fields("vapour_mixing_ratio", Vt)
-    water_c0 = state.fields("cloud_liquid_mixing_ratio", Vt)
+    water_v0 = state.fields("water_vapour", Vt)
+    water_c0 = state.fields("cloud_water", Vt)
 
     # Set a background state with constant pressure and temperature
     pressure = Function(Vr).interpolate(Constant(100000.))
@@ -87,13 +86,18 @@ def run_cond_evap(dirname, process):
     rho0.interpolate(pressure / (temperature*parameters.R_d * (1 + water_v0 * parameters.R_v / parameters.R_d)))
     mc_init = Function(Vt).assign(water_c0)
 
-    physics = Condensation(state)
+    # Only want time derivatives and physics terms in equation, so drop the rest
+    eqn.residual = eqn.residual.label_map(lambda t: t.has_label(time_derivative),
+                                          map_if_true=identity, map_if_false=drop)
 
-    state.setup_diagnostics()
-    state.setup_dump(0, tmax, False)
+    physics_schemes = [(SaturationAdjustment(eqn, parameters), ForwardEuler(state))]
 
-    physics.apply()
-    state.dump(float(tmax))
+    # build time stepper
+    scheme = ForwardEuler(state)
+    stepper = SplitPhysicsTimestepper(eqn, scheme, state,
+                                      physics_schemes=physics_schemes)
+
+    stepper.run(t=0, tmax=dt)
 
     return state, mv_true, mc_true, theta_d_true, mc_init
 
@@ -104,8 +108,8 @@ def test_cond_evap(tmpdir, process):
     dirname = str(tmpdir)
     state, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname, process)
 
-    water_v = state.fields('vapour_mixing_ratio')
-    water_c = state.fields('cloud_liquid_mixing_ratio')
+    water_v = state.fields('water_vapour')
+    water_c = state.fields('cloud_water')
     theta_vd = state.fields('theta')
     theta_d = Function(theta_vd.function_space())
     theta_d.interpolate(theta_vd/(1 + water_v * state.parameters.R_v / state.parameters.R_d))
@@ -127,7 +131,7 @@ def test_cond_evap(tmpdir, process):
     filename = path.join(dirname, "cond_evap/diagnostics.nc")
     data = Dataset(filename, "r")
 
-    water = data.groups["vapour_mixing_ratio_plus_cloud_liquid_mixing_ratio"]
+    water = data.groups["water_vapour_plus_cloud_water"]
     total = water.variables["total"]
     water_t_0 = total[0]
     water_t_T = total[-1]

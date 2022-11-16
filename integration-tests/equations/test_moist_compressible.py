@@ -28,7 +28,7 @@ def run_moist_compressible(tmpdir):
     R_v = parameters.R_v
     g = parameters.g
 
-    tracers = [WaterVapour(), CloudWater()]
+    tracers = [WaterVapour(name='vapour_mixing_ratio'), CloudWater(name='cloud_liquid_mixing_ratio')]
 
     state = State(mesh,
                   dt=dt,

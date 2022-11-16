@@ -52,7 +52,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         else:
             state.fields(field_name, function_space)
             state.diagnostics.register(field_name)
-            self.bcs[field_name] = []
+
+        self.bcs[field_name] = []
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -406,6 +407,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
+
+        # Add all boundary conditions to mixed function space
+        W = self.X.function_space()
+        self.bcs[self.field_name] = []
+        for idx, field_name in enumerate(self.field_names):
+            for bc in self.bcs[field_name]:
+                self.bcs[self.field_name].append(DirichletBC(W.sub(idx), bc.function_arg, bc.sub_domain))
 
     # ======================================================================== #
     # Active Tracer Routines
