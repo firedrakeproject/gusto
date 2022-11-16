@@ -48,7 +48,7 @@ eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
 x, y, = SpatialCoordinate(mesh)
 u0 = state.fields("u")
 D0 = state.fields("D")
-Q0 = state.fields("Q_mixing_ratio")
+Q0 = state.fields("Q")
 gaussian = 11*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
 D0.interpolate(Constant(H) + 0.01 * gaussian)
 Q0.interpolate(q_g * Constant(1 - 1e-4))
@@ -57,7 +57,7 @@ Q0.interpolate(q_g * Constant(1 - 1e-4))
 saturation = q_0 * exp(-alpha*(state.fields("D")-H)/H)
 
 # Add Bouchut condensation forcing
-InstantRain(eqns, saturation, vapour_name="Q_mixing_ratio",
+InstantRain(eqns, saturation, vapour_name="Q",
             parameters=parameters,
             convective_feedback=True)
 

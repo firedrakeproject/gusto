@@ -89,7 +89,7 @@ q1expr = b + c * (q_max/2)*(1 + cos(pi*r1/br))
 
 u0 = state.fields('u')
 D0 = state.fields('D')
-Q0 = state.fields("Q_mixing_ratio")
+Q0 = state.fields("Q")
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 Q0.interpolate(conditional(r1 < br, 3*q1expr, b))
@@ -101,7 +101,7 @@ saturation = q_0 * exp(-alpha*(state.fields("D")-H)/H)
 #  the dynamics
 if split_physics:
     physics_schemes = [(InstantRain(eqns, saturation,
-                                    vapour_name="Q_mixing_ratio",
+                                    vapour_name="Q",
                                     parameters=parameters,
                                     convective_feedback=True),
                         ForwardEuler(state))]
@@ -109,7 +109,7 @@ if split_physics:
                                       physics_schemes=physics_schemes)
 
 else:
-    InstantRain(eqns, saturation, vapour_name="Q_mixing_ratio",
+    InstantRain(eqns, saturation, vapour_name="Q",
                 parameters=parameters, convective_feedback=True)
     stepper = Timestepper(eqns, RK4(state), state)
 
