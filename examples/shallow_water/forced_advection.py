@@ -2,11 +2,11 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
                        VectorFunctionSpace, conditional, acos, cos, pi,
                        FiniteElement, as_vector)
-split_physics = False
+split_physics = True
 
-tophat = False
+tophat = True
 triangle = False
-trig = True
+trig = False
 
 u_max = 1
 if tophat:
@@ -26,7 +26,7 @@ else:
     tmax = 55
 
 if tophat:
-    dirname = "forced_advection_hat"
+    dirname = "forced_advection_hat_temp"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
@@ -73,7 +73,11 @@ rain = Rain(space='tracer', transport_eqn=TransportEquationType.no_transport)
 meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
                                active_tracers=[rain])
 state.fields("u").project(as_vector([u_max]))
-state.fields("water_vapour").project(mexpr)
+qv = state.fields("water_vapour")
+qv.project(mexpr)
+from firedrake.functionspaceimpl import IndexedFunctionSpace
+# index_vq = IndexedFunctionSpace(1, qv.function_space(), meqn.spaces)
+# print(type(index_vq))
 
 # exact rainfall profile (analytically)
 r_exact = state.fields("r_exact", VD)
@@ -99,7 +103,7 @@ if split_physics:
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(state))]
 
-    stepper = PrescribedTransport(meqn, RK4(state), state,
+    stepper = PrescribedTransport(meqn, RK4(state, limiter=DG1Limiter(qv.function_space())), state,
                                   physics_schemes=physics_schemes)
 else:
     InstantRain(meqn, msat, rain_name="rain", set_tau_to_dt=True)
