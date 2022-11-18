@@ -8,25 +8,25 @@ from firedrake import PeriodicRectangleMesh, exp, Constant
 Lx = 200
 Ly = 20
 delta = 1
-# nx = int(Lx/delta)
-# ny = int(Ly/delta)
-nx = ny = 100
+nx = int(Lx/delta)
+ny = int(Ly/delta)
 
-mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction='x')
+mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly)
 x, y = SpatialCoordinate(mesh)
 
 # set up parameters
 dt = 0.01
-H = 30.
+H = 1.
 g = 10
-beta = 2.286e-11
-fexpr = beta*(y-Ly/2)
+beta = 1 #2.286e-11
+# fexpr = beta*(y-Ly/2)
+fexpr = Constant(0)
 
 parameters = ShallowWaterParameters(H=H, g=g)
 
-dirname = "height_adjustment_BCs"
+dirname = "height_adjustment_f=0"
 
-output = OutputParameters(dirname=dirname, dumpfreq=1)
+output = OutputParameters(dirname=dirname, dumpfreq=10)
 
 diagnostic_fields = [CourantNumber()]
 
