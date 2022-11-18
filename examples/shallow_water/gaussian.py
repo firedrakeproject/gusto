@@ -3,6 +3,8 @@
 from gusto import *
 from firedrake import (PeriodicSquareMesh, exp, Constant)
 
+split_physics = True
+
 # set up mesh
 Lx = 10000e3
 Ly = 10000e3
@@ -48,7 +50,7 @@ eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
 x, y, = SpatialCoordinate(mesh)
 u0 = state.fields("u")
 D0 = state.fields("D")
-Q0 = state.fields("Q_mixing_ratio")
+Q0 = state.fields("Q")
 gaussian = 11*exp(-((x-0.5*Lx)**2/2.5e11 + (y-0.5*Ly)**2/2.5e11))
 D0.interpolate(Constant(H) + 0.01 * gaussian)
 Q0.interpolate(q_g * Constant(1 - 1e-4))
@@ -56,12 +58,20 @@ Q0.interpolate(q_g * Constant(1 - 1e-4))
 # define saturation function
 saturation = q_0 * exp(-alpha*(state.fields("D")-H)/H)
 
-# Add Bouchut condensation forcing
-InstantRain(eqns, saturation, vapour_name="Q_mixing_ratio",
-            parameters=parameters,
-            convective_feedback=True)
+# add forcing and set up timestepper
+if split_physics:
+    physics_schemes = [(InstantRain(eqns, saturation, vapour_name="Q",
+                                    parameters=parameters,
+                                    convective_feedback=True),
+                        ForwardEuler(state))]
 
-# Build time stepper
-stepper = Timestepper(eqns, RK4(state), state)
+    stepper = SplitPhysicsTimestepper(eqns, RK4(state), state,
+                                  physics_schemes=physics_schemes)
+else:
+    InstantRain(eqns, saturation, vapour_name="Q",
+                parameters=parameters,
+                convective_feedback=True)
 
-stepper.run(t=0, tmax=5*dt)
+    stepper = Timestepper(eqns, RK4(state), state)
+
+stepper.run(t=0, tmax=2*dt)

@@ -8,6 +8,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
+from firedrake.functionspaceimpl import IndexedFunctionSpace
 from gusto.kernels import LimitMidpoints
 
 import numpy as np
@@ -35,7 +36,11 @@ class DG1Limiter(object):
         """
 
         self.space = space
-        mesh = space.mesh()
+
+        print(type(space))
+        print("yes to indexed") if isinstance(space, type(IndexedFunctionSpace)) else print("no to indexed")
+        mesh = space.parent.mesh() if isinstance(space, type(IndexedFunctionSpace)) else space.mesh()
+        # mesh = space.mesh()
 
         # check that space is DG1
         degree = space.ufl_element().degree()
@@ -69,8 +74,8 @@ class DG1Limiter(object):
         Raises:
              AssertionError: If the field is not in the correct space.
          """
-        assert field.function_space() == self.space, \
-            "Given field does not belong to this object's function space"
+        # assert field.function_space() == self.space, \
+        #     "Given field does not belong to this object's function space"
 
         # Obtain field in equispaced DG space
         self.field_equispaced.interpolate(field)

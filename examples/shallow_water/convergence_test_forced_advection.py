@@ -110,14 +110,14 @@ for dx, dt in dx_dt.items():
     # add forcing and set up timestepper
     if split_physics:
         physics_schemes = [(InstantRain(meqn, msat,
-                                        rain_name="rain_mixing_ratio",
+                                        rain_name="rain",
                                         set_tau_to_dt=True),
                             ForwardEuler(state))]
 
         stepper = PrescribedTransport(meqn, RK4(state), state,
                                       physics_schemes=physics_schemes)
     else:
-        InstantRain(meqn, msat, rain_name="rain_mixing_ratio",
+        InstantRain(meqn, msat, rain_name="rain",
                     set_tau_to_dt=True)
 
         stepper = PrescribedTransport(meqn, RK4(state), state)
@@ -127,13 +127,13 @@ for dx, dt in dx_dt.items():
     # plot results
     fig, axes = plt.subplots()
     plot(r_exact, axes=axes, label='exact solution', color='green')
-    plot(state.fields("rain_mixing_ratio"), axes=axes, label='rain after advection', color='red')
+    plot(state.fields("rain"), axes=axes, label='rain after advection', color='red')
     plt.title("Rainfall profile after advecting")
     plt.legend()
     plt.show()
 
     # calculate L2 error norm
-    r = state.fields("rain_mixing_ratio")
+    r = state.fields("rain")
     L2_error = errornorm(r_exact, r)
     error_norms.append(L2_error)
     dx_list.append(dx)
