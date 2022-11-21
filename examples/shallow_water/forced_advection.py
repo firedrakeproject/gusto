@@ -75,9 +75,6 @@ meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
 state.fields("u").project(as_vector([u_max]))
 qv = state.fields("water_vapour")
 qv.project(mexpr)
-from firedrake.functionspaceimpl import IndexedFunctionSpace
-# index_vq = IndexedFunctionSpace(1, qv.function_space(), meqn.spaces)
-# print(type(index_vq))
 
 # exact rainfall profile (analytically)
 r_exact = state.fields("r_exact", VD)
@@ -103,8 +100,7 @@ if split_physics:
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(state))]
 
-    stepper = PrescribedTransport(meqn, RK4(state, limiter=DG1Limiter(qv.function_space())), state,
-                                  physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(meqn, RK4(state, limiter=DG1Limiter(qv.function_space())), state, physics_schemes=physics_schemes)
 else:
     InstantRain(meqn, msat, rain_name="rain", set_tau_to_dt=True)
 
