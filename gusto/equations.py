@@ -219,8 +219,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     """
 
     def __init__(self, field_names, state, family, degree,
-                 terms_to_linearise=None,
-                 no_normal_flow_bc_ids=None, active_tracers=None):
+                 linearisation_map=None, no_normal_flow_bc_ids=None,
+                 active_tracers=None):
         """
         Args:
             field_names (list): a list of strings for names of the prognostic
@@ -230,7 +230,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 field. This determines the other finite element spaces used via
                 the de Rham complex.
             degree (int): the element degree used for the velocity space.
-            terms_to_linearise (dict, optional): a dictionary specifying which
+            linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
@@ -242,7 +242,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         self.field_names = field_names
         self.active_tracers = active_tracers
-        self.terms_to_linearise = {} if terms_to_linearise is None else terms_to_linearise
+        self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
 
         # Build finite element spaces
         self.spaces = [space for space in self._build_spaces(state, family, degree)]
@@ -302,7 +302,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     # Linearisation Routines
     # ======================================================================== #
 
-    def generate_linear_terms(self, residual, terms_to_linearise):
+    def generate_linear_terms(self, residual, linearisation_map):
         """
         Generate the linearised forms for the equation set.
 
@@ -318,7 +318,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         Args:
             residual (:class:`LabelledForm`): the residual of the equation set.
                 A labelled form containing all the terms of the equation set.
-            terms_to_linearise (dict): a dictionary describing the terms to be
+            linearisation_map (func): a function describing the terms to be
                 linearised.
 
         Returns:
@@ -326,17 +326,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 each term as labels.
         """
 
-        # TODO: Neaten up the `terms_to_linearise` variable. This should not be
-        # a dictionary, it should be a filter of some sort
-
         from functools import partial
 
         # Function to check if term should be linearised
-        def should_linearise(term, field):
-            return (not term.has_label(linearisation)
-                    and term.get(prognostic) == field
-                    and any(term.has_label(*terms_to_linearise[field], return_tuple=True))
-                    )
+        def should_linearise(term):
+            return (not term.has_label(linearisation) and linearisation_map(term))
 
         # Linearise a term, and add the linearisation as a label
         def linearise(term, X, X_ref, du):
@@ -344,12 +338,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             return linearisation(term, replace_subject(X_ref)(linear_term))
 
         # Add linearisations to all terms that need linearising
-        for field in self.field_names:
-            residual = residual.label_map(
-                partial(should_linearise, field=field),
-                map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
-                map_if_false=identity,  # TODO: should "keep" be an alias for identity?
-            )
+        residual = residual.label_map(
+            should_linearise,
+            map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
+            map_if_false=identity,  # TODO: should "keep" be an alias for identity?
+        )
 
         return residual
 
@@ -433,9 +426,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 else:
                     raise ValueError(f'There is already a field named {tracer.name}')
                 self.spaces.append(state.spaces(tracer.space))
-                # Add an item to the terms_to_linearise dictionary
-                if tracer.name not in self.terms_to_linearise.keys():
-                    self.terms_to_linearise[tracer.name] = []
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
@@ -497,8 +487,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'D': [time_derivative, transport],
-                                     'u': [time_derivative, pressure_gradient]},
+                 linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -512,10 +501,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
                 surface of the fluid. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                both time derivatives, the 'D' transport term and the pressure
-                gradient term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term and the pressure gradient term.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -540,8 +530,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient and
+            # transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient))
+                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+
         super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
@@ -582,7 +579,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Depth transport term
         D_adv = prognostic(continuity_form(state, phi, D), "D")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['D']:
+        if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(state, phi, H).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
@@ -635,7 +632,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         u_ref.assign(Constant(0.0))
 
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
@@ -651,8 +648,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'D': [time_derivative, transport],
-                                     'u': [time_derivative, pressure_gradient, coriolis]},
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -666,10 +662,11 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
                 surface of the fluid. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                both time derivatives, the 'D' transport term and the pressure
-                gradient term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term, pressure gradient and Coriolis terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -683,8 +680,15 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 in the equations. Defaults to None.
         """
 
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
@@ -716,10 +720,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 extra_terms=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
+                 extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -737,9 +738,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the scalar transport terms.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -764,8 +767,14 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives and scalar transport terms
+            linearisation_map = lambda t: \
+                (t.has_label(time_derivative)
+                 or (t.get(prognostic) != "u" and t.has_label(transport)))
+
         super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
@@ -811,7 +820,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Density transport (conservative form)
         rho_adv = prognostic(continuity_form(state, phi, rho), "rho")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['rho']:
+        if self.linearisation_map(rho_adv.terms[0]):
             linear_rho_adv = linear_continuity_form(state, phi, rhobar).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
@@ -821,7 +830,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Potential temperature transport (advective form)
         theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['theta']:
+        if self.linearisation_map(theta_adv.terms[0]):
             linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
@@ -937,7 +946,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # TODO: add linearisation states for variables
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
 class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
@@ -959,10 +968,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     """
 
     def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 extra_terms=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
+                 extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -980,9 +986,11 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the scalar transport terms.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -1004,7 +1012,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         super().__init__(state, family, degree, Omega=Omega, sponge=sponge,
                          extra_terms=extra_terms,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -1065,9 +1073,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'p': [time_derivative],
-                                     'b': [time_derivative, transport]},
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -1080,9 +1086,11 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
             degree (int): the element degree used for the velocity space.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the buoyancy transport term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -1107,8 +1115,14 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives and scalar transport terms
+            linearisation_map = lambda t: \
+                (t.has_label(time_derivative)
+                 or (t.get(prognostic) not in ["u", "p"] and t.has_label(transport)))
+
         super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
@@ -1147,11 +1161,12 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
         # Buoyancy transport
         b_adv = prognostic(advection_form(state, gamma, b), "b")
-        linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
-            lambda t: t.has_label(transporting_velocity),
-            lambda t: Term(ufl.replace(
-                t.form, {t.get(transporting_velocity): u_trial}), t.labels))
-        b_adv = linearisation(b_adv, linear_b_adv)
+        if self.linearisation_map(b_adv.terms[0]):
+            linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): u_trial}), t.labels))
+            b_adv = linearisation(b_adv, linear_b_adv)
 
         adv_form = subject(u_adv + b_adv, self.X)
 
@@ -1195,4 +1210,4 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # TODO: add linearisation states for variables
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
