@@ -7,9 +7,9 @@ import numpy as np
 
 split_physics = True
 
-tophat = False
+tophat = True
 triangle = False
-trig = True
+trig = False
 
 # set up resolution and timestepping parameters for convergence test
 dx_dt = {0.05: 0.005, 0.1: 0.01, 0.2: 0.02, 0.25: 0.025, 0.5: 0.05}
@@ -39,7 +39,7 @@ else:
 for dx, dt in dx_dt.items():
 
     if tophat:
-        dirname = "convergence_test_forced_advection_hat_dx%s_dt%s" % (dx, dt)
+        dirname = "convergence_test_forced_advection_hat_DG1limiter_dx%s_dt%s" % (dx, dt)
     elif triangle:
         dirname = "converence_test_forced_advection_triangle_dx%s_dt%s" % (dx, dt)
     elif trig:
@@ -114,7 +114,9 @@ for dx, dt in dx_dt.items():
                                         set_tau_to_dt=True),
                             ForwardEuler(state))]
 
-        stepper = PrescribedTransport(meqn, RK4(state), state,
+        stepper = PrescribedTransport(meqn, RK4(state,limiter=DG1Limiter
+                                                (VD, subspace=0)),
+                                      state,
                                       physics_schemes=physics_schemes)
     else:
         InstantRain(meqn, msat, rain_name="rain",
