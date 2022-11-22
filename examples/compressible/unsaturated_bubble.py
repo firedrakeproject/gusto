@@ -148,7 +148,7 @@ for i in range(max_outer_solve_count):
     # calculate averaged rho
     rho_recoverer.project()
 
-    RH.assign(RH_ev)
+    RH.interpolate(RH_ev)
     if errornorm(RH, H) < 1e-10:
         break
 
@@ -158,10 +158,10 @@ for i in range(max_outer_solve_count):
         water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
         # compute theta_vd
-        theta0.assign(theta_d * (1 + water_v0 / epsilon))
+        theta0.interpolate(theta_d * (1 + water_v0 / epsilon))
 
         # test quality of solution by re-evaluating expression
-        RH.assign(RH_ev)
+        RH.interpolate(RH_ev)
         if errornorm(RH, H) < 1e-10:
             break
 
