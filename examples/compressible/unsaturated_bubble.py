@@ -161,7 +161,7 @@ for i in range(max_outer_solve_count):
         theta0.interpolate(theta_d * (1 + water_v0 / epsilon))
 
         # test quality of solution by re-evaluating expression
-        RH.assign(RH_ev)
+        RH.interpolate(RH_ev)
         if errornorm(RH, H) < 1e-10:
             break
 
