@@ -19,12 +19,11 @@ dt = 0.01
 H = 1.
 g = 10
 beta = 1 #2.286e-11
-# fexpr = beta*(y-Ly/2)
-fexpr = Constant(0)
+fexpr = beta*(y-Ly/2)
 
 parameters = ShallowWaterParameters(H=H, g=g)
 
-dirname = "height_adjustment_f=0"
+dirname = "height_adjustment_gaussian_with_rotation"
 
 output = OutputParameters(dirname=dirname, dumpfreq=10)
 
@@ -44,7 +43,7 @@ D0 = state.fields("D")
 b0 = state.fields("b")
 epsilon = 0.2
 a = 5
-Dexpr = 1 - epsilon*exp(-((x-Lx/2)**2/(2*a**2) + (y-Ly/2)**2/2))
+Dexpr = 1 - epsilon*exp(-((x-Lx/2)**2/(2*a**2) + (y-Ly/2)**2/(2*a**2)))
 D0.interpolate(Dexpr)
 b0.interpolate(Constant(1))
 
