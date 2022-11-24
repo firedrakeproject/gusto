@@ -1,14 +1,17 @@
 """
 This tests the scheme that converts water vapour directly to rain. It creates a
-bubble of vapour, and passes if the integral of the total water is conserved.
+bubble of vapour and any above a specified saturation function is converted to
+rain. The test passes if the the maximum of the vapour is equivalent to the
+saturation function, the minimum of the vapour is unchanged, the maximum of the
+vapour above saturation agrees with the maximum of the created rain, and the
+minimum of the rain is zero.
 """
 
-from os import path
 from gusto import *
 from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
-from netCDF4 import Dataset
 import pytest
+
 
 def setup_instant_rain(dirname):
 
@@ -23,7 +26,7 @@ def setup_instant_rain(dirname):
     g = 10
     fexpr = Constant(0)
     dt = 0.1
-    
+
     output = OutputParameters(dirname=dirname+"/instant_rain",
                               dumpfreq=1,
                               dumplist=['vapour', "rain"])
@@ -43,7 +46,7 @@ def setup_instant_rain(dirname):
                 transport_eqn=TransportEquationType.no_transport)
 
     eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
-                             active_tracers=[vapour, rain])
+                                 active_tracers=[vapour, rain])
 
     vapour0 = state.fields("water_vapour")
 
@@ -55,9 +58,9 @@ def setup_instant_rain(dirname):
     vapour_expr = conditional(r > rc, 0., 1 * (cos(pi * r / (rc * 2))) ** 2)
 
     vapour0.interpolate(vapour_expr)
-    
+
     initial_vapour = Function(VD).interpolate(vapour_expr)
-    
+
     # define saturation function
     saturation = 0.5
 
@@ -100,6 +103,3 @@ def test_instant_rain_setup(tmpdir):
     assert r.dat.data.min() < 1e-8
 
     # TODO: should we also check that the total moisture is conserved?
-
-    
-

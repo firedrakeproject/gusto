@@ -8,7 +8,6 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from firedrake.functionspaceimpl import IndexedFunctionSpace
 from gusto.kernels import LimitMidpoints
 
 import numpy as np
