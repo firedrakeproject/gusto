@@ -10,6 +10,7 @@ from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields
+from gusto.time_discretisation import ExplicitTimeDiscretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
@@ -147,7 +148,8 @@ class SplitPhysicsTimestepper(Timestepper):
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
-                Defaults to None.
+                Timestepping schemes for physics must be explicit. Defaults to
+                None.
         """
 
         self.equation = equation
@@ -163,6 +165,8 @@ class SplitPhysicsTimestepper(Timestepper):
             self.physics_schemes = []
 
         for _, scheme in self.physics_schemes:
+            # check that the supplied schemes for physics are explicit
+            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
             apply_bcs = False
             scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 
@@ -225,7 +229,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
-                Defaults to None.
+                Timestepping schemes for physics must be explicit. Defaults to
+                None.
 
         :kwargs: maxk is the number of outer iterations, maxi is the number
             of inner iterations and alpha is the offcentering parameter
@@ -243,6 +248,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.physics_schemes = []
         for _, scheme in self.physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
+            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -406,8 +412,11 @@ class PrescribedTransport(Timestepper):
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             state (:class:`State`): the model's state object
-            physics_list: (list, optional): a list of :class:`Physics`
-                options describing physical parametrisations. Defaults to None.
+            physics_schemes: (list, optional): a list of :class:`Physics` and
+                :class:`TimeDiscretisation` options describing physical
+                parametrisations and timestepping schemes to use for each.
+                Timestepping schemes for physics must be explicit. Defaults to
+                None.
             prescribed_transporting_velocity (func, optional): a function,
                 with a single argument representing the time, that returns a
                 :class:`ufl.Expr` for the transporting velocity. This allows
@@ -424,6 +433,8 @@ class PrescribedTransport(Timestepper):
             self.physics_schemes = []
 
         for _, scheme in self.physics_schemes:
+            # check that the supplied schemes for physics are explicit
+            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
             apply_bcs = False
             scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 
