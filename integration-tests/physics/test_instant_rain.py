@@ -10,7 +10,6 @@ minimum of the rain is zero.
 from gusto import *
 from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
-import pytest
 
 
 def run_instant_rain(dirname):
@@ -101,5 +100,3 @@ def test_instant_rain_setup(tmpdir):
 
     # check that the minimum of the rain is 0
     assert r.dat.data.min() < 1e-8
-
-    # TODO: should we also check that the total moisture is conserved?
