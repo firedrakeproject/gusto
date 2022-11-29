@@ -67,7 +67,7 @@ def run_instant_rain(dirname):
 
     # define expected solutions; vapour should be equal to saturation and rain
     # should be (initial vapour - saturation)
-    vapour_true = Function(VD).interpolate(Constant(saturation))
+    vapour_true = Function(VD).interpolate(saturation)
     rain_true = Function(VD).interpolate(vapour0 - saturation)
 
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
