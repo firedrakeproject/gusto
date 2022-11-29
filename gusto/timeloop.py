@@ -135,9 +135,11 @@ class Timestepper(BaseTimestepper):
 
 class SplitPhysicsTimestepper(Timestepper):
     """
-    Implements a timeloop by applying a scheme to a prognostic equation, with
-    the option of applying a different scheme to the physics.
+    Implements a timeloop by applying schemes separately to the physics and
+    dynamics. This 'splits' the physics from the dynamics and allows a different
+    scheme to be applied to the physics terms than the prognostic equation.
     """
+
     def __init__(self, equation, scheme, state, physics_schemes=None):
         """
         Args:
