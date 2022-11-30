@@ -622,7 +622,7 @@ class InstantRain(object):
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
                 to.
-            saturation_curve (function): the saturation function, above which
+            saturation_curve (ufl.Expr): the saturation function, above which
                 excess moisture is converted.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
