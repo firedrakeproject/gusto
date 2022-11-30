@@ -4,7 +4,7 @@ Objects to perform parametrisations of physical processes, or "physics".
 "Physics" schemes are routines to compute updates to prognostic fields that
 represent the action of non-fluid processes, or those fluid processes that are
 unresolved. This module contains a set of these processes in the form of classes
-with "apply" methods.
+with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -621,7 +621,6 @@ class InstantRain(object):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
-                to.
             saturation_curve (ufl.Expr): the saturation function, above which
                 excess moisture is converted.
             vapour_name (str, optional): name of the water vapour variable.
@@ -714,7 +713,7 @@ class InstantRain(object):
         rain and loss of height due to convection) at each timestep.
 
         Args:
-            x_in: (:class: 'Function): the (mixed) field to be evolved.
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
         """

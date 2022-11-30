@@ -1,7 +1,10 @@
 """
-Tests discretisations of the forced advection equation. This checks the
-errornorm for the resulting field against an analytic solution to ensure that
-the result is reasonable.
+Tests discretisations of the forced advection equation. This test describes
+transport of water vapour, which is converted to rain where it exceeds a
+prescribed saturation profile. The initial condition and saturation profile are
+chosen to give an analytic solution. The test compares the errornorm for the
+resulting field against the analytic solution to check that they agree, within
+a specified tolerance.
 """
 
 from gusto import *
@@ -14,12 +17,12 @@ def run_forced_advection(tmpdir):
 
     # mesh, state and equation
     Lx = 100
-    delta_x = 0.05
+    delta_x = 2.0
     nx = int(Lx/delta_x)
     mesh = PeriodicIntervalMesh(nx, Lx)
     x = SpatialCoordinate(mesh)[0]
 
-    dt = 0.005
+    dt = 0.2
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
     diagnostic_fields = [CourantNumber()]
 
@@ -82,7 +85,6 @@ def run_forced_advection(tmpdir):
 
 def test_forced_advection(tmpdir):
 
-    tol = 0.003
+    tol = 0.1
     error = run_forced_advection(tmpdir)
-    print(error)
     assert error < tol, 'The error in the forced advection equation is greater than the permitted tolerance'
