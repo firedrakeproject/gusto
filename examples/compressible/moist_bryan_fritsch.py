@@ -56,9 +56,9 @@ eqns = CompressibleEulerEquations(state, "CG", degree, active_tracers=tracers)
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
-water_v0 = state.fields("vapour_mixing_ratio")
-water_c0 = state.fields("cloud_liquid_mixing_ratio")
-moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio"]
+water_v0 = state.fields("water_vapour")
+water_c0 = state.fields("cloud_water")
+moisture = ["water_vapour", "cloud_water"]
 
 # spaces
 Vu = state.spaces("HDiv")
@@ -130,7 +130,7 @@ water_c0.assign(water_t - water_v0)
 
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
-                              ('vapour_mixing_ratio', water_vb)])
+                              ('water_vapour', water_vb)])
 
 rho_opts = None
 theta_opts = EmbeddedDGOptions()
@@ -138,19 +138,19 @@ u_transport = ImplicitMidpoint(state, "u")
 
 transported_fields = [SSPRK3(state, "rho", options=rho_opts),
                       SSPRK3(state, "theta", options=theta_opts),
-                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
-                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts),
+                      SSPRK3(state, "water_vapour", options=theta_opts),
+                      SSPRK3(state, "cloud_water", options=theta_opts),
                       u_transport]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
 # define condensation
-physics_list = [Condensation(state)]
+physics_schemes = [(SaturationAdjustment(eqns, params), ForwardEuler(state))]
 
 # build time stepper
 stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver,
-                                  physics_list=physics_list)
+                                  physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=tmax)

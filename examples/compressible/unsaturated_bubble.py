@@ -35,7 +35,7 @@ degree = 0
 
 dirname = 'unsaturated_bubble'
 output = OutputParameters(dirname=dirname, dumpfreq=tdump,
-                          perturbation_fields=['theta', 'vapour_mixing_ratio', 'rho'],
+                          perturbation_fields=['theta', 'water_vapour', 'rho'],
                           log_level='INFO')
 params = CompressibleParameters()
 diagnostic_fields = [RelativeHumidity()]
@@ -54,10 +54,10 @@ eqns = CompressibleEulerEquations(state, "CG", degree,
 u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
-water_v0 = state.fields("vapour_mixing_ratio")
-water_c0 = state.fields("cloud_liquid_mixing_ratio")
-rain0 = state.fields("rain_mixing_ratio", theta0.function_space())
-moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio", "rain_mixing_ratio"]
+water_v0 = state.fields("water_vapour")
+water_c0 = state.fields("cloud_water")
+rain0 = state.fields("rain", theta0.function_space())
+moisture = ["water_vapour", "cloud_water", "rain"]
 
 # spaces
 Vu = state.spaces("HDiv")
@@ -177,7 +177,7 @@ for i in range(max_outer_solve_count):
 # initialise fields
 state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b),
-                              ('vapour_mixing_ratio', water_vb)])
+                              ('water_vapour', water_vb)])
 
 # Set up transport schemes
 u_opts = RecoveryOptions(embedding_space=Vu_DG1,
@@ -192,20 +192,23 @@ limiter = VertexBasedLimiter(VDG1)
 transported_fields = [SSPRK3(state, "u", options=u_opts),
                       SSPRK3(state, "rho", options=rho_opts),
                       SSPRK3(state, "theta", options=theta_opts),
-                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "rain_mixing_ratio", options=theta_opts, limiter=limiter)]
+                      SSPRK3(state, "water_vapour", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "cloud_water", options=theta_opts, limiter=limiter),
+                      SSPRK3(state, "rain", options=theta_opts, limiter=limiter)]
 
 # Set up linear solver
 linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
-# define condensation
-physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
-                Condensation(state)]
+# define physics schemes
+# NB: to use wrapper options with Fallout, need to pass field name to time discretisation
+physics_schemes = [(Fallout(eqns, 'rain', state), SSPRK3(state, field_name='rain', options=theta_opts, limiter=limiter)),
+                   (Coalescence(eqns), ForwardEuler(state)),
+                   (EvaporationOfRain(eqns, params), ForwardEuler(state)),
+                   (SaturationAdjustment(eqns, params), ForwardEuler(state))]
 
 # build time stepper
 stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                   linear_solver=linear_solver,
-                                  physics_list=physics_list)
+                                  physics_schemes=physics_schemes)
 
 stepper.run(t=0, tmax=tmax)

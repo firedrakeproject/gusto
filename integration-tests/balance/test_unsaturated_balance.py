@@ -51,7 +51,7 @@ def setup_unsaturated(dirname, recovered):
     # Initial conditions
     rho0 = state.fields("rho")
     theta0 = state.fields("theta")
-    moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
+    moisture = ['water_vapour', 'cloud_water']
 
     # spaces
     Vt = theta0.function_space()
@@ -89,8 +89,8 @@ def setup_unsaturated(dirname, recovered):
 
     transported_fields = [SSPRK3(state, "rho", options=rho_opts),
                           SSPRK3(state, "theta", options=theta_opts),
-                          SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
-                          SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
+                          SSPRK3(state, "water_vapour", options=theta_opts),
+                          SSPRK3(state, "cloud_water", options=theta_opts)]
     if recovered:
         transported_fields.append(SSPRK3(state, "u", options=u_opts))
     else:
@@ -99,12 +99,12 @@ def setup_unsaturated(dirname, recovered):
     linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
 
     # Set up physics
-    physics_list = [Condensation(state)]
+    physics_schemes = [(SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
                                       linear_solver=linear_solver,
-                                      physics_list=physics_list)
+                                      physics_schemes=physics_schemes)
 
     return stepper, tmax
 

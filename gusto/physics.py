@@ -4,47 +4,43 @@ Objects to perform parametrisations of physical processes, or "physics".
 "Physics" schemes are routines to compute updates to prognostic fields that
 represent the action of non-fluid processes, or those fluid processes that are
 unresolved. This module contains a set of these processes in the form of classes
-with "apply" methods.
+with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
+from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, BoundaryMethod
-from gusto.time_discretisation import SSPRK3
-from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.equations import AdvectionEquation
-from gusto.limiters import ThetaLimiter, NoLimiter
-from gusto.configuration import logger, EmbeddedDGOptions, RecoveryOptions
-from firedrake import (Interpolator, conditional, Function,
-                       min_value, max_value, as_vector,
-                       FunctionSpace, Constant, pi, Projector)
+from gusto.equations import CompressibleEulerEquations
+from gusto.transport_forms import advection_form
+from gusto.fml import identity, Term
+from gusto.labels import subject, physics, transporting_velocity
+from firedrake import (Interpolator, conditional, Function, dx,
+                       min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics
-from math import gamma
+import ufl
+import math
 from enum import Enum
 
 
-__all__ = ["Condensation", "Fallout", "Coalescence", "Evaporation", "AdvectedMoments"]
+__all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
+           "AdvectedMoments", "InstantRain"]
 
 
 class Physics(object, metaclass=ABCMeta):
     """Base class for the parametrisation of physical processes for Gusto."""
 
-    def __init__(self, state):
-        """
-        Args:
-            state (:class:`State`): the model's state object.
-        """
-        self.state = state
+    def __init__(self):
+        pass
 
     @abstractmethod
-    def apply(self):
+    def evaluate(self):
         """
-        Computes the value of certain prognostic fields, representing the
-        action of the physical process.
+        Computes the value of physics source and sink terms.
         """
         pass
 
 
-class Condensation(Physics):
+class SaturationAdjustment(Physics):
     """
     Represents the phase change between water vapour and cloud liquid.
 
@@ -60,93 +56,157 @@ class Condensation(Physics):
     A filter is applied to prevent generation of negative mixing ratios.
     """
 
-    def __init__(self, state, iterations=1):
+    def __init__(self, equation, parameters, vapour_name='water_vapour',
+                 cloud_name='cloud_water', latent_heat=True):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            iterations (int, optional): number of saturation adjustment
-                iterations to perform for each call of the step. Defaults to 1.
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            parameters (:class:`Configuration`): an object containing the
+                model's physical parameters.
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to 'water_vapour'.
+            cloud_name (str, optional): name of the cloud water variable.
+                Defaults to 'cloud_water'.
+            latent_heat (bool, optional): whether to have latent heat exchange
+                feeding back from the phase change. Defaults to True.
+
+        Raises:
+            NotImplementedError: currently this is only implemented for the
+                CompressibleEulerEquations.
         """
-        super().__init__(state)
 
-        self.iterations = iterations
-        # obtain our fields
-        self.theta = state.fields('theta')
-        self.water_v = state.fields('vapour_mixing_ratio')
-        self.water_c = state.fields('cloud_liquid_mixing_ratio')
-        rho = state.fields('rho')
-        try:
-            # TODO: use the phase flag for the tracers here
-            rain = state.fields('rain_mixing_ratio')
-            water_l = self.water_c + rain
-        except NotImplementedError:
-            water_l = self.water_c
+        # TODO: make a check on the variable type of the active tracers
+        # if not a mixing ratio, we need to convert to mixing ratios
+        # this will be easier if we change equations to have dictionary of
+        # active tracer metadata corresponding to variable names
 
-        # declare function space
-        Vt = self.theta.function_space()
+        # Check that fields exist
+        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
+        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
 
-        # make rho variables
-        # we recover rho into theta space
-        h_deg = rho.function_space().ufl_element().degree()[0]
-        v_deg = rho.function_space().ufl_element().degree()[1]
-        if v_deg == 0 and h_deg == 0:
-            boundary_method = BoundaryMethod.extruded
+        # Make prognostic for physics scheme
+        self.X = Function(equation.X.function_space())
+        self.equation = equation
+        self.latent_heat = latent_heat
+
+        # Vapour and cloud variables are needed for every form of this scheme
+        cloud_idx = equation.field_names.index(cloud_name)
+        vap_idx = equation.field_names.index(vapour_name)
+        cloud_water = self.X.split()[cloud_idx]
+        water_vapour = self.X.split()[vap_idx]
+
+        # Indices of variables in mixed function space
+        V_idxs = [vap_idx, cloud_idx]
+        V = equation.function_space.sub(vap_idx)  # space in which to do the calculation
+
+        # Get variables used to calculate saturation curve
+        if isinstance(equation, CompressibleEulerEquations):
+            rho_idx = equation.field_names.index('rho')
+            theta_idx = equation.field_names.index('theta')
+            rho = self.X.split()[rho_idx]
+            theta = self.X.split()[theta_idx]
+            if latent_heat:
+                V_idxs.append(theta_idx)
+
+            # need to evaluate rho at theta-points, and do this via recovery
+            # TODO: make this bit of code neater if possible using domain object
+            v_deg = V.ufl_element().degree()[1]
+            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            rho_averaged = Function(V)
+            self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+
+            exner = thermodynamics.exner_pressure(parameters, rho_averaged, theta)
+            T = thermodynamics.T(parameters, theta, exner, r_v=water_vapour)
+            p = thermodynamics.p(parameters, exner)
+
         else:
-            boundary_method = None
-        rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+            raise NotImplementedError(
+                'Saturation adjustment only implemented for the Compressible Euler equations')
+
+        # -------------------------------------------------------------------- #
+        # Compute heat capacities and calculate saturation curve
+        # -------------------------------------------------------------------- #
+        # Loop through variables to extract all liquid components
+        liquid_water = cloud_water
+        for active_tracer in equation.active_tracers:
+            if (active_tracer.phase == Phases.liquid
+                    and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
+                liq_idx = equation.field_names.index(active_tracer.name)
+                liquid_water += self.X.split()[liq_idx]
 
         # define some parameters as attributes
-        dt = state.dt
-        R_d = state.parameters.R_d
-        cp = state.parameters.cp
-        cv = state.parameters.cv
-        c_pv = state.parameters.c_pv
-        c_pl = state.parameters.c_pl
-        c_vv = state.parameters.c_vv
-        R_v = state.parameters.R_v
+        self.dt = Constant(0.0)
+        R_d = parameters.R_d
+        cp = parameters.cp
+        cv = parameters.cv
+        c_pv = parameters.c_pv
+        c_pl = parameters.c_pl
+        c_vv = parameters.c_vv
+        R_v = parameters.R_v
 
         # make useful fields
-        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, exner)
-        L_v = thermodynamics.Lv(state.parameters, T)
-        R_m = R_d + R_v * self.water_v
-        c_pml = cp + c_pv * self.water_v + c_pl * water_l
-        c_vml = cv + c_vv * self.water_v + c_pl * water_l
+        L_v = thermodynamics.Lv(parameters, T)
+        R_m = R_d + R_v * water_vapour
+        c_pml = cp + c_pv * water_vapour + c_pl * liquid_water
+        c_vml = cv + c_vv * water_vapour + c_pl * liquid_water
 
-        # use Teten's formula to calculate w_sat
-        w_sat = thermodynamics.r_sat(state.parameters, T, p)
+        # use Teten's formula to calculate the saturation curve
+        sat_expr = thermodynamics.r_sat(parameters, T, p)
 
+        # -------------------------------------------------------------------- #
+        # Saturation adjustment expression
+        # -------------------------------------------------------------------- #
         # make appropriate condensation rate
-        dot_r_cond = ((self.water_v - w_sat)
-                      / (dt * (1.0 + ((L_v ** 2.0 * w_sat)
-                                      / (cp * R_v * T ** 2.0)))))
+        sat_adj_expr = (water_vapour - sat_expr) / self.dt
+        if latent_heat:
+            # As condensation/evaporation happens, the temperature changes
+            # so need to take this into account with an extra factor
+            sat_adj_expr = sat_adj_expr / (1.0 + ((L_v ** 2.0 * sat_expr)
+                                                  / (cp * R_v * T ** 2.0)))
 
-        # make cond_rate function, that needs to be the same for all updates in one time step
-        cond_rate = Function(Vt)
+        # adjust the rate so that so negative values don't occur
+        sat_adj_expr = conditional(sat_adj_expr < 0,
+                                   max_value(sat_adj_expr, -cloud_water / self.dt),
+                                   min_value(sat_adj_expr, water_vapour / self.dt))
 
-        # adjust cond rate so negative concentrations don't occur
-        self.lim_cond_rate = Interpolator(conditional(dot_r_cond < 0,
-                                                      max_value(dot_r_cond, - self.water_c / dt),
-                                                      min_value(dot_r_cond, self.water_v / dt)), cond_rate)
+        # -------------------------------------------------------------------- #
+        # Factors for multiplying source for different variables
+        # -------------------------------------------------------------------- #
+        # Factors need to have same shape as V_idxs
+        factors = [Constant(1.0), Constant(-1.0)]
+        if latent_heat and isinstance(equation, CompressibleEulerEquations):
+            factors.append(-theta * (cv * L_v / (c_vml * cp * T) - R_v * cv * c_pml / (R_m * cp * c_vml)))
 
-        # tell the prognostic fields what to update to
-        self.water_v_new = Interpolator(self.water_v - dt * cond_rate, Vt)
-        self.water_c_new = Interpolator(self.water_c + dt * cond_rate, Vt)
-        self.theta_new = Interpolator(self.theta
-                                      * (1.0 + dt * cond_rate
-                                         * (cv * L_v / (c_vml * cp * T)
-                                            - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+        # -------------------------------------------------------------------- #
+        # Add terms to equations and make interpolators
+        # -------------------------------------------------------------------- #
+        self.source = [Function(V) for factor in factors]
+        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+                                     for factor, source in zip(factors, self.source)]
 
-    def apply(self):
-        """Applies the condensation/evaporation process."""
-        self.rho_recoverer.project()
-        for i in range(self.iterations):
-            self.lim_cond_rate.interpolate()
-            self.theta.assign(self.theta_new.interpolate())
-            self.water_v.assign(self.water_v_new.interpolate())
-            self.water_c.assign(self.water_c_new.interpolate())
+        tests = [equation.tests[idx] for idx in V_idxs]
+
+        # Add source terms to residual
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
+                                                 equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source/sink for the saturation adjustment process.
+
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        # Update the values of internal variables
+        self.dt.assign(dt)
+        self.X.assign(x_in)
+        if isinstance(self.equation, CompressibleEulerEquations):
+            self.rho_recoverer.project()
+        # Evaluate the source
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()
 
 
 class AdvectedMoments(Enum):
@@ -182,63 +242,59 @@ class Fallout(Physics):
     for Cartesian geometry.
     """
 
-    def __init__(self, state, moments=AdvectedMoments.M3, limit=True):
+    def __init__(self, equation, rain_name, state, moments=AdvectedMoments.M3):
         """
         Args:
-            state (:class:`State`): the model's state object
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            rain_name (str, optional): name of the rain variable. Defaults to
+                'rain'.
+            state (:class:`State`): the model's state object.
             moments (int, optional): an :class:`AdvectedMoments` enumerator,
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
-            limit (bool, optional): whether to apply a limiter to the transport.
-                Defaults to True.
-
-        Raises:
-            NotImplementedError: the limiter is only implemented for specific
-                spaces (the equispaced DG1 field and the degree 1 temperature
-                space).
         """
-        super().__init__(state)
+        # Check that fields exist
+        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # function spaces
-        Vt = state.spaces("theta")
+        # TODO: check if variable is a mixing ratio
+
+        # Set up rain and velocity
+        self.X = Function(equation.X.function_space())
+
+        rain_idx = equation.field_names.index(rain_name)
+        rain = self.X.split()[rain_idx]
+        test = equation.tests[rain_idx]
+
         Vu = state.spaces("HDiv")
+        v = state.fields('rainfall_velocity', Vu)
 
-        # declare properties of class
-        self.state = state
+        # -------------------------------------------------------------------- #
+        # Create physics term -- which is actually a transport term
+        # -------------------------------------------------------------------- #
+
+        adv_term = advection_form(state, test, rain, outflow=True)
+        # Add rainfall velocity by replacing transport_velocity in term
+        adv_term = adv_term.label_map(identity,
+                                      map_if_true=lambda t: Term(
+                                          ufl.replace(t.form, {t.get(transporting_velocity): v}),
+                                          t.labels))
+
+        equation.residual += physics(subject(adv_term, equation.X), self.evaluate)
+
+        # -------------------------------------------------------------------- #
+        # Expressions for determining rainfall velocity
+        # -------------------------------------------------------------------- #
         self.moments = moments
-        self.v = state.fields('rainfall_velocity', Vu)
-        self.limit = limit
-
-        # determine whether to do recovered space advection scheme
-        # if horizontal and vertical degrees are 0 do recovered spac
-        h_deg = Vt.ufl_element().degree()[0]
-        v_deg = Vt.ufl_element().degree()[1] - 1
-        if v_deg == 0 and h_deg == 0:
-            VDG1 = state.spaces("DG1_equispaced")
-            VCG1 = FunctionSpace(Vt.mesh(), "CG", 1)
-            boundary_method = BoundaryMethod.taylor
-            advect_options = RecoveryOptions(embedding_space=VDG1,
-                                             recovered_space=VCG1,
-                                             boundary_method=boundary_method)
-        else:
-            advect_options = EmbeddedDGOptions()
-
-        # need to define advection equation before limiter (as it is needed for the ThetaLimiter)
-        # TODO: check if rain is a mixing ratio
-        advection_equation = AdvectionEquation(state, Vt, "rain_mixing_ratio", outflow=True)
-        self.rain = state.fields("rain_mixing_ratio")
 
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            if state.mesh.geometric_dimension() == 2:
-                self.v.project(as_vector([0, -terminal_velocity]))
-            elif state.mesh.geometric_dimension() == 3:
-                self.v.project(as_vector([0, 0, -terminal_velocity]))
+            v.project(-terminal_velocity*state.k)
         elif moments == AdvectedMoments.M3:
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
-            rho = state.fields('rho')
+            rho_idx = equation.field_names.index('rho')
+            rho = self.X.split()[rho_idx]
             rho_w = Constant(1000.0)  # density of liquid water
             # assume n(D) = n_0 * D^mu * exp(-Lambda*D)
             # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
@@ -252,49 +308,34 @@ class Fallout(Physics):
             g = Constant(0.5)  # scaling of density correction
             # we keep mu in the expressions even though mu = 0
             threshold = Constant(10**-10)  # only do rainfall for r > threshold
-            Lambda = (N_r * pi * rho_w * gamma(4 + mu)
-                      / (6 * gamma(1 + mu) * rho * self.rain)) ** (1. / 3)
-            Lambda0 = (N_r * pi * rho_w * gamma(4 + mu)
-                       / (6 * gamma(1 + mu) * rho * threshold)) ** (1. / 3)
-            v_expression = conditional(self.rain > threshold,
-                                       (a * gamma(4 + b + mu)
-                                        / (gamma(4 + mu) * Lambda ** b)
+            Lambda = (N_r * pi * rho_w * math.gamma(4 + mu)
+                      / (6 * math.gamma(1 + mu) * rho * rain)) ** (1. / 3)
+            Lambda0 = (N_r * pi * rho_w * math.gamma(4 + mu)
+                       / (6 * math.gamma(1 + mu) * rho * threshold)) ** (1. / 3)
+            v_expression = conditional(rain > threshold,
+                                       (a * math.gamma(4 + b + mu)
+                                        / (math.gamma(4 + mu) * Lambda ** b)
                                         * (rho0 / rho) ** g),
-                                       (a * gamma(4 + b + mu)
-                                        / (gamma(4 + mu) * Lambda0 ** b)
+                                       (a * math.gamma(4 + b + mu)
+                                        / (math.gamma(4 + mu) * Lambda0 ** b)
                                         * (rho0 / rho) ** g))
         else:
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            # TODO: implement for spherical geometry. Raise an error if the
-            # geometry is not Cartesian
-            if state.mesh.geometric_dimension() == 2:
-                self.determine_v = Projector(as_vector([0, -v_expression]), self.v)
-            elif state.mesh.geometric_dimension() == 3:
-                self.determine_v = Projector(as_vector([0, 0, -v_expression]), self.v)
+            self.determine_v = Projector(-v_expression*state.k, v)
 
-        # decide which limiter to use
-        if self.limit:
-            if h_deg == 0 and v_deg == 0:
-                limiter = VertexBasedLimiter(VDG1)
-            elif h_deg == 1 and v_deg == 1:
-                limiter = ThetaLimiter(Vt)
-            else:
-                logger.warning("There is no limiter yet implemented for the spaces used. NoLimiter() is being used for the rainfall in this case.")
-                limiter = NoLimiter()
-        else:
-            limiter = None
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source/sink corresponding to the fallout process.
 
-        # sedimentation will happen using a full advection method
-        self.advection_method = SSPRK3(state, options=advect_options, limiter=limiter)
-        self.advection_method.setup(advection_equation, self.v)
-
-    def apply(self):
-        """Applies the precipitation process."""
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
-        self.advection_method.apply(self.rain, self.rain)
 
 
 class Coalescence(Physics):
@@ -311,26 +352,38 @@ class Coalescence(Physics):
     This is only implemented for mixing ratio variables.
     """
 
-    def __init__(self, state, accretion=True, accumulation=True):
+    def __init__(self, equation, cloud_name='cloud_water', rain_name='rain',
+                 accretion=True, accumulation=True):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            cloud_name (str, optional): name of the cloud variable. Defaults to
+                'cloud_water'.
+            rain_name (str, optional): name of the rain variable. Defaults to
+                'rain'.
             accretion (bool, optional): whether to include the accretion process
                 in the parametrisation. Defaults to True.
             accumulation (bool, optional): whether to include the accumulation
                 process in the parametrisation. Defaults to True.
         """
-        super().__init__(state)
+        # Check that fields exist
+        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
+        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # obtain our fields
-        self.water_c = state.fields('cloud_liquid_mixing_ratio')
-        self.rain = state.fields('rain_mixing_ratio')
+        self.cloud_idx = equation.field_names.index(cloud_name)
+        self.rain_idx = equation.field_names.index(rain_name)
+        Vcl = equation.function_space.sub(self.cloud_idx)
+        Vr = equation.function_space.sub(self.rain_idx)
+        self.cloud_water = Function(Vcl)
+        self.rain = Function(Vr)
 
-        # declare function space
-        Vt = self.water_c.function_space()
+        # declare function space and source field
+        Vt = self.cloud_water.function_space()
+        self.source = Function(Vt)
 
         # define some parameters as attributes
-        dt = state.dt
+        self.dt = Constant(0.0)
+        # TODO: should these parameters be hard-coded or configurable?
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
         a = Constant(0.001)  # min cloud conc in kg/kg
@@ -341,39 +394,50 @@ class Coalescence(Physics):
         accu_rate = Constant(0.0)
 
         if accretion:
-            accr_rate = k_1 * (self.water_c - a)
+            accr_rate = k_1 * (self.cloud_water - a)
         if accumulation:
-            accu_rate = k_2 * self.water_c * self.rain ** b
+            accu_rate = k_2 * self.cloud_water * self.rain ** b
 
-        # make coalescence rate function, that needs to be the same for all updates in one time step
-        coalesce_rate = Function(Vt)
+        # Expression for rain increment, with conditionals to prevent negative values
+        rain_expr = conditional(self.rain < 0.0,  # if rain is negative do only accretion
+                                conditional(accr_rate < 0.0,
+                                            0.0,
+                                            min_value(accr_rate, self.cloud_water / self.dt)),
+                                # don't turn rain back into cloud
+                                conditional(accr_rate + accu_rate < 0.0,
+                                            0.0,
+                                            # if accretion rate is negative do only accumulation
+                                            conditional(accr_rate < 0.0,
+                                                        min_value(accu_rate, self.cloud_water / self.dt),
+                                                        min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        # adjust coalesce rate using min_value so negative cloud concentration doesn't occur
-        self.lim_coalesce_rate = Interpolator(conditional(self.rain < 0.0,  # if rain is negative do only accretion
-                                                          conditional(accr_rate < 0.0,
-                                                                      0.0,
-                                                                      min_value(accr_rate, self.water_c / dt)),
-                                                          # don't turn rain back into cloud
-                                                          conditional(accr_rate + accu_rate < 0.0,
-                                                                      0.0,
-                                                                      # if accretion rate is negative do only accumulation
-                                                                      conditional(accr_rate < 0.0,
-                                                                                  min_value(accu_rate, self.water_c / dt),
-                                                                                  min_value(accr_rate + accu_rate, self.water_c / dt)))),
-                                              coalesce_rate)
+        self.source_interpolator = Interpolator(rain_expr, self.source)
 
-        # tell the prognostic fields what to update to
-        self.water_c_new = Interpolator(self.water_c - dt * coalesce_rate, Vt)
-        self.rain_new = Interpolator(self.rain + dt * coalesce_rate, Vt)
+        # Add term to equation's residual
+        test_cl = equation.tests[self.cloud_idx]
+        test_r = equation.tests[self.rain_idx]
+        equation.residual += physics(subject(test_cl * self.source * dx
+                                             - test_r * self.source * dx,
+                                             equation.X),
+                                     self.evaluate)
 
-    def apply(self):
-        """Applies the coalescence process."""
-        self.lim_coalesce_rate.interpolate()
-        self.rain.assign(self.rain_new.interpolate())
-        self.water_c.assign(self.water_c_new.interpolate())
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source/sink for the coalescence process.
+
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        # Update the values of internal variables
+        self.dt.assign(dt)
+        self.rain.assign(x_in.split()[self.rain_idx])
+        self.cloud_water.assign(x_in.split()[self.cloud_idx])
+        # Evaluate the source
+        self.source.assign(self.source_interpolator.interpolate())
 
 
-class Evaporation(Physics):
+class EvaporationOfRain(Physics):
     """
     Represents the evaporation of rain into water vapour.
 
@@ -386,96 +450,276 @@ class Evaporation(Physics):
     is the virtual dry potential temperature.
     """
 
-    def __init__(self, state):
+    def __init__(self, equation, parameters, rain_name='rain',
+                 vapour_name='water_vapour', latent_heat=True):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            parameters (:class:`Configuration`): an object containing the
+                model's physical parameters.
+            cloud_name (str, optional): name of the rain variable. Defaults to
+                'rain'.
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to 'water_vapour'.
+            latent_heat (bool, optional): whether to have latent heat exchange
+                feeding back from the phase change. Defaults to True.
+
+        Raises:
+            NotImplementedError: currently this is only implemented for the
+                CompressibleEulerEquations.
         """
-        super().__init__(state)
+        # TODO: make a check on the variable type of the active tracers
+        # if not a mixing ratio, we need to convert to mixing ratios
+        # this will be easier if we change equations to have dictionary of
+        # active tracer metadata corresponding to variable names
 
-        # obtain our fields
-        self.theta = state.fields('theta')
-        self.water_v = state.fields('vapour_mixing_ratio')
-        self.rain = state.fields('rain_mixing_ratio')
-        rho = state.fields('rho')
-        try:
-            water_c = state.fields('cloud_liquid_mixing_ratio')
-            water_l = self.rain + water_c
-        except NotImplementedError:
-            water_l = self.rain
+        # Check that fields exist
+        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
+        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # declare function space
-        Vt = self.theta.function_space()
+        # Make prognostic for physics scheme
+        self.X = Function(equation.X.function_space())
+        self.equation = equation
+        self.latent_heat = latent_heat
 
-        # make rho variables
-        # we recover rho into theta space
-        h_deg = rho.function_space().ufl_element().degree()[0]
-        v_deg = rho.function_space().ufl_element().degree()[1]
-        if v_deg == 0 and h_deg == 0:
-            boundary_method = BoundaryMethod.extruded
-        else:
-            boundary_method = None
-        rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+        # Vapour and cloud variables are needed for every form of this scheme
+        rain_idx = equation.field_names.index(rain_name)
+        vap_idx = equation.field_names.index(vapour_name)
+        rain = self.X.split()[rain_idx]
+        water_vapour = self.X.split()[vap_idx]
+
+        # Indices of variables in mixed function space
+        V_idxs = [rain_idx, vap_idx]
+        V = equation.function_space.sub(rain_idx)  # space in which to do the calculation
+
+        # Get variables used to calculate saturation curve
+        if isinstance(equation, CompressibleEulerEquations):
+            rho_idx = equation.field_names.index('rho')
+            theta_idx = equation.field_names.index('theta')
+            rho = self.X.split()[rho_idx]
+            theta = self.X.split()[theta_idx]
+            if latent_heat:
+                V_idxs.append(theta_idx)
+
+            # need to evaluate rho at theta-points, and do this via recovery
+            # TODO: make this bit of code neater if possible using domain object
+            v_deg = V.ufl_element().degree()[1]
+            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            rho_averaged = Function(V)
+            self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+
+            exner = thermodynamics.exner_pressure(parameters, rho_averaged, theta)
+            T = thermodynamics.T(parameters, theta, exner, r_v=water_vapour)
+            p = thermodynamics.p(parameters, exner)
+
+        # -------------------------------------------------------------------- #
+        # Compute heat capacities and calculate saturation curve
+        # -------------------------------------------------------------------- #
+        # Loop through variables to extract all liquid components
+        liquid_water = rain
+        for active_tracer in equation.active_tracers:
+            if (active_tracer.phase == Phases.liquid
+                    and active_tracer.chemical == 'H2O' and active_tracer.name != rain_name):
+                liq_idx = equation.field_names.index(active_tracer.name)
+                liquid_water += self.X.split()[liq_idx]
 
         # define some parameters as attributes
-        dt = state.dt
-        R_d = state.parameters.R_d
-        cp = state.parameters.cp
-        cv = state.parameters.cv
-        c_pv = state.parameters.c_pv
-        c_pl = state.parameters.c_pl
-        c_vv = state.parameters.c_vv
-        R_v = state.parameters.R_v
+        self.dt = Constant(0.0)
+        R_d = parameters.R_d
+        cp = parameters.cp
+        cv = parameters.cv
+        c_pv = parameters.c_pv
+        c_pl = parameters.c_pl
+        c_vv = parameters.c_vv
+        R_v = parameters.R_v
 
         # make useful fields
-        exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, self.theta)
-        T = thermodynamics.T(state.parameters, self.theta, exner, r_v=self.water_v)
-        p = thermodynamics.p(state.parameters, exner)
-        L_v = thermodynamics.Lv(state.parameters, T)
-        R_m = R_d + R_v * self.water_v
-        c_pml = cp + c_pv * self.water_v + c_pl * water_l
-        c_vml = cv + c_vv * self.water_v + c_pl * water_l
+        L_v = thermodynamics.Lv(parameters, T)
+        R_m = R_d + R_v * water_vapour
+        c_pml = cp + c_pv * water_vapour + c_pl * liquid_water
+        c_vml = cv + c_vv * water_vapour + c_pl * liquid_water
 
-        # use Teten's formula to calculate w_sat
-        w_sat = thermodynamics.r_sat(state.parameters, T, p)
+        # use Teten's formula to calculate the saturation curve
+        sat_expr = thermodynamics.r_sat(parameters, T, p)
 
+        # -------------------------------------------------------------------- #
+        # Evaporation expression
+        # -------------------------------------------------------------------- #
+        # TODO: should these parameters be hard-coded or configurable?
         # expression for ventilation factor
         a = Constant(1.6)
         b = Constant(124.9)
         c = Constant(0.2046)
-        C = a + b * (rho_averaged * self.rain) ** c
+        C = a + b * (rho_averaged * rain) ** c
 
         # make appropriate condensation rate
         f = Constant(5.4e5)
         g = Constant(2.55e6)
         h = Constant(0.525)
-        dot_r_evap = (((1 - self.water_v / w_sat) * C * (rho_averaged * self.rain) ** h)
-                      / (rho_averaged * (f + g / (p * w_sat))))
-
-        # make evap_rate function, needs to be the same for all updates in one time step
-        evap_rate = Function(Vt)
+        evap_rate = (((1 - water_vapour / sat_expr) * C * (rho_averaged * rain) ** h)
+                     / (rho_averaged * (f + g / (p * sat_expr))))
 
         # adjust evap rate so negative rain doesn't occur
-        self.lim_evap_rate = Interpolator(conditional(dot_r_evap < 0,
-                                                      0.0,
-                                                      conditional(self.rain < 0.0,
-                                                                  0.0,
-                                                                  min_value(dot_r_evap, self.rain / dt))),
-                                          evap_rate)
+        evap_rate = conditional(evap_rate < 0, 0.0,
+                                conditional(rain < 0.0, 0.0,
+                                            min_value(evap_rate, rain / self.dt)))
 
-        # tell the prognostic fields what to update to
-        self.water_v_new = Interpolator(self.water_v + dt * evap_rate, Vt)
-        self.rain_new = Interpolator(self.rain - dt * evap_rate, Vt)
-        self.theta_new = Interpolator(self.theta
-                                      * (1.0 - dt * evap_rate
-                                         * (cv * L_v / (c_vml * cp * T)
-                                            - R_v * cv * c_pml / (R_m * cp * c_vml))), Vt)
+        # -------------------------------------------------------------------- #
+        # Factors for multiplying source for different variables
+        # -------------------------------------------------------------------- #
+        # Factors need to have same shape as V_idxs
+        factors = [Constant(-1.0), Constant(1.0)]
+        if latent_heat and isinstance(equation, CompressibleEulerEquations):
+            factors.append(-theta * (cv * L_v / (c_vml * cp * T) - R_v * cv * c_pml / (R_m * cp * c_vml)))
 
-    def apply(self):
-        """Applies the process to evaporate rain droplets."""
-        self.rho_recoverer.project()
-        self.lim_evap_rate.interpolate()
-        self.theta.assign(self.theta_new.interpolate())
-        self.water_v.assign(self.water_v_new.interpolate())
-        self.rain.assign(self.rain_new.interpolate())
+        # -------------------------------------------------------------------- #
+        # Add terms to equations and make interpolators
+        # -------------------------------------------------------------------- #
+        self.source = [Function(V) for factor in factors]
+        self.source_interpolators = [Interpolator(evap_rate*factor, source)
+                                     for factor, source in zip(factors, self.source)]
+
+        tests = [equation.tests[idx] for idx in V_idxs]
+
+        # Add source terms to residual
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
+                                                 equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Applies the process to evaporate rain droplets.
+
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        # Update the values of internal variables
+        self.dt.assign(dt)
+        self.X.assign(x_in)
+        if isinstance(self.equation, CompressibleEulerEquations):
+            self.rho_recoverer.project()
+        # Evaluate the source
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()
+
+
+class InstantRain(object):
+    """
+    The process of converting vapour above the saturation curve to rain.
+
+    A scheme to move vapour directly to rain. If convective feedback is true
+    then this process feeds back directly on the height equation. If rain is
+    accumulating then excess vapour is being tracked and stored as rain;
+    otherwise converted vapour is not recorded. The process can happen over the
+    timestep dt or over a specified time interval tau.
+     """
+
+    def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
+                 rain_name=None, parameters=None, convective_feedback=False,
+                 set_tau_to_dt=False):
+        """
+        Args:
+            equation (:class: 'PrognosticEquationSet'): the model's equation.
+            saturation_curve (ufl.Expr): the saturation function, above which
+                excess moisture is converted.
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to "water_vapour".
+            rain_name (str, optional): name of the rain variable. Defaults to
+                None.
+            parameters (:class: 'Configuration', optional): an object
+                containing the model's physical parameters. Defaults to None
+                but required if convective_feedback is True.
+            convective_feedback (bool, optional): True if the conversion of
+                vapour affects the height equation. Defaults to False.
+            set_tau_to_dt (bool, optional): True if the timescale for the
+                conversion is equal to the timestep and False if not. If False
+                then the user must provide a timescale, tau, that gets passed to
+                the parameters list.
+        """
+
+        self.convective_feedback = convective_feedback
+        self.set_tau_to_dt = set_tau_to_dt
+
+        # check for the correct fields
+        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
+        self.Vv_idx = equation.field_names.index(vapour_name)
+
+        if rain_name is not None:
+            assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set "
+
+        if self.convective_feedback:
+            assert "D" in equation.field_names, "Depth field must exist for convective feedback"
+            assert parameters is not None, "You must provide parameters for convective feedback"
+
+        # obtain function space and functions; vapour needed for all cases
+        W = equation.function_space
+        Vv = W.sub(self.Vv_idx)
+        test_v = equation.tests[self.Vv_idx]
+
+        # depth needed if convective feedback
+        if self.convective_feedback:
+            self.VD_idx = equation.field_names.index("D")
+            VD = W.sub(self.VD_idx)
+            test_D = equation.tests[self.VD_idx]
+            self.D = Function(VD)
+
+        # the source function is the difference between the water vapour and
+        # the saturation function
+        self.water_v = Function(Vv)
+        self.source = Function(Vv)
+
+        # tau is the timescale for conversion (may or may not be the timestep)
+        if self.set_tau_to_dt:
+            self.tau = Constant(0)
+        else:
+            assert parameters.tau is not None, "If the relaxation timescale is not dt then you must specify tau"
+            self.tau = parameters.tau
+
+        # lose vapour above the saturation curve
+        equation.residual += physics(subject(test_v * self.source * dx,
+                                             equation.X),
+                                     self.evaluate)
+
+        # if rain is not none then the excess vapour is being tracked and is
+        # added to rain
+        if rain_name is not None:
+            Vr_idx = equation.field_names.index(rain_name)
+            test_r = equation.tests[Vr_idx]
+            equation.residual -= physics(subject(test_r * self.source * dx,
+                                                 equation.X),
+                                         self.evaluate)
+
+        # if feeding back on the height adjust the height equation
+        if convective_feedback:
+            test_D = equation.tests[self.VD_idx]
+            gamma = parameters.gamma
+            equation.residual += physics(subject
+                                         (test_D * gamma * self.source * dx,
+                                          equation.X),
+                                         self.evaluate)
+
+        # interpolator does the conversion of vapour to rain
+        self.source_interpolator = Interpolator(conditional(
+            self.water_v > saturation_curve,
+            (1/self.tau)*(self.water_v - saturation_curve),
+            0), Vv)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evalutes the source term generated by the physics.
+
+        Computes the physics contributions (loss of vapour, accumulation of
+        rain and loss of height due to convection) at each timestep.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+        if self.convective_feedback:
+            self.D.assign(x_in.split()[self.VD_idx])
+        if self.set_tau_to_dt:
+            self.tau.assign(dt)
+        self.water_v.assign(x_in.split()[self.Vv_idx])
+        self.source.assign(self.source_interpolator.interpolate())

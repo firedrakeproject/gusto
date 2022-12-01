@@ -52,7 +52,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         else:
             state.fields(field_name, function_space)
             state.diagnostics.register(field_name)
-            self.bcs[field_name] = []
+
+        self.bcs[field_name] = []
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -400,6 +401,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         for id in no_normal_flow_bc_ids:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
+        # Add all boundary conditions to mixed function space
+        W = self.X.function_space()
+        self.bcs[self.field_name] = []
+        for idx, field_name in enumerate(self.field_names):
+            for bc in self.bcs[field_name]:
+                self.bcs[self.field_name].append(DirichletBC(W.sub(idx), bc.function_arg, bc.sub_domain))
+
     # ======================================================================== #
     # Active Tracer Routines
     # ======================================================================== #
@@ -473,9 +481,53 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         return adv_form
 
 
+class ForcedAdvectionEquation(PrognosticEquationSet):
+
+    def __init__(self, state, function_space, field_name,
+                 ufamily=None, udegree=None, Vu=None, active_tracers=None,
+                 **kwargs):
+
+        self.field_names = [field_name]
+        self.active_tracers = active_tracers
+        self.terms_to_linearise = {}
+
+        # Build finite element spaces
+        self.spaces = [state.spaces("tracer", V=function_space)]
+
+        # Add active tracers to the list of prognostics
+        if active_tracers is None:
+            active_tracers = []
+        self.add_tracers_to_prognostics(state, active_tracers)
+
+        # Make the full mixed function space
+        W = MixedFunctionSpace(self.spaces)
+
+        # Can now call the underlying PrognosticEquation
+        full_field_name = "_".join(self.field_names)
+        PrognosticEquation.__init__(self, state, W, full_field_name)
+
+        if not hasattr(state.fields, "u"):
+            if Vu is not None:
+                V = state.spaces("HDiv", V=Vu)
+            else:
+                assert ufamily is not None, "Specify the family for u"
+                assert udegree is not None, "Specify the degree of the u space"
+                V = state.spaces("HDiv", ufamily, udegree)
+            state.fields("u", V)
+
+        self.tests = TestFunctions(W)
+        self.X = Function(W)
+
+        mass_form = self.generate_mass_terms()
+
+        self.residual = subject(
+            mass_form + advection_form(state, self.tests[0], split(self.X)[0], **kwargs), self.X
+        )
+
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
+
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
@@ -524,9 +576,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         field_names = ["u", "D"]
 
-        if active_tracers is not None:
-            raise NotImplementedError('Tracers not implemented for shallow water equations')
-
         if active_tracers is None:
             active_tracers = []
 
@@ -545,8 +594,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
         g = state.parameters.g
         H = state.parameters.H
 
-        w, phi = self.tests
-        u, D = split(self.X)
+        w, phi = self.tests[0:2]
+        u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
 
         # -------------------------------------------------------------------- #
@@ -625,7 +674,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u_ref, D_ref = self.X_ref.split()
+        u_ref, D_ref = self.X_ref.split()[0:2]
         # Linearise about D = H
         # TODO: add interface to update linearisation state
         D_ref.assign(Constant(H))
