@@ -693,6 +693,9 @@ class RK4(ExplicitTimeDiscretisation):
             self.k4.assign(self.x_out)
             self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
 
+        if self.limiter is not None:
+            self.limiter.apply(self.x1)
+
     def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
@@ -715,7 +718,7 @@ class Heun(ExplicitTimeDiscretisation):
     u"""
     Implements Heun's method.
 
-    The 2-stage Runge-Kutta scheme known as Heun's method,for solving
+    The 2-stage Runge-Kutta scheme known as Heun's method, for solving
     ∂y/∂t = F(y). It can be written as:
 
     y_1 = F[y^n]
@@ -749,6 +752,9 @@ class Heun(ExplicitTimeDiscretisation):
         elif stage == 1:
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
+
+        if self.limiter is not None:
+            self.limiter.apply(self.x1)
 
     def apply_cycle(self, x_out, x_in):
         """
