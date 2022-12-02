@@ -667,10 +667,14 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = pressure_gradient(
-            subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
+        # Add pressure gradient only if not doing thermal
+        if self.thermal:
+             residual = (mass_form + adv_form)
+        else:
+            pressure_gradient_form = pressure_gradient(
+                subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form)
+            residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Topography and Thermal)
