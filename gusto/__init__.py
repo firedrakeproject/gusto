@@ -17,3 +17,4 @@ from gusto.state import *                            # noqa
 from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_forms import *                  # noqa
+from gusto.thermodynamics import *                   # noqa
