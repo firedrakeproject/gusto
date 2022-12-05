@@ -37,6 +37,7 @@ from gusto.physics import *                          # noqa
 from gusto.preconditioners import *                  # noqa
 from gusto.recovery import *                         # noqa
 from gusto.spatial_methods import *                  # noqa
+from gusto.thermodynamics import *                   # noqa
 from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_methods import *                # noqa
