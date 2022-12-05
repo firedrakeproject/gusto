@@ -1,12 +1,9 @@
 from gusto import *
-from firedrake import (CubedSphereMesh, ExtrudedMesh, Mesh, FiniteElement, interval,
-                       SpatialCoordinate, conditional, cos, sin, pi, sqrt,
-                       ln, exp, Constant, Function, DirichletBC, as_vector,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace, op2,
-                       errornorm, norm, asin, atan_2, Min, Max, acos, curl,
-                       TensorProductElement)
-import sys
-import numpy as np
+from firedrake import (CubedSphereMesh, ExtrudedMesh,
+                       SpatialCoordinate, cos, sin, pi, sqrt,
+                       exp, Constant, Function, as_vector,
+                       FunctionSpace, VectorFunctionSpace,
+                       errornorm, norm, Min, Max)
 
 dt = 900
 days = 1
@@ -17,7 +14,7 @@ deltaz = 2.0e3
 a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
-ref_level = 3 
+ref_level = 3
 m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=1)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 
@@ -58,7 +55,7 @@ T0 = 280.  # in K
 u0 = 40.
 
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
-state = State(mesh, 
+state = State(mesh,
               dt=dt,
               output=output,
               parameters=params,
@@ -80,11 +77,11 @@ Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
 
 # expressions for variables from paper
 s = (r / a) * cos(lat)
-#Inirial Velocity
+# Inirial Velocity
 u00 = u0 * (u0 + 2 * omega * a) / (T0 * Rd)
 f_sb = 0.5 * u00 * s ** 2
-#Initial Potential Temperature
-theta_expr = T0 * exp(g * (r - a) / (cp * T0 )) * exp(-params.kappa * f_sb)
+# Initial Potential Temperature
+theta_expr = T0 * exp(g * (r - a) / (cp * T0)) * exp(-params.kappa * f_sb)
 pie_expr = T0 / theta_expr
 rho_expr = rho(params, theta_expr, pie_expr)
 
@@ -106,7 +103,7 @@ print('interpolate theta')
 thetaf.interpolate(theta_expr)
 print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
-print('find rho')  
+print('find rho')
 compressible_hydrostatic_balance(state, thetaf, rhof, exner_boundary=pie, solve_for_rho=False)
 
 print('make analytic rho')
@@ -120,9 +117,9 @@ rho_b = Function(Vr).assign(rhof)
 u_b = state.fields('ubar', Vu).project(u)
 theta_b = Function(Vt).project(thetaf)
 
-#assign reference profiles
+# assign reference profiles
 state.set_reference_profiles([('rho', rho_b),
-                                ('theta', theta_b)])
+                              ('theta', theta_b)])
 
 
 # Set up transport schemes
