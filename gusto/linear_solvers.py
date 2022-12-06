@@ -28,11 +28,10 @@ __all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolv
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, state, equations, alpha=0.5, solver_parameters=None,
+    def __init__(self, equations, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
         Args:
-            state (:class:`State`): the model's state object.
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
@@ -44,7 +43,6 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 update the default parameters with the `solver_parameters`
                 passed in. Defaults to False.
         """
-        self.state = state
         self.equations = equations
         self.alpha = alpha
 
@@ -122,12 +120,11 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, state, equations, alpha=0.5,
+    def __init__(self, equations, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
@@ -149,7 +146,7 @@ class CompressibleSolver(TimesteppingSolver):
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
         else:
-            dgspace = state.spaces("DG")
+            dgspace = equations.domain.spaces("DG")
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
@@ -164,20 +161,19 @@ class CompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
-        super().__init__(state, equations, alpha, solver_parameters,
+        super().__init__(equations, alpha, solver_parameters,
                          overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
 
-        state = self.state
         dt = state.dt
         beta_ = dt*self.alpha
-        cp = state.parameters.cp
-        Vu = state.spaces("HDiv")
-        Vu_broken = FunctionSpace(state.mesh, BrokenElement(Vu.ufl_element()))
-        Vtheta = state.spaces("theta")
-        Vrho = state.spaces("DG")
+        cp = equations.parameters.cp
+        Vu = equations.domain.spaces("HDiv")
+        Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
+        Vtheta = equations.domain.spaces("theta")
+        Vrho = equations.domain.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)
@@ -185,7 +181,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         h_deg = Vrho.ufl_element().degree()[0]
         v_deg = Vrho.ufl_element().degree()[1]
-        Vtrace = FunctionSpace(state.mesh, "HDiv Trace", degree=(h_deg, v_deg))
+        Vtrace = FunctionSpace(equations.domain.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(self.equations.function_space)
@@ -196,17 +192,17 @@ class CompressibleSolver(TimesteppingSolver):
         w, phi, dl = TestFunctions(M)
         u, rho, l0 = TrialFunctions(M)
 
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(equations.domin.mesh)
 
         # Get background fields
-        thetabar = state.fields("thetabar")
-        rhobar = state.fields("rhobar")
-        exnerbar = thermodynamics.exner_pressure(state.parameters, rhobar, thetabar)
-        exnerbar_rho = thermodynamics.dexner_drho(state.parameters, rhobar, thetabar)
-        exnerbar_theta = thermodynamics.dexner_dtheta(state.parameters, rhobar, thetabar)
+        thetabar = equations.fields("thetabar")
+        rhobar = equations.fields("rhobar")
+        exnerbar = thermodynamics.exner_pressure(equations.parameters, rhobar, thetabar)
+        exnerbar_rho = thermodynamics.dexner_drho(equations.parameters, rhobar, thetabar)
+        exnerbar_theta = thermodynamics.dexner_dtheta(equations.parameters, rhobar, thetabar)
 
         # Analytical (approximate) elimination of theta
-        k = state.k             # Upward pointing unit vector
+        k = equations.domain.k             # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
 
         # Only include theta' (rather than exner') in the vertical
@@ -232,10 +228,11 @@ class CompressibleSolver(TimesteppingSolver):
                   + ds_b(degree=(self.quadrature_degree)))
 
         # Add effect of density of water upon theta
+        # TODO: this has to be done using active tracers
         if self.moisture is not None:
             water_t = Function(Vtheta).assign(0.0)
             for water in self.moisture:
-                water_t += self.state.fields(water)
+                water_t += self.equations.fields(water)
             theta_w = theta / (1 + water_t)
             thetabar_w = thetabar / (1 + water_t)
         else:
@@ -405,13 +402,6 @@ class IncompressibleSolver(TimesteppingSolver):
     (1) Analytically eliminate b (introduces error near topography)
     (2) Solve resulting system for (u,p) using a hybrid-mixed method
     (3) Reconstruct b
-
-    :arg state: a :class:`.State` object containing everything else.
-    :arg solver_parameters: (optional) Solver parameters.
-    :arg overwrite_solver_parameters: boolean, if True use only the
-         solver_parameters that have been passed in, if False then
-         update the default solver parameters with the solver_parameters
-         passed in.
     """
 
     solver_parameters = {
@@ -430,12 +420,12 @@ class IncompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
-        state = self.state      # just cutting down line length a bit
+        equation = self.equation      # just cutting down line length a bit
         dt = state.dt
         beta_ = dt*self.alpha
-        Vu = state.spaces("HDiv")
-        Vb = state.spaces("theta")
-        Vp = state.spaces("DG")
+        Vu = equation.domain.spaces("HDiv")
+        Vb = equation.domain.spaces("theta")
+        Vp = equation.domain.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)
@@ -450,10 +440,10 @@ class IncompressibleSolver(TimesteppingSolver):
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = state.fields("bbar")
+        bbar = equation.fields("bbar")
 
         # Analytical (approximate) elimination of theta
-        k = state.k             # Upward pointing unit vector
+        k = equation.domain.k             # Upward pointing unit vector
         b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
 
         # vertical projection
@@ -570,7 +560,7 @@ class LinearTimesteppingSolver(object):
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
 
-        dt = equation.state.dt
+        dt = state.dt
         W = equation.function_space
         beta = dt*alpha
 
