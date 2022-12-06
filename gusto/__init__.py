@@ -1,11 +1,13 @@
 from gusto.active_tracers import *                   # noqa
 from gusto.configuration import *                    # noqa
+from gusto.domain import *                           # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion import *                        # noqa
 from gusto.equations import *                        # noqa
 from gusto.fml import *                              # noqa
 from gusto.forcing import *                          # noqa
 from gusto.initialisation_tools import *             # noqa
+from gusto.io import *                               # noqa
 from gusto.labels import *                           # noqa
 from gusto.limiters import *                         # noqa
 from gusto.linear_solvers import *                   # noqa
