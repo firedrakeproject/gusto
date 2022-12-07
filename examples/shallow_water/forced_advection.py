@@ -26,7 +26,7 @@ else:
     tmax = 55
 
 if tophat:
-    dirname = "forced_advection_hat_no_limiter"
+    dirname = "forced_advection_hat_RK4_water_vapour_new_limiter"
 elif triangle:
     dirname = "forced_advection_triangle"
 elif trig:
@@ -100,9 +100,9 @@ if split_physics:
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(state))]
 
-    # stepper = PrescribedTransport(meqn, RK4(state, limiter=DG1Limiter(VD, subspace=0)), state, physics_schemes=physics_schemes)
-    stepper = PrescribedTransport(meqn, RK4(state), state,
-                                  physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(meqn, RK4(state, field_name="water_vapour",
+                                            limiter=DG1Limiter(VD, subspace=0)), state, physics_schemes=physics_schemes)
+
 else:
     InstantRain(meqn, msat, rain_name="rain", set_tau_to_dt=True)
 
