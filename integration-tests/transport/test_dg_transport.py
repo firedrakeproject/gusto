@@ -20,6 +20,7 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
     V = domain.spaces("DG")
+
     if equation_form == "advective":
         eqn = AdvectionEquation(domain, V, "f")
     else:

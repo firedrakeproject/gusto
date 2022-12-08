@@ -1,5 +1,5 @@
 """
-This tests three limiter options for different transport schemes.
+This tests limiter options for different transport schemes.
 A sharp bubble of warm air is generated in a vertical slice and then transported
 by a prescribed transport scheme. If the limiter is working, the transport
 should have produced no new maxima or minima.
@@ -33,39 +33,41 @@ def setup_limiters(dirname, space):
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
     output = OutputParameters(dirname=dirname+'/limiters',
                               dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
-    parameters = CompressibleParameters()
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters)
+    degree = 0 if space in ['DG0', 'Vtheta_degree_0'] else 1
+
+    domain = Domain(mesh, family="CG", degree=degree)
 
     if space == 'DG0':
-        V = state.spaces('DG', 'DG', 0)
+        V = domain.spaces('DG')
         VCG1 = FunctionSpace(mesh, 'CG', 1)
-        VDG1 = state.spaces('DG1_equispaced')
+        VDG1 = domain.spaces('DG1_equispaced')
+    elif space == 'DG1':
+        V = domain.spaces('DG')
     elif space == 'DG1_equispaced':
-        V = state.spaces('DG1_equispaced')
+        V = domain.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_0':
-        V = state.spaces('theta', degree=0)
+        V = domain.spaces('theta')
         VCG1 = FunctionSpace(mesh, 'CG', 1)
-        VDG1 = state.spaces('DG1_equispaced')
+        VDG1 = domain.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_1':
-        V = state.spaces('theta', degree=1)
+        V = domain.spaces('theta')
     else:
         raise NotImplementedError
 
-    Vpsi = FunctionSpace(mesh, 'CG', 2)
+    Vpsi = domain.spaces('CG', 'CG', degree, degree)
 
     # set up the equation
-    eqn = AdvectionEquation(state, V, 'tracer', ufamily='CG', udegree=1)
+    eqn = AdvectionEquation(domain, V, 'tracer')
+
+    io = IO(domain, eqn, dt=dt, output=output)
 
     # ------------------------------------------------------------------------ #
     # Initial condition
     # ------------------------------------------------------------------------ #
 
-    tracer0 = state.fields('tracer', V)
-    true_field = state.fields('true_tracer', V)
+    tracer0 = eqn.fields('tracer', V)
+    true_field = eqn.fields('true_tracer', V)
 
     x, z = SpatialCoordinate(mesh)
 
@@ -125,7 +127,7 @@ def setup_limiters(dirname, space):
     # ------------------------------------------------------------------------ #
 
     psi = Function(Vpsi)
-    u = state.fields('u')
+    u = eqn.fields('u')
 
     # set up solid body rotation for transport
     # we do this slightly complicated stream function to make the velocity 0 at edges
@@ -158,33 +160,36 @@ def setup_limiters(dirname, space):
                                recovered_space=VCG1,
                                project_low_method='recover',
                                boundary_method=BoundaryMethod.taylor)
-        transport_schemes = SSPRK3(state, options=opts,
+        transport_schemes = SSPRK3(domain, io, options=opts,
                                    limiter=VertexBasedLimiter(VDG1))
 
+    elif space == 'DG1':
+        transport_schemes = SSPRK3(domain, io, limiter=DG1Limiter(V))
+
     elif space == 'DG1_equispaced':
-        transport_schemes = SSPRK3(state, limiter=VertexBasedLimiter(V))
+        transport_schemes = SSPRK3(domain, io, limiter=VertexBasedLimiter(V))
 
     elif space == 'Vtheta_degree_1':
         opts = EmbeddedDGOptions()
-        transport_schemes = SSPRK3(state, options=opts, limiter=ThetaLimiter(V))
+        transport_schemes = SSPRK3(domain, io, options=opts, limiter=ThetaLimiter(V))
     else:
         raise NotImplementedError
 
     # build time stepper
-    stepper = PrescribedTransport(eqn, transport_schemes, state)
+    stepper = PrescribedTransport(eqn, transport_schemes, io)
 
-    return stepper, tmax, state, true_field
+    return stepper, tmax, eqn, true_field
 
 
 @pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1',
-                                   'DG0', 'DG1_equispaced'])
+                                   'DG0', 'DG1', 'DG1_equispaced'])
 def test_limiters(tmpdir, space):
 
     # Setup and run
     dirname = str(tmpdir)
-    stepper, tmax, state, true_field = setup_limiters(dirname, space)
+    stepper, tmax, eqn, true_field = setup_limiters(dirname, space)
     stepper.run(t=0, tmax=tmax)
-    final_field = state.fields('tracer')
+    final_field = eqn.fields('tracer')
 
     # Check tracer is roughly in the correct place
     assert norm(true_field - final_field) / norm(true_field) < 0.05, \

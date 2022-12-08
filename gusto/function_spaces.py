@@ -61,6 +61,13 @@ class Spaces(object):
                 # The space itself has been provided (to add it to the creator)
                 value = V
 
+            elif name == "DG1_equispaced":
+                # Special case based on name
+                if self.extruded_mesh:
+                    value = self.build_dg_space(1, 1, variant='equispaced')
+                else:
+                    value = self.build_dg_space(1, variant='equispaced')
+
             else:
                 # Need to create space, based on name/family/degree
                 assert horizontal_degree is not None
@@ -70,8 +77,6 @@ class Spaces(object):
                     value = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
                 elif name == "theta":
                     value = self.build_theta_space(horizontal_degree, vertical_degree)
-                elif name == "DG1_equispaced":
-                    value = self.build_dg_space(1, variant='equispaced')
                 elif family == "DG":
                     value = self.build_dg_space(horizontal_degree, vertical_degree)
                 elif family == "CG":
@@ -252,14 +257,14 @@ class Spaces(object):
             if vertical_degree is None:
                 raise ValueError('vertical_degree must be specified to create CG space on an extruded mesh')
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            CG_hori = FiniteElement("CG", cell, horizontal_degree+2)
-            CG_vert = FiniteElement("CG", interval, vertical_degree+2)
+            CG_hori = FiniteElement("CG", cell, horizontal_degree+1)
+            CG_vert = FiniteElement("CG", interval, vertical_degree+1)
             V_elt = TensorProductElement(CG_hori, CG_vert)
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement("DG", cell, horizontal_degree+2, variant=variant)
+            V_elt = FiniteElement("DG", cell, horizontal_degree+1, variant=variant)
 
         # How should we name this if the horizontal and vertical degrees are different?
-        name = f'CG{horizontal_degree+2}'
+        name = f'CG{horizontal_degree+1}'
 
         return FunctionSpace(self.mesh, V_elt, name=name)
