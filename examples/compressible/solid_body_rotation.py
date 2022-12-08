@@ -5,7 +5,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, Min, Max)
 
-dt = 900
+dt = 1800
 days = 1
 tmax = days * 24 * 60 * 60
 deltaz = 2.0e3
@@ -65,25 +65,36 @@ eqns = CompressibleEulerEquations(state, "RTCF", 1, Omega=Omega)
 
 # Initial conditions
 u = state.fields("u")
-rhof = state.fields("rho")
-thetaf = state.fields("theta")
+rho0 = state.fields("rho")
+theta0 = state.fields("theta")
 
 # spaces
 Vu = u.function_space()
-Vt = thetaf.function_space()
-Vr = rhof.function_space()
+Vt = theta0.function_space()
+Vr = rho0.function_space()
 Vpsi = FunctionSpace(mesh, "CG", 2)
 Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
 
 # expressions for variables from paper
 s = (r / a) * cos(lat)
-# Inirial Velocity
-u00 = u0 * (u0 + 2 * omega * a) / (T0 * Rd)
-f_sb = 0.5 * u00 * s ** 2
-# Initial Potential Temperature
-theta_expr = T0 * exp(g * (r - a) / (cp * T0)) * exp(-params.kappa * f_sb)
+
+Q_expr = s**2  * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
+
+#solving fields as per the staniforth paper 
+q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
+
+p_expr = p0 * exp(q_expr)
+theta_expr = T0 * p_expr ** (-params.kappa) / p0
 pie_expr = T0 / theta_expr
 rho_expr = rho(params, theta_expr, pie_expr)
+
+# Inirial Velocity
+#u00 = u0 * (u0 + 2 * omega * a) / (T0 * Rd)
+#f_sb = 0.5 * u00 * s ** 2
+# Initial Potential Temperature
+#theta_expr = T0 * exp(g * (r - a) / (cp * T0)) * exp(-params.kappa * f_sb)
+#pie_expr = T0 / theta_expr
+#rho_expr = rho(params, theta_expr, pie_expr)
 
 # get components of u in spherical polar coordinates
 zonal_u = u0 * r / a * cos(lat)
@@ -100,22 +111,22 @@ print('Set up initial conditions')
 print('project u')
 u.project(as_vector([u_x_expr, u_y_expr, u_z_expr]))
 print('interpolate theta')
-thetaf.interpolate(theta_expr)
+theta0.interpolate(theta_expr)
 print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
-compressible_hydrostatic_balance(state, thetaf, rhof, exner_boundary=pie, solve_for_rho=False)
+rho0.interpolate(rho_expr)
+compressible_hydrostatic_balance(state, theta0, rho0, exner_boundary=pie, solve_for_rho=False)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
-print('Normalised rho error is:', errornorm(rho_analytic, rhof) / norm(rho_analytic))
+print('Normalised rho error is:', errornorm(rho_analytic, rho0) / norm(rho_analytic))
 # rho.assign(rho_analytic)
 
 # make mean fields
 print('make mean fields')
-rho_b = Function(Vr).assign(rhof)
-u_b = state.fields('ubar', Vu).project(u)
-theta_b = Function(Vt).project(thetaf)
+rho_b = Function(Vr).assign(rho0)
+theta_b = Function(Vt).assign(theta0)
 
 # assign reference profiles
 state.set_reference_profiles([('rho', rho_b),
