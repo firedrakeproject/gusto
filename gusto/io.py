@@ -160,13 +160,16 @@ class DiagnosticsOutput(object):
 class IO(object):
     """Controls the model's input, output and diagnostics."""
 
-    def __init__(self, mesh, dt,
+    def __init__(self, domain, equation, dt,
                  output=None,
                  parameters=None,
                  diagnostics=None,
                  diagnostic_fields=None):
         """
         Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            equation (:class:`PrognosticEquation`): the prognostic equation.
             dt (:class:`Constant`): the time taken to perform a single model
                 step. If a float or int is passed, it will be cast to a
                 :class:`Constant`.
@@ -181,6 +184,9 @@ class IO(object):
             RuntimeError: if no output is provided.
             TypeError: if `dt` cannot be cast to a :class:`Constant`.
         """
+
+        self.equation = equation
+        self.mesh = domain.mesh
 
         if output is None:
             # TODO: maybe this shouldn't be an optional argument then?
@@ -200,14 +206,11 @@ class IO(object):
 
         # TODO: quick way of ensuring that diagnostics are registered
         if hasattr(self, "field_names"):
-            for fname in self.field_names:
+            for fname in equation.field_names:
                 self.diagnostics.register(fname)
                 self.bcs[fname] = []
         else:
-            self.diagnostics.register(field_name)
-
-        # The mesh
-        self.mesh = mesh
+            self.diagnostics.register(equation.field_name)
 
         if self.output.dumplist is None:
             self.output.dumplist = []
@@ -218,7 +221,7 @@ class IO(object):
 
         # setup logger
         logger.setLevel(output.log_level)
-        set_log_handler(mesh.comm)
+        set_log_handler(self.mesh.comm)
         if parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(parameters).items()))
@@ -242,7 +245,7 @@ class IO(object):
             f = SteadyStateError(self, name)
             self.diagnostic_fields.append(f)
 
-        fields = set([f.name() for f in self.fields])
+        fields = set([f.name() for f in self.equation.fields])
         field_deps = [(d, sorted(set(d.required_fields).difference(fields),)) for d in self.diagnostic_fields]
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
@@ -293,7 +296,7 @@ class IO(object):
                 comm=self.mesh.comm)
 
             # make list of fields to dump
-            self.to_dump = [f for f in self.fields if f.name() in self.fields.to_dump]
+            self.to_dump = [f for f in self.equation.fields if f.name() in self.equation.fields.to_dump]
 
             # make dump counter
             self.dumpcount = itertools.count()
@@ -310,7 +313,7 @@ class IO(object):
             # make functions on latlon mesh, as specified by dumplist_latlon
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
-                f = self.fields(name)
+                f = self.equation.fields(name)
                 field = Function(
                     functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
@@ -334,7 +337,7 @@ class IO(object):
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
-                                                    self.fields,
+                                                    self.equation.fields,
                                                     self.mesh.comm,
                                                     self.output.tolerance,
                                                     create=not pickup)
@@ -355,7 +358,7 @@ class IO(object):
                                             mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
-            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
+            self.to_pickup = [f for f in self.equation.fields if f.name() in self.equation.fields.to_pickup]
 
         # if we want to checkpoint then make a checkpoint counter
         if self.output.checkpoint:
@@ -369,7 +372,7 @@ class IO(object):
         # TODO: this duplicates some code from setup_dump. Can this be avoided?
         # It is because we don't know if we are picking up or setting dump first
         if self.to_pickup is None:
-            self.to_pickup = [f for f in self.fields if f.name() in self.fields.to_pickup]
+            self.to_pickup = [f for f in self.equation.fields if f.name() in self.equation.fields.to_pickup]
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
@@ -412,11 +415,11 @@ class IO(object):
 
         if output.dump_diagnostics:
             # Output diagnostic data
-            self.diagnostic_output.dump(self, t)
+            self.diagnostic_output.dump(self.equation, t)
 
         if len(output.point_data) > 0 and (next(self.pddumpcount) % output.pddumpfreq) == 0:
             # Output pointwise data
-            self.pointdata_output.dump(self.fields, t)
+            self.pointdata_output.dump(self.equation.fields, t)
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
@@ -443,7 +446,7 @@ class IO(object):
                 is used to set the initial field.
         """
         for name, ic in initial_conditions:
-            f_init = getattr(self.fields, name)
+            f_init = getattr(self.equation.fields, name)
             f_init.assign(ic)
             f_init.rename(name)
 

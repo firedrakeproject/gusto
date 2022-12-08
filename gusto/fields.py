@@ -58,7 +58,7 @@ class Fields(object):
 
 
 class StateFields(Fields):
-    """Creates the prognostic fields for the :class:`State` object."""
+    """Creates the prognostic fields for the model's equation."""
 
     def __init__(self, *fields_to_dump):
         """
@@ -149,14 +149,17 @@ class TimeLevelFields(object):
             except AttributeError:
                 setattr(self, level, Fields(equation))
 
-    def initialise(self, state):
+    def initialise(self, equation):
+        # TODO: should this be IO?
         """
-        Initialises the time fields from those currently in state
+        Initialises the time fields from those currently in the equation.
 
-        Args: state (:class:`State`): the model state object
+        Args:
+            equation (:class:`PrognosticEquation`): the model's prognostic
+                equation object.
         """
         for field in self.n:
-            field.assign(state.fields(field.name()))
+            field.assign(equation.fields(field.name()))
             self.np1(field.name()).assign(field)
 
     def update(self):

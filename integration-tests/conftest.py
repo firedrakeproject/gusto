@@ -9,7 +9,7 @@ from gusto import *
 from collections import namedtuple
 import pytest
 
-opts = ('state', 'tmax', 'f_init', 'f_end', 'family', 'degree',
+opts = ('domain', 'dt', 'tmax', 'output', 'f_init', 'f_end', 'degree',
         'uexpr', 'umax', 'radius', 'tol')
 TracerSetup = namedtuple('TracerSetup', opts)
 TracerSetup.__new__.__defaults__ = (None,)*len(opts)
@@ -29,7 +29,7 @@ def tracer_sphere(tmpdir, degree):
 
     dt = pi/3. * 0.02
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
-    state = State(mesh, dt=dt, output=output)
+    domain = Domain(mesh, family="BDM", degree=degree)
 
     umax = 1.0
     uexpr = as_vector([- umax * x[1] / radius, umax * x[0] / radius, 0.0])
@@ -40,7 +40,7 @@ def tracer_sphere(tmpdir, degree):
 
     tol = 0.05
 
-    return TracerSetup(state, tmax, f_init, f_end, "BDM", degree,
+    return TracerSetup(domain, dt, tmax, output, f_init, f_end, degree,
                        uexpr, umax, radius, tol)
 
 
@@ -56,7 +56,7 @@ def tracer_slice(tmpdir, degree):
     dt = 0.01
     tmax = 0.75
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    state = State(mesh, dt=dt, output=output)
+    domain = Domain(mesh, family="CG", degree=degree)
 
     uexpr = as_vector([2.0, 0.0])
 
@@ -73,7 +73,7 @@ def tracer_slice(tmpdir, degree):
 
     tol = 0.12
 
-    return TracerSetup(state, tmax, f_init, f_end, "CG", degree, uexpr, tol=tol)
+    return TracerSetup(domain, dt, tmax, output, f_init, f_end, degree, uexpr, tol=tol)
 
 
 def tracer_blob_slice(tmpdir, degree):
@@ -83,13 +83,13 @@ def tracer_blob_slice(tmpdir, degree):
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    state = State(mesh, dt=dt, output=output)
+    domain = Domain(mesh, family="CG", degree=degree)
 
     tmax = 1.
     x = SpatialCoordinate(mesh)
     f_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
 
-    return TracerSetup(state, tmax, f_init, family="CG", degree=degree)
+    return TracerSetup(domain, dt, tmax, output, f_init, degree=degree)
 
 
 @pytest.fixture()

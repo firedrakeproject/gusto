@@ -19,15 +19,15 @@ __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
 class BaseTimestepper(object, metaclass=ABCMeta):
     """Base class for timesteppers."""
 
-    def __init__(self, equation, state):
+    def __init__(self, equation, io):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation.
-            state (:class:`State`): the model's state object
+            io (:class:`IO`): the model's object for controlling input/output.
         """
 
         self.equation = equation
-        self.state = state
+        self.io = io
 
         self.setup_fields()
         self.setup_scheme()
@@ -61,39 +61,39 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             pickup: (bool): specify whether to pickup from a previous run
         """
 
-        state = self.state
+        io = self.io
 
         if pickup:
-            t = state.pickup_from_checkpoint()
+            t = io.pickup_from_checkpoint()
 
-        state.setup_diagnostics()
+        io.setup_diagnostics()
 
         with timed_stage("Dump output"):
-            state.setup_dump(t, tmax, pickup)
+            io.setup_dump(t, tmax, pickup)
 
-        state.t.assign(t)
+        io.t.assign(t)
 
-        self.x.initialise(state)
+        self.x.initialise(self.equation)
 
-        while float(state.t) < tmax - 0.5*float(state.dt):
-            logger.info(f'at start of timestep, t={float(state.t)}, dt={float(state.dt)}')
+        while float(io.t) < tmax - 0.5*float(io.dt):
+            logger.info(f'at start of timestep, t={float(io.t)}, dt={float(io.dt)}')
 
             self.x.update()
 
             self.timestep()
 
             for field in self.x.np1:
-                state.fields(field.name()).assign(field)
+                self.equation.fields(field.name()).assign(field)
 
-            state.t.assign(state.t + state.dt)
+            io.t.assign(io.t + io.dt)
 
             with timed_stage("Dump output"):
-                state.dump(float(state.t))
+                io.dump(float(io.t))
 
-        if state.output.checkpoint:
-            state.chkpt.close()
+        if io.output.checkpoint:
+            io.chkpt.close()
 
-        logger.info(f'TIMELOOP complete. t={float(state.t)}, tmax={tmax}')
+        logger.info(f'TIMELOOP complete. t={float(io.t)}, tmax={tmax}')
 
 
 class Timestepper(BaseTimestepper):
@@ -101,16 +101,16 @@ class Timestepper(BaseTimestepper):
     Implements a timeloop by applying a scheme to a prognostic equation.
     """
 
-    def __init__(self, equation, scheme, state):
+    def __init__(self, equation, scheme, io):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
-            state (:class:`State`): the model's state object
+            io (:class:`IO`): the model's object for controlling input/output.
         """
         self.scheme = scheme
-        super().__init__(equation=equation, state=state)
+        super().__init__(equation=equation, io=io)
 
     @property
     def transporting_velocity(self):
@@ -140,13 +140,13 @@ class SplitPhysicsTimestepper(Timestepper):
     scheme to be applied to the physics terms than the prognostic equation.
     """
 
-    def __init__(self, equation, scheme, state, physics_schemes=None):
+    def __init__(self, equation, scheme, io, physics_schemes=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
-            state (:class:`State`): the model's state object
+            io (:class:`IO`): the model's object for controlling input/output.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -156,7 +156,7 @@ class SplitPhysicsTimestepper(Timestepper):
 
         self.equation = equation
         self.scheme = scheme
-        self.state = state
+        self.io = io
 
         self.setup_fields()
         self.setup_scheme()
@@ -206,7 +206,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     terms.
     """
 
-    def __init__(self, equation_set, state, transport_schemes,
+    def __init__(self, equation_set, io, transport_schemes,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -216,7 +216,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
                 equation set to be solved
-            state (:class:`State`) the model's state object
+            io (:class:`IO`): the model's object for controlling input/output.
             transport_schemes: iterable of ``(field_name, scheme)`` pairs
                 indicating the name of the field (str) to transport, and the
                 :class:`TimeDiscretisation` to use
@@ -265,7 +265,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 assert scheme.field_name in equation_set.field_names
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        super().__init__(equation_set, state)
+        if not equation_set.reference_profile_initialised:
+            raise RuntimeError('Reference profiles for equation set must be initialised to use Semi-Implicit Timestepper')
+
+        super().__init__(equation_set, io)
 
         if auxiliary_equations_and_schemes is not None:
             for eqn, scheme in auxiliary_equations_and_schemes:
@@ -379,7 +382,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in state.dy
+                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
@@ -406,14 +409,14 @@ class PrescribedTransport(Timestepper):
     """
     Implements a timeloop with a prescibed transporting velocity
     """
-    def __init__(self, equation, scheme, state, physics_schemes=None,
+    def __init__(self, equation, scheme, io, physics_schemes=None,
                  prescribed_transporting_velocity=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
-            state (:class:`State`): the model's state object
+            io (:class:`IO`): the model's object for controlling input/output.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -427,7 +430,7 @@ class PrescribedTransport(Timestepper):
                 updated. Defaults to None.
         """
 
-        super().__init__(equation, scheme, state)
+        super().__init__(equation, scheme, io)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -442,14 +445,14 @@ class PrescribedTransport(Timestepper):
 
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
-                prescribed_transporting_velocity(self.state.t),
-                self.state.fields('u'))
+                prescribed_transporting_velocity(self.io.t),
+                self.equation.fields('u'))
         else:
             self.velocity_projection = None
 
     @property
     def transporting_velocity(self):
-        return self.state.fields('u')
+        return self.equation.fields('u')
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)

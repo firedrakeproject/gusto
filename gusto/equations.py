@@ -60,8 +60,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 class AdvectionEquation(PrognosticEquation):
     u"""Discretises the advection equation, ∂q/∂t + (u.∇)q = 0"""
 
-    def __init__(self, domain, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -69,14 +68,9 @@ class AdvectionEquation(PrognosticEquation):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
             **kwargs: any keyword arguments to be passed to the advection form.
         """
         super().__init__(domain, function_space, field_name)
@@ -85,9 +79,7 @@ class AdvectionEquation(PrognosticEquation):
             if Vu is not None:
                 V = domain.spaces("HDiv", V=Vu)
             else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = domain.spaces("HDiv", ufamily, udegree)
+                V = domain.spaces("HDiv")
             self.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -101,8 +93,7 @@ class AdvectionEquation(PrognosticEquation):
 class ContinuityEquation(PrognosticEquation):
     u"""Discretises the continuity equation, ∂q/∂t + ∇(u*q) = 0"""
 
-    def __init__(self, domain, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -110,14 +101,9 @@ class ContinuityEquation(PrognosticEquation):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
             **kwargs: any keyword arguments to be passed to the advection form.
         """
         super().__init__(domain, function_space, field_name)
@@ -126,9 +112,7 @@ class ContinuityEquation(PrognosticEquation):
             if Vu is not None:
                 V = domain.spaces("HDiv", V=Vu)
             else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = domain.spaces("HDiv", ufamily, udegree)
+                V = domain.spaces("HDiv")
             self.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -170,9 +154,8 @@ class DiffusionEquation(PrognosticEquation):
 class AdvectionDiffusionEquation(PrognosticEquation):
     u"""The advection-diffusion equation, ∂q/∂t + (u.∇)q = ∇.(κ∇q)"""
 
-    def __init__(self, domain, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, diffusion_parameters=None,
-                 **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None,
+                 diffusion_parameters=None, **kwargs):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -180,12 +163,6 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is  Defaults to None.
             diffusion_parameters (:class:`DiffusionParameters`, optional):
@@ -199,9 +176,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             if Vu is not None:
                 V = domain.spaces("HDiv", V=Vu)
             else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = domain.spaces("HDiv", ufamily, udegree)
+                V = domain.spaces("HDiv")
             self.fields("u", V)
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -246,6 +221,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.active_tracers = active_tracers
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
         self.reference_profiles_initialised = False
+
+        # Build finite element spaces
+        self.spaces = domain.compatible_spaces
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -516,9 +494,8 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
         ∂q/∂t + (u.∇)q = F,
     which can also be augmented with active tracers.
     """
-    def __init__(self, domain, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, active_tracers=None,
-                 **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None,
+                 active_tracers=None, **kwargs):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -526,14 +503,9 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
@@ -563,9 +535,7 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             if Vu is not None:
                 V = domain.spaces("HDiv", V=Vu)
             else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = domain.spaces("HDiv", ufamily, udegree)
+                V = domain.spaces("HDiv")
             self.fields("u", V)
 
         self.tests = TestFunctions(W)
