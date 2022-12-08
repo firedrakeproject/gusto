@@ -15,7 +15,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 ref_level = 3
-m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=1)
+m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=3)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 
 x, y, z = SpatialCoordinate(mesh)
