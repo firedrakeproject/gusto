@@ -2,11 +2,9 @@ from gusto import *
 from firedrake import PeriodicRectangleMesh, exp, Constant
 
 # set up mesh
-# Lx = 200
-# Ly = 20
-# nx = ny = 1000
-Lx = 20
-Ly = 20
+y_scale = 1
+Lx = 80*y_scale
+Ly = 8*y_scale
 delta = 0.2
 nx = int(Lx/delta)
 ny = int(Ly/delta)
@@ -16,14 +14,15 @@ x, y = SpatialCoordinate(mesh)
 
 # set up parameters
 dt = 0.002
-H = 1.
 g = 1
-beta = 1 #2.286e-11
+beta = 1
+H = 1
 fexpr = beta*(y-Ly/2)
+T = 1/beta*y_scale
 
 parameters = ShallowWaterParameters(H=H, g=g)
 
-dirname = "height_adjustment_gaussian"
+dirname = "Gill_adjustment"
 
 output = OutputParameters(dirname=dirname, dumpfreq=1)
 
@@ -36,21 +35,17 @@ state = State(mesh,
               parameters=parameters)
 
 eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
-                             no_normal_flow_bc_ids=[1,2], thermal=True)
+                             no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-b0 = state.fields("b")
 epsilon = 0.3
 a = 0.3
-Dexpr = 1 - epsilon*exp(-((x-Lx/2)**2/(2*a**2) + (y-Ly/2)**2/(2*a**2)))
+Dexpr = 1 - epsilon*exp(-((x-30)**2/(2*a**2) + (y-Ly/2)**2/(2*a**2)))
 D0.interpolate(Dexpr)
-b0.interpolate(Constant(1))
 
-# Build time stepper
+# build timestepper
 stepper = Timestepper(eqns, RK4(state), state)
 
-stepper.run(t=0, tmax=20)
-
-
+stepper.run(t=0, tmax=5*T)
