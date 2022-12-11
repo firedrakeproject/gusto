@@ -146,102 +146,112 @@ class DiagnosticField(object, metaclass=ABCMeta):
         """The name of this diagnostic field"""
         pass
 
-    def setup(self, state, space=None):
+    def setup(self, eqn, space=None):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
             space (:class:`FunctionSpace`, optional): the function space for the
                 diagnostic field to be computed in. Defaults to None, in which
                 case the space will be DG0.
         """
         if not self._initialised:
             if space is None:
-                space = state.spaces("DG0", "DG", 0)
-            self.field = state.fields(self.name, space, pickup=False)
+                space = eqn.domain.spaces("DG0", "DG", 0)
+
+            # TODO: would it be better for these diagnostics to be stored in the IO?
+            self.field = eqn.fields(self.name, space, pickup=False)
             self._initialised = True
 
     @abstractmethod
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         pass
 
-    def __call__(self, state):
+    def __call__(self, eqn):
         """
         Compute the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
-        return self.compute(state)
+        return self.compute(eqn)
 
 
 class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
 
-    def setup(self, state):
+    def __init__(self, dt):
+        """
+        Args:
+            dt (float): time increment over a model time step.
+        """
+        super().__init__()
+        self.dt = dt
+
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            super(CourantNumber, self).setup(state)
+            super(CourantNumber, self).setup(eqn)
             # set up area computation
-            V = state.spaces("DG0")
+            V = eqn.domain.spaces("DG0")
             test = TestFunction(V)
             self.area = Function(V)
             assemble(test*dx, tensor=self.area)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
-        dt = Constant(state.dt)
-        return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*dt)
+        # TODO: update dt here?
+        u = eqn.fields("u")
+        return self.field.project(sqrt(dot(u, u))/sqrt(self.area)*self.dt)
 
 
 class VelocityX(DiagnosticField):
     """The geocentric Cartesian X component of the velocity field."""
     name = "VelocityX"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("CG1", "CG", 1)
-            super(VelocityX, self).setup(state, space=space)
+            space = eqn.domain.spaces("CG1", "CG", 1)
+            super(VelocityX, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
+        u = eqn.fields("u")
         uh = u[0]
         return self.field.interpolate(uh)
 
@@ -250,28 +260,28 @@ class VelocityZ(DiagnosticField):
     """The geocentric Cartesian Z component of the velocity field."""
     name = "VelocityZ"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("CG1", "CG", 1)
-            super(VelocityZ, self).setup(state, space=space)
+            space = eqn.domain.spaces("CG1", "CG", 1)
+            super(VelocityZ, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
+        u = eqn.fields("u")
         w = u[u.geometric_dimension() - 1]
         return self.field.interpolate(w)
 
@@ -280,28 +290,28 @@ class VelocityY(DiagnosticField):
     """The geocentric Cartesian Y component of the velocity field."""
     name = "VelocityY"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("CG1", "CG", 1)
-            super(VelocityY, self).setup(state, space=space)
+            space = eqn.domain.spaces("CG1", "CG", 1)
+            super(VelocityY, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
+        u = eqn.fields("u")
         v = u[1]
         return self.field.interpolate(v)
 
@@ -321,27 +331,27 @@ class Gradient(DiagnosticField):
         """Gives the name of this diagnostic field."""
         return self.fname+"_gradient"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            mesh_dim = state.mesh.geometric_dimension()
+            mesh_dim = eqn.domain.mesh.geometric_dimension()
             try:
-                field_dim = state.fields(self.fname).ufl_shape[0]
+                field_dim = eqn.fields(self.fname).ufl_shape[0]
             except IndexError:
                 field_dim = 1
             shape = (mesh_dim, ) * field_dim
-            space = TensorFunctionSpace(state.mesh, "CG", 1, shape=shape)
-            super().setup(state, space=space)
+            space = TensorFunctionSpace(eqn.domain.mesh, "CG", 1, shape=shape)
+            super().setup(eqn, space=space)
 
-        f = state.fields(self.fname)
+        f = eqn.fields(self.fname)
         test = TestFunction(space)
         trial = TrialFunction(space)
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(eqn.domain.mesh)
         a = inner(test, trial)*dx
         L = -inner(div(test), f)*dx
         if space.extruded:
@@ -349,12 +359,12 @@ class Gradient(DiagnosticField):
         prob = LinearVariationalProblem(a, L, self.field)
         self.solver = LinearVariationalSolver(prob)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -367,28 +377,28 @@ class Divergence(DiagnosticField):
     """Diagnostic for computing the divergence of vector-valued fields."""
     name = "Divergence"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("DG1", "DG", 1)
-            super(Divergence, self).setup(state, space=space)
+            space = eqn.domain.spaces("DG1", "DG", 1)
+            super(Divergence, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
+        u = eqn.fields("u")
         return self.field.interpolate(div(u))
 
 
@@ -402,28 +412,28 @@ class SphericalComponent(DiagnosticField):
         super().__init__()
         self.fname = name
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
             # check geometric dimension is 3D
-            if state.mesh.geometric_dimension() != 3:
+            if eqn.domain.mesh.geometric_dimension() != 3:
                 raise ValueError('Spherical components only work when the geometric dimension is 3!')
-            space = FunctionSpace(state.mesh, "CG", 1)
-            super().setup(state, space=space)
+            space = FunctionSpace(eqn.domain.mesh, "CG", 1)
+            super().setup(eqn, space=space)
 
-        V = VectorFunctionSpace(state.mesh, "CG", 1)
-        self.x, self.y, self.z = SpatialCoordinate(state.mesh)
+        V = VectorFunctionSpace(eqn.domain.mesh, "CG", 1)
+        self.x, self.y, self.z = SpatialCoordinate(eqn.domain.mesh)
         self.x_hat = Function(V).interpolate(Constant(as_vector([1.0, 0.0, 0.0])))
         self.y_hat = Function(V).interpolate(Constant(as_vector([0.0, 1.0, 0.0])))
         self.z_hat = Function(V).interpolate(Constant(as_vector([0.0, 0.0, 1.0])))
         self.R = sqrt(self.x**2 + self.y**2)  # distance from z axis
         self.r = sqrt(self.x**2 + self.y**2 + self.z**2)  # distance from origin
-        self.f = state.fields(self.fname)
+        self.f = eqn.fields(self.fname)
         if np.prod(self.f.ufl_shape) != 3:
             raise ValueError('Components can only be found of a vector function space in 3D.')
 
@@ -435,12 +445,12 @@ class MeridionalComponent(SphericalComponent):
         """Gives the name of this diagnostic field."""
         return self.fname+"_meridional"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -458,12 +468,12 @@ class ZonalComponent(SphericalComponent):
         """Gives the name of this diagnostic field."""
         return self.fname+"_zonal"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -479,12 +489,12 @@ class RadialComponent(SphericalComponent):
         """Gives the name of this diagnostic field."""
         return self.fname+"_radial"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -508,31 +518,31 @@ class RichardsonNumber(DiagnosticField):
         self.density_field = density_field
         self.factor = Constant(factor)
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         rho_grad = self.density_field+"_gradient"
-        super().setup(state)
-        self.grad_density = state.fields(rho_grad)
-        self.gradu = state.fields("u_gradient")
+        super().setup(eqn)
+        self.grad_density = eqn.fields(rho_grad)
+        self.gradu = eqn.fields("u_gradient")
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
         denom = 0.
-        z_dim = state.mesh.geometric_dimension() - 1
-        u_dim = state.fields("u").ufl_shape[0]
+        z_dim = eqn.domain.mesh.geometric_dimension() - 1
+        u_dim = eqn.fields("u").ufl_shape[0]
         for i in range(u_dim-1):
             denom += self.gradu[i, z_dim]**2
         Nsq = self.factor*self.grad_density[z_dim]
@@ -565,17 +575,17 @@ class KineticEnergy(Energy):
     """Diagnostic kinetic energy density."""
     name = "KineticEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
+        u = eqn.fields("u")
         energy = self.kinetic(u)
         return self.field.interpolate(energy)
 
@@ -584,18 +594,18 @@ class ShallowWaterKineticEnergy(Energy):
     """Diagnostic shallow-water kinetic energy density."""
     name = "ShallowWaterKineticEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
-        D = state.fields("D")
+        u = eqn.fields("u")
+        D = eqn.fields("D")
         energy = self.kinetic(u, D)
         return self.field.interpolate(energy)
 
@@ -604,18 +614,18 @@ class ShallowWaterPotentialEnergy(Energy):
     """Diagnostic shallow-water potential energy density."""
     name = "ShallowWaterPotentialEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        g = state.parameters.g
-        D = state.fields("D")
+        g = eqn.parameters.g
+        D = eqn.fields("D")
         energy = 0.5*g*D**2
         return self.field.interpolate(energy)
 
@@ -637,28 +647,28 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
         base_name = "SWPotentialEnstrophy"
         return "_from_".join((base_name, self.base_field_name))
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
         if self.base_field_name == "PotentialVorticity":
-            pv = state.fields("PotentialVorticity")
-            D = state.fields("D")
+            pv = eqn.fields("PotentialVorticity")
+            D = eqn.fields("D")
             enstrophy = 0.5*pv**2*D
         elif self.base_field_name == "RelativeVorticity":
-            zeta = state.fields("RelativeVorticity")
-            D = state.fields("D")
-            f = state.fields("coriolis")
+            zeta = eqn.fields("RelativeVorticity")
+            D = eqn.fields("D")
+            f = eqn.fields("coriolis")
             enstrophy = 0.5*(zeta + f)**2/D
         elif self.base_field_name == "AbsoluteVorticity":
-            zeta_abs = state.fields("AbsoluteVorticity")
-            D = state.fields("D")
+            zeta_abs = eqn.fields("AbsoluteVorticity")
+            D = eqn.fields("D")
             enstrophy = 0.5*(zeta_abs)**2/D
         else:
             raise ValueError("Don't know how to compute enstrophy with base_field_name=%s; base_field_name should be %s %s or %s." % (self.base_field_name, "RelativeVorticity", "AbsoluteVorticity", "PotentialVorticity"))
@@ -669,18 +679,18 @@ class CompressibleKineticEnergy(Energy):
     """Diagnostic (dry) compressible kinetic energy density."""
     name = "CompressibleKineticEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        u = state.fields("u")
-        rho = state.fields("rho")
+        u = eqn.fields("u")
+        rho = eqn.fields("rho")
         energy = self.kinetic(u, rho)
         return self.field.interpolate(energy)
 
@@ -710,30 +720,30 @@ class Exner(DiagnosticField):
         else:
             return "Exner"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("CG1", "CG", 1)
-            super(Exner, self).setup(state, space=space)
+            space = eqn.domain.spaces("CG1", "CG", 1)
+            super(Exner, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        rho = state.fields(self.rho_name)
-        theta = state.fields(self.theta_name)
-        exner = thermodynamics.exner_pressure(state.parameters, rho, theta)
+        rho = eqn.fields(self.rho_name)
+        theta = eqn.fields(self.theta_name)
+        exner = thermodynamics.exner_pressure(eqn.parameters, rho, theta)
         return self.field.interpolate(exner)
 
 
@@ -754,29 +764,29 @@ class Sum(DiagnosticField):
         """Gives the name of this diagnostic field."""
         return self.field1+"_plus_"+self.field2
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.fields(self.field1).function_space()
-            super(Sum, self).setup(state, space=space)
+            space = eqn.fields(self.field1).function_space()
+            super(Sum, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        field1 = state.fields(self.field1)
-        field2 = state.fields(self.field2)
+        field1 = eqn.fields(self.field1)
+        field2 = eqn.fields(self.field2)
         return self.field.assign(field1 + field2)
 
 
@@ -797,45 +807,45 @@ class Difference(DiagnosticField):
         """Gives the name of this diagnostic field."""
         return self.field1+"_minus_"+self.field2
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.fields(self.field1).function_space()
-            super(Difference, self).setup(state, space=space)
+            space = eqn.fields(self.field1).function_space()
+            super(Difference, self).setup(eqn, space=space)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        field1 = state.fields(self.field1)
-        field2 = state.fields(self.field2)
+        field1 = eqn.fields(self.field1)
+        field2 = eqn.fields(self.field2)
         return self.field.assign(field1 - field2)
 
 
 class SteadyStateError(Difference):
     """Base diagnostic for computing the steady-state error in a field."""
-    def __init__(self, state, name):
+    def __init__(self, eqn, name):
         """
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
             name (str): name of the field to take the perturbation of.
         """
         DiagnosticField.__init__(self)
         self.field1 = name
         self.field2 = name+'_init'
-        field1 = state.fields(name)
-        field2 = state.fields(self.field2, field1.function_space())
+        field1 = eqn.fields(name)
+        field2 = eqn.fields(self.field2, field1.function_space())
         field2.assign(field1)
 
     @property
@@ -864,52 +874,53 @@ class Perturbation(Difference):
 class ThermodynamicDiagnostic(DiagnosticField):
     """Base thermodynamic diagnostic field, computing many common fields."""
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquationSet`): the model's equation.
         """
         if not self._initialised:
-            space = state.fields("theta").function_space()
+            domain = eqn.domain
+            space = domain.spaces('theta')
             h_deg = space.ufl_element().degree()[0]
             v_deg = space.ufl_element().degree()[1]-1
             boundary_method = BoundaryMethod.extruded if (v_deg == 0 and h_deg == 0) else None
-            super().setup(state, space=space)
+            super().setup(eqn, space=space)
 
             # now let's attach all of our fields
-            self.u = state.fields("u")
-            self.rho = state.fields("rho")
-            self.theta = state.fields("theta")
+            self.u = eqn.fields("u")
+            self.rho = eqn.fields("rho")
+            self.theta = eqn.fields("theta")
             self.rho_averaged = Function(space)
             self.recoverer = Recoverer(self.rho, self.rho_averaged, boundary_method=boundary_method)
             try:
-                self.r_v = state.fields("water_vapour")
+                self.r_v = eqn.fields("water_vapour")
             except NotImplementedError:
                 self.r_v = Constant(0.0)
             try:
-                self.r_c = state.fields("cloud_water")
+                self.r_c = eqn.fields("cloud_water")
             except NotImplementedError:
                 self.r_c = Constant(0.0)
             try:
-                self.rain = state.fields("rain")
+                self.rain = eqn.fields("rain")
             except NotImplementedError:
                 self.rain = Constant(0.0)
 
             # now let's store the most common expressions
-            self.exner = thermodynamics.exner_pressure(state.parameters, self.rho_averaged, self.theta)
-            self.T = thermodynamics.T(state.parameters, self.theta, self.exner, r_v=self.r_v)
-            self.p = thermodynamics.p(state.parameters, self.exner)
+            self.exner = thermodynamics.exner_pressure(eqn.parameters, self.rho_averaged, self.theta)
+            self.T = thermodynamics.T(eqn.parameters, self.theta, self.exner, r_v=self.r_v)
+            self.p = thermodynamics.p(eqn.parameters, self.exner)
             self.r_l = self.r_c + self.rain
             self.r_t = self.r_v + self.r_c + self.rain
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute thermodynamic auxiliary fields commonly used by diagnostics.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         self.recoverer.project()
 
@@ -918,84 +929,84 @@ class Theta_e(ThermodynamicDiagnostic):
     """The moist equivalent potential temperature diagnostic field."""
     name = "Theta_e"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(thermodynamics.theta_e(state.parameters, self.T, self.p, self.r_v, self.r_t))
+        return self.field.interpolate(thermodynamics.theta_e(eqn.parameters, self.T, self.p, self.r_v, self.r_t))
 
 
 class InternalEnergy(ThermodynamicDiagnostic):
     """The moist compressible internal energy density."""
     name = "InternalEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(thermodynamics.internal_energy(state.parameters, self.rho_averaged, self.T, r_v=self.r_v, r_l=self.r_l))
+        return self.field.interpolate(thermodynamics.internal_energy(eqn.parameters, self.rho_averaged, self.T, r_v=self.r_v, r_l=self.r_l))
 
 
 class PotentialEnergy(ThermodynamicDiagnostic):
     """The moist compressible potential energy density."""
     name = "PotentialEnergy"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
-        super().setup(state)
-        self.x = SpatialCoordinate(state.mesh)
+        super().setup(eqn)
+        self.x = SpatialCoordinate(eqn.domain.mesh)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(self.rho_averaged * (1 + self.r_t) * state.parameters.g * dot(self.x, state.k))
+        return self.field.interpolate(self.rho_averaged * (1 + self.r_t) * eqn.parameters.g * dot(self.x, eqn.domain.k))
 
 
 class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
     """The moist compressible kinetic energy density."""
     name = "ThermodynamicKineticEnergy"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
         return self.field.project(0.5 * self.rho_averaged * (1 + self.r_t) * dot(self.u, self.u))
 
@@ -1004,36 +1015,36 @@ class Dewpoint(ThermodynamicDiagnostic):
     """The dewpoint temperature diagnostic field."""
     name = "Dewpoint"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(thermodynamics.T_dew(state.parameters, self.p, self.r_v))
+        return self.field.interpolate(thermodynamics.T_dew(eqn.parameters, self.p, self.r_v))
 
 
 class Temperature(ThermodynamicDiagnostic):
     """The absolute temperature diagnostic field."""
     name = "Temperature"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
         return self.field.assign(self.T)
 
@@ -1042,55 +1053,55 @@ class Theta_d(ThermodynamicDiagnostic):
     """The dry potential temperature diagnostic field."""
     name = "Theta_d"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(self.theta / (1 + self.r_v * state.parameters.R_v / state.parameters.R_d))
+        return self.field.interpolate(self.theta / (1 + self.r_v * eqn.parameters.R_v / eqn.parameters.R_d))
 
 
 class RelativeHumidity(ThermodynamicDiagnostic):
     """The relative humidity diagnostic field."""
     name = "RelativeHumidity"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
-        return self.field.interpolate(thermodynamics.RH(state.parameters, self.r_v, self.T, self.p))
+        return self.field.interpolate(thermodynamics.RH(eqn.parameters, self.r_v, self.T, self.p))
 
 
 class Pressure(ThermodynamicDiagnostic):
     """The pressure field computed in the 'theta' space."""
     name = "Pressure_Vt"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
         return self.field.assign(self.p)
 
@@ -1099,17 +1110,17 @@ class Exner_Vt(ThermodynamicDiagnostic):
     """The Exner pressure field computed in the 'theta' space."""
     name = "Exner_Vt"
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
         """
-        super().compute(state)
+        super().compute(eqn)
 
         return self.field.assign(self.exner)
 
@@ -1118,26 +1129,26 @@ class HydrostaticImbalance(DiagnosticField):
     """Hydrostatic imbalance diagnostic field."""
     name = "HydrostaticImbalance"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            Vu = state.spaces("HDiv")
-            space = FunctionSpace(state.mesh, Vu.ufl_element()._elements[-1])
-            super().setup(state, space=space)
-            rho = state.fields("rho")
-            rhobar = state.fields("rhobar")
-            theta = state.fields("theta")
-            thetabar = state.fields("thetabar")
-            exner = thermodynamics.exner_pressure(state.parameters, rho, theta)
-            exnerbar = thermodynamics.exner_pressure(state.parameters, rhobar, thetabar)
+            Vu = eqn.domain.spaces("HDiv")
+            space = FunctionSpace(eqn.domain.mesh, Vu.ufl_element()._elements[-1])
+            super().setup(eqn, space=space)
+            rho = eqn.fields("rho")
+            rhobar = eqn.fields("rhobar")
+            theta = eqn.fields("theta")
+            thetabar = eqn.fields("thetabar")
+            exner = thermodynamics.exner_pressure(eqn.parameters, rho, theta)
+            exnerbar = thermodynamics.exner_pressure(eqn.parameters, rhobar, thetabar)
 
-            cp = Constant(state.parameters.cp)
-            n = FacetNormal(state.mesh)
+            cp = Constant(eqn.parameters.cp)
+            n = FacetNormal(eqn.domain.mesh)
 
             F = TrialFunction(space)
             w = TestFunction(space)
@@ -1153,12 +1164,12 @@ class HydrostaticImbalance(DiagnosticField):
             imbalanceproblem = LinearVariationalProblem(a, L, self.field, bcs=bcs)
             self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -1171,23 +1182,23 @@ class Precipitation(DiagnosticField):
     """The total precipitation falling through the domain's bottom surface."""
     name = "Precipitation"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
         if not self._initialised:
-            space = state.spaces("DG0", "DG", 0)
-            super().setup(state, space=space)
+            space = eqn.domain.spaces("DG0", "DG", 0)
+            super().setup(eqn, space=space)
 
-            rain = state.fields('rain')
-            rho = state.fields('rho')
-            v = state.fields('rainfall_velocity')
+            rain = eqn.fields('rain')
+            rho = eqn.fields('rho')
+            v = eqn.fields('rainfall_velocity')
             self.phi = TestFunction(space)
             flux = TrialFunction(space)
-            n = FacetNormal(state.mesh)
+            n = FacetNormal(eqn.domain.mesh)
             un = 0.5 * (dot(v, n) + abs(dot(v, n)))
             self.flux = Function(space)
 
@@ -1202,12 +1213,12 @@ class Precipitation(DiagnosticField):
             problem = LinearVariationalProblem(a, L, self.flux)
             self.solver = LinearVariationalSolver(problem)
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -1220,12 +1231,12 @@ class Precipitation(DiagnosticField):
 class Vorticity(DiagnosticField):
     """Base diagnostic field class for shallow-water vorticity variables."""
 
-    def setup(self, state, vorticity_type=None):
+    def setup(self, eqn, vorticity_type=None):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
             vorticity_type (str, optional): denotes which type of vorticity to
                 be computed ('relative', 'absolute' or 'potential'). Defaults to
                 None.
@@ -1235,36 +1246,36 @@ class Vorticity(DiagnosticField):
             if vorticity_type not in vorticity_types:
                 raise ValueError("vorticity type must be one of %s, not %s" % (vorticity_types, vorticity_type))
             try:
-                space = state.spaces("CG")
+                space = eqn.domain.spaces("CG")
             except ValueError:
-                dgspace = state.spaces("DG")
+                dgspace = eqn.domain.spaces("DG")
                 cg_degree = dgspace.ufl_element().degree() + 2
-                space = FunctionSpace(state.mesh, "CG", cg_degree)
-            super().setup(state, space=space)
-            u = state.fields("u")
+                space = FunctionSpace(eqn.domain.mesh, "CG", cg_degree)
+            super().setup(eqn, space=space)
+            u = eqn.fields("u")
             gamma = TestFunction(space)
             q = TrialFunction(space)
 
             if vorticity_type == "potential":
-                D = state.fields("D")
+                D = eqn.fields("D")
                 a = q*gamma*D*dx
             else:
                 a = q*gamma*dx
 
-            L = (- inner(state.perp(grad(gamma)), u))*dx
+            L = (- inner(eqn.domain.perp(grad(gamma)), u))*dx
             if vorticity_type != "relative":
-                f = state.fields("coriolis")
+                f = eqn.fields("coriolis")
                 L += gamma*f*dx
 
             problem = LinearVariationalProblem(a, L, self.field)
             self.solver = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
-    def compute(self, state):
+    def compute(self, eqn):
         """
         Compute and return the diagnostic field from the current state.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
 
         Returns:
             :class:`Function`: the diagnostic field.
@@ -1277,39 +1288,39 @@ class PotentialVorticity(Vorticity):
     u"""Diagnostic field for shallow-water potential vorticity, q=(∇×(u+f))/D"""
     name = "PotentialVorticity"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
-        super().setup(state, vorticity_type="potential")
+        super().setup(eqn, vorticity_type="potential")
 
 
 class AbsoluteVorticity(Vorticity):
     u"""Diagnostic field for absolute vorticity, ζ=∇×(u+f)"""
     name = "AbsoluteVorticity"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
-        super().setup(state, vorticity_type="absolute")
+        super().setup(eqn, vorticity_type="absolute")
 
 
 class RelativeVorticity(Vorticity):
     u"""Diagnostic field for relative vorticity, ζ=∇×u"""
     name = "RelativeVorticity"
 
-    def setup(self, state):
+    def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            state (:class:`State`): the model's state.
+            eqn (:class:`PrognosticEquation`): the model's equation.
         """
-        super().setup(state, vorticity_type="relative")
+        super().setup(eqn, vorticity_type="relative")

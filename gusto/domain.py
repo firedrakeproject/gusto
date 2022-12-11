@@ -3,7 +3,7 @@ The Domain object that is provided in this module contains the model's mesh and
 the set of compatible function spaces defined upon it.
 """
 
-from gusto.function_spaces import Spaces
+from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        as_vector, inner, interpolate)
 
@@ -39,17 +39,7 @@ class Domain(object):
                 both "degree" and "horizontal_degree").
         """
 
-        # Checks on degree arguments
-        if degree is None and horizontal_degree is None:
-            raise ValueError('Either "degree" or "horizontal_degree" must be passed to Domain')
-        if mesh.extruded and degree is None and vertical_degree is None:
-            raise ValueError('For extruded meshes, either degree or "vertical_degree" must be passed to Domain')
-        if degree is not None and horizontal_degree is not None:
-            raise ValueError('Cannot pass both "degree" and "horizontal_degree" to Domain')
-        if mesh.extruded and degree is not None and vertical_degree is not None:
-            raise ValueError('Cannot pass both "degree" and "vertical_degree" to Domain')
-        if not mesh.extruded and vertical_degree is not None:
-            raise ValueError('Cannot pass "vertical_degree" to Domain if mesh is not extruded')
+        check_degree_args('Domain', mesh, degree, horizontal_degree, vertical_degree)
 
         # Get degrees
         self.horizontal_degree = degree if horizontal_degree is None else horizontal_degree

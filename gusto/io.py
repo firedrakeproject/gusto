@@ -205,10 +205,9 @@ class IO(object):
             self.diagnostic_fields = []
 
         # TODO: quick way of ensuring that diagnostics are registered
-        if hasattr(self, "field_names"):
+        if hasattr(equation, "field_names"):
             for fname in equation.field_names:
                 self.diagnostics.register(fname)
-                self.bcs[fname] = []
         else:
             self.diagnostics.register(equation.field_name)
 
@@ -250,7 +249,8 @@ class IO(object):
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
         for diagnostic in self.diagnostic_fields:
-            diagnostic.setup(self)
+            # TODO: for diagnostics to see equation and IO, change the setup here
+            diagnostic.setup(self.equation)
             self.diagnostics.register(diagnostic.name)
 
     def setup_dump(self, t, tmax, pickup=False):
@@ -411,7 +411,7 @@ class IO(object):
         # Diagnostics:
         # Compute diagnostic fields
         for field in self.diagnostic_fields:
-            field(self)
+            field(self.equation)
 
         if output.dump_diagnostics:
             # Output diagnostic data

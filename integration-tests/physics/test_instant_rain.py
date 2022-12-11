@@ -18,6 +18,7 @@ def run_instant_rain(dirname):
     L = 10
     nx = 10
     mesh = PeriodicSquareMesh(nx, nx, L)
+    domain = Domain(mesh, "BDM", 1)
     x, y = SpatialCoordinate(mesh)
 
     # parameters
@@ -26,30 +27,21 @@ def run_instant_rain(dirname):
     fexpr = Constant(0)
     dt = 0.1
 
-    output = OutputParameters(dirname=dirname+"/instant_rain",
-                              dumpfreq=1,
-                              dumplist=['vapour', "rain"])
-
-    parameters = ShallowWaterParameters(H=H, g=g)
-
-    diagnostic_fields = [CourantNumber()]
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  diagnostic_fields=diagnostic_fields,
-                  parameters=parameters)
-
     vapour = WaterVapour(name="water_vapour", space='DG')
     rain = Rain(name="rain", space="DG",
                 transport_eqn=TransportEquationType.no_transport)
 
-    VD = FunctionSpace(mesh, "DG", 1)
-
-    eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
+    parameters = ShallowWaterParameters(H=H, g=g)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                                  active_tracers=[vapour, rain])
 
-    vapour0 = state.fields("water_vapour")
+    output = OutputParameters(dirname=dirname+"/instant_rain",
+                              dumpfreq=1,
+                              dumplist=['vapour', "rain"])
+    diagnostic_fields = [CourantNumber(dt)]
+    io = IO(domain, eqns, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
+
+    vapour0 = eqns.fields("water_vapour")
 
     # set up vapour
     xc = L/2
@@ -60,6 +52,7 @@ def run_instant_rain(dirname):
 
     vapour0.interpolate(vapour_expr)
 
+    VD = FunctionSpace(mesh, "DG", 1)
     initial_vapour = Function(VD).interpolate(vapour_expr)
 
     # define saturation function
@@ -71,20 +64,20 @@ def run_instant_rain(dirname):
     rain_true = Function(VD).interpolate(vapour0 - saturation)
 
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
-                                    set_tau_to_dt=True), ForwardEuler(state))]
+                                    set_tau_to_dt=True), ForwardEuler(domain, io))]
 
-    stepper = PrescribedTransport(eqns, RK4(state), state,
+    stepper = PrescribedTransport(eqns, RK4(domain, io), io,
                                   physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=5*dt)
-    return state, saturation, initial_vapour, vapour_true, rain_true
+    return eqns, saturation, initial_vapour, vapour_true, rain_true
 
 
 def test_instant_rain_setup(tmpdir):
     dirname = str(tmpdir)
-    state, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
-    v = state.fields("water_vapour")
-    r = state.fields("rain")
+    eqns, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
+    v = eqns.fields("water_vapour")
+    r = eqns.fields("rain")
 
     # check that the maximum of the vapour field is equal to the saturation
     assert v.dat.data.max() - saturation.values() < 0.001, "The maximum of the final vapour field should be equal to saturation"

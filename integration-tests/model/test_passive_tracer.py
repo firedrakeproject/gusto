@@ -16,12 +16,12 @@ import pytest
 def run_tracer(setup):
 
     # Get initial conditions from shared config
-    state = setup.state
-    mesh = state.mesh
-    dt = state.dt
-    output = state.output
+    domain = setup.domain
+    mesh = domain.mesh
+    dt = setup.dt
+    output = setup.output
 
-    x = SpatialCoordinate(state.mesh)
+    x = SpatialCoordinate(mesh)
     H = 0.1
     parameters = ShallowWaterParameters(H=H)
     Omega = parameters.Omega
@@ -31,40 +31,42 @@ def run_tracer(setup):
     fexpr = 2*Omega*x[2]/R
 
     # Need to create a new state containing parameters
-    state = State(mesh, dt=dt, output=output, parameters=parameters)
 
     # Equations
-    eqns = LinearShallowWaterEquations(state, setup.family,
-                                       setup.degree, fexpr=fexpr)
-    tracer_eqn = AdvectionEquation(state, state.spaces("DG"), "tracer")
+    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+    io = IO(domain, eqns, dt=dt, output=output)
 
     # Specify initial prognostic fields
-    u0 = state.fields("u")
-    D0 = state.fields("D")
-    tracer0 = state.fields("tracer", D0.function_space())
+    u0 = eqns.fields("u")
+    D0 = eqns.fields("D")
+    tracer0 = tracer_eqn.fields("tracer", D0.function_space())
     tracer_end = Function(D0.function_space())
 
     # Expressions for initial fields corresponding to Williamson 2 test case
     Dexpr = H - ((R * Omega * umax)*(x[2]*x[2]/(R*R))) / g
     u0.project(setup.uexpr)
     D0.interpolate(Dexpr)
+    Dbar = Function(D0.function_space()).assign(H)
     tracer0.interpolate(setup.f_init)
     tracer_end.interpolate(setup.f_end)
 
+    eqns.set_reference_profiles([('D', Dbar)])
+
     # set up transport schemes
-    transport_schemes = [ForwardEuler(state, "D")]
+    transport_schemes = [ForwardEuler(domain, io, "D")]
 
     # Set up tracer transport
-    tracer_transport = [(tracer_eqn, SSPRK3(state))]
+    tracer_transport = [(tracer_eqn, SSPRK3(domain, io))]
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, state, transport_schemes,
+        eqns, io, transport_schemes,
         auxiliary_equations_and_schemes=tracer_transport)
 
     stepper.run(t=0, tmax=setup.tmax)
 
-    error = norm(state.fields("tracer") - tracer_end) / norm(tracer_end)
+    error = norm(tracer_eqn.fields("tracer") - tracer_end) / norm(tracer_end)
 
     return error
 

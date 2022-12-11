@@ -24,22 +24,11 @@ def setup_saturated(dirname, recovered):
     nlayers = int(H/deltax)
     ncolumns = int(L/deltax)
 
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-
-    # option to easily change between recovered and not if necessary
-    # default should be to use lowest order set of spaces
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'])
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Theta_e()]
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+    m = PeriodicIntervalMesh(ncolumns, L)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, "CG", degree)
 
     tracers = [WaterVapour(), CloudWater()]
 
@@ -47,14 +36,19 @@ def setup_saturated(dirname, recovered):
         u_transport_option = "vector_advection_form"
     else:
         u_transport_option = "vector_invariant_form"
+    parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(
-        state, "CG", degree, u_transport_option=u_transport_option, active_tracers=tracers)
+        domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
+
+    output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'])
+    diagnostic_fields = [Theta_e()]
+    io = IO(domain, eqns, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
-    water_v0 = state.fields("water_vapour")
-    water_c0 = state.fields("cloud_water")
+    rho0 = eqns.fields("rho")
+    theta0 = eqns.fields("theta")
+    water_v0 = eqns.fields("water_vapour")
+    water_c0 = eqns.fields("cloud_water")
     moisture = ['water_vapour', 'cloud_water']
 
     # spaces
@@ -67,15 +61,14 @@ def setup_saturated(dirname, recovered):
     water_t = Function(Vt).interpolate(total_water)
 
     # Calculate hydrostatic exner
-    saturated_hydrostatic_balance(state, theta_e, water_t)
+    saturated_hydrostatic_balance(eqns, theta_e, water_t)
     water_c0.assign(water_t - water_v0)
 
-    state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
+    eqns.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 
     # Set up transport schemes
     if recovered:
-        VDG1 = state.spaces("DG1_equispaced")
+        VDG1 = domain.spaces("DG1_equispaced")
         VCG1 = FunctionSpace(mesh, "CG", 1)
         Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
         Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
@@ -99,23 +92,23 @@ def setup_saturated(dirname, recovered):
         wv_opts = EmbeddedDGOptions()
         wc_opts = EmbeddedDGOptions()
 
-    transported_fields = [SSPRK3(state, 'rho', options=rho_opts),
-                          SSPRK3(state, 'theta', options=theta_opts),
-                          SSPRK3(state, 'water_vapour', options=wv_opts),
-                          SSPRK3(state, 'cloud_water', options=wc_opts)]
+    transported_fields = [SSPRK3(domain, io, 'rho', options=rho_opts),
+                          SSPRK3(domain, io, 'theta', options=theta_opts),
+                          SSPRK3(domain, io, 'water_vapour', options=wv_opts),
+                          SSPRK3(domain, io, 'cloud_water', options=wc_opts)]
 
     if recovered:
-        transported_fields.append(SSPRK3(state, 'u', options=u_opts))
+        transported_fields.append(SSPRK3(domain, io, 'u', options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(state, 'u'))
+        transported_fields.append(ImplicitMidpoint(domain, io, 'u'))
 
-    linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
+    linear_solver = CompressibleSolver(eqns, io, moisture=moisture)
 
     # add physics
-    physics_schemes = [(SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
+    physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain, io))]
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
 

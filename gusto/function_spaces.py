@@ -24,8 +24,8 @@ class Spaces(object):
         self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self._initialised_base_spaces = False
 
-    def __call__(self, name, family=None, horizontal_degree=None,
-                 vertical_degree=None, V=None):
+    def __call__(self, name, family=None, degree=None,
+                 horizontal_degree=None, vertical_degree=None, V=None):
         """
         Returns a space, and also creates it if it is not created yet.
 
@@ -33,10 +33,18 @@ class Spaces(object):
         family and degree) need to be provided. Alternatively a space can be
         passed in to be stored in the creator.
 
+        For extruded meshes, it is possible to seperately specify the horizontal
+        and vertical degrees of the elements. Alternatively, if these degrees
+        should be the same then this can be specified through the "degree"
+        argument.
+
         Args:
             name (str): the name of the space.
             family (str, optional): name of the finite element family to be
                 created. Defaults to None.
+            degree (int, optional): the element degree used for the space.
+                Defaults to None, in which case the horizontal degree must be
+                provided.
             horizontal_degree (int, optional): the horizontal degree of the
                 finite element space to be created. Defaults to None.
             vertical_degree (int, optional): the vertical degree of the
@@ -62,15 +70,15 @@ class Spaces(object):
                 value = V
 
             elif name == "DG1_equispaced":
-                # Special case based on name
-                if self.extruded_mesh:
-                    value = self.build_dg_space(1, 1, variant='equispaced')
-                else:
-                    value = self.build_dg_space(1, variant='equispaced')
+                # Special case as no degree arguments need providing
+                value = self.build_dg_space(1, 1, variant='equispaced')
 
             else:
-                # Need to create space, based on name/family/degree
-                assert horizontal_degree is not None
+                check_degree_args('Spaces', self.mesh, degree, horizontal_degree, vertical_degree)
+
+                # Convert to horizontal and vertical degrees
+                horizontal_degree = degree if horizontal_degree is None else horizontal_degree
+                vertical_degree = degree if vertical_degree is None else vertical_degree
 
                 # Loop through name and family combinations
                 if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
@@ -244,10 +252,10 @@ class Spaces(object):
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space from the de Rham complex.
+                part of the CG space.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the the DG space from the de Rham complex.
-                Defaults to None. Must be specified if the mesh is extruded.
+                vertical part of the the CG space. Defaults to None. Must be
+                specified if the mesh is extruded.
 
         Returns:
             :class:`FunctionSpace`: the continuous space.
@@ -257,14 +265,43 @@ class Spaces(object):
             if vertical_degree is None:
                 raise ValueError('vertical_degree must be specified to create CG space on an extruded mesh')
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            CG_hori = FiniteElement("CG", cell, horizontal_degree+1)
-            CG_vert = FiniteElement("CG", interval, vertical_degree+1)
+            CG_hori = FiniteElement("CG", cell, horizontal_degree)
+            CG_vert = FiniteElement("CG", interval, vertical_degree)
             V_elt = TensorProductElement(CG_hori, CG_vert)
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement("DG", cell, horizontal_degree+1, variant=variant)
+            V_elt = FiniteElement("CG", cell, horizontal_degree)
 
         # How should we name this if the horizontal and vertical degrees are different?
-        name = f'CG{horizontal_degree+1}'
+        name = f'CG{horizontal_degree}'
 
         return FunctionSpace(self.mesh, V_elt, name=name)
+
+
+def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
+    """
+    Check the degree arguments passed to either the :class:`Domain` or the
+    :class:`Spaces` object. This will raise errors if the arguments are not
+    appropriate.
+
+    Args:
+        name (str): name of object to print out.
+        mesh (:class:`Mesh`): the model's mesh.
+        degree (int): the element degree.
+        horizontal_degree (int): the element degree used for the horizontal part
+            of a space.
+        vertical_degree (int): the element degree used for the vertical part
+            of a space.
+    """
+
+    # Checks on degree arguments
+    if degree is None and horizontal_degree is None:
+        raise ValueError(f'Either "degree" or "horizontal_degree" must be passed to {name}')
+    if mesh.extruded and degree is None and vertical_degree is None:
+        raise ValueError(f'For extruded meshes, either degree or "vertical_degree" must be passed to {name}')
+    if degree is not None and horizontal_degree is not None:
+        raise ValueError(f'Cannot pass both "degree" and "horizontal_degree" to {name}')
+    if mesh.extruded and degree is not None and vertical_degree is not None:
+        raise ValueError(f'Cannot pass both "degree" and "vertical_degree" to {name}')
+    if not mesh.extruded and vertical_degree is not None:
+        raise ValueError(f'Cannot pass "vertical_degree" to {name} if mesh is not extruded')

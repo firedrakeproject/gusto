@@ -22,29 +22,23 @@ def setup_fallout(dirname):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
+    domain = Domain(mesh, "CG", 1)
     x = SpatialCoordinate(mesh)
 
-    dt = 0.1
-    output = OutputParameters(dirname=dirname+"/fallout",
-                              dumpfreq=10,
-                              dumplist=['rain'])
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Precipitation()]
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
-
-    Vrho = state.spaces("DG1_equispaced")
+    Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
-    eqn = ForcedAdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1,
-                                  active_tracers=active_tracers)
-    scheme = ForwardEuler(state)
-    state.fields("rho").assign(1.)
+    eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
 
-    physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state, 'rain'))]
-    rain0 = state.fields("rain")
+    dt = 0.1
+    output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
+    diagnostic_fields = [Precipitation()]
+    io = IO(domain, eqn, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
+
+    scheme = ForwardEuler(domain, io)
+    eqn.fields("rho").assign(1.)
+
+    physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, io, 'rain'))]
+    rain0 = eqn.fields("rain")
 
     # set up rain
     xc = L / 2
@@ -56,7 +50,7 @@ def setup_fallout(dirname):
     rain0.interpolate(rain_expr)
 
     # build time stepper
-    stepper = PrescribedTransport(eqn, scheme, state,
+    stepper = PrescribedTransport(eqn, scheme, io,
                                   physics_schemes=physics_schemes)
 
     return stepper, 10.0

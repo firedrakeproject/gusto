@@ -265,7 +265,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 assert scheme.field_name in equation_set.field_names
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        if not equation_set.reference_profile_initialised:
+        if not equation_set.reference_profiles_initialised:
             raise RuntimeError('Reference profiles for equation set must be initialised to use Semi-Implicit Timestepper')
 
         super().__init__(equation_set, io)
@@ -295,10 +295,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.xrhs = Function(W)
         self.dy = Function(W)
         if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
+            self.linear_solver = LinearTimesteppingSolver(equation_set, io, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, self.alpha)
+        self.forcing = Forcing(equation_set, io, self.alpha)
         self.bcs = equation_set.bcs
 
     def _apply_bcs(self):

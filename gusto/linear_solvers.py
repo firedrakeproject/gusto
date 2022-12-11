@@ -28,7 +28,7 @@ __all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolv
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, equations, alpha=0.5, solver_parameters=None,
+    def __init__(self, equations, io, alpha=0.5, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
         Args:
@@ -44,6 +44,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 passed in. Defaults to False.
         """
         self.equations = equations
+        self.dt = io.dt
         self.alpha = alpha
 
         if solver_parameters is not None:
@@ -120,7 +121,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5,
+    def __init__(self, equations, io, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False, moisture=None):
         """
@@ -161,13 +162,14 @@ class CompressibleSolver(TimesteppingSolver):
             # Turn monitor on for the trace system
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
-        super().__init__(equations, alpha, solver_parameters,
+        super().__init__(equations, io, alpha, solver_parameters,
                          overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
 
-        dt = state.dt
+        equations = self.equations
+        dt = self.dt
         beta_ = dt*self.alpha
         cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
@@ -192,7 +194,7 @@ class CompressibleSolver(TimesteppingSolver):
         w, phi, dl = TestFunctions(M)
         u, rho, l0 = TrialFunctions(M)
 
-        n = FacetNormal(equations.domin.mesh)
+        n = FacetNormal(equations.domain.mesh)
 
         # Get background fields
         thetabar = equations.fields("thetabar")
@@ -421,7 +423,7 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         equation = self.equation      # just cutting down line length a bit
-        dt = state.dt
+        dt = self.dt
         beta_ = dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
@@ -548,7 +550,7 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, io, alpha):
         """
         Args:
             equation (:class:`PrognosticEquation`): the model's equation object.
@@ -560,7 +562,7 @@ class LinearTimesteppingSolver(object):
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
 
-        dt = state.dt
+        dt = io.dt
         W = equation.function_space
         beta = dt*alpha
 

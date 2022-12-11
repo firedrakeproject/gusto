@@ -57,7 +57,7 @@ class SaturationAdjustment(Physics):
     """
 
     def __init__(self, equation, vapour_name='water_vapour',
-                 cloud_name='cloud_water', latent_heat=True):
+                 cloud_name='cloud_water', latent_heat=True, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -67,6 +67,9 @@ class SaturationAdjustment(Physics):
                 Defaults to 'cloud_water'.
             latent_heat (bool, optional): whether to have latent heat exchange
                 feeding back from the phase change. Defaults to True.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
 
         Raises:
             NotImplementedError: currently this is only implemented for the
@@ -85,7 +88,7 @@ class SaturationAdjustment(Physics):
         # Make prognostic for physics scheme
         self.X = Function(equation.X.function_space())
         self.equation = equation
-        parameters = equation.parameters
+        parameters = equation.parameters if parameters is None else parameters
         self.latent_heat = latent_heat
 
         # Vapour and cloud variables are needed for every form of this scheme
@@ -267,7 +270,7 @@ class Fallout(Physics):
 
         Vu = domain.spaces("HDiv")
         # TODO: how do we allow this to be output?
-        v = Function(Vu, name='rainfall_velocity')
+        v = equation.fields(name='rainfall_velocity', space=Vu)
 
         # -------------------------------------------------------------------- #
         # Create physics term -- which is actually a transport term

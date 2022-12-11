@@ -24,41 +24,37 @@ def setup_balance(dirname):
 
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, "CG", 1)
 
     output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters)
-
-    eqns = CompressibleEulerEquations(state, "CG", 1)
+    eqns = CompressibleEulerEquations(domain, parameters)
+    io = IO(domain, eqns, dt=dt, output=output)
 
     # Initial conditions
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+    rho0 = eqns.fields("rho")
+    theta0 = eqns.fields("theta")
 
     # Isentropic background state
     Tsurf = Constant(300.)
     theta0.interpolate(Tsurf)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(state, theta0, rho0, solve_for_rho=True)
+    compressible_hydrostatic_balance(eqns, theta0, rho0, solve_for_rho=True)
 
-    state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
+    eqns.set_reference_profiles([('rho', rho0),
+                                 ('theta', theta0)])
 
     # Set up transport schemes
-    transported_fields = [ImplicitMidpoint(state, "u"),
-                          SSPRK3(state, "rho"),
-                          SSPRK3(state, "theta", options=EmbeddedDGOptions())]
+    transported_fields = [ImplicitMidpoint(domain, io, "u"),
+                          SSPRK3(domain, io, "rho"),
+                          SSPRK3(domain, io, "theta", options=EmbeddedDGOptions())]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state, eqns)
+    linear_solver = CompressibleSolver(eqns, io)
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver)
 
     return stepper, tmax

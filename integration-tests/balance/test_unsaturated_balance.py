@@ -24,20 +24,11 @@ def setup_unsaturated(dirname, recovered):
     nlayers = int(H/deltax)
     ncolumns = int(L/deltax)
 
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Theta_d(), RelativeHumidity()]
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+    m = PeriodicIntervalMesh(ncolumns, L)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, "CG", degree)
 
     tracers = [WaterVapour(), CloudWater()]
 
@@ -45,12 +36,17 @@ def setup_unsaturated(dirname, recovered):
         u_transport_option = "vector_advection_form"
     else:
         u_transport_option = "vector_invariant_form"
+    parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(
-        state, "CG", degree, u_transport_option=u_transport_option, active_tracers=tracers)
+        domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
+
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
+    diagnostic_fields = [Theta_d(), RelativeHumidity()]
+    io = IO(domain, eqns, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+    rho0 = eqns.fields("rho")
+    theta0 = eqns.fields("theta")
     moisture = ['water_vapour', 'cloud_water']
 
     # spaces
@@ -63,14 +59,13 @@ def setup_unsaturated(dirname, recovered):
     RH = Function(Vt).interpolate(humidity)
 
     # Calculate hydrostatic exner
-    unsaturated_hydrostatic_balance(state, theta_d, RH)
+    unsaturated_hydrostatic_balance(eqns, theta_d, RH)
 
-    state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
+    eqns.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 
     # Set up transport schemes
     if recovered:
-        VDG1 = state.spaces("DG1_equispaced")
+        VDG1 = domain.spaces("DG1_equispaced")
         VCG1 = FunctionSpace(mesh, "CG", 1)
         Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
         Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
@@ -87,22 +82,22 @@ def setup_unsaturated(dirname, recovered):
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
 
-    transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                          SSPRK3(state, "theta", options=theta_opts),
-                          SSPRK3(state, "water_vapour", options=theta_opts),
-                          SSPRK3(state, "cloud_water", options=theta_opts)]
+    transported_fields = [SSPRK3(domain, io, "rho", options=rho_opts),
+                          SSPRK3(domain, io, "theta", options=theta_opts),
+                          SSPRK3(domain, io, "water_vapour", options=theta_opts),
+                          SSPRK3(domain, io, "cloud_water", options=theta_opts)]
     if recovered:
-        transported_fields.append(SSPRK3(state, "u", options=u_opts))
+        transported_fields.append(SSPRK3(domain, io, "u", options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(state, "u"))
+        transported_fields.append(ImplicitMidpoint(domain, io, "u"))
 
-    linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
+    linear_solver = CompressibleSolver(eqns, io, moisture=moisture)
 
     # Set up physics
-    physics_schemes = [(SaturationAdjustment(eqns, parameters), ForwardEuler(state))]
+    physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain, io))]
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
 
