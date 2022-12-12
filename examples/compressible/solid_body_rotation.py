@@ -16,7 +16,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 ref_level = 3
-m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=3)
+m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 
 x, y, z = SpatialCoordinate(mesh)
@@ -31,7 +31,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 
 
 # options
-dirname = 'sbr_quadratic_%i_day_dt_%i' % (days, dt)
+dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (ndumps * dt)),
@@ -62,7 +62,7 @@ state = State(mesh,
               parameters=params,
               diagnostic_fields=diagnostic_fields)
 
-eqns = CompressibleEulerEquations(state, "RTCF", 1, Omega=Omega)
+eqns = CompressibleEulerEquations(state, "RTCF", 1, Omega=Omega, u_transport_option='vector_advection_form')
 
 # Initial conditions
 u = state.fields("u")
@@ -79,9 +79,9 @@ Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
 # expressions for variables from paper
 s = (r / a) * cos(lat)
 
-Q_expr = s**2  * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
+Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
 
-#solving fields as per the staniforth paper 
+# solving fields as per the staniforth paper 
 q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
 
 p_expr = p0 * exp(q_expr)
@@ -90,12 +90,12 @@ pie_expr = T0 / theta_expr
 rho_expr = rho(params, theta_expr, pie_expr)
 
 # Inirial Velocity
-#u00 = u0 * (u0 + 2 * omega * a) / (T0 * Rd)
-#f_sb = 0.5 * u00 * s ** 2
+# u00 = u0 * (u0 + 2 * omega * a) / (T0 * Rd)
+# f_sb = 0.5 * u00 * s ** 2
 # Initial Potential Temperature
-#theta_expr = T0 * exp(g * (r - a) / (cp * T0)) * exp(-params.kappa * f_sb)
-#pie_expr = T0 / theta_expr
-#rho_expr = rho(params, theta_expr, pie_expr)
+# theta_expr = T0 * exp(g * (r - a) / (cp * T0)) * exp(-params.kappa * f_sb)
+# pie_expr = T0 / theta_expr
+# rho_expr = rho(params, theta_expr, pie_expr)
 
 # get components of u in spherical polar coordinates
 zonal_u = u0 * r / a * cos(lat)
