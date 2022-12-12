@@ -708,14 +708,14 @@ def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
     coords_fs = coords_orig.function_space()
 
-    if coords_fs.extruded:
+
+    if coords_fs.extruded: #This might be the cause of the problem
         cell = mesh._base_mesh.ufl_cell().cellname()
-        DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-        DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-        DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        coords_orig = mesh._base_mesh.coordinates
     else:
         cell = mesh.ufl_cell().cellname()
-        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+    
+    DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
     vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
     coords_dg = Function(vec_DG1).interpolate(coords_orig)
     coords_latlon = Function(vec_DG1)
@@ -759,8 +759,12 @@ void splat_coords(double *coords) {{
 
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-    return Mesh(coords_latlon)
-
+    if mesh.extruded:
+        base_mesh = Mesh(coords_latlon)
+        new_mesh = ExtrudedMesh(base_mesh, mesh.layers)
+        return new_mesh
+    else:
+        return Mesh(coords_latlon)
 
 def topo_sort(field_deps):
     """
