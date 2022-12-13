@@ -33,11 +33,11 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     else:
         eqn = ContinuityEquation(domain, V, "f", ibp=ibp)
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(setup.uexpr)
 
-    transport_schemes = SSPRK3(domain, io, options=opts)
+    transport_schemes = SSPRK3(domain, options=opts)
 
     error = run(eqn, transport_schemes, io, setup.tmax, setup.f_end)
     assert error < setup.tol, \

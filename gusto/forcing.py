@@ -21,7 +21,7 @@ class Forcing(object):
     discretisation.
     """
 
-    def __init__(self, equation, io, alpha):
+    def __init__(self, equation, alpha):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
@@ -33,7 +33,7 @@ class Forcing(object):
 
         self.field_name = equation.field_name
         implicit_terms = ["incompressibility", "sponge"]
-        dt = io.dt
+        dt = equation.domain.dt
 
         W = equation.function_space
         self.x0 = Function(W)

@@ -19,21 +19,18 @@ def run_incompressible(tmpdir):
     Lz = 1000.0
     m = PeriodicIntervalMesh(ncols, Lx)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers)
+    domain = Domain(mesh, dt, "CG", 1)
+
+    parameters = CompressibleParameters()
+    eqn = IncompressibleBoussinesqEquations(domain, parameters)
 
     output = OutputParameters(dirname=tmpdir+"/incompressible",
                               dumpfreq=2, chkptfreq=2)
-    parameters = CompressibleParameters()
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters)
-
-    eqns = IncompressibleBoussinesqEquations(state, "CG", 1)
+    io = IO(domain, eqn, output=output)
 
     # Initial conditions
-    p0 = state.fields("p")
-    b0 = state.fields("b")
+    p0 = eqn.fields("p")
+    b0 = eqn.fields("b")
 
     # z.grad(bref) = N**2
     x, z = SpatialCoordinate(mesh)
@@ -41,9 +38,8 @@ def run_incompressible(tmpdir):
     bref = z*(N**2)
 
     b_b = Function(b0.function_space()).interpolate(bref)
-    incompressible_hydrostatic_balance(state, b_b, p0)
-    state.initialise([('p', p0),
-                      ('b', b_b)])
+    incompressible_hydrostatic_balance(eqn, b_b, p0)
+    eqn.set_reference_profiles([('p', p0), ('b', b_b)])
 
     # Add perturbation
     r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)
@@ -52,14 +48,14 @@ def run_incompressible(tmpdir):
 
     # Set up transport schemes
     b_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(state, "u"),
-                          SSPRK3(state, "b", options=b_opts)]
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "b", options=b_opts)]
 
     # Set up linear solver for the timestepping scheme
-    linear_solver = IncompressibleSolver(state, eqns)
+    linear_solver = IncompressibleSolver(eqn)
 
     # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
+    stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                       linear_solver=linear_solver)
 
     # Run
@@ -68,24 +64,25 @@ def run_incompressible(tmpdir):
     # State for checking checkpoints
     checkpoint_name = 'incompressible_chkpt'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
+    check_eqn = IncompressibleBoussinesqEquations(domain, parameters)
+    check_eqn.set_reference_profiles([])
     check_output = OutputParameters(dirname=tmpdir+"/incompressible",
                                     checkpoint_pickup_filename=new_path)
-    check_state = State(mesh, dt=dt, output=check_output)
-    check_eqn = IncompressibleBoussinesqEquations(check_state, "CG", 1)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_state, [])
+    check_io = IO(domain, check_eqn, output=check_output)
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
     check_stepper.run(t=0, tmax=0, pickup=True)
 
-    return state, check_state
+    return eqn, check_eqn
 
 
 def test_incompressible(tmpdir):
 
     dirname = str(tmpdir)
-    state, check_state = run_incompressible(dirname)
+    eqn, check_eqn = run_incompressible(dirname)
 
     for variable in ['u', 'b', 'p']:
-        new_variable = state.fields(variable)
-        check_variable = check_state.fields(variable)
+        new_variable = eqn.fields(variable)
+        check_variable = check_eqn.fields(variable)
         error = norm(new_variable - check_variable) / norm(check_variable)
 
         # Slack values chosen to be robust to different platforms

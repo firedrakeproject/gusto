@@ -26,7 +26,7 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     V = domain.spaces("DG")
     # Make equation
     eqn = AdvectionEquation(domain, V, "f")
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     # Initialise fields
     def u_evaluation(t):

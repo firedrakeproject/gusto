@@ -31,7 +31,7 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
     # Make equation
     eqn = ContinuityEquation(domain, VDG0, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     # Initialise fields
     eqn.fields("f").interpolate(setup.f_init)
@@ -42,7 +42,7 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
                                     recovered_space=VCG1,
                                     boundary_method=BoundaryMethod.taylor)
 
-    transport_scheme = SSPRK3(domain, io, options=recovery_opts)
+    transport_scheme = SSPRK3(domain, options=recovery_opts)
 
     # Run and check error
     error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)

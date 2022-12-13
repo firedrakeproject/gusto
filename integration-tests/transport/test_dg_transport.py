@@ -26,11 +26,11 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(setup.uexpr)
 
-    transport_scheme = SSPRK3(domain, io)
+    transport_scheme = SSPRK3(domain)
     error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
@@ -49,10 +49,10 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
     eqn.fields("f").interpolate(f_init)
     eqn.fields("u").project(setup.uexpr)
-    transport_schemes = SSPRK3(domain, io)
+    transport_schemes = SSPRK3(domain)
     f_end = as_vector([setup.f_end]*gdim)
     error = run(eqn, transport_schemes, io, setup.tmax, f_end)
     assert error < setup.tol, \

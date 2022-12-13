@@ -15,7 +15,6 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate, FunctionSpace,
 
 def run_forced_advection(tmpdir):
 
-    # mesh, state and equation
     Lx = 100
     delta_x = 2.0
     nx = int(Lx/delta_x)
@@ -23,15 +22,7 @@ def run_forced_advection(tmpdir):
     x = SpatialCoordinate(mesh)[0]
 
     dt = 0.2
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
-    diagnostic_fields = [CourantNumber()]
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=None,
-                  diagnostics=None,
-                  diagnostic_fields=diagnostic_fields)
+    domain = Domain(mesh, dt, "CG", 1)
 
     VD = FunctionSpace(mesh, "DG", 1)
     Vu = VectorFunctionSpace(mesh, "CG", 1)
@@ -54,17 +45,22 @@ def run_forced_advection(tmpdir):
 
     rain = Rain(space='tracer',
                 transport_eqn=TransportEquationType.no_transport)
-    meqn = ForcedAdvectionEquation(state, VD, field_name="water_vapour", Vu=Vu,
+    meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
-                                    set_tau_to_dt=True), ForwardEuler(state))]
+                                    set_tau_to_dt=True), ForwardEuler(domain))]
 
-    state.fields("u").project(as_vector([u_max]))
-    qv = state.fields("water_vapour")
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
+    diagnostic_fields = [CourantNumber()]
+    io = IO(domain, meqn, output=output, diagnostic_fields=diagnostic_fields)
+
+
+    meqn.fields("u").project(as_vector([u_max]))
+    qv = meqn.fields("water_vapour")
     qv.project(mexpr)
 
     # exact rainfall profile (analytically)
-    r_exact = state.fields("r_exact", VD)
+    r_exact = meqn.fields("r_exact", VD)
     lim1 = Lx/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
     lim2 = Lx/2
     coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/K0
@@ -73,12 +69,12 @@ def run_forced_advection(tmpdir):
     r_exact.interpolate(r_expr)
 
     # build time stepper
-    stepper = PrescribedTransport(meqn, RK4(state), state,
+    stepper = PrescribedTransport(meqn, RK4(domain), io,
                                   physics_schemes=physics_schemes)
 
     stepper.run(0, tmax=tmax)
 
-    error = errornorm(r_exact, state.fields("rain"))
+    error = errornorm(r_exact, meqn.fields("rain"))
 
     return error
 

@@ -18,14 +18,14 @@ def run_instant_rain(dirname):
     L = 10
     nx = 10
     mesh = PeriodicSquareMesh(nx, nx, L)
-    domain = Domain(mesh, "BDM", 1)
+    dt = 0.1
+    domain = Domain(mesh, dt, "BDM", 1)
     x, y = SpatialCoordinate(mesh)
 
     # parameters
     H = 30
     g = 10
     fexpr = Constant(0)
-    dt = 0.1
 
     vapour = WaterVapour(name="water_vapour", space='DG')
     rain = Rain(name="rain", space="DG",
@@ -38,8 +38,8 @@ def run_instant_rain(dirname):
     output = OutputParameters(dirname=dirname+"/instant_rain",
                               dumpfreq=1,
                               dumplist=['vapour', "rain"])
-    diagnostic_fields = [CourantNumber(dt)]
-    io = IO(domain, eqns, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
+    diagnostic_fields = [CourantNumber()]
+    io = IO(domain, eqns, output=output, diagnostic_fields=diagnostic_fields)
 
     vapour0 = eqns.fields("water_vapour")
 
@@ -64,9 +64,9 @@ def run_instant_rain(dirname):
     rain_true = Function(VD).interpolate(vapour0 - saturation)
 
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
-                                    set_tau_to_dt=True), ForwardEuler(domain, io))]
+                                    set_tau_to_dt=True), ForwardEuler(domain))]
 
-    stepper = PrescribedTransport(eqns, RK4(domain, io), io,
+    stepper = PrescribedTransport(eqns, RK4(domain), io,
                                   physics_schemes=physics_schemes)
 
     stepper.run(t=0, tmax=5*dt)

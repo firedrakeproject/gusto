@@ -188,14 +188,6 @@ class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
 
-    def __init__(self, dt):
-        """
-        Args:
-            dt (float): time increment over a model time step.
-        """
-        super().__init__()
-        self.dt = dt
-
     def setup(self, eqn):
         """
         Sets up the :class:`Function` for the diagnostic field.
@@ -205,6 +197,7 @@ class CourantNumber(DiagnosticField):
         """
         if not self._initialised:
             super(CourantNumber, self).setup(eqn)
+            self.dt = eqn.domain.dt
             # set up area computation
             V = eqn.domain.spaces("DG0")
             test = TestFunction(V)

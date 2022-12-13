@@ -20,25 +20,25 @@ def setup_checkpointing(dirname):
     # build volume mesh
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, "CG", 1)
+    domain = Domain(mesh, dt, "CG", 1)
 
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
 
     output = OutputParameters(dirname=dirname, dumpfreq=1,
                               chkptfreq=2, log_level='INFO')
-    io = IO(domain, eqns, dt=dt, output=output)
+    io = IO(domain, eqns, output=output)
 
     initialise_fields(eqns)
 
     # Set up transport schemes
     transported_fields = []
-    transported_fields.append(SSPRK3(domain, io, "u"))
-    transported_fields.append(SSPRK3(domain, io, "rho"))
-    transported_fields.append(SSPRK3(domain, io, "theta"))
+    transported_fields.append(SSPRK3(domain, "u"))
+    transported_fields.append(SSPRK3(domain, "rho"))
+    transported_fields.append(SSPRK3(domain, "theta"))
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(eqns, io)
+    linear_solver = CompressibleSolver(eqns)
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,

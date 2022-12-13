@@ -10,20 +10,22 @@ from gusto import *
 
 def run_advection_diffusion(tmpdir):
 
-    # Mesh, state and equation
-    L = 10
-    mesh = PeriodicIntervalMesh(20, L)
     dt = 0.02
     tmax = 1.0
+    L = 10
+    mesh = PeriodicIntervalMesh(20, L)
+    domain = Domain(mesh, dt, "CG", 1)
 
     diffusion_params = DiffusionParameters(kappa=0.75, mu=5)
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    state = State(mesh, dt=dt, output=output)
-    V = state.spaces("DG", "DG", 1)
+    V = domain.spaces("DG", "DG", 1)
     Vu = VectorFunctionSpace(mesh, "CG", 1)
 
-    equation = AdvectionDiffusionEquation(state, V, "f", Vu=Vu,
+    equation = AdvectionDiffusionEquation(domain, V, "f", Vu=Vu,
                                           diffusion_parameters=diffusion_params)
+
+    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    io = IO(domain, equation, output=output)
+
 
     # Initial conditions
     x = SpatialCoordinate(mesh)
@@ -45,15 +47,15 @@ def run_advection_diffusion(tmpdir):
     f_init_expr = f_init*exp(-(x_init / f_width_init)**2)
     f_end_expr = f_end*exp(-(x_end / f_width_end)**2)
 
-    state.fields('f').interpolate(f_init_expr)
-    state.fields('u').interpolate(as_vector([Constant(umax)]))
-    f_end = state.fields('f_end', V).interpolate(f_end_expr)
+    equation.fields('f').interpolate(f_init_expr)
+    equation.fields('u').interpolate(as_vector([Constant(umax)]))
+    f_end = equation.fields('f_end', V).interpolate(f_end_expr)
 
     # Time stepper
-    timestepper = PrescribedTransport(equation, SSPRK3(state), state)
+    timestepper = PrescribedTransport(equation, SSPRK3(domain), io)
     timestepper.run(0, tmax=tmax)
 
-    error = norm(state.fields('f') - f_end) / norm(f_end)
+    error = norm(equation.fields('f') - f_end) / norm(f_end)
 
     return error
 

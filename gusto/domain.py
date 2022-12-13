@@ -1,6 +1,7 @@
 """
 The Domain object that is provided in this module contains the model's mesh and
-the set of compatible function spaces defined upon it.
+the set of compatible function spaces defined upon it. It also contains the
+model's time interval.
 """
 
 from gusto.function_spaces import Spaces, check_degree_args
@@ -19,11 +20,14 @@ class Domain(object):
     vertical degrees of the elements. Alternatively, if these degrees should be
     the same then this can be specified through the "degree" argument.
     """
-    def __init__(self, mesh, family, degree=None,
+    def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
+            dt (:class:`Constant`): the time taken to perform a single model
+                step. If a float or int is passed, it will be cast to a
+                :class:`Constant`.
             family (str): the finite element space family used for the velocity
                 field. This determines the other finite element spaces used via
                 the de Rham complex.
@@ -38,6 +42,13 @@ class Domain(object):
             ValueError: if incompatible degrees are specified (e.g. specifying
                 both "degree" and "horizontal_degree").
         """
+
+        if type(dt) is Constant:
+            self.dt = dt
+        elif type(dt) in (float, int):
+            self.dt = Constant(dt)
+        else:
+            raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
         check_degree_args('Domain', mesh, degree, horizontal_degree, vertical_degree)
 

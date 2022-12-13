@@ -28,7 +28,7 @@ def setup_unsaturated(dirname, recovered):
 
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, "CG", degree)
+    domain = Domain(mesh, dt, "CG", degree)
 
     tracers = [WaterVapour(), CloudWater()]
 
@@ -42,7 +42,7 @@ def setup_unsaturated(dirname, recovered):
 
     output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
     diagnostic_fields = [Theta_d(), RelativeHumidity()]
-    io = IO(domain, eqns, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
+    io = IO(domain, eqns, output=output, diagnostic_fields=diagnostic_fields)
 
     # Initial conditions
     rho0 = eqns.fields("rho")
@@ -82,19 +82,19 @@ def setup_unsaturated(dirname, recovered):
         rho_opts = None
         theta_opts = EmbeddedDGOptions()
 
-    transported_fields = [SSPRK3(domain, io, "rho", options=rho_opts),
-                          SSPRK3(domain, io, "theta", options=theta_opts),
-                          SSPRK3(domain, io, "water_vapour", options=theta_opts),
-                          SSPRK3(domain, io, "cloud_water", options=theta_opts)]
+    transported_fields = [SSPRK3(domain, "rho", options=rho_opts),
+                          SSPRK3(domain, "theta", options=theta_opts),
+                          SSPRK3(domain, "water_vapour", options=theta_opts),
+                          SSPRK3(domain, "cloud_water", options=theta_opts)]
     if recovered:
-        transported_fields.append(SSPRK3(domain, io, "u", options=u_opts))
+        transported_fields.append(SSPRK3(domain, "u", options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(domain, io, "u"))
+        transported_fields.append(ImplicitMidpoint(domain, "u"))
 
-    linear_solver = CompressibleSolver(eqns, io, moisture=moisture)
+    linear_solver = CompressibleSolver(eqns, moisture=moisture)
 
     # Set up physics
-    physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain, io))]
+    physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,

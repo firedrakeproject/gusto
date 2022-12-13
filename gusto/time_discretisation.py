@@ -73,13 +73,12 @@ def embedded_dg(original_apply):
 class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 
-    def __init__(self, domain, io, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -95,7 +94,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        self.dt = io.dt
+        self.dt = domain.dt
 
         self.limiter = limiter
 
@@ -438,13 +437,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
-    def __init__(self, domain, io, field_name=None, subcycles=None,
+    def __init__(self, domain, field_name=None, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             subcycles (int, optional): the number of sub-steps to perform.
@@ -458,7 +456,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(domain, io, field_name,
+        super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -780,13 +778,12 @@ class BackwardEuler(TimeDiscretisation):
     The backward Euler method for operator F is the most simple implicit scheme:
     y^(n+1) = y^n + dt*F[y^(n+1)].
     """
-    def __init__(self, domain, io, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             subcycles (int, optional): the number of sub-steps to perform.
@@ -805,7 +802,7 @@ class BackwardEuler(TimeDiscretisation):
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
-        super().__init__(domain=domain, io=io, field_name=field_name,
+        super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -852,13 +849,12 @@ class ThetaMethod(TimeDiscretisation):
     for off-centring parameter theta.
     """
 
-    def __init__(self, domain, io, field_name=None, theta=None,
+    def __init__(self, domain, field_name=None, theta=None,
                  solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             theta (float, optional): the off-centring parameter. theta = 1
@@ -886,7 +882,7 @@ class ThetaMethod(TimeDiscretisation):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        super().__init__(domain, io, field_name,
+        super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          options=options)
 
@@ -936,13 +932,12 @@ class ImplicitMidpoint(ThetaMethod):
     It is equivalent to the "theta" method with theta = 1/2.
     """
 
-    def __init__(self, domain, io, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -952,7 +947,7 @@ class ImplicitMidpoint(ThetaMethod):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(domain, io, field_name, theta=0.5,
+        super().__init__(domain, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
 
@@ -960,13 +955,12 @@ class ImplicitMidpoint(ThetaMethod):
 class MultilevelTimeDiscretisation(TimeDiscretisation):
     """Base class for multi-level timesteppers"""
 
-    def __init__(self, domain, io, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            io (:class:`IO`): the model's object for controlling input/output.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -980,7 +974,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
-        super().__init__(domain=domain, io=io, field_name=field_name,
+        super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.initial_timesteps = 0

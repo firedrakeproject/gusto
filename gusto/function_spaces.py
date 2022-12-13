@@ -294,14 +294,16 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
             of a space.
     """
 
+    extruded_mesh = hasattr(mesh, "_base_mesh")
+
     # Checks on degree arguments
     if degree is None and horizontal_degree is None:
         raise ValueError(f'Either "degree" or "horizontal_degree" must be passed to {name}')
-    if mesh.extruded and degree is None and vertical_degree is None:
+    if extruded_mesh and degree is None and vertical_degree is None:
         raise ValueError(f'For extruded meshes, either degree or "vertical_degree" must be passed to {name}')
     if degree is not None and horizontal_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "horizontal_degree" to {name}')
-    if mesh.extruded and degree is not None and vertical_degree is not None:
+    if extruded_mesh and degree is not None and vertical_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "vertical_degree" to {name}')
-    if not mesh.extruded and vertical_degree is not None:
+    if not extruded_mesh and vertical_degree is not None:
         raise ValueError(f'Cannot pass "vertical_degree" to {name} if mesh is not extruded')

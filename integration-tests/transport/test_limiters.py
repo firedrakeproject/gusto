@@ -36,7 +36,7 @@ def setup_limiters(dirname, space):
 
     degree = 0 if space in ['DG0', 'Vtheta_degree_0'] else 1
 
-    domain = Domain(mesh, family="CG", degree=degree)
+    domain = Domain(mesh, dt, family="CG", degree=degree)
 
     if space == 'DG0':
         V = domain.spaces('DG')
@@ -60,7 +60,7 @@ def setup_limiters(dirname, space):
     # set up the equation
     eqn = AdvectionEquation(domain, V, 'tracer')
 
-    io = IO(domain, eqn, dt=dt, output=output)
+    io = IO(domain, eqn, output=output)
 
     # ------------------------------------------------------------------------ #
     # Initial condition
@@ -160,18 +160,18 @@ def setup_limiters(dirname, space):
                                recovered_space=VCG1,
                                project_low_method='recover',
                                boundary_method=BoundaryMethod.taylor)
-        transport_schemes = SSPRK3(domain, io, options=opts,
+        transport_schemes = SSPRK3(domain, options=opts,
                                    limiter=VertexBasedLimiter(VDG1))
 
     elif space == 'DG1':
-        transport_schemes = SSPRK3(domain, io, limiter=DG1Limiter(V))
+        transport_schemes = SSPRK3(domain, limiter=DG1Limiter(V))
 
     elif space == 'DG1_equispaced':
-        transport_schemes = SSPRK3(domain, io, limiter=VertexBasedLimiter(V))
+        transport_schemes = SSPRK3(domain, limiter=VertexBasedLimiter(V))
 
     elif space == 'Vtheta_degree_1':
         opts = EmbeddedDGOptions()
-        transport_schemes = SSPRK3(domain, io, options=opts, limiter=ThetaLimiter(V))
+        transport_schemes = SSPRK3(domain, options=opts, limiter=ThetaLimiter(V))
     else:
         raise NotImplementedError
 

@@ -41,14 +41,14 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
     # Make equation
     eqn = AdvectionEquation(domain, Vu, "f")
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     # Initialise fields
     f_init = as_vector([setup.f_init]*gdim)
     eqn.fields("f").project(f_init)
     eqn.fields("u").project(setup.uexpr)
 
-    transport_scheme = SSPRK3(domain, io, options=rec_opts)
+    transport_scheme = SSPRK3(domain, options=rec_opts)
 
     f_end = as_vector([setup.f_end]*gdim)
 

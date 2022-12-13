@@ -18,19 +18,19 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     V = domain.spaces("DG")
 
     eqn = AdvectionEquation(domain, V, "f")
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(setup.uexpr)
 
     if scheme == "ssprk":
-        transport_scheme = SSPRK3(domain, io)
+        transport_scheme = SSPRK3(domain)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain, io)
+        transport_scheme = ImplicitMidpoint(domain)
     elif scheme == "RK4":
-        transport_scheme = RK4(domain, io)
+        transport_scheme = RK4(domain)
     elif scheme == "Heun":
-        transport_scheme = Heun(domain, io)
+        transport_scheme = Heun(domain)
     elif scheme == "BDF2":
-        transport_scheme = BDF2(domain, io)
+        transport_scheme = BDF2(domain)
     assert run(eqn, transport_scheme, io, setup.tmax, setup.f_end) < setup.tol

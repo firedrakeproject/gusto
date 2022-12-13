@@ -24,12 +24,12 @@ def setup_balance(dirname):
 
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, "CG", 1)
+    domain = Domain(mesh, dt, "CG", 1)
 
     output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
-    io = IO(domain, eqns, dt=dt, output=output)
+    io = IO(domain, eqns, output=output)
 
     # Initial conditions
     rho0 = eqns.fields("rho")
@@ -46,12 +46,12 @@ def setup_balance(dirname):
                                  ('theta', theta0)])
 
     # Set up transport schemes
-    transported_fields = [ImplicitMidpoint(domain, io, "u"),
-                          SSPRK3(domain, io, "rho"),
-                          SSPRK3(domain, io, "theta", options=EmbeddedDGOptions())]
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "rho"),
+                          SSPRK3(domain, "theta", options=EmbeddedDGOptions())]
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(eqns, io)
+    linear_solver = CompressibleSolver(eqns)
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,

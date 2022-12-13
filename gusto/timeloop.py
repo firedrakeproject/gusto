@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector
+from firedrake import Function, Projector, Constant
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.forcing import Forcing
@@ -28,6 +28,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.equation = equation
         self.io = io
+        self.dt = self.equation.domain.dt
+        self.t = Constant(0.0)
 
         self.setup_fields()
         self.setup_scheme()
@@ -71,12 +73,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         with timed_stage("Dump output"):
             io.setup_dump(t, tmax, pickup)
 
-        io.t.assign(t)
+        self.t.assign(t)
 
         self.x.initialise(self.equation)
 
-        while float(io.t) < tmax - 0.5*float(io.dt):
-            logger.info(f'at start of timestep, t={float(io.t)}, dt={float(io.dt)}')
+        while float(self.t) < tmax - 0.5*float(self.dt):
+            logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
 
             self.x.update()
 
@@ -85,15 +87,15 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for field in self.x.np1:
                 self.equation.fields(field.name()).assign(field)
 
-            io.t.assign(io.t + io.dt)
+            self.t.assign(self.t + self.dt)
 
             with timed_stage("Dump output"):
-                io.dump(float(io.t))
+                io.dump(float(self.t))
 
         if io.output.checkpoint:
             io.chkpt.close()
 
-        logger.info(f'TIMELOOP complete. t={float(io.t)}, tmax={tmax}')
+        logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')
 
 
 class Timestepper(BaseTimestepper):
@@ -157,6 +159,8 @@ class SplitPhysicsTimestepper(Timestepper):
         self.equation = equation
         self.scheme = scheme
         self.io = io
+        self.dt = self.equation.domain.dt
+        self.t = Constant(0.0)
 
         self.setup_fields()
         self.setup_scheme()
@@ -295,10 +299,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.xrhs = Function(W)
         self.dy = Function(W)
         if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, io, self.alpha)
+            self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, io, self.alpha)
+        self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
     def _apply_bcs(self):
@@ -445,7 +449,7 @@ class PrescribedTransport(Timestepper):
 
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
-                prescribed_transporting_velocity(self.io.t),
+                prescribed_transporting_velocity(self.t),
                 self.equation.fields('u'))
         else:
             self.velocity_projection = None

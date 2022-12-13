@@ -18,7 +18,6 @@ def run_tracer(setup):
     # Get initial conditions from shared config
     domain = setup.domain
     mesh = domain.mesh
-    dt = setup.dt
     output = setup.output
 
     x = SpatialCoordinate(mesh)
@@ -35,7 +34,7 @@ def run_tracer(setup):
     # Equations
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
-    io = IO(domain, eqns, dt=dt, output=output)
+    io = IO(domain, eqns, output=output)
 
     # Specify initial prognostic fields
     u0 = eqns.fields("u")
@@ -54,10 +53,10 @@ def run_tracer(setup):
     eqns.set_reference_profiles([('D', Dbar)])
 
     # set up transport schemes
-    transport_schemes = [ForwardEuler(domain, io, "D")]
+    transport_schemes = [ForwardEuler(domain, "D")]
 
     # Set up tracer transport
-    tracer_transport = [(tracer_eqn, SSPRK3(domain, io))]
+    tracer_transport = [(tracer_eqn, SSPRK3(domain))]
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(

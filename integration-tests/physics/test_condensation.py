@@ -15,6 +15,9 @@ import pytest
 
 
 def run_cond_evap(dirname, process):
+
+    dt = 2.0
+
     # declare grid shape, with length L and height H
     L = 1000.
     H = 1000.
@@ -24,7 +27,8 @@ def run_cond_evap(dirname, process):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-    domain = Domain(mesh, "CG", 1)
+
+    domain = Domain(mesh, dt, "CG", 1)
 
     x, z = SpatialCoordinate(mesh)
 
@@ -37,11 +41,10 @@ def run_cond_evap(dirname, process):
     parameters = CompressibleParameters()
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
-    dt = 2.0
     output = OutputParameters(dirname=dirname+"/cond_evap",
                               dumpfreq=1,
                               dumplist=['u'])
-    io = IO(domain, eqn, dt=dt, output=output, diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
+    io = IO(domain, eqn, output=output, diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
 
     # Declare prognostic fields
     rho0 = eqn.fields("rho")
@@ -87,10 +90,10 @@ def run_cond_evap(dirname, process):
     eqn.residual = eqn.residual.label_map(lambda t: t.has_label(time_derivative),
                                           map_if_true=identity, map_if_false=drop)
 
-    physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain, io))]
+    physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain))]
 
     # build time stepper
-    scheme = ForwardEuler(domain, io)
+    scheme = ForwardEuler(domain)
     stepper = SplitPhysicsTimestepper(eqn, scheme, io,
                                       physics_schemes=physics_schemes)
 

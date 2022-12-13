@@ -25,12 +25,12 @@ def test_subcyling(tmpdir, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(setup.uexpr)
 
-    transport_scheme = SSPRK3(domain, io, subcycles=2)
+    transport_scheme = SSPRK3(domain, subcycles=2)
     error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

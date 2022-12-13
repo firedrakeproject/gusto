@@ -36,9 +36,9 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
 
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
-    diffusion_scheme = BackwardEuler(domain, io)
+    diffusion_scheme = BackwardEuler(domain)
 
     eqn.fields("f").interpolate(f_init)
     f_end = run(eqn, diffusion_scheme, io, tmax)
@@ -69,14 +69,14 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
 
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     if DG:
         eqn.fields("f").interpolate(f_init)
     else:
         eqn.fields("f").project(f_init)
 
-    diffusion_scheme = BackwardEuler(domain, io)
+    diffusion_scheme = BackwardEuler(domain)
 
     f_end = run(eqn, diffusion_scheme, io, tmax)
     assert errornorm(f_end_expr, f_end) < tol

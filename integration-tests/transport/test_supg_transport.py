@@ -37,15 +37,15 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(setup.uexpr)
 
     if scheme == "ssprk":
-        transport_scheme = SSPRK3(domain, io, options=opts)
+        transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain, io, options=opts)
+        transport_scheme = ImplicitMidpoint(domain, options=opts)
 
     error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
     assert error < setup.tol, \
@@ -77,7 +77,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, dt=setup.dt, output=setup.output)
+    io = IO(domain, eqn, output=setup.output)
 
     f = eqn.fields("f")
     if space == "CG":
@@ -86,9 +86,9 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
         f.project(f_init)
     eqn.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
-        transport_scheme = SSPRK3(domain, io, options=opts)
+        transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain, io, options=opts)
+        transport_scheme = ImplicitMidpoint(domain, options=opts)
 
     f_end = as_vector([setup.f_end]*gdim)
     error = run(eqn, transport_scheme, io, setup.tmax, f_end)

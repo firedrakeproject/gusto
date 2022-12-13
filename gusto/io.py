@@ -160,7 +160,7 @@ class DiagnosticsOutput(object):
 class IO(object):
     """Controls the model's input, output and diagnostics."""
 
-    def __init__(self, domain, equation, dt,
+    def __init__(self, domain, equation,
                  output=None,
                  parameters=None,
                  diagnostics=None,
@@ -170,9 +170,6 @@ class IO(object):
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             equation (:class:`PrognosticEquation`): the prognostic equation.
-            dt (:class:`Constant`): the time taken to perform a single model
-                step. If a float or int is passed, it will be cast to a
-                :class:`Constant`.
             output (:class:`OutputParameters`, optional): holds and describes
                 the options for outputting. Defaults to None.
             diagnostics (:class:`Diagnostics`, optional): object holding and
@@ -227,12 +224,6 @@ class IO(object):
 
         #  Constant to hold current time
         self.t = Constant(0.0)
-        if type(dt) is Constant:
-            self.dt = dt
-        elif type(dt) in (float, int):
-            self.dt = Constant(dt)
-        else:
-            raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
     def setup_diagnostics(self):
         """Concatenates the various types of diagnostic field."""

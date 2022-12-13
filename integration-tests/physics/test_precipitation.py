@@ -14,6 +14,7 @@ from netCDF4 import Dataset
 def setup_fallout(dirname):
 
     # declare grid shape, with length L and height H
+    dt = 0.1
     L = 10.
     H = 10.
     nlayers = 10
@@ -22,22 +23,21 @@ def setup_fallout(dirname):
     # make mesh
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-    domain = Domain(mesh, "CG", 1)
+    domain = Domain(mesh, dt, "CG", 1)
     x = SpatialCoordinate(mesh)
 
     Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
     eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
 
-    dt = 0.1
     output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
     diagnostic_fields = [Precipitation()]
-    io = IO(domain, eqn, dt=dt, output=output, diagnostic_fields=diagnostic_fields)
+    io = IO(domain, eqn, output=output, diagnostic_fields=diagnostic_fields)
 
-    scheme = ForwardEuler(domain, io)
+    scheme = ForwardEuler(domain)
     eqn.fields("rho").assign(1.)
 
-    physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, io, 'rain'))]
+    physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, 'rain'))]
     rain0 = eqn.fields("rain")
 
     # set up rain
