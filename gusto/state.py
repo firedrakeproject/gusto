@@ -17,7 +17,7 @@ from firedrake import (FiniteElement, TensorProductElement, HDiv,
                        interval, Function, Mesh, functionspaceimpl,
                        File, SpatialCoordinate, sqrt, Constant, inner,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, interpolate,
-                       CellNormal, cross, as_vector)
+                       CellNormal, cross, as_vector, ExtrudedMesh)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 from gusto.fields import StateFields
@@ -538,6 +538,11 @@ class State(object):
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
                 f = self.fields(name)
+                #proxy_functionspace = functionspaceimpl.WithGeometry.create(
+                        #f.function_space(), mesh_ll)
+                proxy_function = f.function_space()
+                print(mesh_ll.topology)
+                print(proxy_function.mesh())
                 field = Function(
                     functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
@@ -708,15 +713,16 @@ def get_latlon_mesh(mesh):
     coords_orig = mesh.coordinates
     coords_fs = coords_orig.function_space()
 
-
     if coords_fs.extruded: #This might be the cause of the problem
         cell = mesh._base_mesh.ufl_cell().cellname()
         coords_orig = mesh._base_mesh.coordinates
+        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+        vec_DG1 = VectorFunctionSpace(mesh._base_mesh, DG1_elt)
     else:
         cell = mesh.ufl_cell().cellname()
+        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+        vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
     
-    DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
     coords_dg = Function(vec_DG1).interpolate(coords_orig)
     coords_latlon = Function(vec_DG1)
     shapes = {"nDOFs": vec_DG1.finat_element.space_dimension(), 'dim': 3}
@@ -759,7 +765,7 @@ void splat_coords(double *coords) {{
 
     op2.par_loop(kernel, coords_latlon.cell_set,
                  coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-    if mesh.extruded:
+    if coords_fs.extruded:
         base_mesh = Mesh(coords_latlon)
         new_mesh = ExtrudedMesh(base_mesh, mesh.layers)
         return new_mesh
