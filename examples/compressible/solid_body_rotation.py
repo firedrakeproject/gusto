@@ -55,7 +55,7 @@ p0 = Constant(100000)
 T0 = 280.  # in K
 u0 = 40.
 
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), Energy(), CompressibleKineticEnergy()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), CompressibleKineticEnergy()]
 state = State(mesh,
               dt=dt,
               output=output,
