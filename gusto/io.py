@@ -232,7 +232,7 @@ class IO(object):
             self.diagnostic_fields.append(f)
 
         for name in self.output.steady_state_error_fields:
-            f = SteadyStateError(self, name)
+            f = SteadyStateError(self.equation, name)
             self.diagnostic_fields.append(f)
 
         fields = set([f.name() for f in self.equation.fields])

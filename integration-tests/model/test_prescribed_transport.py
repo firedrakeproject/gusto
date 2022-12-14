@@ -36,7 +36,7 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     eqn.fields("f").interpolate(setup.f_init)
     eqn.fields("u").project(u_evaluation(Constant(0.0)))
 
-    transport_scheme = SSPRK3(domain, io)
+    transport_scheme = SSPRK3(domain)
 
     # Run and check error
     error = run(eqn, transport_scheme, io, setup.tmax,

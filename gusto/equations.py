@@ -48,7 +48,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
             self.fields(field_name, function_space,
-                         subfield_names=self.field_names, pickup=True)
+                        subfield_names=self.field_names, pickup=True)
             for fname in self.field_names:
                 self.bcs[fname] = []
         else:
@@ -223,7 +223,10 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.reference_profiles_initialised = False
 
         # Build finite element spaces
-        self.spaces = domain.compatible_spaces
+        # TODO: this implies order of spaces matches order of variables
+        # we should not assume this and should instead specify which variable
+        # is in which space
+        self.spaces = [space for space in domain.compatible_spaces]
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:

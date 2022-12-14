@@ -49,8 +49,7 @@ def run_moist_compressible(tmpdir):
     theta0.interpolate(tde.theta(parameters, T_vd, p))
     rho0.interpolate(p / (R_d * T))
 
-    eqn.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
+    eqn.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 
     # Add perturbation
     r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)

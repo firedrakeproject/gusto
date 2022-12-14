@@ -130,7 +130,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.equation = equation
         self.residual = equation.residual
 
-        if self.field_name is not None:
+        if self.field_name is not None and hasattr(equation, "field_names"):
             self.idx = equation.field_names.index(self.field_name)
             self.fs = equation.fields(self.field_name).function_space()
             self.residual = self.residual.label_map(
