@@ -6,7 +6,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        errornorm, norm, Min, Max)
 
 dt = 1800
-days = 12
+days = 1
 ndumps = 12
 tmax = days * 24 * 60 * 60
 deltaz = 2.0e3
@@ -34,7 +34,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(int(dt * 5)),
+                          dumpfreq=int(tmax / (ndumps * dt)),
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['theta'],
                           dumplist_latlon=['u_meridional',
