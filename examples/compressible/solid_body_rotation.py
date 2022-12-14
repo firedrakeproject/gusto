@@ -34,7 +34,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(dt * 10),
+                          dumpfreq=int(int(dt * 5)),
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['theta'],
                           dumplist_latlon=['u_meridional',
