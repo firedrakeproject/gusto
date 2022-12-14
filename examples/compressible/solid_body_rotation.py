@@ -7,7 +7,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
 
 dt = 1800
 days = 1
-ndumps = 12
+ndumps = 20
 tmax = days * 24 * 60 * 60
 deltaz = 2.0e3
 
@@ -31,7 +31,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 
 
 # options
-dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i' % (days, dt, 2)
+dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_extradiag' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (ndumps * dt)),
@@ -55,7 +55,7 @@ p0 = Constant(100000)
 T0 = 280.  # in K
 u0 = 40.
 
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), Energy(), CompressibleKineticEnergy()]
 state = State(mesh,
               dt=dt,
               output=output,
