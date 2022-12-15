@@ -31,7 +31,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 
 
 # options
-dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_extradiag' % (days, dt, 2)
+dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq= 1,   # int(tmax / (ndumps * dt)),
