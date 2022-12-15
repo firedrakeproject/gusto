@@ -34,7 +34,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_extradiag' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tmax / (ndumps * dt)),
+                          dumpfreq= 1,   # int(tmax / (ndumps * dt)),
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['theta'],
                           dumplist_latlon=['u_meridional',
@@ -109,7 +109,7 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(state, theta0, rho0, exner_boundary=pie, solve_for_rho=False)
+compressible_hydrostatic_balance(state, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
