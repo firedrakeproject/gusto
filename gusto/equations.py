@@ -549,6 +549,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 forcing_expr=None, u_dissipation_expr=None,
+                 D_dissipation_expr=None,
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient]},
                  u_transport_option='vector_invariant_form',
@@ -705,6 +707,24 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                           self.X)
             residual += topography_form
 
+        # forcing and dissipation
+        if forcing_expr: 
+            forcing_form = subject(prognostic(forcing_expr*phi*dx,
+                                              "D"), self.X)
+            residual -= forcing_form
+
+        if u_dissipation_expr:
+            u_dissipation_form = subject(prognostic
+                                         (u*alpha*w*dx,
+                                          "u"), self.X)
+            residual += u_dissipation_form
+
+        if D_dissipation_expr:
+            D_dissipation_form = subject(prognostic
+                                         (D*alpha*phi*dx,
+                                          "D"), self.X)
+            residual += D_dissipation_form
+
         # thermal source terms not involving topography
         if self.thermal:
             source_form = subject(prognostic(-D*div(b*w)*dx
@@ -748,6 +768,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
+                 forcing_expr=None, u_dissipation_expr=None,
+                 D_dissipation_expr=None,
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient, coriolis]},
                  u_transport_option="vector_invariant_form",
@@ -781,6 +803,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         """
 
         super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
+                         forcing_expr=None, u_dissipation_expr=None,
+                         D_dissipation_expr=None,
                          terms_to_linearise=terms_to_linearise,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
