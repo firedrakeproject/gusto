@@ -10,9 +10,8 @@ dt = 100 #3000
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
-Omega = 7.292e-5
 
-parameters = ShallowWaterParameters(H=H, Omega=Omega)
+parameters = ShallowWaterParameters(H=H)
 
 dirname = "thermal_williamson2"
 
@@ -64,12 +63,7 @@ phi_0 = 3e4
 epsilon = 0.1
 theta_0 = epsilon*phi_0**2
 
-# theta = (theta_0 - sigma*((
-#     cos(phi))**2) * ((w + sigma)(cos(phi))**2 + 2*(phi_0 - w - sigma)))/(
-#         phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*
-#         (sin(phi))**2)
-
-numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)(cos(phi))**2 + 2*(phi_0 - w - sigma))
+numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
 
 denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
 
