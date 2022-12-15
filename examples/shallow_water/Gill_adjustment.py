@@ -1,32 +1,35 @@
 from gusto import *
-from firedrake import PeriodicRectangleMesh, exp, Constant
+from firedrake import (PeriodicRectangleMesh, exp, Constant, sqrt, cos,
+                       conditional)
+
+# mesh depends on parameters so set these up first
+H = 400
+beta = 2.3e-11
+parameters = ShallowWaterParameters(H=H)
+g = parameters.g
+c = sqrt(g*H)
+Req = sqrt(c/(2*beta))
 
 # set up mesh
-y_scale = 1
-Lx = 80*y_scale
-Ly = 8*y_scale
-delta = 0.2
+Lx = 20*Req
+Ly = 10*Req
+delta = 0.1*Req
 nx = int(Lx/delta)
 ny = int(Ly/delta)
 
 mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction='x')
 x, y = SpatialCoordinate(mesh)
 
-# set up parameters
-dt = 0.002
-g = 1
-beta = 1
-H = 1
-fexpr = beta*(y-Ly/2)
-T = 1/beta*y_scale
+# set up the rest of the parameters
+dt = 200
+fexpr = beta*(y-(Ly/2))
+T = 1/sqrt(2*beta*c)
 
-parameters = ShallowWaterParameters(H=H, g=g)
-
-dirname = "Gill_adjustment"
+dirname = "Gill_heating"
 
 output = OutputParameters(dirname=dirname, dumpfreq=1)
 
-diagnostic_fields = [CourantNumber()]
+diagnostic_fields = [CourantNumber(), RelativeVorticity()]
 
 state = State(mesh,
               dt=dt,
@@ -34,18 +37,16 @@ state = State(mesh,
               diagnostic_fields=diagnostic_fields,
               parameters=parameters)
 
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
+eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                              no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
-epsilon = 0.3
-a = 0.3
-Dexpr = 1 - epsilon*exp(-((x-30)**2/(2*a**2) + (y-Ly/2)**2/(2*a**2)))
-D0.interpolate(Dexpr)
 
-# build timestepper
-stepper = Timestepper(eqns, RK4(state), state)
+L = 2*Req  # radius of perturbed region
+k = 2*pi/L
+forcing = cos(k*x)*exp(0.25*y**2)
+forcing_expr = conditional(x>-L, conditional(x<L, forcing, 0), 0)
 
-stepper.run(t=0, tmax=5*T)
+
