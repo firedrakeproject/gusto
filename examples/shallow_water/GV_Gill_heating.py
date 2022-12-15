@@ -2,30 +2,29 @@ from gusto import *
 from firedrake import (PeriodicRectangleMesh, exp, Constant, sqrt, cos,
                        conditional)
 
-# mesh depends on parameters so set these up first
-H = 400
-beta = 2.3e-11
-parameters = ShallowWaterParameters(H=H)
-g = parameters.g
-c = sqrt(g*H)
-Req = sqrt(c/(2*beta))
-
 # set up mesh
-Lx = 20*Req
-Ly = 10*Req
-delta = 0.1*Req
+Lx = 40
+Ly = 16
+delta = 0.2
 nx = int(Lx/delta)
 ny = int(Ly/delta)
 
 mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction='x')
 x, y = SpatialCoordinate(mesh)
 
-# set up the rest of the parameters
-dt = 200
+# set up parameters
+dt = 0.02
+beta = 0.5
+L = 2
+k = pi/(2*L)
+alpha = 0.15
+H = 0  # maybe??
+tmax = 10000
 fexpr = beta*(y-(Ly/2))
-T = 1/sqrt(2*beta*c)
 
-dirname = "Gill_heating"
+dirname = "GV_Gill_heating"
+
+parameters = ShallowWaterParameters(H=H)
 
 output = OutputParameters(dirname=dirname, dumpfreq=1)
 
@@ -37,6 +36,13 @@ state = State(mesh,
               diagnostic_fields=diagnostic_fields,
               parameters=parameters)
 
+expy = exp(0.25*(y-(Ly/2))**2)
+# forcing = cos(k*(x-(Lx/2)))*exp(0.25*(y-(Ly/2))**2)
+forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
+forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
+
+# need to add damping terms too
+
 eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                              no_normal_flow_bc_ids=[1,2])
 
@@ -44,9 +50,9 @@ eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
 u0 = state.fields("u")
 D0 = state.fields("D")
 
-L = 2*Req  # radius of perturbed region
-k = 2*pi/L
-forcing = cos(k*x)*exp(0.25*y**2)
-forcing_expr = conditional(x>-L, conditional(x<L, forcing, 0), 0)
+D0.interpolate(0.1*forcing_expr)
 
+# timestepper
+stepper = Timestepper(eqns, ForwardEuler(state), state)
 
+stepper.run(t=0, tmax = 2*dt)
