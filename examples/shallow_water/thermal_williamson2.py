@@ -1,11 +1,11 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi,
-                       cos, sin)
+                       cos, sin, Constant)
 
 day = 24*60*60
 tmax = 5*day
 ndumps = 5
-dt = 3000
+dt = 100 #3000
 
 # setup shallow water parameters
 R = 6371220.
@@ -43,32 +43,45 @@ state = State(mesh,
               diagnostic_fields=diagnostic_fields)
 
 Omega = parameters.Omega
+print(Omega)
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
+eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, thermal=True)
 
-# interpolate initial conditions
+# initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
+b0 = state.fields("b")
 
 u_max = 20
-uexpr = sphere_to_cartesian(
-    mesh, u_max*cos(phi), 0)
-# uexpr = as_vector([cartesian_u_expr, 0.0, 0.0])
+uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
 g = parameters.g
 w = Omega*R*u_max + (u_max**2)/2
-Dexpr = H - (1/g)*(w + w/10)*((sin(phi))**2)
+sigma = w/10
+
+Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
 
 phi_0 = 3e4
 epsilon = 0.1
 theta_0 = epsilon*phi_0**2
 
+# theta = (theta_0 - sigma*((
+#     cos(phi))**2) * ((w + sigma)(cos(phi))**2 + 2*(phi_0 - w - sigma)))/(
+#         phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*
+#         (sin(phi))**2)
+
+numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)(cos(phi))**2 + 2*(phi_0 - w - sigma))
+
+denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
+
+theta = numerator/denominator
+
+bexpr = parameters.g * (1 - theta)
+
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-
-transported_fields = [ImplicitMidpoint(state, "u"),
-                      SSPRK3(state, "D", subcycles=2)]
+b0.interpolate(bexpr)
 
 # build time stepper
-stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields)
+stepper = Timestepper(eqns, RK4(state), state)
 
 stepper.run(t=0, tmax=5*dt)
