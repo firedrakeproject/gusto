@@ -43,22 +43,10 @@ expy = exp(-0.25*(y-(Ly/2))**2)
 forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
 
-# damping terms
-VD = FunctionSpace(mesh, "DG", 1)
-Vu = FunctionSpace(mesh, "BDM", 2)
-u = Function(Vu)
-D = Function(VD)
-u_dissipation_expr = alpha * u
-D_dissipation_expr = alpha * D
-
 eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                                    forcing_expr=forcing_expr,
-                                   u_dissipation_expr=u_dissipation,
-                                   D_dissipation_expr=D_dissipation_expr,
+                                   u_dissipation=True, D_dissipation=True,
                                    no_normal_flow_bc_ids=[1,2])
-
-u.assign(state.fields("u"))
-D.assign(state.fields("D"))
 
 # initial conditions
 u0 = state.fields("u")
