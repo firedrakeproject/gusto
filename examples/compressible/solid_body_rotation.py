@@ -85,9 +85,10 @@ Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
 q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
 
 p_expr = p0 * exp(q_expr)
-theta_expr = T0 * (p_expr / p0) ** (-params.kappa) 
+theta_expr = T0 * (p_expr / p0) ** (-params.kappa)
 pie_expr = T0 / theta_expr
-rho_expr = rho(params, theta_expr, pie_expr)
+rho_expr = p_expr / (Rd * T0)
+# rho_expr = rho(params, theta_expr, pie_expr)
 
 # get components of u in spherical polar coordinates
 zonal_u = u0 * r / a * cos(lat)
