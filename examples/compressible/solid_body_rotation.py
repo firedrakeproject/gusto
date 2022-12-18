@@ -34,7 +34,7 @@ safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq= 1,   # int(tmax / (ndumps * dt)),
+                          dumpfreq=1,   # int(tmax / (ndumps * dt)),
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['theta'],
                           dumplist_latlon=['u_meridional',
@@ -81,11 +81,11 @@ s = (r / a) * cos(lat)
 
 Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
 
-# solving fields as per the staniforth paper 
+# solving fields as per the staniforth paper
 q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
 
 p_expr = p0 * exp(q_expr)
-theta_expr = T0 * p_expr ** (-params.kappa) / p0
+theta_expr = T0 * (p_expr / p0) ** (-params.kappa) 
 pie_expr = T0 / theta_expr
 rho_expr = rho(params, theta_expr, pie_expr)
 
