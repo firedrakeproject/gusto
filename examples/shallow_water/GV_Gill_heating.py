@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, exp, Constant, sqrt, cos,
-                       conditional)
+                       conditional, FunctionSpace, Function)
 
 # set up mesh
 Lx = 40
@@ -18,7 +18,8 @@ beta = 0.5
 L = 2
 k = pi/(2*L)
 alpha = 0.15
-H = 0  # maybe??
+H = 1
+g = 1
 tmax = 10000
 fexpr = beta*(y-(Ly/2))
 
@@ -36,21 +37,22 @@ state = State(mesh,
               diagnostic_fields=diagnostic_fields,
               parameters=parameters)
 
-expy = exp(0.25*(y-(Ly/2))**2)
+expy = exp(-0.25*(y-(Ly/2))**2)
+
 # forcing = cos(k*(x-(Lx/2)))*exp(0.25*(y-(Ly/2))**2)
 forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
 
-# need to add damping terms too
-
 eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
-                             no_normal_flow_bc_ids=[1,2])
+                                   forcing_expr=forcing_expr,
+                                   u_dissipation=True, D_dissipation=True,
+                                   no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
 u0 = state.fields("u")
 D0 = state.fields("D")
 
-D0.interpolate(0.1*forcing_expr)
+# D0.interpolate(0.1*forcing_expr)
 
 # timestepper
 stepper = Timestepper(eqns, ForwardEuler(state), state)

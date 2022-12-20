@@ -13,9 +13,9 @@ H = 5960.
 
 parameters = ShallowWaterParameters(H=H)
 
-dirname = "thermal_williamson2"
+dirname = "thermal_williamson2_degree=2"
 
-mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=1)
+mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
 
 x = SpatialCoordinate(mesh)
 global_normal = x
@@ -25,7 +25,7 @@ phi, lamda = latlon_coords(mesh)
 
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           steady_state_error_fields=['D', 'u'],
                           log_level='INFO')
@@ -44,7 +44,7 @@ state = State(mesh,
 Omega = parameters.Omega
 print(Omega)
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, thermal=True)
+eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
 # initial conditions
 u0 = state.fields("u")
@@ -78,4 +78,4 @@ b0.interpolate(bexpr)
 # build time stepper
 stepper = Timestepper(eqns, RK4(state), state)
 
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=15*day)
