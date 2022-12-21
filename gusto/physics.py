@@ -29,8 +29,20 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
 class Physics(object, metaclass=ABCMeta):
     """Base class for the parametrisation of physical processes for Gusto."""
 
-    def __init__(self):
-        pass
+    def __init__(self, equation, parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
+        """
+
+        self.equation = equation
+        if parameters is None and hasattr(equation, 'parameters'):
+            self.parameters = equation.parameters
+        else:
+            self.parameters = parameters
 
     @abstractmethod
     def evaluate(self):
@@ -76,6 +88,8 @@ class SaturationAdjustment(Physics):
                 CompressibleEulerEquations.
         """
 
+        super().__init__(equation, parameters=parameters)
+
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
         # this will be easier if we change equations to have dictionary of
@@ -86,9 +100,8 @@ class SaturationAdjustment(Physics):
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
 
         # Make prognostic for physics scheme
+        parameters = self.parameters
         self.X = Function(equation.X.function_space())
-        self.equation = equation
-        parameters = equation.parameters if parameters is None else parameters
         self.latent_heat = latent_heat
 
         # Vapour and cloud variables are needed for every form of this scheme
@@ -269,8 +282,8 @@ class Fallout(Physics):
         test = equation.tests[rain_idx]
 
         Vu = domain.spaces("HDiv")
-        # TODO: how do we allow this to be output?
-        v = equation.fields(name='rainfall_velocity', space=Vu)
+        # TODO: there must be a better way than forcing this into the equation
+        v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
 
         # -------------------------------------------------------------------- #
         # Create physics term -- which is actually a transport term
@@ -455,7 +468,7 @@ class EvaporationOfRain(Physics):
     """
 
     def __init__(self, equation, rain_name='rain', vapour_name='water_vapour',
-                 latent_heat=True):
+                 latent_heat=True, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -465,11 +478,17 @@ class EvaporationOfRain(Physics):
                 Defaults to 'water_vapour'.
             latent_heat (bool, optional): whether to have latent heat exchange
                 feeding back from the phase change. Defaults to True.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
 
         Raises:
             NotImplementedError: currently this is only implemented for the
                 CompressibleEulerEquations.
         """
+
+        super().__init__(equation, parameters=parameters)
+
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
         # this will be easier if we change equations to have dictionary of
@@ -481,8 +500,7 @@ class EvaporationOfRain(Physics):
 
         # Make prognostic for physics scheme
         self.X = Function(equation.X.function_space())
-        self.equation = equation
-        parameters = equation.parameters
+        parameters = self.parameters
         self.latent_heat = latent_heat
 
         # Vapour and cloud variables are needed for every form of this scheme
@@ -607,7 +625,7 @@ class EvaporationOfRain(Physics):
             interpolator.interpolate()
 
 
-class InstantRain(object):
+class InstantRain(Physics):
     """
     The process of converting vapour above the saturation curve to rain.
 
@@ -619,7 +637,8 @@ class InstantRain(object):
      """
 
     def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
-                 rain_name=None, convective_feedback=False, set_tau_to_dt=False):
+                 rain_name=None, convective_feedback=False, set_tau_to_dt=False,
+                 parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
@@ -635,9 +654,14 @@ class InstantRain(object):
                 conversion is equal to the timestep and False if not. If False
                 then the user must provide a timescale, tau, that gets passed to
                 the parameters list.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
         """
 
-        parameters = equation.parameters
+        super().__init__(equation, parameters=None)
+
+        parameters = self.parameters
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
 

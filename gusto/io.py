@@ -5,10 +5,10 @@ import itertools
 from netCDF4 import Dataset
 import sys
 import time
-from gusto.diagnostics import Diagnostics, Perturbation, SteadyStateError
+from gusto.diagnostics import Diagnostics
 from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl, File,
-                       Constant, op2, DumbCheckpoint, FILE_CREATE, FILE_READ)
+                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -132,17 +132,17 @@ class DiagnosticsOutput(object):
                     for diagnostic in diagnostics.available_diagnostics:
                         group.createVariable(diagnostic, np.float64, ("time", ))
 
-    def dump(self, equation, t):
+    def dump(self, state_fields, t):
         """
         Output the global diagnostics.
 
-            equation (:class:`PrognosticEquation`): the model's equation object.
+            state_fields (:class:`StateFields`): the model's field container.
             t (float): simulation time at which the output occurs.
         """
 
         diagnostics = []
         for fname in self.diagnostics.fields:
-            field = equation.fields(fname)
+            field = state_fields(fname)
             for dname in self.diagnostics.available_diagnostics:
                 diagnostic = getattr(self.diagnostics, dname)
                 diagnostics.append((fname, dname, diagnostic(field)))
@@ -160,16 +160,11 @@ class DiagnosticsOutput(object):
 class IO(object):
     """Controls the model's input, output and diagnostics."""
 
-    def __init__(self, domain, equation,
-                 output=None,
-                 parameters=None,
-                 diagnostics=None,
-                 diagnostic_fields=None):
+    def __init__(self, domain, output, diagnostics=None, diagnostic_fields=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            equation (:class:`PrognosticEquation`): the prognostic equation.
             output (:class:`OutputParameters`, optional): holds and describes
                 the options for outputting. Defaults to None.
             diagnostics (:class:`Diagnostics`, optional): object holding and
@@ -181,16 +176,9 @@ class IO(object):
             RuntimeError: if no output is provided.
             TypeError: if `dt` cannot be cast to a :class:`Constant`.
         """
-
-        self.equation = equation
+        self.domain = domain
         self.mesh = domain.mesh
-
-        if output is None:
-            # TODO: maybe this shouldn't be an optional argument then?
-            raise RuntimeError("You must provide a directory name for dumping results")
-        else:
-            self.output = output
-        self.parameters = parameters
+        self.output = output
 
         if diagnostics is not None:
             self.diagnostics = diagnostics
@@ -200,13 +188,6 @@ class IO(object):
             self.diagnostic_fields = diagnostic_fields
         else:
             self.diagnostic_fields = []
-
-        # TODO: quick way of ensuring that diagnostics are registered
-        if hasattr(equation, "field_names"):
-            for fname in equation.field_names:
-                self.diagnostics.register(fname)
-        else:
-            self.diagnostics.register(equation.field_name)
 
         if self.output.dumplist is None:
             self.output.dumplist = []
@@ -218,33 +199,45 @@ class IO(object):
         # setup logger
         logger.setLevel(output.log_level)
         set_log_handler(self.mesh.comm)
-        if parameters is not None:
+
+    def log_parameters(self, equation):
+        """
+        Logs an equation's physical parameters that take non-default values.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation which
+                contains any physical parameters used in the model run.
+        """
+        if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(parameters).items()))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
 
-        #  Constant to hold current time
-        self.t = Constant(0.0)
+    def setup_diagnostics(self, state_fields):
+        """
+        Prepares the I/O for computing the model's global diagnostics and
+        diagnostic fields.
 
-    def setup_diagnostics(self):
-        """Concatenates the various types of diagnostic field."""
-        for name in self.output.perturbation_fields:
-            f = Perturbation(name)
-            self.diagnostic_fields.append(f)
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+        """
 
-        for name in self.output.steady_state_error_fields:
-            f = SteadyStateError(self.equation, name)
-            self.diagnostic_fields.append(f)
-
-        fields = set([f.name() for f in self.equation.fields])
-        field_deps = [(d, sorted(set(d.required_fields).difference(fields),)) for d in self.diagnostic_fields]
+        diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+        non_diagnostics = [fname for fname in state_fields._field_names if state_fields.field_type(fname) != "diagnostic" or fname not in diagnostic_names]
+        # Filter out non-diagnostic fields
+        field_deps = [(d, sorted(set(d.required_fields).difference(non_diagnostics),)) for d in self.diagnostic_fields]
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
         for diagnostic in self.diagnostic_fields:
-            # TODO: for diagnostics to see equation and IO, change the setup here
-            diagnostic.setup(self.equation)
+            diagnostic.setup(self.domain, state_fields)
             self.diagnostics.register(diagnostic.name)
 
-    def setup_dump(self, t, tmax, pickup=False):
+        # Register fields for global diagnostics
+        # TODO: it should be possible to specify which global diagnostics are used
+        for fname in state_fields._field_names:
+            if fname in state_fields.to_dump:
+                self.diagnostics.register(fname)
+
+    def setup_dump(self, state_fields, t, tmax, pickup=False):
         """
         Sets up a series of things used for outputting.
 
@@ -254,6 +247,7 @@ class IO(object):
         checkpointing file.
 
         Args:
+            state_fields (:class:`StateFields`): the model's field container.
             t (float): the current model time.
             tmax (float): the end time of the model's simulation.
             pickup (bool, optional): whether to pick up the model's initial
@@ -287,7 +281,7 @@ class IO(object):
                 comm=self.mesh.comm)
 
             # make list of fields to dump
-            self.to_dump = [f for f in self.equation.fields if f.name() in self.equation.fields.to_dump]
+            self.to_dump = [f for f in state_fields.fields if f.name() in state_fields.to_dump]
 
             # make dump counter
             self.dumpcount = itertools.count()
@@ -304,7 +298,7 @@ class IO(object):
             # make functions on latlon mesh, as specified by dumplist_latlon
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
-                f = self.equation.fields(name)
+                f = state_fields(name)
                 field = Function(
                     functionspaceimpl.WithGeometry.create(
                         f.function_space(), mesh_ll),
@@ -324,11 +318,11 @@ class IO(object):
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
-            ndt = int(tmax/float(self.dt))
+            ndt = int(tmax/float(self.domain.dt))
             self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
                                                     self.output.point_data,
                                                     self.output.dirname,
-                                                    self.equation.fields,
+                                                    state_fields,
                                                     self.mesh.comm,
                                                     self.output.tolerance,
                                                     create=not pickup)
@@ -349,21 +343,21 @@ class IO(object):
                                             mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
-            self.to_pickup = [f for f in self.equation.fields if f.name() in self.equation.fields.to_pickup]
+            self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
 
         # if we want to checkpoint then make a checkpoint counter
         if self.output.checkpoint:
             self.chkptcount = itertools.count()
 
         # dump initial fields
-        self.dump(t)
+        self.dump(state_fields, t)
 
-    def pickup_from_checkpoint(self):
+    def pickup_from_checkpoint(self, state_fields):
         """Picks up the model's variables from a checkpoint file."""
         # TODO: this duplicates some code from setup_dump. Can this be avoided?
         # It is because we don't know if we are picking up or setting dump first
         if self.to_pickup is None:
-            self.to_pickup = [f for f in self.equation.fields if f.name() in self.equation.fields.to_pickup]
+            self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
@@ -386,7 +380,7 @@ class IO(object):
 
         return t
 
-    def dump(self, t):
+    def dump(self, state_fields, t):
         """
         Dumps all of the required model output.
 
@@ -395,6 +389,7 @@ class IO(object):
         a checkpoint file if specified.
 
         Args:
+            state_fields (:class:`StateFields`): the model's field container.
             t (float): the simulation's current time.
         """
         output = self.output
@@ -402,15 +397,15 @@ class IO(object):
         # Diagnostics:
         # Compute diagnostic fields
         for field in self.diagnostic_fields:
-            field(self.equation)
+            field.compute()
 
         if output.dump_diagnostics:
             # Output diagnostic data
-            self.diagnostic_output.dump(self.equation, t)
+            self.diagnostic_output.dump(state_fields, t)
 
         if len(output.point_data) > 0 and (next(self.pddumpcount) % output.pddumpfreq) == 0:
             # Output pointwise data
-            self.pointdata_output.dump(self.equation.fields, t)
+            self.pointdata_output.dump(state_fields, t)
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
@@ -426,20 +421,6 @@ class IO(object):
             if len(output.dumplist_latlon) > 0:
                 self.dumpfile_ll.write(*self.to_dump_latlon)
 
-    def initialise(self, initial_conditions):
-        """
-        Initialise the state's prognostic variables.
-
-        Args:
-            initial_conditions (list): an iterable of pairs: (field_name, expr),
-                where 'field_name' is the string giving the name of the
-                prognostic field and expr is the :class:`ufl.Expr` whose value
-                is used to set the initial field.
-        """
-        for name, ic in initial_conditions:
-            f_init = getattr(self.equation.fields, name)
-            f_init.assign(ic)
-            f_init.rename(name)
 
 def get_latlon_mesh(mesh):
     """
@@ -522,6 +503,7 @@ def topo_sort(field_deps):
     name2field = dict((f.name, f) for f, _ in field_deps)
     # map node: (input_deps, output_deps)
     graph = dict((f.name, (list(deps), [])) for f, deps in field_deps)
+
     roots = []
     for f, input_deps in field_deps:
         if len(input_deps) == 0:

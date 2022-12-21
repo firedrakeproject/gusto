@@ -9,10 +9,9 @@ from firedrake import FunctionSpace, norm
 import pytest
 
 
-def run(eqn, transport_scheme, io, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_scheme, io)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(eqn.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
@@ -31,12 +30,6 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
     # Make equation
     eqn = ContinuityEquation(domain, VDG0, "f")
 
-    io = IO(domain, eqn, output=setup.output)
-
-    # Initialise fields
-    eqn.fields("f").interpolate(setup.f_init)
-    eqn.fields("u").project(setup.uexpr)
-
     # Declare transport scheme
     recovery_opts = RecoveryOptions(embedding_space=VDG1,
                                     recovered_space=VCG1,
@@ -44,7 +37,13 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
     transport_scheme = SSPRK3(domain, options=recovery_opts)
 
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initialise fields
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
     # Run and check error
-    error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

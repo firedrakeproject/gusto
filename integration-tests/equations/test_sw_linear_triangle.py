@@ -12,6 +12,11 @@ from netCDF4 import Dataset
 
 def setup_sw(dirname):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
     dt = 3600.
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
@@ -26,19 +31,29 @@ def setup_sw(dirname):
 
     domain = Domain(mesh, dt, "BDM", degree=1)
 
-    # Coriolis
+    # Equation
     parameters = ShallowWaterParameters(H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
-    output = OutputParameters(dirname=dirname+"/sw_linear_w2", steady_state_error_fields=['u', 'D'], dumpfreq=12)
-    io = IO(domain, eqns, output=output)
+    # I/O
+    diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
+    output = OutputParameters(dirname=dirname+"/sw_linear_w2", dumpfreq=12)
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # interpolate initial conditions
-    # Initial/current conditions
-    u0 = eqns.fields("u")
-    D0 = eqns.fields("D")
+    # Transport schemes
+    transport_schemes = [ForwardEuler(domain, "D")]
+
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = parameters.g
@@ -47,12 +62,7 @@ def setup_sw(dirname):
     D0.interpolate(Dexpr)
 
     Dbar = Function(D0.function_space()).assign(H)
-    eqns.set_reference_profiles([('D', Dbar)])
-
-    transport_schemes = [ForwardEuler(domain, "D")]
-
-    # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes)
+    stepper.set_reference_profiles([('D', Dbar)])
 
     return stepper, 2*day
 

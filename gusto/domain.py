@@ -8,6 +8,7 @@ from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        as_vector, inner, interpolate)
 
+
 class Domain(object):
     """
     The Domain holds the model's mesh and its compatible function spaces.
@@ -64,7 +65,7 @@ class Domain(object):
 
         # Figure out if we're on a sphere
         # TODO: could we run on other domains that could confuse this?
-        if hasattr(mesh, "_base_mesh"):
+        if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
             self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)

@@ -8,10 +8,9 @@ from gusto import *
 import pytest
 
 
-def run(eqn, transport_scheme, io, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_scheme, io)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(eqn.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
@@ -37,17 +36,18 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, output=setup.output)
-
-    eqn.fields("f").interpolate(setup.f_init)
-    eqn.fields("u").project(setup.uexpr)
-
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
         transport_scheme = ImplicitMidpoint(domain, options=opts)
 
-    error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
@@ -77,20 +77,22 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, output=setup.output)
-
-    f = eqn.fields("f")
-    if space == "CG":
-        f.interpolate(f_init)
-    else:
-        f.project(f_init)
-    eqn.fields("u").project(setup.uexpr)
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
         transport_scheme = ImplicitMidpoint(domain, options=opts)
 
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    f = timestepper.fields("f")
+    if space == "CG":
+        f.interpolate(f_init)
+    else:
+        f.project(f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
     f_end = as_vector([setup.f_end]*gdim)
-    error = run(eqn, transport_scheme, io, setup.tmax, f_end)
+    error = run(timestepper, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

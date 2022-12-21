@@ -132,7 +132,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.field_name is not None and hasattr(equation, "field_names"):
             self.idx = equation.field_names.index(self.field_name)
-            self.fs = equation.fields(self.field_name).function_space()
+            self.fs = equation.spaces[self.idx]
             self.residual = self.residual.label_map(
                 lambda t: t.get(prognostic) == self.field_name,
                 lambda t: Term(
@@ -183,7 +183,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if self.idx is None:
                 self.x_projected = Function(equation.function_space)
             else:
-                self.x_projected = Function(equation.fields(self.field_name).function_space())
+                self.x_projected = Function(equation.spaces[self.idx])
             new_test = TestFunction(self.fs)
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
@@ -256,7 +256,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.discretisation_option == "recovered":
             # set up the necessary functions
-            self.x_in = Function(equation.fields(self.field_name).function_space())
+            if self.idx is not None:
+                self.x_in = Function(equation.spaces[self.idx])
+            else:
+                self.x_in = Function(equation.function_space)
 
             # Operator to recover to higher discontinuous space
             self.x_recoverer = ReversibleRecoverer(self.x_in, self.xdg_in, options)
@@ -374,7 +377,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             # Do the options specify a different ibp to the old transport term?
             if old_transport_term.labels['ibp'] != self.options.ibp:
                 # Set up a new transport term
-                field = self.equation.fields(self.field_name)
+                if self.idx is not None:
+                    field = self.equation.X.split()[self.idx]
+                else:
+                    field = self.equation.X
                 test = TestFunction(self.fs)
 
                 # Set up new transport term (depending on the type of transport equation)

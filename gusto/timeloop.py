@@ -4,12 +4,13 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, Constant
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
+from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
 from gusto.fml.form_manipulation_labelling import drop
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.fields import TimeLevelFields
+from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
@@ -30,9 +31,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.io = io
         self.dt = self.equation.domain.dt
         self.t = Constant(0.0)
+        self.reference_profiles_initialised = False
 
         self.setup_fields()
         self.setup_scheme()
+
+        self.io.log_parameters(equation)
 
     @abstractproperty
     def transporting_velocity(self):
@@ -41,6 +45,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     @abstractmethod
     def setup_fields(self):
         """Set up required fields. Must be implemented in child classes"""
+        # TODO: should we actually implement this?
         pass
 
     @abstractmethod
@@ -63,19 +68,15 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             pickup: (bool): specify whether to pickup from a previous run
         """
 
-        io = self.io
-
         if pickup:
-            t = io.pickup_from_checkpoint()
+            t = self.io.pickup_from_checkpoint(self.fields)
 
-        io.setup_diagnostics()
+        self.io.setup_diagnostics(self.fields)
 
         with timed_stage("Dump output"):
-            io.setup_dump(t, tmax, pickup)
+            self.io.setup_dump(self.fields, t, tmax, pickup)
 
         self.t.assign(t)
-
-        self.x.initialise(self.equation)
 
         while float(self.t) < tmax - 0.5*float(self.dt):
             logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
@@ -84,18 +85,65 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.timestep()
 
-            for field in self.x.np1:
-                self.equation.fields(field.name()).assign(field)
-
             self.t.assign(self.t + self.dt)
 
             with timed_stage("Dump output"):
-                io.dump(float(self.t))
+                self.io.dump(self.fields, float(self.t))
 
-        if io.output.checkpoint:
-            io.chkpt.close()
+        if self.io.output.checkpoint:
+            self.io.chkpt.close()
 
         logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')
+
+    def set_reference_profiles(self, reference_profiles):
+        """
+        Initialise the model's reference profiles.
+
+        reference_profiles (list): an iterable of pairs: (field_name, expr),
+            where 'field_name' is the string giving the name of the reference
+            profile field expr is the :class:`ufl.Expr` whose value is used to
+            set the reference field.
+        """
+        # TODO: come back and consider all aspects of this
+        for field_name, profile in reference_profiles:
+            if field_name+'_bar' in self.fields:
+                # For reference profiles already added to state, allow
+                # interpolation from expressions
+                ref = self.fields(field_name+'_bar')
+            elif isinstance(profile, Function):
+                # Need to add reference profile to state so profile must be
+                # a Function
+                ref = self.fields(field_name+'_bar', space=profile.function_space(), dump=False)
+            else:
+                raise ValueError(f'When initialising reference profile {field_name}'
+                                 + ' the passed profile must be a Function')
+            ref.interpolate(profile)
+
+            # Assign profile to X_ref belonging to equation
+            if isinstance(self.equation, PrognosticEquationSet):
+                assert field_name in self.equation.field_names, \
+                    f'Cannot set reference profile as field {field_name} not found'
+                idx = self.equation.field_names.index(field_name)
+                X_ref = self.equation.X_ref.split()[idx]
+                X_ref.assign(ref)
+
+        self.reference_profiles_initialised = True
+
+    # TODO: do we need this interface? If so, should we use it in all examples?
+    def initialise(self, initial_conditions):
+        """
+        Initialise the state's fields.
+
+        Args:
+            initial_conditions (list): an iterable of pairs: (field_name, expr),
+                where 'field_name' is the string giving the name of the
+                prognostic field and expr is the :class:`ufl.Expr` whose value
+                is used to set the initial field.
+        """
+        for field_name, ic in initial_conditions:
+            f_init = getattr(self.fields, field_name)
+            f_init.assign(ic)
+            f_init.rename(field_name)
 
 
 class Timestepper(BaseTimestepper):
@@ -120,6 +168,8 @@ class Timestepper(BaseTimestepper):
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
 
     def setup_scheme(self):
         self.scheme.setup(self.equation, self.transporting_velocity)
@@ -182,6 +232,8 @@ class SplitPhysicsTimestepper(Timestepper):
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
 
     def setup_scheme(self):
         from gusto.labels import coriolis, pressure_gradient
@@ -203,7 +255,7 @@ class SplitPhysicsTimestepper(Timestepper):
 class SemiImplicitQuasiNewton(BaseTimestepper):
     """
     Implements a semi-implicit quasi-Newton discretisation,
-    with Strang splitting and auxilliary semi-Lagrangian transport.
+    with Strang splitting and auxiliary semi-Lagrangian transport.
 
     The timestep consists of an outer loop applying the transport and an
     inner loop to perform the quasi-Newton interations for the fast-wave
@@ -269,20 +321,21 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 assert scheme.field_name in equation_set.field_names
                 self.diffusion_schemes.append((scheme.field_name, scheme))
 
-        if not equation_set.reference_profiles_initialised:
-            raise RuntimeError('Reference profiles for equation set must be initialised to use Semi-Implicit Timestepper')
-
-        super().__init__(equation_set, io)
-
         if auxiliary_equations_and_schemes is not None:
             for eqn, scheme in auxiliary_equations_and_schemes:
-                self.x.add_fields(eqn)
-                scheme.setup(eqn, self.transporting_velocity)
+                assert not hasattr(eqn, "field_names"), 'Cannot use auxiliary schemes with multiple fields'
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
                 for eqn, scheme in auxiliary_equations_and_schemes]
         else:
+            auxiliary_equations_and_schemes = []
             self.auxiliary_schemes = []
+        self.auxiliary_equations_and_schemes = auxiliary_equations_and_schemes
+
+        super().__init__(equation_set, io)
+
+        for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
+            aux_scheme.setup(aux_eqn, self.transporting_velocity)
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
@@ -326,6 +379,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         """Sets up time levels n, star, p and np1"""
         self.x = TimeLevelFields(self.equation, 1)
         self.x.add_fields(self.equation, levels=("star", "p"))
+        for aux_eqn, _ in self.auxiliary_equations_and_schemes:
+            self.x.add_fields(aux_eqn)
+        # Prescribed fields for auxiliary eqns should come from prognostics of
+        # other equations, so only the prescribed fields of the main equation
+        # need passing to StateFields
+        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
 
     def setup_scheme(self):
         """Sets up transport, diffusion and physics schemes"""
@@ -399,6 +459,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
             scheme.apply(xnp1(name), xn(name))
+            print('xnp1 tracer', xnp1('tracer').dat.data.min(), xnp1('tracer').dat.data.max())
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
@@ -407,6 +468,21 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+
+    def run(self, t, tmax, pickup=False):
+        """
+        Runs the model for the specified time, from t to tmax.
+
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pickup: (bool): specify whether to pickup from a previous run
+        """
+
+        assert self.reference_profiles_initialised, \
+            'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
+
+        super().run(t, tmax, pickup=pickup)
 
 
 class PrescribedTransport(Timestepper):
@@ -450,16 +526,18 @@ class PrescribedTransport(Timestepper):
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
                 prescribed_transporting_velocity(self.t),
-                self.equation.fields('u'))
+                self.fields('u'))
         else:
             self.velocity_projection = None
 
     @property
     def transporting_velocity(self):
-        return self.equation.fields('u')
+        return self.fields('u')
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
 
     def setup_scheme(self):
         self.scheme.setup(self.equation, self.transporting_velocity)

@@ -14,6 +14,7 @@ from firedrake import (split, LinearVariationalProblem, Constant,
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
+from gusto.active_tracers import TracerVariableType
 from gusto.configuration import logger, DEBUG
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
@@ -123,7 +124,7 @@ class CompressibleSolver(TimesteppingSolver):
 
     def __init__(self, equations, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
-                 overwrite_solver_parameters=False, moisture=None):
+                 overwrite_solver_parameters=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -139,11 +140,8 @@ class CompressibleSolver(TimesteppingSolver):
                 `solver_parameters` that have been passed in. If False then
                 update the default parameters with the `solver_parameters`
                 passed in. Defaults to False.
-            moisture (list, optional): list of names of moisture fields.
-                Defaults to None.
         """
         self.equations = equations
-        self.moisture = moisture
 
         if quadrature_degree is not None:
             self.quadrature_degree = quadrature_degree
@@ -198,8 +196,7 @@ class CompressibleSolver(TimesteppingSolver):
         n = FacetNormal(equations.domain.mesh)
 
         # Get background fields
-        thetabar = equations.fields("thetabar")
-        rhobar = equations.fields("rhobar")
+        _, rhobar, thetabar = split(equations.X_ref)[0:3]
         exnerbar = thermodynamics.exner_pressure(equations.parameters, rhobar, thetabar)
         exnerbar_rho = thermodynamics.dexner_drho(equations.parameters, rhobar, thetabar)
         exnerbar_theta = thermodynamics.dexner_dtheta(equations.parameters, rhobar, thetabar)
@@ -230,14 +227,21 @@ class CompressibleSolver(TimesteppingSolver):
         ds_tbp = (ds_t(degree=(self.quadrature_degree))
                   + ds_b(degree=(self.quadrature_degree)))
 
-        # Add effect of density of water upon theta
-        # TODO: this has to be done using active tracers
-        if self.moisture is not None:
-            water_t = Function(Vtheta).assign(0.0)
-            for water in self.moisture:
-                water_t += self.equations.fields(water)
-            theta_w = theta / (1 + water_t)
-            thetabar_w = thetabar / (1 + water_t)
+        # Add effect of density of water upon theta, using moisture reference profiles
+        # TODO: Explore if this is the right thing to do for the linear problem
+        if equations.active_tracers is not None:
+            mr_t = Constant(0.0)*thetabar
+            for tracer in equations.active_tracers:
+                if tracer.chemical == 'H2O':
+                    if tracer.variable_type == TracerVariableType.mixing_ratio:
+                        idx = equations.field_names.index(tracer.name)
+                        mr_bar = split(equations.X_ref)[idx]
+                        mr_t += mr_bar
+                    else:
+                        raise NotImplementedError('Only mixing ratio tracers are implemented')
+
+            theta_w = theta / (1 + mr_t)
+            thetabar_w = thetabar / (1 + mr_t)
         else:
             theta_w = theta
             thetabar_w = thetabar
@@ -260,18 +264,12 @@ class CompressibleSolver(TimesteppingSolver):
         rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
         exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg)
 
-        rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
-                                                 solver_parameters=cg_ilu_parameters,
-                                                 options_prefix='rhobar_avg_solver')
-        exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
-                                                   solver_parameters=cg_ilu_parameters,
-                                                   options_prefix='exnerbar_avg_solver')
-
-        with timed_region("Gusto:HybridProjectRhobar"):
-            rho_avg_solver.solve()
-
-        with timed_region("Gusto:HybridProjectExnerbar"):
-            exner_avg_solver.solve()
+        self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
+                                                      solver_parameters=cg_ilu_parameters,
+                                                      options_prefix='rhobar_avg_solver')
+        self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
+                                                        solver_parameters=cg_ilu_parameters,
+                                                        options_prefix='exnerbar_avg_solver')
 
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
@@ -306,6 +304,7 @@ class CompressibleSolver(TimesteppingSolver):
             + dl*dot(u, n)*(ds_tbp + ds_vp)
         )
 
+        # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
@@ -363,6 +362,13 @@ class CompressibleSolver(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
+
+        # TODO: can we avoid computing these each time the solver is called?
+        with timed_region("Gusto:HybridProjectRhobar"):
+            self.rho_avg_solver.solve()
+
+        with timed_region("Gusto:HybridProjectExnerbar"):
+            self.exner_avg_solver.solve()
 
         # Solve the hybridized system
         self.hybridized_solver.solve()
@@ -443,7 +449,7 @@ class IncompressibleSolver(TimesteppingSolver):
         u, p = TrialFunctions(M)
 
         # Get background fields
-        bbar = equation.fields("bbar")
+        bbar = split(equation.X_ref)[2]
 
         # Analytical (approximate) elimination of theta
         k = equation.domain.k             # Upward pointing unit vector

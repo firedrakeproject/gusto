@@ -14,24 +14,27 @@ import pytest
 
 def setup_saturated(dirname, recovered):
 
-    # set up grid and time stepping parameters
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Parameters
     dt = 1.
     tmax = 3.
     deltax = 400.
     L = 2000.
     H = 10000.
-
     nlayers = int(H/deltax)
     ncolumns = int(L/deltax)
-
     degree = 0 if recovered else 1
 
+    # Domain
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
     domain = Domain(mesh, dt, "CG", degree)
 
+    # Equation
     tracers = [WaterVapour(), CloudWater()]
-
     if recovered:
         u_transport_option = "vector_advection_form"
     else:
@@ -40,31 +43,10 @@ def setup_saturated(dirname, recovered):
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
 
+    # I/O
     output = OutputParameters(dirname=dirname+'/saturated_balance', dumpfreq=1, dumplist=['u'])
-    diagnostic_fields = [Theta_e()]
-    io = IO(domain, eqns, output=output, diagnostic_fields=diagnostic_fields)
-
-    # Initial conditions
-    rho0 = eqns.fields("rho")
-    theta0 = eqns.fields("theta")
-    water_v0 = eqns.fields("water_vapour")
-    water_c0 = eqns.fields("cloud_water")
-    moisture = ['water_vapour', 'cloud_water']
-
-    # spaces
-    Vt = theta0.function_space()
-
-    # Isentropic background state
-    Tsurf = Constant(300.)
-    total_water = Constant(0.02)
-    theta_e = Function(Vt).interpolate(Tsurf)
-    water_t = Function(Vt).interpolate(total_water)
-
-    # Calculate hydrostatic exner
-    saturated_hydrostatic_balance(eqns, theta_e, water_t)
-    water_c0.assign(water_t - water_v0)
-
-    eqns.set_reference_profiles([('rho', rho0), ('theta', theta0)])
+    diagnostic_fields = [Theta_e(eqns)]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Set up transport schemes
     if recovered:
@@ -102,15 +84,40 @@ def setup_saturated(dirname, recovered):
     else:
         transported_fields.append(ImplicitMidpoint(domain, 'u'))
 
-    linear_solver = CompressibleSolver(eqns, moisture=moisture)
+    # Linear solver
+    linear_solver = CompressibleSolver(eqns)
 
-    # add physics
+    # Physics schemes
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
-    # build time stepper
+    # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
+    water_v0 = stepper.fields("water_vapour")
+    water_c0 = stepper.fields("cloud_water")
+
+    # spaces
+    Vt = theta0.function_space()
+
+    # Isentropic background state
+    Tsurf = Constant(300.)
+    total_water = Constant(0.02)
+    theta_e = Function(Vt).interpolate(Tsurf)
+    water_t = Function(Vt).interpolate(total_water)
+
+    # Calculate hydrostatic exner
+    saturated_hydrostatic_balance(eqns, stepper.fields, theta_e, water_t)
+    water_c0.assign(water_t - water_v0)
+
+    stepper.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 
     return stepper, tmax
 

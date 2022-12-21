@@ -8,11 +8,9 @@ from firedrake import (VectorFunctionSpace, Constant, as_vector, errornorm)
 import pytest
 
 
-def run(equation, diffusion_scheme, io, tmax):
-
-    timestepper = Timestepper(equation, diffusion_scheme, io)
+def run(timestepper, tmax):
     timestepper.run(0., tmax)
-    return timestepper.equation.fields("f")
+    return timestepper.fields("f")
 
 
 @pytest.mark.parametrize("DG", [True, False])
@@ -36,12 +34,12 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
 
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
-    io = IO(domain, eqn, output=setup.output)
-
     diffusion_scheme = BackwardEuler(domain)
+    timestepper = Timestepper(eqn, diffusion_scheme, setup.io)
 
-    eqn.fields("f").interpolate(f_init)
-    f_end = run(eqn, diffusion_scheme, io, tmax)
+    # Initial conditions
+    timestepper.fields("f").interpolate(f_init)
+    f_end = run(timestepper, tmax)
     assert errornorm(f_end_expr, f_end) < tol
 
 
@@ -69,14 +67,14 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
 
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
-    io = IO(domain, eqn, output=setup.output)
-
-    if DG:
-        eqn.fields("f").interpolate(f_init)
-    else:
-        eqn.fields("f").project(f_init)
-
     diffusion_scheme = BackwardEuler(domain)
+    timestepper = Timestepper(eqn, diffusion_scheme, setup.io)
 
-    f_end = run(eqn, diffusion_scheme, io, tmax)
+    # Initial conditions
+    if DG:
+        timestepper.fields("f").interpolate(f_init)
+    else:
+        timestepper.fields("f").project(f_init)
+
+    f_end = run(timestepper, tmax)
     assert errornorm(f_end_expr, f_end) < tol

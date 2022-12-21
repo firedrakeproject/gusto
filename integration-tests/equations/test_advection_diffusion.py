@@ -10,12 +10,18 @@ from gusto import *
 
 def run_advection_diffusion(tmpdir):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
     dt = 0.02
     tmax = 1.0
     L = 10
     mesh = PeriodicIntervalMesh(20, L)
     domain = Domain(mesh, dt, "CG", 1)
 
+    # Equation
     diffusion_params = DiffusionParameters(kappa=0.75, mu=5)
     V = domain.spaces("DG", "DG", 1)
     Vu = VectorFunctionSpace(mesh, "CG", 1)
@@ -23,11 +29,17 @@ def run_advection_diffusion(tmpdir):
     equation = AdvectionDiffusionEquation(domain, V, "f", Vu=Vu,
                                           diffusion_parameters=diffusion_params)
 
+    # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
-    io = IO(domain, equation, output=output)
+    io = IO(domain, output)
 
+    # Time stepper
+    stepper = PrescribedTransport(equation, SSPRK3(domain), io)
 
+    # ------------------------------------------------------------------------ #
     # Initial conditions
+    # ------------------------------------------------------------------------ #
+
     x = SpatialCoordinate(mesh)
     xc_init = 0.25*L
     xc_end = 0.75*L
@@ -47,15 +59,18 @@ def run_advection_diffusion(tmpdir):
     f_init_expr = f_init*exp(-(x_init / f_width_init)**2)
     f_end_expr = f_end*exp(-(x_end / f_width_end)**2)
 
-    equation.fields('f').interpolate(f_init_expr)
-    equation.fields('u').interpolate(as_vector([Constant(umax)]))
-    f_end = equation.fields('f_end', V).interpolate(f_end_expr)
+    stepper.fields('f').interpolate(f_init_expr)
+    stepper.fields('u').interpolate(as_vector([Constant(umax)]))
+    f_end = stepper.fields('f_end', space=V)
+    f_end.interpolate(f_end_expr)
 
-    # Time stepper
-    timestepper = PrescribedTransport(equation, SSPRK3(domain), io)
-    timestepper.run(0, tmax=tmax)
+    # ------------------------------------------------------------------------ #
+    # Run
+    # ------------------------------------------------------------------------ #
 
-    error = norm(equation.fields('f') - f_end) / norm(f_end)
+    stepper.run(0, tmax=tmax)
+
+    error = norm(stepper.fields('f') - f_end) / norm(f_end)
 
     return error
 

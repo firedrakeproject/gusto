@@ -16,6 +16,10 @@ import pytest
 
 def run_cond_evap(dirname, process):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
     dt = 2.0
 
     # declare grid shape, with length L and height H
@@ -24,33 +28,46 @@ def run_cond_evap(dirname, process):
     nlayers = int(H / 10.)
     ncolumns = int(L / 10.)
 
-    # make mesh
+    # make mesh and domain
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
-
     domain = Domain(mesh, dt, "CG", 1)
 
     x, z = SpatialCoordinate(mesh)
 
     # spaces
-    Vt = domain.spaces("theta", degree=1)
-    Vr = domain.spaces("DG", "DG", degree=1)
 
-    # Set up equation -- use compressible to set up these spaces
+    # Set up equation
     tracers = [WaterVapour(), CloudWater()]
     parameters = CompressibleParameters()
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
+    # I/O
     output = OutputParameters(dirname=dirname+"/cond_evap",
                               dumpfreq=1,
                               dumplist=['u'])
-    io = IO(domain, eqn, output=output, diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
+    io = IO(domain, output, diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
+
+    # Physics scheme
+    physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain))]
+
+    # Time stepper
+    scheme = ForwardEuler(domain)
+    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                      physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    Vt = domain.spaces("theta", degree=1)
+    Vr = domain.spaces("DG", "DG", degree=1)
 
     # Declare prognostic fields
-    rho0 = eqn.fields("rho")
-    theta0 = eqn.fields("theta")
-    water_v0 = eqn.fields("water_vapour", Vt)
-    water_c0 = eqn.fields("cloud_water", Vt)
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
+    water_v0 = stepper.fields("water_vapour")
+    water_c0 = stepper.fields("cloud_water")
 
     # Set a background state with constant pressure and temperature
     pressure = Function(Vr).interpolate(Constant(100000.))
@@ -90,27 +107,24 @@ def run_cond_evap(dirname, process):
     eqn.residual = eqn.residual.label_map(lambda t: t.has_label(time_derivative),
                                           map_if_true=identity, map_if_false=drop)
 
-    physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain))]
-
-    # build time stepper
-    scheme = ForwardEuler(domain)
-    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_schemes)
+    # ------------------------------------------------------------------------ #
+    # Run
+    # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=dt)
 
-    return eqn, mv_true, mc_true, theta_d_true, mc_init
+    return eqn, stepper, mv_true, mc_true, theta_d_true, mc_init
 
 
 @pytest.mark.parametrize("process", ["evaporation", "condensation"])
 def test_cond_evap(tmpdir, process):
 
     dirname = str(tmpdir)
-    eqn, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname, process)
+    eqn, stepper, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname, process)
 
-    water_v = eqn.fields('water_vapour')
-    water_c = eqn.fields('cloud_water')
-    theta_vd = eqn.fields('theta')
+    water_v = stepper.fields('water_vapour')
+    water_c = stepper.fields('cloud_water')
+    theta_vd = stepper.fields('theta')
     theta_d = Function(theta_vd.function_space())
     theta_d.interpolate(theta_vd/(1 + water_v * eqn.parameters.R_v / eqn.parameters.R_d))
 

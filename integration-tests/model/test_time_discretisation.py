@@ -3,10 +3,9 @@ from gusto import *
 import pytest
 
 
-def run(eqn, transport_scheme, io, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_scheme, io)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(eqn.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
@@ -18,10 +17,6 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     V = domain.spaces("DG")
 
     eqn = AdvectionEquation(domain, V, "f")
-    io = IO(domain, eqn, output=setup.output)
-
-    eqn.fields("f").interpolate(setup.f_init)
-    eqn.fields("u").project(setup.uexpr)
 
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain)
@@ -33,4 +28,11 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = Heun(domain)
     elif scheme == "BDF2":
         transport_scheme = BDF2(domain)
-    assert run(eqn, transport_scheme, io, setup.tmax, setup.f_end) < setup.tol
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    assert run(timestepper, setup.tmax, setup.f_end) < setup.tol

@@ -8,10 +8,9 @@ from gusto import *
 import pytest
 
 
-def run(eqn, transport_schemes, io, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_schemes, io)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(eqn.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("ibp", [IntegrateByParts.ONCE, IntegrateByParts.TWICE])
@@ -33,12 +32,13 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     else:
         eqn = ContinuityEquation(domain, V, "f", ibp=ibp)
 
-    io = IO(domain, eqn, output=setup.output)
-    eqn.fields("f").interpolate(setup.f_init)
-    eqn.fields("u").project(setup.uexpr)
-
     transport_schemes = SSPRK3(domain, options=opts)
+    timestepper = PrescribedTransport(eqn, transport_schemes, setup.io)
 
-    error = run(eqn, transport_schemes, io, setup.tmax, setup.f_end)
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

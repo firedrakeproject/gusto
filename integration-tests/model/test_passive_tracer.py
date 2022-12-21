@@ -15,10 +15,14 @@ import pytest
 
 def run_tracer(setup):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
     # Get initial conditions from shared config
     domain = setup.domain
     mesh = domain.mesh
-    output = setup.output
+    io = setup.io
 
     x = SpatialCoordinate(mesh)
     H = 0.1
@@ -29,28 +33,9 @@ def run_tracer(setup):
     R = setup.radius
     fexpr = 2*Omega*x[2]/R
 
-    # Need to create a new state containing parameters
-
     # Equations
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
-    io = IO(domain, eqns, output=output)
-
-    # Specify initial prognostic fields
-    u0 = eqns.fields("u")
-    D0 = eqns.fields("D")
-    tracer0 = tracer_eqn.fields("tracer", D0.function_space())
-    tracer_end = Function(D0.function_space())
-
-    # Expressions for initial fields corresponding to Williamson 2 test case
-    Dexpr = H - ((R * Omega * umax)*(x[2]*x[2]/(R*R))) / g
-    u0.project(setup.uexpr)
-    D0.interpolate(Dexpr)
-    Dbar = Function(D0.function_space()).assign(H)
-    tracer0.interpolate(setup.f_init)
-    tracer_end.interpolate(setup.f_end)
-
-    eqns.set_reference_profiles([('D', Dbar)])
 
     # set up transport schemes
     transport_schemes = [ForwardEuler(domain, "D")]
@@ -63,9 +48,29 @@ def run_tracer(setup):
         eqns, io, transport_schemes,
         auxiliary_equations_and_schemes=tracer_transport)
 
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    # Specify initial prognostic fields
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
+    tracer0 = stepper.fields("tracer")
+    tracer_end = Function(D0.function_space())
+
+    # Expressions for initial fields corresponding to Williamson 2 test case
+    Dexpr = H - ((R * Omega * umax)*(x[2]*x[2]/(R*R))) / g
+    u0.project(setup.uexpr)
+    D0.interpolate(Dexpr)
+    Dbar = Function(D0.function_space()).assign(H)
+    tracer0.interpolate(setup.f_init)
+    tracer_end.interpolate(setup.f_end)
+
+    stepper.set_reference_profiles([('D', Dbar)])
+
     stepper.run(t=0, tmax=setup.tmax)
 
-    error = norm(tracer_eqn.fields("tracer") - tracer_end) / norm(tracer_end)
+    error = norm(stepper.fields("tracer") - tracer_end) / norm(tracer_end)
 
     return error
 

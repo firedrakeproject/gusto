@@ -13,6 +13,7 @@ from firedrake import (HDiv, FunctionSpace, FiniteElement, TensorProductElement,
 # the creation of the de Rham complex spaces?
 # TODO: how do we create HCurl spaces if we want them?
 
+
 class Spaces(object):
     """Object to create and hold the model's finite element spaces."""
     def __init__(self, mesh):
@@ -58,13 +59,12 @@ class Spaces(object):
             :class:`FunctionSpace`: the desired function space.
         """
 
-        try:
-            # First attempt to return the space based on the name, if it exists
+        if hasattr(self, name) and family is None and V is None:
+            # We have requested a space that should already have been created
             return getattr(self, name)
 
-        except AttributeError:
-
-            # Space does not exist in creator
+        else:
+            # Space does not exist in creator or needs overwriting
             if V is not None:
                 # The space itself has been provided (to add it to the creator)
                 value = V

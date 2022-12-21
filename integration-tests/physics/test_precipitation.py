@@ -13,6 +13,10 @@ from netCDF4 import Dataset
 
 def setup_fallout(dirname):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
     # declare grid shape, with length L and height H
     dt = 0.1
     L = 10.
@@ -20,25 +24,36 @@ def setup_fallout(dirname):
     nlayers = 10
     ncolumns = 10
 
-    # make mesh
+    # Domain
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     domain = Domain(mesh, dt, "CG", 1)
     x = SpatialCoordinate(mesh)
 
+    # Equation
     Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
     eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
 
+    # I/O
     output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
     diagnostic_fields = [Precipitation()]
-    io = IO(domain, eqn, output=output, diagnostic_fields=diagnostic_fields)
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    scheme = ForwardEuler(domain)
-    eqn.fields("rho").assign(1.)
-
+    # Physics schemes
     physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, 'rain'))]
-    rain0 = eqn.fields("rain")
+
+    # build time stepper
+    scheme = ForwardEuler(domain)
+    stepper = PrescribedTransport(eqn, scheme, io,
+                                  physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    stepper.fields("rho").assign(1.)
+    rain0 = stepper.fields("rain")
 
     # set up rain
     xc = L / 2
@@ -48,10 +63,6 @@ def setup_fallout(dirname):
     rain_expr = conditional(r > rc, 0., 1e-3 * (cos(pi * r / (rc * 2))) ** 2)
 
     rain0.interpolate(rain_expr)
-
-    # build time stepper
-    stepper = PrescribedTransport(eqn, scheme, io,
-                                  physics_schemes=physics_schemes)
 
     return stepper, 10.0
 

@@ -8,10 +8,9 @@ from gusto import *
 import pytest
 
 
-def run(eqn, transport_scheme, io, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_scheme, io)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(eqn.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
@@ -26,12 +25,15 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, output=setup.output)
-    eqn.fields("f").interpolate(setup.f_init)
-    eqn.fields("u").project(setup.uexpr)
-
     transport_scheme = SSPRK3(domain)
-    error = run(eqn, transport_scheme, io, setup.tmax, setup.f_end)
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
@@ -49,11 +51,14 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    io = IO(domain, eqn, output=setup.output)
-    eqn.fields("f").interpolate(f_init)
-    eqn.fields("u").project(setup.uexpr)
-    transport_schemes = SSPRK3(domain)
+    transport_scheme = SSPRK3(domain)
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(f_init)
+    timestepper.fields("u").project(setup.uexpr)
     f_end = as_vector([setup.f_end]*gdim)
-    error = run(eqn, transport_schemes, io, setup.tmax, f_end)
+    error = run(timestepper, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

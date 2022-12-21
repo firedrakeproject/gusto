@@ -12,38 +12,31 @@ from netCDF4 import Dataset
 
 def setup_balance(dirname):
 
-    # set up grid and time stepping parameters
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Parameters
     dt = 1.
     tmax = 5.
     deltax = 400
     L = 2000.
     H = 10000.
-
     nlayers = int(H/deltax)
     ncolumns = int(L/deltax)
 
+    # Domain
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
     domain = Domain(mesh, dt, "CG", 1)
 
-    output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
+    # Equation
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
-    io = IO(domain, eqns, output=output)
 
-    # Initial conditions
-    rho0 = eqns.fields("rho")
-    theta0 = eqns.fields("theta")
-
-    # Isentropic background state
-    Tsurf = Constant(300.)
-    theta0.interpolate(Tsurf)
-
-    # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(eqns, theta0, rho0, solve_for_rho=True)
-
-    eqns.set_reference_profiles([('rho', rho0),
-                                 ('theta', theta0)])
+    # I/O
+    output = OutputParameters(dirname=dirname+'/dry_balance', dumpfreq=10, dumplist=['u'])
+    io = IO(domain, output)
 
     # Set up transport schemes
     transported_fields = [ImplicitMidpoint(domain, "u"),
@@ -56,6 +49,23 @@ def setup_balance(dirname):
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
+
+    # Isentropic background state
+    Tsurf = Constant(300.)
+    theta0.interpolate(Tsurf)
+
+    # Calculate hydrostatic exner
+    compressible_hydrostatic_balance(eqns, theta0, rho0, solve_for_rho=True)
+
+    stepper.set_reference_profiles([('rho', rho0),
+                                    ('theta', theta0)])
 
     return stepper, tmax
 

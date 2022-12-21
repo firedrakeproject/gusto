@@ -26,14 +26,12 @@ def setup_limiters(dirname, space):
     rotations = 0.25
 
     # ------------------------------------------------------------------------ #
-    # Mesh and spaces
+    # Build model objects
     # ------------------------------------------------------------------------ #
 
+    # Domain
     m = PeriodicIntervalMesh(20, Ld)
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
-    output = OutputParameters(dirname=dirname+'/limiters',
-                              dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
-
     degree = 0 if space in ['DG0', 'Vtheta_degree_0'] else 1
 
     domain = Domain(mesh, dt, family="CG", degree=degree)
@@ -57,17 +55,47 @@ def setup_limiters(dirname, space):
 
     Vpsi = domain.spaces('CG', 'CG', degree+1)
 
-    # set up the equation
+    # Equation
     eqn = AdvectionEquation(domain, V, 'tracer')
 
-    io = IO(domain, eqn, output=output)
+    # I/O
+    output = OutputParameters(dirname=dirname+'/limiters',
+                            dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
+    io = IO(domain, output)
+
+    # ------------------------------------------------------------------------ #
+    # Set up transport scheme
+    # ------------------------------------------------------------------------ #
+
+    if space in ['DG0', 'Vtheta_degree_0']:
+        opts = RecoveryOptions(embedding_space=VDG1,
+                               recovered_space=VCG1,
+                               project_low_method='recover',
+                               boundary_method=BoundaryMethod.taylor)
+        transport_schemes = SSPRK3(domain, options=opts,
+                                   limiter=VertexBasedLimiter(VDG1))
+
+    elif space == 'DG1':
+        transport_schemes = SSPRK3(domain, limiter=DG1Limiter(V))
+
+    elif space == 'DG1_equispaced':
+        transport_schemes = SSPRK3(domain, limiter=VertexBasedLimiter(V))
+
+    elif space == 'Vtheta_degree_1':
+        opts = EmbeddedDGOptions()
+        transport_schemes = SSPRK3(domain, options=opts, limiter=ThetaLimiter(V))
+    else:
+        raise NotImplementedError
+
+    # Build time stepper
+    stepper = PrescribedTransport(eqn, transport_schemes, io)
 
     # ------------------------------------------------------------------------ #
     # Initial condition
     # ------------------------------------------------------------------------ #
 
-    tracer0 = eqn.fields('tracer', V)
-    true_field = eqn.fields('true_tracer', V)
+    tracer0 = stepper.fields('tracer', V)
+    true_field = stepper.fields('true_tracer', space=V)
 
     x, z = SpatialCoordinate(mesh)
 
@@ -127,7 +155,7 @@ def setup_limiters(dirname, space):
     # ------------------------------------------------------------------------ #
 
     psi = Function(Vpsi)
-    u = eqn.fields('u')
+    u = stepper.fields('u')
 
     # set up solid body rotation for transport
     # we do this slightly complicated stream function to make the velocity 0 at edges
@@ -151,34 +179,7 @@ def setup_limiters(dirname, space):
     gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
     u.project(gradperp(psi))
 
-    # ------------------------------------------------------------------------ #
-    # Set up transport scheme
-    # ------------------------------------------------------------------------ #
-
-    if space in ['DG0', 'Vtheta_degree_0']:
-        opts = RecoveryOptions(embedding_space=VDG1,
-                               recovered_space=VCG1,
-                               project_low_method='recover',
-                               boundary_method=BoundaryMethod.taylor)
-        transport_schemes = SSPRK3(domain, options=opts,
-                                   limiter=VertexBasedLimiter(VDG1))
-
-    elif space == 'DG1':
-        transport_schemes = SSPRK3(domain, limiter=DG1Limiter(V))
-
-    elif space == 'DG1_equispaced':
-        transport_schemes = SSPRK3(domain, limiter=VertexBasedLimiter(V))
-
-    elif space == 'Vtheta_degree_1':
-        opts = EmbeddedDGOptions()
-        transport_schemes = SSPRK3(domain, options=opts, limiter=ThetaLimiter(V))
-    else:
-        raise NotImplementedError
-
-    # build time stepper
-    stepper = PrescribedTransport(eqn, transport_schemes, io)
-
-    return stepper, tmax, eqn, true_field
+    return stepper, tmax, true_field
 
 
 @pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1',
@@ -187,9 +188,9 @@ def test_limiters(tmpdir, space):
 
     # Setup and run
     dirname = str(tmpdir)
-    stepper, tmax, eqn, true_field = setup_limiters(dirname, space)
+    stepper, tmax, true_field = setup_limiters(dirname, space)
     stepper.run(t=0, tmax=tmax)
-    final_field = eqn.fields('tracer')
+    final_field = stepper.fields('tracer')
 
     # Check tracer is roughly in the correct place
     assert norm(true_field - final_field) / norm(true_field) < 0.05, \

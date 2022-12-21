@@ -279,8 +279,9 @@ def remove_initial_w(u):
     u.assign(uin)
 
 
-def saturated_hydrostatic_balance(equation, theta_e, mr_t, exner0=None,
-                                  top=False, exner_boundary=Constant(1.0),
+def saturated_hydrostatic_balance(equation, state_fields, theta_e, mr_t,
+                                  exner0=None, top=False,
+                                  exner_boundary=Constant(1.0),
                                   max_outer_solve_count=40,
                                   max_theta_solve_count=5,
                                   max_inner_solve_count=3):
@@ -300,6 +301,7 @@ def saturated_hydrostatic_balance(equation, theta_e, mr_t, exner0=None,
 
     Args:
         equation (:class:`PrognosticEquation`): the model's equation object.
+        state_fields (:class:`StateFields`): the model's field container.
         theta_e (:class:`ufl.Expr`): expression for the desired wet equivalent
             potential temperature field.
         mr_t (:class:`ufl.Expr`): expression for the total moisture content.
@@ -326,9 +328,9 @@ def saturated_hydrostatic_balance(equation, theta_e, mr_t, exner0=None,
             number of iterations.
     """
 
-    theta0 = equation.fields('theta')
-    rho0 = equation.fields('rho')
-    mr_v0 = equation.fields('water_vapour')
+    theta0 = state_fields('theta')
+    rho0 = state_fields('rho')
+    mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
     domain = equation.domain
@@ -409,8 +411,9 @@ def saturated_hydrostatic_balance(equation, theta_e, mr_t, exner0=None,
                                      mr_t=mr_t, solve_for_rho=True)
 
 
-def unsaturated_hydrostatic_balance(equation, theta_d, H, exner0=None,
-                                    top=False, exner_boundary=Constant(1.0),
+def unsaturated_hydrostatic_balance(equation, state_fields, theta_d, H,
+                                    exner0=None, top=False,
+                                    exner_boundary=Constant(1.0),
                                     max_outer_solve_count=40,
                                     max_inner_solve_count=20):
     """
@@ -428,6 +431,7 @@ def unsaturated_hydrostatic_balance(equation, theta_d, H, exner0=None,
 
     Args:
         equation (:class:`PrognosticEquation`): the model's equation object.
+        state_fields (:class:`StateFields`): the model's field container.
         theta_d (:class:`ufl.Expr`): the specified dry potential temperature
             field.
         H (:class:`ufl.Expr`): the specified relative humidity field.
@@ -452,9 +456,9 @@ def unsaturated_hydrostatic_balance(equation, theta_d, H, exner0=None,
             number of iterations.
     """
 
-    theta0 = equation.fields('theta')
-    rho0 = equation.fields('rho')
-    mr_v0 = equation.fields('water_vapour')
+    theta0 = state_fields('theta')
+    rho0 = state_fields('rho')
+    mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
     domain = equation.domain
