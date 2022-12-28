@@ -60,7 +60,7 @@ def setup_limiters(dirname, space):
 
     # I/O
     output = OutputParameters(dirname=dirname+'/limiters',
-                            dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
+                              dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
     io = IO(domain, output)
 
     # ------------------------------------------------------------------------ #

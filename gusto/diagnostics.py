@@ -432,8 +432,8 @@ class SphericalComponent(DiagnosticField):
         R = sqrt(x**2 + y**2)  # distance from z axis
         r = sqrt(x**2 + y**2 + z**2)  # distance from origin
 
-        lambda_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
-        phi_hat = (x * y_hat - y * x_hat) / R
+        lambda_hat = (x * y_hat - y * x_hat) / R
+        phi_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
         r_hat = (x * x_hat + y * y_hat + z * z_hat) / r
 
         return lambda_hat, phi_hat, r_hat
@@ -473,8 +473,8 @@ class MeridionalComponent(SphericalComponent):
         """
         f = state_fields(self.fname)
         self._check_args(domain, f)
-        lambda_hat, _, _ = self._spherical_polar_unit_vectors(domain)
-        self.expr = dot(f, lambda_hat)
+        _, phi_hat, _ = self._spherical_polar_unit_vectors(domain)
+        self.expr = dot(f, phi_hat)
         super().setup(domain, state_fields)
 
 
@@ -495,8 +495,8 @@ class ZonalComponent(SphericalComponent):
         """
         f = state_fields(self.fname)
         self._check_args(domain, f)
-        _, phi_hat, _ = self._spherical_polar_unit_vectors(domain)
-        self.expr = dot(f, phi_hat)
+        lambda_hat, _, _ = self._spherical_polar_unit_vectors(domain)
+        self.expr = dot(f, lambda_hat)
         super().setup(domain, state_fields)
 
 

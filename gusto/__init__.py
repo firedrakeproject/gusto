@@ -14,7 +14,6 @@ from gusto.linear_solvers import *                   # noqa
 from gusto.physics import *                          # noqa
 from gusto.preconditioners import *                  # noqa
 from gusto.recovery import *                         # noqa
-from gusto.state import *                            # noqa
 from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_forms import *                  # noqa
