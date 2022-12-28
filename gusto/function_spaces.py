@@ -71,7 +71,7 @@ class Spaces(object):
 
             elif name == "DG1_equispaced":
                 # Special case as no degree arguments need providing
-                value = self.build_dg_space(1, 1, variant='equispaced')
+                value = self.build_dg_space(1, 1, variant='equispaced', name='DG1_equispaced')
 
             else:
                 check_degree_args('Spaces', self.mesh, degree, horizontal_degree, vertical_degree)
@@ -86,7 +86,7 @@ class Spaces(object):
                 elif name == "theta":
                     value = self.build_theta_space(horizontal_degree, vertical_degree)
                 elif family == "DG":
-                    value = self.build_dg_space(horizontal_degree, vertical_degree)
+                    value = self.build_dg_space(horizontal_degree, vertical_degree, name=name)
                 elif family == "CG":
                     value = self.build_cg_space(horizontal_degree, vertical_degree)
                 else:
@@ -120,7 +120,7 @@ class Spaces(object):
             self.build_base_spaces(family, horizontal_degree, vertical_degree)
             Vu = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree)
+            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name="DG")
             setattr(self, "DG", Vdg)
             Vth = self.build_theta_space(horizontal_degree, vertical_degree)
             setattr(self, "theta", Vth)
@@ -184,7 +184,7 @@ class Spaces(object):
             V_elt = FiniteElement(family, cell, horizontal_degree)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None):
+    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None, name=None):
         """
         Builds and returns the DG :class:`FunctionSpace`.
 
@@ -194,8 +194,10 @@ class Spaces(object):
             vertical_degree (int, optional): the polynomial degree of the
                 vertical part of the DG space. Defaults to None. Must be
                 specified if the mesh is extruded.
-            variant (str): the variant of the underlying :class:`FiniteElement`
-                to use. Defaults to None, which will call the default variant.
+            variant (str, optional): the variant of the underlying
+                :class:`FiniteElement` to use. Defaults to None, which will call
+                the default variant.
+            name (str, optional): name to assign to the function space.
 
         Returns:
             :class:`FunctionSpace`: the DG space.
@@ -215,7 +217,8 @@ class Spaces(object):
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, horizontal_degree, variant=variant)
         # TODO: how should we name this if vertical degree is different?
-        name = f'DG{horizontal_degree}_equispaced' if variant == 'equispaced' else 'DG'
+        if name is None:
+            name = 'DG'
         return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, horizontal_degree, vertical_degree):

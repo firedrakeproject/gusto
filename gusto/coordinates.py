@@ -3,9 +3,8 @@ This file provides a coordinate object, dependent on the domain and mesh.
 Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
-from firedrake import (SpatialCoordinate, Constant, as_vector,
-                       Function, VectorElement, TensorElement)
-from pyop2.mpi import COMM_WORLD
+from firedrake import (SpatialCoordinate, Constant, as_vector, atan_2, asin,
+                       Function, VectorElement, TensorElement, sqrt)
 import numpy as np
 
 class Coordinates(object):
@@ -70,8 +69,8 @@ class Coordinates(object):
             R = sqrt(self.xyz[0]**2 + self.xyz[1]**2)  # distance from z axis
             r = sqrt(self.xyz[0]**2 + self.xyz[1]**2 + self.xyz[2]**2)  # distance from origin
 
-            lon = np.atan_2(self.xyz[1], self.xyz[0])
-            lat = np.asin(self.xyz[2]/r)
+            lon = atan_2(self.xyz[1], self.xyz[0])
+            lat = asin(self.xyz[2]/r)
 
             self.lonlatr = (lon, lat, r)
 

@@ -190,6 +190,9 @@ class DiagnosticField(object, metaclass=ABCMeta):
             else:
                 space = self.space
 
+            # Add space to domain
+            assert space.name is not None, 'Must name spaces for diagnostics!'
+            domain.spaces(space.name, V=space)
             self.field = state_fields(self.name, space=space, dump=True, pickup=False)
 
             if self.method != 'solve':
@@ -1354,8 +1357,8 @@ class Vorticity(DiagnosticField):
         except ValueError:
             dgspace = domain.spaces("DG")
             # TODO: should this be degree + 1?
-            cg_degree = dgspace.ufl_element().degree() + 2
-            space = FunctionSpace(domain.mesh, "CG", cg_degree)
+            cg_degree = dgspace.ufl_element().degree() + 1
+            space = FunctionSpace(domain.mesh, "CG", cg_degree, name=f"CG{cg_degree}")
 
         u = state_fields("u")
         if vorticity_type in ["absolute", "potential"]:

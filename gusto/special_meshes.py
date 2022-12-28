@@ -2,8 +2,8 @@
 This file provides some specialised meshes not provided by Firedrake
 """
 
-from firedrake import (pi, atan_2, cos, FiniteElement, par_loop, READ, WRITE,
-                       FunctionSpace, VectorFunctionSpace, dx,
+from firedrake import (FiniteElement, par_loop, READ, WRITE,
+                       VectorFunctionSpace, dx,
                        functionspace, function, mesh, Constant,
                        Function, op2, Mesh, PeriodicRectangleMesh)
 from firedrake.petsc import PETSc
@@ -53,7 +53,8 @@ def equiangular_weights(x0, x1, num_points):
 @PETSc.Log.EventDecorator()
 def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
                                  degree=1, method='equidistant', reorder=None,
-                                 distribution_parameters=None, comm=COMM_WORLD):
+                                 distribution_parameters=None, comm=COMM_WORLD,
+                                 name=mesh.DEFAULT_MESH_NAME):
     """Generate an icosahedral approximation to the surface of the
     sphere.
 
@@ -475,18 +476,19 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
         if num not in [5, 6]:
             raise ValueError('Num of times vertex %i is called in all_faces is %i' % (i, num))
 
-    plex = mesh._from_cell_list(2, all_faces, all_vertices, comm)
+    plex = mesh.plex_from_cell_list(2, all_faces, all_vertices, comm)
 
     coords = plex.getCoordinatesLocal().array.reshape(-1, 3)
     scale = (radius / np.linalg.norm(coords, axis=1)).reshape(-1, 1)
     coords *= scale
-    m = mesh.Mesh(plex, dim=3, reorder=reorder, distribution_parameters=distribution_parameters)
+    m = mesh.Mesh(plex, dim=3, reorder=reorder, name=name, comm=comm,
+                  distribution_parameters=distribution_parameters)
     if degree > 1:
         new_coords = function.Function(functionspace.VectorFunctionSpace(m, "CG", degree))
         new_coords.interpolate(ufl.SpatialCoordinate(m))
         # "push out" to sphere
         new_coords.dat.data[:] *= (radius / np.linalg.norm(new_coords.dat.data, axis=1)).reshape(-1, 1)
-        m = mesh.Mesh(new_coords)
+        m = mesh.Mesh(new_coords, name=name, comm=comm)
     m._radius = radius
 
     return m
@@ -622,7 +624,7 @@ def _cubedsphere_cells_and_coords(radius, cells_per_cube_edge):
 @PETSc.Log.EventDecorator()
 def GeneralCubedSphereMesh(radius, num_cells_per_edge_of_panel=1, degree=1,
                            reorder=None, distribution_parameters=None,
-                           comm=COMM_WORLD):
+                           comm=COMM_WORLD, name=mesh.DEFAULT_MESH_NAME):
     """Generate an cubed approximation to the surface of the
     sphere.
 
@@ -644,16 +646,17 @@ def GeneralCubedSphereMesh(radius, num_cells_per_edge_of_panel=1, degree=1,
         raise ValueError("Mesh coordinate degree must be at least 1")
 
     cells, coords = _cubedsphere_cells_and_coords(radius, num_cells_per_edge_of_panel)
-    plex = mesh._from_cell_list(2, cells, coords, comm)
+    plex = mesh.plex_from_cell_list(2, cells, coords, comm, mesh._generate_default_mesh_topology_name(name))
 
-    m = mesh.Mesh(plex, dim=3, reorder=reorder, distribution_parameters=distribution_parameters)
+    m = mesh.Mesh(plex, dim=3, reorder=reorder, name=name, comm=comm,
+                  distribution_parameters=distribution_parameters)
 
     if degree > 1:
         new_coords = function.Function(functionspace.VectorFunctionSpace(m, "Q", degree))
         new_coords.interpolate(ufl.SpatialCoordinate(m))
         # "push out" to sphere
         new_coords.dat.data[:] *= (radius / np.linalg.norm(new_coords.dat.data, axis=1)).reshape(-1, 1)
-        m = mesh.Mesh(new_coords)
+        m = mesh.Mesh(new_coords, name=name, comm=comm)
     m._radius = radius
     return m
 
