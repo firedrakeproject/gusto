@@ -24,9 +24,9 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     tdump = tmax
 else:
-    deltax = 20.
-    tmax = 600.
-    tdump = 100.
+    deltax = 240.
+    tmax = 10.
+    tdump = 5
 
 L = 3600.
 h = 2400.
@@ -52,7 +52,8 @@ eqns = CompressibleEulerEquations(domain, params,
 # I/O
 dirname = 'unsaturated_bubble'
 output = OutputParameters(dirname=dirname, dumpfreq=tdump, dump_nc=True,
-                          dumplist=['cloud_water', 'rain'], log_level='INFO')
+                          dumplist=['cloud_water', 'rain'], log_level='INFO',
+                          checkpoint=False)
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)

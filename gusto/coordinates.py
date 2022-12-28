@@ -4,7 +4,7 @@ Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
 from firedrake import (SpatialCoordinate, Constant, as_vector,
-                       Function, VectorFunctionSpace, TensorFunctionSpace)
+                       Function, VectorElement, TensorElement)
 from pyop2.mpi import COMM_WORLD
 import numpy as np
 
@@ -65,7 +65,7 @@ class Coordinates(object):
         # Set up specific coordinate systems for each domain type
         #----------------------------------------------------------------------#
 
-        if domain.is_spherical:
+        if domain.on_sphere:
 
             R = sqrt(self.xyz[0]**2 + self.xyz[1]**2)  # distance from z axis
             r = sqrt(self.xyz[0]**2 + self.xyz[1]**2 + self.xyz[2]**2)  # distance from origin
@@ -83,6 +83,9 @@ class Coordinates(object):
             self.coords = self.lonlatr
             self.coords_name = ['lon', 'lat', 'r']
             self.e_up = self.e_r
+        else:
+            self.coords = self.cart
+            self.coords_name = self.cart_name
 
         #----------------------------------------------------------------------#
         # Store chi field
@@ -93,7 +96,7 @@ class Coordinates(object):
         self.full_chi_coords = {}   # Dictionary of numpy arrays of coord data
         self.parallel_array_lims = {}   # Dictionary of parallel lengths
 
-        comm = COMM_WORLD
+        comm = mesh.comm
         comm_size = comm.Get_size()
         my_rank = comm.Get_rank()
 
@@ -102,7 +105,8 @@ class Coordinates(object):
             space = domain.spaces(space_name)
 
             # Use the appropriate scalar function space if the space is vector
-            if isinstance(space, VectorFunctionSpace) or isinstance(space, TensorFunctionSpace):
+            if (isinstance(space.ufl_element(), VectorElement) or
+                isinstance(space.ufl_element(), TensorElement)):
                 raise NotImplementedError('Coordinates for vector or tensor function spaces not implemented')
                 # TODO: get scalar space, and only compute coordinates if necessary
 

@@ -5,6 +5,7 @@ import itertools
 from netCDF4 import Dataset
 import sys
 import time
+from gusto.coordinates import Coordinates
 from gusto.diagnostics import Diagnostics
 from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl, File,
@@ -265,7 +266,8 @@ class IO(object):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
-            if self.mesh.comm.rank == 0:
+            print('my rank is', self.mesh.comm.Get_rank())
+            if self.mesh.comm.Get_rank() == 0:
                 if not running_tests and path.exists(self.dumpdir) and not pickup:
                     raise IOError("results directory '%s' already exists"
                                   % self.dumpdir)
@@ -277,8 +279,8 @@ class IO(object):
             # make list of fields to dump
             self.to_dump = [f for f in state_fields.fields if f.name() in state_fields.to_dump]
 
-            # make dump counter
-            self.dumpcount = itertools.count()
+        # make dump counter
+        self.dumpcount = itertools.count()
 
         if self.output.dump_vtus:
             # setup pvd output file
@@ -289,19 +291,18 @@ class IO(object):
 
         if self.output.dump_nc:
             self.nc_filename = path.join(self.dumpdir, "field_output.nc")
-            space_names = set([field.function_space().name() for field in self.to_dump])
+            space_names = set([field.function_space().name for field in self.to_dump])
             self.coords = Coordinates(self.domain, space_names)
 
             if pickup:
                 # Pick up t idx
-                comm = COMM_WORLD
-                if comm.Get_rank() == 0:
+                if self.mesh.comm.Get_rank() == 0:
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
             else:
                 # File needs creating
-                self.create_nc_dump(self.nc_filename)
+                self.create_nc_dump(self.nc_filename, space_names)
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -430,21 +431,22 @@ class IO(object):
                 self.chkpt.store(field)
             self.chkpt.write_attribute("/", "time", t)
 
-        if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
-            # dump fields
-            self.pvd_dumpfile.write(*self.to_dump)
+        if (next(self.dumpcount) % output.dumpfreq) == 0:
+            if output.dump_nc:
+                # dump fields
+                self.write_nc_dump(t)
 
-            # dump fields on latlon mesh
-            if len(output.dumplist_latlon) > 0:
-                self.dumpfile_ll.write(*self.to_dump_latlon)
+            if output.dump_vtus:
+                # dump fields
+                self.pvd_dumpfile.write(*self.to_dump)
 
-        if output.dump_nc and (next(self.dumpcount) % output.dumpfreq) == 0:
-            # dump fields
-            self.write_nc_dump(t)
+                # dump fields on latlon mesh
+                if len(output.dumplist_latlon) > 0:
+                    self.dumpfile_ll.write(*self.to_dump_latlon)
+
 
     def create_nc_dump(self, filename, space_names):
-        comm = COMM_WORLD
-        my_rank = comm.Get_rank()
+        my_rank = self.mesh.comm.Get_rank()
         self.field_t_idx = 0
 
         if my_rank == 0:
@@ -466,7 +468,7 @@ class IO(object):
             # Create variable for storing the field values
             for field in self.to_dump:
                 field_name = field.name()
-                space_name = field.function_space().name()
+                space_name = field.function_space().name
                 nc_field_file.createGroup(field_name)
                 nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
 
@@ -474,7 +476,7 @@ class IO(object):
 
     def write_nc_dump(self, t):
 
-        comm = COMM_WORLD
+        comm = self.mesh.comm
         my_rank = comm.Get_rank()
         comm_size = comm.Get_size()
 
@@ -484,12 +486,12 @@ class IO(object):
             nc_field_file['time'][self.field_t_idx] = t
 
         # Loop through output field data here
-        num_fields = len(self.field_functions_to_dump)
+        num_fields = len(self.to_dump)
         for i, field in enumerate(self.to_dump):
             field_name = field.name()
-            space_name = field.function_space().name()
+            space_name = field.function_space().name
 
-            if isinstance(output_field.ufl_element(), VectorElement):
+            if isinstance(field.ufl_element(), VectorElement):
                 raise NotImplementedError('Vector outputting not yet implemented')
 
             # -------------------------------------------------------- #
@@ -504,16 +506,16 @@ class IO(object):
                     comm.send(field.dat.data_ro[:], dest=0, tag=my_tag)
                 else:
                     # Set up array to store full data in
-                    total_data_size = self.coordinates.parallel_array_lims[space_name][comm_size-1][1]+1
+                    total_data_size = self.coords.parallel_array_lims[space_name][comm_size-1][1]+1
                     single_proc_data = np.zeros(total_data_size)
                     # Get data for this processor first
-                    (low_lim, up_lim) = self.coordinates.parallel_array_lims[space_name][my_rank][:]
+                    (low_lim, up_lim) = self.coords.parallel_array_lims[space_name][my_rank][:]
                     single_proc_data[low_lim:up_lim+1] = field.dat.data_ro[:]
                     # Receive data from other processors
                     for procid in range(1,comm_size):
                         my_tag = comm_size*(num_fields*j + i) + procid
                         incoming_data = comm.recv(source=procid, tag=my_tag)
-                        (low_lim, up_lim) = self.coordinates.parallel_array_lims[space_name][procid][:]
+                        (low_lim, up_lim) = self.coords.parallel_array_lims[space_name][procid][:]
                         single_proc_data[low_lim:up_lim+1] = incoming_data[:]
                     # Store whole field data
                     nc_field_file[field_name].variables['field_values'][:, self.field_t_idx] = single_proc_data[:]

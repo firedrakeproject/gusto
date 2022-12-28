@@ -215,7 +215,7 @@ class Spaces(object):
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, horizontal_degree, variant=variant)
         # TODO: how should we name this if vertical degree is different?
-        name = f'DG{horizontal_degree}_equispaced' if variant == 'equispaced' else f'DG{horizontal_degree}'
+        name = f'DG{horizontal_degree}_equispaced' if variant == 'equispaced' else 'DG'
         return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, horizontal_degree, vertical_degree):
@@ -244,7 +244,7 @@ class Spaces(object):
             self.S2 = FiniteElement("DG", cell, horizontal_degree)
             self.T0 = FiniteElement("CG", interval, vertical_degree+1)
         V_elt = TensorProductElement(self.S2, self.T0)
-        return FunctionSpace(self.mesh, V_elt, name='Vtheta')
+        return FunctionSpace(self.mesh, V_elt, name='theta')
 
     def build_cg_space(self, horizontal_degree, vertical_degree):
         """
