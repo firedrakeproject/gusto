@@ -572,8 +572,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives, pressure gradient and
             # transport term from depth equation
             linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient))
-                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+                t.get(prognostic) in ["u", "D"] \
+                and (any(t.has_label(time_derivative, pressure_gradient))
+                     or (t.get(prognostic) == "D" and t.has_label(transport)))
 
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
@@ -803,9 +804,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
             linearisation_map = lambda t: \
-                (t.has_label(time_derivative)
-                 or (t.get(prognostic) != "u" and t.has_label(transport)))
+                t.get(prognostic) in ['u', 'rho', 'theta'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
 
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
@@ -1149,9 +1152,11 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
             linearisation_map = lambda t: \
-                (t.has_label(time_derivative)
-                 or (t.get(prognostic) not in ["u", "p"] and t.has_label(transport)))
+                t.get(prognostic) in ['u', 'p', 'b'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
 
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
