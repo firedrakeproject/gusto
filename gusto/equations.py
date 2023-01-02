@@ -742,17 +742,28 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Use the underlying routine to do a first linearisation of the equations
-        self.linearise_equation_set()
+        g = state.parameters.g
+        H = state.parameters.H
 
-        # D transport term is a special case -- add facet term
-        _, D = split(self.X)
-        _, phi = self.tests
-        D_adv = prognostic(linear_continuity_form(state, phi, D, facet_term=True), "D")
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-            map_if_true=lambda t: Term(D_adv.form, t.labels)
-        )
+        u, D = split(self.X)
+        w, phi = self.tests
+
+        mass_form = self.generate_mass_terms()        
+
+        D_adv = subject(
+            prognostic(linear_continuity_form(state, phi, H), "D"), self.X)
+        pressure_gradient_form = pressure_gradient(
+            subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
+
+        self.residual = mass_form + D_adv + pressure_gradient_form
+
+        if fexpr is not None:
+            V = FunctionSpace(state.mesh, "CG", 1)
+            f = state.fields("coriolis", space=V)
+            f.interpolate(fexpr)
+            coriolis_form = coriolis(
+                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
+            self.residual += coriolis_form
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
