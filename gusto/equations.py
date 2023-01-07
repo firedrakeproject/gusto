@@ -73,7 +73,7 @@ class AdvectionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -106,7 +106,7 @@ class ContinuityEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -170,7 +170,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -500,7 +500,7 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -570,11 +570,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
-            # transport term from depth equation
+            # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient))
-                 or (t.get(prognostic) == "D" and t.has_label(transport)))
-
+                t.get(prognostic) in ["u", "D"] \
+                and (any(t.has_label(time_derivative, pressure_gradient))
+                     or (t.get(prognostic) == "D" and t.has_label(transport)))
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -649,7 +649,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if fexpr is not None:
             V = FunctionSpace(domain.mesh, "CG", 1)
-            # TODO: link this to state fields
             f = self.prescribed_fields("coriolis", V).interpolate(fexpr)
             coriolis_form = coriolis(
                 subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
@@ -803,10 +802,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
             linearisation_map = lambda t: \
-                (t.has_label(time_derivative)
-                 or (t.get(prognostic) != "u" and t.has_label(transport)))
-
+                t.get(prognostic) in ['u', 'rho', 'theta'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -978,7 +978,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
@@ -1092,7 +1091,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
 
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
-    # TODO: check that these are correct
     """
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
@@ -1149,9 +1147,11 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
             linearisation_map = lambda t: \
-                (t.has_label(time_derivative)
-                 or (t.get(prognostic) not in ["u", "p"] and t.has_label(transport)))
+                t.get(prognostic) in ['u', 'p', 'b'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
 
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
@@ -1241,6 +1241,5 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)

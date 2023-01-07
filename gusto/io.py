@@ -17,13 +17,11 @@ __all__ = ["IO"]
 
 class PointDataOutput(object):
     """Object for outputting field point data."""
-    def __init__(self, filename, ndt, field_points, description,
+    def __init__(self, filename, field_points, description,
                  field_creator, comm, tolerance=None, create=True):
         """
         Args:
             filename (str): name of file to output to.
-            ndt (int): number of time points to output at. TODO: remove as this
-                is unused.
             field_points (list): some iterable of pairs, matching fields with
                 arrays of evaluation points: (field_name, evaluation_points).
             description (str): a description of the simulation to be included in
@@ -318,8 +316,7 @@ class IO(object):
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
-            ndt = int(tmax/float(self.domain.dt))
-            self.pointdata_output = PointDataOutput(pointdata_filename, ndt,
+            self.pointdata_output = PointDataOutput(pointdata_filename,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     state_fields,

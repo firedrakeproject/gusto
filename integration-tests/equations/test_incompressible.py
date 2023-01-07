@@ -6,7 +6,7 @@ atmosphere, and checks the example against a known good checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, Function, norm)
+                       sqrt, ExtrudedMesh, Function, norm, as_vector)
 
 
 def run_incompressible(tmpdir):
@@ -53,6 +53,10 @@ def run_incompressible(tmpdir):
 
     p0 = stepper.fields("p")
     b0 = stepper.fields("b")
+    u0 = stepper.fields("u")
+
+    # Add horizontal translation to ensure some transport happens
+    u0.project(as_vector([0.5, 0.0]))
 
     # z.grad(bref) = N**2
     x, z = SpatialCoordinate(mesh)

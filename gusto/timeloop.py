@@ -45,7 +45,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     @abstractmethod
     def setup_fields(self):
         """Set up required fields. Must be implemented in child classes"""
-        # TODO: should we actually implement this?
         pass
 
     @abstractmethod
@@ -459,7 +458,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
             scheme.apply(xnp1(name), xn(name))
-            print('xnp1 tracer', xnp1('tracer').dat.data.min(), xnp1('tracer').dat.data.max())
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
