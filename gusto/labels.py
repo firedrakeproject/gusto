@@ -7,7 +7,78 @@ from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
 from types import MethodType
 
 
-def replace_test_function(new_test):
+def _replace_dict(old, new, idx, replace_type):
+    """
+    Build a dictionary to pass to the ufl.replace routine
+    The dictionary matches variables in the old term with those in the new
+
+    Consider cases that old is normal Function or MixedFunction
+    vs cases of new being Function vs MixedFunction vs tuple
+    Ideally catch all cases or fail gracefully
+    """
+
+    replace_dict = {}
+
+    if type(old.ufl_element()) is MixedElement:
+        if type(new) == tuple:
+            assert len(new) == len(old.function_space())
+            for k, v in zip(split(old), new):
+                replace_dict[k] = v
+
+        elif type(new) == ufl.algebra.Sum:
+            replace_dict[old] = new
+
+        elif isinstance(new, ufl.indexed.Indexed):
+            if idx is None:
+                raise ValueError('idx must be specified to replace_{replace_type}'
+                                 + ' when {replace_type} is Mixed and new is a single component')
+            replace_dict[split(old)[idx]] = new
+
+        # Otherwise fail if new is not a function
+        elif not isinstance(new, type(old)):
+            raise ValueError(f'new must be a tuple or {type(old)}, not type {type(new)}')
+
+        # Now handle MixedElements separately as these need indexing
+        elif type(new.ufl_element()) is MixedElement:
+            assert len(new.function_space()) == len(old.function_space())
+            # If idx specified, replace only that component
+            if idx is not None:
+                replace_dict[split(old)[idx]] = split(new)[idx]
+            # Otherwise replace all components
+            else:
+                for k, v in zip(split(old), split(new)):
+                    replace_dict[k] = v
+
+        # Otherwise 'new' is a normal Function
+        else:
+            if idx is None:
+                raise ValueError('idx must be specified to replace_{replace_type}'
+                                 + ' when {replace_type} is Mixed and new is a single component')
+            replace_dict[split(old)[idx]] = new
+
+    # old is a normal Function
+    else:
+        if type(new) is tuple:
+            if idx is None:
+                raise ValueError('idx must be specified to replace_{replace_type}'
+                                 + ' when new is a tuple')
+            replace_dict[old] = new[idx]
+        elif isinstance(new, ufl.indexed.Indexed):
+            replace_dict[old] = new
+        elif not isinstance(new, type(old)):
+            raise ValueError(f'new must be a {type(old)}, not type {type(new)}')
+        elif type(new.ufl_element()) == MixedElement:
+            if idx is None:
+                raise ValueError('idx must be specified to replace_{replace_type}'
+                                 + ' when new is a tuple')
+            replace_dict[old] = split(new)[idx]
+        else:
+            replace_dict[old] = new
+
+    return replace_dict
+
+
+def replace_test_function(new_test, idx=None):
     """
     A routine to replace the test function in a term with a new test function.
 
@@ -30,14 +101,15 @@ def replace_test_function(new_test):
         Returns:
             :class:`Term`: the new term.
         """
-        test = t.form.arguments()[0]
-        new_form = ufl.replace(t.form, {test: new_test})
+        old_test = t.form.arguments()[0]
+        replace_dict = _replace_dict(old_test, new_test, idx, 'test')
+        new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)
 
     return repl
 
 
-def replace_trial_function(new):
+def replace_trial_function(new_trial, idx=None):
     """
     A routine to replace the trial function in a term with a new expression.
 
@@ -65,14 +137,15 @@ def replace_trial_function(new):
         """
         if len(t.form.arguments()) != 2:
             raise TypeError('Trying to replace trial function of a form that is not linear')
-        trial = t.form.arguments()[1]
-        new_form = ufl.replace(t.form, {trial: new})
+        old_trial = t.form.arguments()[1]
+        replace_dict = _replace_dict(old_trial, new_trial, idx, 'trial')
+        new_form = ufl.replace(t.form, replace_dict)
         return Term(new_form, t.labels)
 
     return repl
 
 
-def replace_subject(new, idx=None):
+def replace_subject(new_subj, idx=None):
     """
     A routine to replace the subject in a term with a new variable.
 
@@ -97,73 +170,9 @@ def replace_subject(new, idx=None):
             :class:`Term`: the new term.
         """
 
-        subj = t.get(subject)
-
-        # Build a dictionary to pass to the ufl.replace routine
-        # The dictionary matches variables in the old term with those in the new
-        replace_dict = {}
-
-        # Consider cases that subj is normal Function or MixedFunction
-        # vs cases of new being Function vs MixedFunction vs tuple
-        # Ideally catch all cases or fail gracefully
-        if type(subj.ufl_element()) is MixedElement:
-            if type(new) == tuple:
-                assert len(new) == len(subj.function_space())
-                for k, v in zip(split(subj), new):
-                    replace_dict[k] = v
-
-            elif type(new) == ufl.algebra.Sum:
-                replace_dict[subj] = new
-
-            elif isinstance(new, ufl.indexed.Indexed):
-                if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'
-                                     + ' when subject is Mixed and new is a single component')
-                replace_dict[split(subj)[idx]] = new
-
-            # Otherwise fail if new is not a function
-            elif not isinstance(new, Function):
-                raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
-
-            # Now handle MixedElements separately as these need indexing
-            elif type(new.ufl_element()) is MixedElement:
-                assert len(new.function_space()) == len(subj.function_space())
-                # If idx specified, replace only that component
-                if idx is not None:
-                    replace_dict[split(subj)[idx]] = split(new)[idx]
-                # Otherwise replace all components
-                else:
-                    for k, v in zip(split(subj), split(new)):
-                        replace_dict[k] = v
-
-            # Otherwise 'new' is a normal Function
-            else:
-                if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'
-                                     + ' when subject is Mixed and new is a single component')
-                replace_dict[split(subj)[idx]] = new
-
-        # subj is a normal Function
-        else:
-            if type(new) is tuple:
-                if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'
-                                     + ' when new is a tuple')
-                replace_dict[subj] = new[idx]
-            elif isinstance(new, ufl.indexed.Indexed):
-                replace_dict[subj] = new
-            elif not isinstance(new, Function):
-                raise ValueError(f'new must be a Function, not type {type(new)}')
-            elif type(new.ufl_element()) == MixedElement:
-                if idx is None:
-                    raise ValueError('idx must be specified to replace_subject'
-                                     + ' when new is a tuple')
-                replace_dict[subj] = split(new)[idx]
-            else:
-                replace_dict[subj] = new
-
+        old_subj = t.get(subject)
+        replace_dict = _replace_dict(old_subj, new_subj, idx, 'subject')
         new_form = ufl.replace(t.form, replace_dict)
-
         return Term(new_form, t.labels)
 
     return repl
