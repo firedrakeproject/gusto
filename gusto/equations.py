@@ -549,7 +549,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 forcing_expr=None, u_dissipation=False, D_dissipation=False,
+                 forcing_expr=None, u_dissipation=None, D_dissipation=None,
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient]},
                  u_transport_option='vector_invariant_form',
@@ -707,23 +707,22 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += topography_form
 
         # forcing and dissipation
-        alpha = Constant(0.15)
         if forcing_expr is not None:
             forcing_form = subject(prognostic(forcing_expr*phi*dx,
                                               "D"), self.X)
-            residual -= forcing_form
+            residual += forcing_form
 
-        if u_dissipation:
+        if u_dissipation is not None:
+            u_alpha = u_dissipation
             u_dissipation_form = subject(prognostic
-                                         (inner(u, w)*alpha*dx,
+                                         (inner(u, w)*u_alpha*dx,
                                           "u"), self.X)
             residual += u_dissipation_form
-        else:
-            print("no u dissipation")
 
-        if D_dissipation:
+        if D_dissipation is not None:
+            D_alpha = D_dissipation
             D_dissipation_form = subject(prognostic
-                                         (D*alpha*phi*dx,
+                                         (D*D_alpha*phi*dx,
                                           "D"), self.X)
             residual += D_dissipation_form
 
@@ -770,7 +769,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 forcing_expr=None, u_dissipation=False, D_dissipation=None,
+                 forcing_expr=None, u_dissipation=None, D_dissipation=None,
                  terms_to_linearise={'D': [time_derivative, transport],
                                      'u': [time_derivative, pressure_gradient, coriolis]},
                  u_transport_option="vector_invariant_form",

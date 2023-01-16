@@ -43,9 +43,10 @@ expy = exp(-0.25*(y-(Ly/2))**2)
 forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
 
+alpha = Constant(0.15)
 eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
                                    forcing_expr=forcing_expr,
-                                   u_dissipation=True, D_dissipation=True,
+                                   u_dissipation=alpha, D_dissipation=alpha,
                                    no_normal_flow_bc_ids=[1,2])
 
 # initial conditions
@@ -57,4 +58,4 @@ D0 = state.fields("D")
 # timestepper
 stepper = Timestepper(eqns, ForwardEuler(state), state)
 
-stepper.run(t=0, tmax = 2*dt)
+stepper.run(t=0, tmax = 4*dt)
