@@ -23,6 +23,8 @@ def _replace_dict(old, new, idx, replace_type):
     if replace_type == 'trial':
         acceptable_types = (*acceptable_types, Function)
 
+    type_error_message = f'new must be a {tuple} or '+' or '.join((f"{t}" for t in acceptable_types))+f', not {type(new)}'
+
     if type(old.ufl_element()) is MixedElement:
         if type(new) == tuple:
             assert len(new) == len(old.function_space())
@@ -31,7 +33,7 @@ def _replace_dict(old, new, idx, replace_type):
 
         # Otherwise fail if new is not a function
         elif not isinstance(new, acceptable_types):
-            raise ValueError(f'new must be a tuple or {type(old)}, not type {type(new)}')
+            raise TypeError(type_error_message)
 
         elif type(new) == ufl.algebra.Sum:
             replace_dict[old] = new
@@ -67,11 +69,11 @@ def _replace_dict(old, new, idx, replace_type):
         if type(new) is tuple:
             if idx is None:
                 raise ValueError('idx must be specified to replace_{replace_type}'
-                                 + ' when new is a tuple')
+                                 + ' when new is a tuple and {replace_type} is not Mixed')
             replace_dict[old] = new[idx]
 
         elif not isinstance(new, acceptable_types):
-            raise ValueError(f'new must be a {type(old)}, not type {type(new)}')
+            raise TypeError(type_error_message)
 
         elif type(new) == ufl.algebra.Sum:
             replace_dict[old] = new
@@ -82,7 +84,7 @@ def _replace_dict(old, new, idx, replace_type):
         elif type(new.ufl_element()) == MixedElement:
             if idx is None:
                 raise ValueError('idx must be specified to replace_{replace_type}'
-                                 + ' when new is a tuple')
+                                 + ' when new is a tuple and {replace_type} is not Mixed')
             replace_dict[old] = split(new)[idx]
 
         else:
