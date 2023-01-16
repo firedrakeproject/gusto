@@ -312,7 +312,7 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
     if degree is None and horizontal_degree is None:
         raise ValueError(f'Either "degree" or "horizontal_degree" must be passed to {name}')
     if extruded_mesh and degree is None and vertical_degree is None:
-        raise ValueError(f'For extruded meshes, either degree or "vertical_degree" must be passed to {name}')
+        raise ValueError(f'For extruded meshes, either "degree" or "vertical_degree" must be passed to {name}')
     if degree is not None and horizontal_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "horizontal_degree" to {name}')
     if extruded_mesh and degree is not None and vertical_degree is not None:
