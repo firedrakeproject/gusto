@@ -42,8 +42,10 @@ def _replace_dict(old, new, idx, replace_type):
         elif type(new.ufl_element()) is MixedElement:
             assert len(new.function_space()) == len(old.function_space())
             # If idx specified, replace only that component
+
             if idx is not None:
                 replace_dict[split(old)[idx]] = split(new)[idx]
+
             # Otherwise replace all components
             else:
                 for k, v in zip(split(old), split(new)):
@@ -63,15 +65,22 @@ def _replace_dict(old, new, idx, replace_type):
                 raise ValueError('idx must be specified to replace_{replace_type}'
                                  + ' when new is a tuple')
             replace_dict[old] = new[idx]
+
+        elif type(new) == ufl.algebra.Sum:
+            replace_dict[old] = new
+
         elif isinstance(new, ufl.indexed.Indexed):
             replace_dict[old] = new
+
         elif not isinstance(new, type(old)):
             raise ValueError(f'new must be a {type(old)}, not type {type(new)}')
+
         elif type(new.ufl_element()) == MixedElement:
             if idx is None:
                 raise ValueError('idx must be specified to replace_{replace_type}'
                                  + ' when new is a tuple')
             replace_dict[old] = split(new)[idx]
+
         else:
             replace_dict[old] = new
 
