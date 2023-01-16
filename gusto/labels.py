@@ -19,11 +19,19 @@ def _replace_dict(old, new, idx, replace_type):
 
     replace_dict = {}
 
+    acceptable_types = (type(old), ufl.algebra.Sum, ufl.indexed.Indexed)
+    if replace_type == 'trial':
+        acceptable_types = (*acceptable_types, Function)
+
     if type(old.ufl_element()) is MixedElement:
         if type(new) == tuple:
             assert len(new) == len(old.function_space())
             for k, v in zip(split(old), new):
                 replace_dict[k] = v
+
+        # Otherwise fail if new is not a function
+        elif not isinstance(new, acceptable_types):
+            raise ValueError(f'new must be a tuple or {type(old)}, not type {type(new)}')
 
         elif type(new) == ufl.algebra.Sum:
             replace_dict[old] = new
@@ -33,10 +41,6 @@ def _replace_dict(old, new, idx, replace_type):
                 raise ValueError('idx must be specified to replace_{replace_type}'
                                  + ' when {replace_type} is Mixed and new is a single component')
             replace_dict[split(old)[idx]] = new
-
-        # Otherwise fail if new is not a function
-        elif not isinstance(new, type(old)):
-            raise ValueError(f'new must be a tuple or {type(old)}, not type {type(new)}')
 
         # Now handle MixedElements separately as these need indexing
         elif type(new.ufl_element()) is MixedElement:
@@ -66,14 +70,14 @@ def _replace_dict(old, new, idx, replace_type):
                                  + ' when new is a tuple')
             replace_dict[old] = new[idx]
 
+        elif not isinstance(new, acceptable_types):
+            raise ValueError(f'new must be a {type(old)}, not type {type(new)}')
+
         elif type(new) == ufl.algebra.Sum:
             replace_dict[old] = new
 
         elif isinstance(new, ufl.indexed.Indexed):
             replace_dict[old] = new
-
-        elif not isinstance(new, type(old)):
-            raise ValueError(f'new must be a {type(old)}, not type {type(new)}')
 
         elif type(new.ufl_element()) == MixedElement:
             if idx is None:
