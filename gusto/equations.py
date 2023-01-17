@@ -662,7 +662,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             adv_form += self.generate_tracer_transport_terms(state, active_tracers)
         # Add transport of buoyancy, if thermal shallow water equations
         if self.thermal:
-            b_adv = prognostic(continuity_form(state, gamma, b), "b")
+            b_adv = prognostic(advection_form(state, gamma, b), "b")
             adv_form += subject(b_adv, self.X)
 
         # -------------------------------------------------------------------- #
