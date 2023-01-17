@@ -954,7 +954,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-            self.mu = self.prescribed_fields("coriolis", W_DG).interpolate(muexpr)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
             residual += name(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, "u"), self.X), "sponge")
