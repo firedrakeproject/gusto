@@ -1,6 +1,7 @@
 """Common labels and routines for manipulating forms using labels."""
 
 import ufl
+import firedrake
 from firedrake import Function, split, MixedElement
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
@@ -115,8 +116,11 @@ def replace_subject(new, idx=None):
             elif type(new) == ufl.algebra.Sum:
                 replace_dict[subj] = new
 
+            elif isinstance(new, (ufl.tensors.ListTensor, ufl.indexed.Indexed, firedrake.function.Function)) :
+                replace_dict[split(subj)[idx]] = new
+
             # Otherwise fail if new is not a function
-            elif not isinstance(new, Function):
+            elif isinstance(new, Function) :
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
 
             # Now handle MixedElements separately as these need indexing

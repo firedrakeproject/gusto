@@ -697,7 +697,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 linearisation_map='default',
+                 linearisation_map=None,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -752,6 +752,12 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
         D_adv = subject(
             prognostic(linear_continuity_form(state, phi, H), "D"), self.X)
+        D_adv = D_adv.label_map(
+            all_terms,
+            lambda t: Term(ufl.replace(
+                t.form,
+                {t.get(transporting_velocity): split(t.get(subject))[0]}
+            ), t.labels))
         pressure_gradient_form = pressure_gradient(
             subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 

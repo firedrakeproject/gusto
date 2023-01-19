@@ -3,6 +3,7 @@ from gusto.configuration import *                    # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion import *                        # noqa
 from gusto.equations import *                        # noqa
+from gusto.exponential_integrators import *          # noqa
 from gusto.fields import *                           # noqa
 from gusto.fml import *                              # noqa
 from gusto.forcing import *                          # noqa

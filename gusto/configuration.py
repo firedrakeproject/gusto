@@ -6,7 +6,8 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
+__all__ = ["WARNING", "INFO", "DEBUG",
+           "Configuration", "IntegrateByParts",
            "TransportEquationType", "OutputParameters",
            "CompressibleParameters", "ShallowWaterParameters",
            "ConvectiveMoistShallowWaterParameters", "logger",
