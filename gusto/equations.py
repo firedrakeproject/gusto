@@ -9,7 +9,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
 from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis,
+                          name, pressure_gradient, coriolis, perp,
                           replace_trial_function, hydrostatic)
 from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
@@ -670,11 +670,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
             V = FunctionSpace(state.mesh, "CG", 1)
             f = state.fields("coriolis", space=V)
             f.interpolate(fexpr)
-            coriolis_form = coriolis(
-                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
+            coriolis_form = perp(
+                coriolis(
+                    subject(prognostic(f*inner(u, w)*dx, "u"), self.X)
+                ), state.perp)
             # Add linearisation
-            linear_coriolis = coriolis(
-                subject(prognostic(f*inner(state.perp(u_trial), w)*dx, "u"), self.X))
+            linear_coriolis = perp(
+                coriolis(
+                    subject(prognostic(f*inner(u_trial, w)*dx, "u"), self.X)
+                ), state.perp)
             coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
