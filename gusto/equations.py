@@ -237,7 +237,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # is in which space
         self.spaces = [space for space in domain.compatible_spaces]
         if len(self.field_names) > len(self.spaces):
-               self.spaces.append(domain.spaces("DG"))
+            self.spaces.append(domain.spaces("DG"))
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -671,7 +671,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add pressure gradient only if not doing thermal
         if self.thermal:
-             residual = (mass_form + adv_form)
+            residual = (mass_form + adv_form)
         else:
             pressure_gradient_form = pressure_gradient(
                 subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
