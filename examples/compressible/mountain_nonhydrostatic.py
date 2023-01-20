@@ -9,7 +9,14 @@ from firedrake import (as_vector, VectorFunctionSpace,
                        exp, pi, cos, Function, conditional, Mesh, op2)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 dt = 5.0
+L = 144000.  # Domain length
+H = 35000.   # Height position of the model top
+
 if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
@@ -21,11 +28,12 @@ else:
     nlayers = 70  # horizontal layers
     columns = 180  # number of columns
 
-L = 144000.
-m = PeriodicIntervalMesh(columns, L)
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
 
-# build volume mesh
-H = 35000.  # Height position of the model top
+# Domain
+m = PeriodicIntervalMesh(columns, L)
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
@@ -36,42 +44,52 @@ x, z = SpatialCoordinate(ext_mesh)
 hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
 
-dirname = 'nonhydrostatic_mountain'
 zh = 5000.
 xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 
 new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
+domain = Domain(mesh, dt, "CG", 1)
 
+# Equation
+parameters = CompressibleParameters(g=9.80665, cp=1004.)
+sponge = SpongeLayerParameters(H=H, z_level=H-10000, mubar=0.15/dt)
+eqns = CompressibleEulerEquations(domain, parameters, sponge=sponge)
+
+# I/O
+dirname = 'nonhydrostatic_mountain'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
+diagnostic_fields = [CourantNumber(), VelocityZ(), Perturbation('theta'), Perturbation('rho')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-parameters = CompressibleParameters(g=9.80665, cp=1004.)
-diagnostic_fields = [CourantNumber(), VelocityZ()]
+# Transport schemes
+theta_opts = SUPGOptions()
+transported_fields = [ImplicitMidpoint(domain, "u"),
+                      SSPRK3(domain, "rho"),
+                      SSPRK3(domain, "theta", options=theta_opts)]
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
 
-# sponge function
-sponge = SpongeLayerParameters(H=H, z_level=H-10000, mubar=0.15/dt)
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver)
 
-eqns = CompressibleEulerEquations(state, "CG", 1, sponge=sponge)
-
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -103,7 +121,7 @@ exner_params = {'ksp_type': 'gmres',
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
 
-compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
                                  top=True, exner_boundary=0.5,
                                  params=exner_params)
 
@@ -119,13 +137,13 @@ static void minify(double *a, double *b) {
 
 
 p0 = minimum(exner)
-compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
                                  top=True, params=exner_params)
 p1 = minimum(exner)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 exner_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, exner,
+compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
                                  top=True, exner_boundary=exner_top, solve_for_rho=True,
                                  params=exner_params)
 
@@ -134,20 +152,11 @@ rho0.assign(rho_b)
 u0.project(as_vector([10.0, 0.0]))
 remove_initial_w(u0)
 
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b)])
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b)])
 
-# Set up transport schemes
-theta_opts = SUPGOptions()
-transported_fields = [ImplicitMidpoint(state, "u"),
-                      SSPRK3(state, "rho"),
-                      SSPRK3(state, "theta", options=theta_opts)]
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns)
-
-# build time stepper
-stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
-                                  linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)
