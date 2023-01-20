@@ -13,38 +13,47 @@ from netCDF4 import Dataset
 
 def setup_fallout(dirname):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
     # declare grid shape, with length L and height H
+    dt = 0.1
     L = 10.
     H = 10.
     nlayers = 10
     ncolumns = 10
 
-    # make mesh
+    # Domain
     m = PeriodicIntervalMesh(ncolumns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
+    domain = Domain(mesh, dt, "CG", 1)
     x = SpatialCoordinate(mesh)
 
-    dt = 0.1
-    output = OutputParameters(dirname=dirname+"/fallout",
-                              dumpfreq=10,
-                              dumplist=['rain'])
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Precipitation()]
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
-
-    Vrho = state.spaces("DG1_equispaced")
+    # Equation
+    Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
-    eqn = ForcedAdvectionEquation(state, Vrho, "rho", ufamily="CG", udegree=1,
-                                  active_tracers=active_tracers)
-    scheme = ForwardEuler(state)
-    state.fields("rho").assign(1.)
+    eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
 
-    physics_schemes = [(Fallout(eqn, 'rain', state), SSPRK3(state, 'rain'))]
-    rain0 = state.fields("rain")
+    # I/O
+    output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
+    diagnostic_fields = [Precipitation()]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+    # Physics schemes
+    physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, 'rain'))]
+
+    # build time stepper
+    scheme = ForwardEuler(domain)
+    stepper = PrescribedTransport(eqn, scheme, io,
+                                  physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    stepper.fields("rho").assign(1.)
+    rain0 = stepper.fields("rain")
 
     # set up rain
     xc = L / 2
@@ -54,10 +63,6 @@ def setup_fallout(dirname):
     rain_expr = conditional(r > rc, 0., 1e-3 * (cos(pi * r / (rc * 2))) ** 2)
 
     rain0.interpolate(rain_expr)
-
-    # build time stepper
-    stepper = PrescribedTransport(eqn, scheme, state,
-                                  physics_schemes=physics_schemes)
 
     return stepper, 10.0
 

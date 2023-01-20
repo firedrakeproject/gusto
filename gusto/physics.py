@@ -29,8 +29,20 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
 class Physics(object, metaclass=ABCMeta):
     """Base class for the parametrisation of physical processes for Gusto."""
 
-    def __init__(self):
-        pass
+    def __init__(self, equation, parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
+        """
+
+        self.equation = equation
+        if parameters is None and hasattr(equation, 'parameters'):
+            self.parameters = equation.parameters
+        else:
+            self.parameters = parameters
 
     @abstractmethod
     def evaluate(self):
@@ -56,24 +68,27 @@ class SaturationAdjustment(Physics):
     A filter is applied to prevent generation of negative mixing ratios.
     """
 
-    def __init__(self, equation, parameters, vapour_name='water_vapour',
-                 cloud_name='cloud_water', latent_heat=True):
+    def __init__(self, equation, vapour_name='water_vapour',
+                 cloud_name='cloud_water', latent_heat=True, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
-            parameters (:class:`Configuration`): an object containing the
-                model's physical parameters.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             cloud_name (str, optional): name of the cloud water variable.
                 Defaults to 'cloud_water'.
             latent_heat (bool, optional): whether to have latent heat exchange
                 feeding back from the phase change. Defaults to True.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
 
         Raises:
             NotImplementedError: currently this is only implemented for the
                 CompressibleEulerEquations.
         """
+
+        super().__init__(equation, parameters=parameters)
 
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
@@ -85,8 +100,8 @@ class SaturationAdjustment(Physics):
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
 
         # Make prognostic for physics scheme
+        parameters = self.parameters
         self.X = Function(equation.X.function_space())
-        self.equation = equation
         self.latent_heat = latent_heat
 
         # Vapour and cloud variables are needed for every form of this scheme
@@ -109,9 +124,7 @@ class SaturationAdjustment(Physics):
                 V_idxs.append(theta_idx)
 
             # need to evaluate rho at theta-points, and do this via recovery
-            # TODO: make this bit of code neater if possible using domain object
-            v_deg = V.ufl_element().degree()[1]
-            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
             rho_averaged = Function(V)
             self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
@@ -242,13 +255,14 @@ class Fallout(Physics):
     for Cartesian geometry.
     """
 
-    def __init__(self, equation, rain_name, state, moments=AdvectedMoments.M3):
+    def __init__(self, equation, rain_name, domain, moments=AdvectedMoments.M3):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
             rain_name (str, optional): name of the rain variable. Defaults to
                 'rain'.
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             moments (int, optional): an :class:`AdvectedMoments` enumerator,
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
@@ -265,14 +279,15 @@ class Fallout(Physics):
         rain = self.X.split()[rain_idx]
         test = equation.tests[rain_idx]
 
-        Vu = state.spaces("HDiv")
-        v = state.fields('rainfall_velocity', Vu)
+        Vu = domain.spaces("HDiv")
+        # TODO: there must be a better way than forcing this into the equation
+        v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
 
         # -------------------------------------------------------------------- #
         # Create physics term -- which is actually a transport term
         # -------------------------------------------------------------------- #
 
-        adv_term = advection_form(state, test, rain, outflow=True)
+        adv_term = advection_form(domain, test, rain, outflow=True)
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(
@@ -289,7 +304,7 @@ class Fallout(Physics):
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            v.project(-terminal_velocity*state.k)
+            v.project(-terminal_velocity*domain.k)
         elif moments == AdvectedMoments.M3:
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
@@ -323,7 +338,7 @@ class Fallout(Physics):
             raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            self.determine_v = Projector(-v_expression*state.k, v)
+            self.determine_v = Projector(-v_expression*domain.k, v)
 
     def evaluate(self, x_in, dt):
         """
@@ -450,24 +465,28 @@ class EvaporationOfRain(Physics):
     is the virtual dry potential temperature.
     """
 
-    def __init__(self, equation, parameters, rain_name='rain',
-                 vapour_name='water_vapour', latent_heat=True):
+    def __init__(self, equation, rain_name='rain', vapour_name='water_vapour',
+                 latent_heat=True, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
-            parameters (:class:`Configuration`): an object containing the
-                model's physical parameters.
             cloud_name (str, optional): name of the rain variable. Defaults to
                 'rain'.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             latent_heat (bool, optional): whether to have latent heat exchange
                 feeding back from the phase change. Defaults to True.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
 
         Raises:
             NotImplementedError: currently this is only implemented for the
                 CompressibleEulerEquations.
         """
+
+        super().__init__(equation, parameters=parameters)
+
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
         # this will be easier if we change equations to have dictionary of
@@ -479,7 +498,7 @@ class EvaporationOfRain(Physics):
 
         # Make prognostic for physics scheme
         self.X = Function(equation.X.function_space())
-        self.equation = equation
+        parameters = self.parameters
         self.latent_heat = latent_heat
 
         # Vapour and cloud variables are needed for every form of this scheme
@@ -502,9 +521,7 @@ class EvaporationOfRain(Physics):
                 V_idxs.append(theta_idx)
 
             # need to evaluate rho at theta-points, and do this via recovery
-            # TODO: make this bit of code neater if possible using domain object
-            v_deg = V.ufl_element().degree()[1]
-            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 1 else None
             rho_averaged = Function(V)
             self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
@@ -604,7 +621,7 @@ class EvaporationOfRain(Physics):
             interpolator.interpolate()
 
 
-class InstantRain(object):
+class InstantRain(Physics):
     """
     The process of converting vapour above the saturation curve to rain.
 
@@ -616,8 +633,8 @@ class InstantRain(object):
      """
 
     def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
-                 rain_name=None, parameters=None, convective_feedback=False,
-                 set_tau_to_dt=False):
+                 rain_name=None, convective_feedback=False, set_tau_to_dt=False,
+                 parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
@@ -627,17 +644,20 @@ class InstantRain(object):
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
                 None.
-            parameters (:class: 'Configuration', optional): an object
-                containing the model's physical parameters. Defaults to None
-                but required if convective_feedback is True.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
             set_tau_to_dt (bool, optional): True if the timescale for the
                 conversion is equal to the timestep and False if not. If False
                 then the user must provide a timescale, tau, that gets passed to
                 the parameters list.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of gas constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
         """
 
+        super().__init__(equation, parameters=None)
+
+        parameters = self.parameters
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
 
@@ -650,7 +670,7 @@ class InstantRain(object):
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
-            assert parameters is not None, "You must provide parameters for convective feedback"
+            assert parameters.gamma is not None, "If convective feedback is used, gamma parameter must be specified"
 
         # obtain function space and functions; vapour needed for all cases
         W = equation.function_space
