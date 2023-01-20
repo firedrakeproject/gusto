@@ -368,7 +368,7 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
         # damp solution
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
-        theta_e_test.assign(theta_e_expr)
+        theta_e_test.interpolate(theta_e_expr)
         if errornorm(theta_e_test, theta_e) < 1e-8:
             break
 
@@ -388,7 +388,7 @@ def saturated_hydrostatic_balance(state, theta_e, mr_t, exner0=None,
                 mr_v0.assign(mr_v0 * (1 - delta) + delta * w_h)
 
                 # break when close enough
-                theta_e_test.assign(theta_e_expr)
+                theta_e_test.interpolate(theta_e_expr)
                 if errornorm(theta_e_test, theta_e) < 1e-6:
                     break
 
@@ -504,7 +504,7 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
         # calculate averaged rho
         rho_recoverer.project()
 
-        RH.assign(RH_ev)
+        RH.interpolate(RH_ev)
         if errornorm(RH, H) < 1e-10:
             break
 
@@ -514,10 +514,10 @@ def unsaturated_hydrostatic_balance(state, theta_d, H, exner0=None,
             mr_v0.assign(mr_v0 * (1 - delta) + delta * w_h)
 
             # compute theta_vd
-            theta0.assign(theta_d * (1 + mr_v0 / epsilon))
+            theta0.interpolate(theta_d * (1 + mr_v0 / epsilon))
 
             # test quality of solution by re-evaluating expression
-            RH.assign(RH_ev)
+            RH.interpolate(RH_ev)
             if errornorm(RH, H) < 1e-10:
                 break
 

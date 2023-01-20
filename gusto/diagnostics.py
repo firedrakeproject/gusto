@@ -930,7 +930,7 @@ class Theta_e(ThermodynamicDiagnostic):
         """
         super().compute(state)
 
-        return self.field.assign(thermodynamics.theta_e(state.parameters, self.T, self.p, self.r_v, self.r_t))
+        return self.field.interpolate(thermodynamics.theta_e(state.parameters, self.T, self.p, self.r_v, self.r_t))
 
 
 class InternalEnergy(ThermodynamicDiagnostic):
@@ -949,7 +949,7 @@ class InternalEnergy(ThermodynamicDiagnostic):
         """
         super().compute(state)
 
-        return self.field.assign(thermodynamics.internal_energy(state.parameters, self.rho_averaged, self.T, r_v=self.r_v, r_l=self.r_l))
+        return self.field.interpolate(thermodynamics.internal_energy(state.parameters, self.rho_averaged, self.T, r_v=self.r_v, r_l=self.r_l))
 
 
 class PotentialEnergy(ThermodynamicDiagnostic):
@@ -1016,7 +1016,7 @@ class Dewpoint(ThermodynamicDiagnostic):
         """
         super().compute(state)
 
-        return self.field.assign(thermodynamics.T_dew(state.parameters, self.p, self.r_v))
+        return self.field.interpolate(thermodynamics.T_dew(state.parameters, self.p, self.r_v))
 
 
 class Temperature(ThermodynamicDiagnostic):
@@ -1054,7 +1054,7 @@ class Theta_d(ThermodynamicDiagnostic):
         """
         super().compute(state)
 
-        return self.field.assign(self.theta / (1 + self.r_v * state.parameters.R_v / state.parameters.R_d))
+        return self.field.interpolate(self.theta / (1 + self.r_v * state.parameters.R_v / state.parameters.R_d))
 
 
 class RelativeHumidity(ThermodynamicDiagnostic):
@@ -1073,7 +1073,7 @@ class RelativeHumidity(ThermodynamicDiagnostic):
         """
         super().compute(state)
 
-        return self.field.assign(thermodynamics.RH(state.parameters, self.r_v, self.T, self.p))
+        return self.field.interpolate(thermodynamics.RH(state.parameters, self.r_v, self.T, self.p))
 
 
 class Pressure(ThermodynamicDiagnostic):

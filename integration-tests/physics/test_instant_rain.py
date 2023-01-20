@@ -1,16 +1,18 @@
 """
 This tests the scheme that converts water vapour directly to rain. It creates a
-bubble of vapour, and passes if the integral of the total water is conserved.
+bubble of vapour and any above a specified saturation function is converted to
+rain. The test passes if the the maximum of the vapour is equivalent to the
+saturation function, the minimum of the vapour is unchanged, the maximum of the
+vapour above saturation agrees with the maximum of the created rain, and the
+minimum of the rain is zero.
 """
 
-from os import path
 from gusto import *
 from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
-from netCDF4 import Dataset
-import pytest
 
-def setup_instant_rain(dirname):
+
+def run_instant_rain(dirname):
 
     # set up mesh
     L = 10
@@ -23,7 +25,7 @@ def setup_instant_rain(dirname):
     g = 10
     fexpr = Constant(0)
     dt = 0.1
-    
+
     output = OutputParameters(dirname=dirname+"/instant_rain",
                               dumpfreq=1,
                               dumplist=['vapour', "rain"])
@@ -42,8 +44,10 @@ def setup_instant_rain(dirname):
     rain = Rain(name="rain", space="DG",
                 transport_eqn=TransportEquationType.no_transport)
 
+    VD = FunctionSpace(mesh, "DG", 1)
+
     eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
-                             active_tracers=[vapour, rain])
+                                 active_tracers=[vapour, rain])
 
     vapour0 = state.fields("water_vapour")
 
@@ -55,33 +59,30 @@ def setup_instant_rain(dirname):
     vapour_expr = conditional(r > rc, 0., 1 * (cos(pi * r / (rc * 2))) ** 2)
 
     vapour0.interpolate(vapour_expr)
-    
+
     initial_vapour = Function(VD).interpolate(vapour_expr)
-    
+
     # define saturation function
-    saturation = 0.5
+    saturation = Constant(0.5)
 
     # define expected solutions; vapour should be equal to saturation and rain
     # should be (initial vapour - saturation)
-    VD = FunctionSpace(mesh, "DG", 1)
-    vapour_true = Function(VD).interpolate(Constant(saturation))
+    vapour_true = Function(VD).interpolate(saturation)
     rain_true = Function(VD).interpolate(vapour0 - saturation)
 
-    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
+    physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(state))]
 
-    return stepper, 5*dt
+    stepper = PrescribedTransport(eqns, RK4(state), state,
+                                  physics_schemes=physics_schemes)
 
-
-def run_instant_rain(dirname):
-    stepper, tmax = setup_instant_rain(dirname)
-    stepper.run(t=0, tmax=tmax)
-    return state, vapour_true, rain_true
+    stepper.run(t=0, tmax=5*dt)
+    return state, saturation, initial_vapour, vapour_true, rain_true
 
 
 def test_instant_rain_setup(tmpdir):
-    dirname = srt(tmpdir)
-    state, vapour_true, rain_true = run_instant_rain(dirname)
+    dirname = str(tmpdir)
+    state, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
     v = state.fields("water_vapour")
     r = state.fields("rain")
 
@@ -93,13 +94,9 @@ def test_instant_rain_setup(tmpdir):
 
     # check that the maximum of the excess vapour agrees with the maximum of the
     # rain
+    VD = Function(v.function_space())
     excess_vapour = Function(VD).interpolate(initial_vapour - saturation)
     assert excess_vapour.dat.data.max() - r.dat.data.max() < 0.001
 
     # check that the minimum of the rain is 0
     assert r.dat.data.min() < 1e-8
-
-    # TODO: should we also check that the total moisture is conserved?
-
-    
-

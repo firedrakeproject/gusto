@@ -97,7 +97,7 @@ theta_pert = Function(Vt).interpolate(
                 Tdash * (cos(pi * r / (2.0 * rc))) ** 2))
 
 # define initial theta
-theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
+theta0.interpolate(theta_b * (theta_pert / 300.0 + 1.0))
 
 # find perturbed rho
 gamma = TestFunction(Vr)

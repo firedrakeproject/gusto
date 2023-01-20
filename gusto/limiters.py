@@ -8,7 +8,6 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from firedrake.functionspaceimpl import IndexedFunctionSpace
 from gusto.kernels import LimitMidpoints
 
 import numpy as np
@@ -25,22 +24,23 @@ class DG1Limiter(object):
     in the space using the appropriate "equispaced" elements.
     """
 
-    def __init__(self, space):
+    def __init__(self, space, subspace=None):
         """
         Args:
             space (:class:`FunctionSpace`): the space in which the transported
-                variables lies. It should be the DG1 space.
+                variables lies. It should be the DG1 space, or a mixed function
+                space containing the DG1 space.
+             subspace (int, optional): specifies that the limiter works on this
+                component of a :class:`MixedFunctionSpace`.
 
         Raises:
             ValueError: If the space is not appropriate for the limiter.
         """
 
-        self.space = space
+        self.space = space    # can be a mixed space
+        self.subspace = subspace
 
-        print(type(space))
-        print("yes to indexed") if isinstance(space, type(IndexedFunctionSpace)) else print("no to indexed")
-        mesh = space.parent.mesh() if isinstance(space, type(IndexedFunctionSpace)) else space.mesh()
-        # mesh = space.mesh()
+        mesh = space.mesh()
 
         # check that space is DG1
         degree = space.ufl_element().degree()
@@ -74,15 +74,19 @@ class DG1Limiter(object):
         Raises:
              AssertionError: If the field is not in the correct space.
          """
-        # assert field.function_space() == self.space, \
-        #     "Given field does not belong to this object's function space"
 
         # Obtain field in equispaced DG space
-        self.field_equispaced.interpolate(field)
+        if self.subspace is not None:
+            self.field_equispaced.interpolate(field.sub(self.subspace))
+        else:
+            self.field_equispaced.interpolate(field)
         # Use vertex based limiter on DG1 field
         self.vertex_limiter.apply(self.field_equispaced)
         # Return to original space
-        field.interpolate(self.field_equispaced)
+        if self.subspace is not None:
+            field.sub(self.subspace).interpolate(self.field_equispaced)
+        else:
+            field.interpolate(self.field_equispaced)
 
 
 class ThetaLimiter(object):
