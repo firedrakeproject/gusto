@@ -1,18 +1,12 @@
 from gusto import *
-from firedrake import (PeriodicRectangleMesh, exp, Constant, sqrt, cos,
-                       conditional, FunctionSpace, Function, tricontourf)
+from firedrake import (PeriodicRectangleMesh, exp, cos, conditional,
+                       FunctionSpace, Function, tricontourf)
 
-# set up mesh
-Lx = 40
-Ly = 16
-delta = 0.2
-nx = int(Lx/delta)
-ny = int(Ly/delta)
 
-mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction='x')
-x, y = SpatialCoordinate(mesh)
+# ----------------------------------------------------------------- #
+# Test case parameters
+# ----------------------------------------------------------------- #
 
-# set up parameters
 dt = 0.02
 beta = 0.5
 L = 2
@@ -21,50 +15,66 @@ alpha = 0.15
 H = 1
 g = 1
 tmax = 10000
+ndumps = 5
+
+# ----------------------------------------------------------------- #
+# Set up model objects
+# ----------------------------------------------------------------- #
+
+# Domain
+Lx = 40
+Ly = 16
+delta = 0.2
+nx = int(Lx/delta)
+ny = int(Ly/delta)
+
+mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction='x')
+degree = 1
+domain = Domain(mesh, dt, "BDM", degree)
+x, y = SpatialCoordinate(mesh)
+
+
+# Equations
+params = ShallowWaterParameters(H=H)
 fexpr = beta*(y-(Ly/2))
-
-dirname = "GV_Gill_heating"
-
-parameters = ShallowWaterParameters(H=H)
-
-output = OutputParameters(dirname=dirname, dumpfreq=1)
-
-diagnostic_fields = [CourantNumber(), RelativeVorticity()]
-
-state = State(mesh,
-              dt=dt,
-              output=output,
-              diagnostic_fields=diagnostic_fields,
-              parameters=parameters)
-
 expy = exp(-0.25*(y-(Ly/2))**2)
-
 # forcing = cos(k*(x-(Lx/2)))*exp(0.25*(y-(Ly/2))**2)
 forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
-forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
+forcing_expr = conditional(x > ((Lx/2) - L), conditional(x < ((Lx/2) + L), forcing, 0), 0)
+eqns = LinearShallowWaterEquations(domain, params, fexpr=fexpr,
+                                   forcing_expr=forcing_expr,
+                                   u_dissipation=alpha, D_dissipation=alpha,
+                                   no_normal_flow_bc_ids=[1, 2])
+
+# I/0
+dirname = "GV_Gill_heating_Jan20"
+dumpfreq = int(tmax / (ndumps*dt))
+output = OutputParameters(dirname=dirname, dumpfreq=1)
+diagnostic_fields = [CourantNumber(), RelativeVorticity()]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+# timestepper
+stepper = Timestepper(eqns, ForwardEuler(domain), io)
+
+# ----------------------------------------------------------------- #
+# Initial conditions
+# ----------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+D0 = stepper.fields("D")
 
 # plot the forcing to check if it is correct
-forcing_space = FunctionSpace(state.mesh, "DG", 1)
+forcing_space = FunctionSpace(domain.mesh, "DG", 1)
 forcing_func = Function(forcing_space)
 forcing_func.interpolate(forcing_expr)
 import matplotlib.pyplot as plt
 tricontourf(forcing_func)
 plt.show()
 
-
-alpha = Constant(0.15)
-eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
-                                   forcing_expr=forcing_expr,
-                                   u_dissipation=alpha, D_dissipation=alpha,
-                                   no_normal_flow_bc_ids=[1,2])
-
-# initial conditions
-u0 = state.fields("u")
-D0 = state.fields("D")
-
 # D0.interpolate(0.1*forcing_expr)
 
-# timestepper
-stepper = Timestepper(eqns, ForwardEuler(state), state)
+# ----------------------------------------------------------------- #
+# Run
+# ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax = 4*dt)
+stepper.run(t=0, tmax=4*dt)

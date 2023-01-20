@@ -1,67 +1,72 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi,
-                       cos, sin, Constant)
+from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos)
+
+# ----------------------------------------------------------------- #
+# Test case parameters
+# ----------------------------------------------------------------- #
 
 day = 24*60*60
 tmax = 5*day
 ndumps = 5
-dt = 100 #3000
-
-# setup shallow water parameters
+dt = 100
 R = 6371220.
 H = 5960.
+u_max = 20
+phi_0 = 3e4
+epsilon = 0.1
+theta_0 = epsilon*phi_0**2
 
-parameters = ShallowWaterParameters(H=H)
+# ----------------------------------------------------------------- #
+# Set up model objects
+# ----------------------------------------------------------------- #
 
-dirname = "thermal_williamson2_degree=2"
-
+# Domain
 mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
-
+degree = 1
+domain = Domain(mesh, dt, 'BDM', degree)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
 
-phi, lamda = latlon_coords(mesh)
+# Equations
+params = ShallowWaterParameters(H=H)
+Omega = params.Omega
+fexpr = 2*Omega*x[2]/R
+eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
+# IO
+dirname = "thermal_williamson2_Jan20"
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
+                          dumpfreq=1,
                           dumplist_latlon=['D', 'D_error'],
-                          steady_state_error_fields=['D', 'u'],
                           log_level='INFO')
-
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterKineticEnergy(),
-                     ShallowWaterPotentialEnergy(),
-                     ShallowWaterPotentialEnstrophy()]
+                     ShallowWaterPotentialEnergy(params),
+                     ShallowWaterPotentialEnstrophy(),
+                     SteadyStateError('D')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+# Time stepper
+stepper = Timestepper(eqns, RK4(domain), io)
 
-Omega = parameters.Omega
-print(Omega)
-fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
+# ----------------------------------------------------------------- #
+# Initial conditions
+# ----------------------------------------------------------------- #
 
-# initial conditions
-u0 = state.fields("u")
-D0 = state.fields("D")
-b0 = state.fields("b")
+u0 = stepper.fields("u")
+D0 = stepper.fields("D")
+b0 = stepper.fields("b")
 
-u_max = 20
+phi, lamda = latlon_coords(mesh)
+
 uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
-g = parameters.g
+g = params.g
 w = Omega*R*u_max + (u_max**2)/2
 sigma = w/10
 
 Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
-
-phi_0 = 3e4
-epsilon = 0.1
-theta_0 = epsilon*phi_0**2
 
 numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
 
@@ -69,13 +74,14 @@ denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin
 
 theta = numerator/denominator
 
-bexpr = parameters.g * (1 - theta)
+bexpr = params.g * (1 - theta)
 
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 b0.interpolate(bexpr)
 
-# build time stepper
-stepper = Timestepper(eqns, RK4(state), state)
+# ----------------------------------------------------------------- #
+# Run
+# ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax=15*day)
+stepper.run(t=0, tmax=5*dt)
