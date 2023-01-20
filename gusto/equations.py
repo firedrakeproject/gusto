@@ -236,6 +236,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # we should not assume this and should instead specify which variable
         # is in which space
         self.spaces = [space for space in domain.compatible_spaces]
+        if len(self.field_names) > len(self.spaces):
+               self.spaces.append(domain.spaces("DG"))
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -613,7 +615,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if self.thermal:
             gamma = self.tests[2]
             b = split(self.X)[2]
-            n = FacetNormal(state.mesh)
+            n = FacetNormal(domain.mesh)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -755,13 +757,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
-    def _build_spaces(self, state, family, degree):
-        spaces = [space for space in state.spaces.build_compatible_spaces
-                  (family, degree)]
-        if self.thermal:
-            spaces.append(state.spaces("DG"))
-        return spaces
-
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
     u"""
@@ -815,7 +810,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
                  or (t.get(prognostic) == "D" and t.has_label(transport)))
 
-        super().__init__(domain, parameters, state, family, degree,
+        super().__init__(domain, parameters,
                          fexpr=fexpr, bexpr=bexpr,
                          forcing_expr=forcing_expr, u_dissipation=u_dissipation,
                          D_dissipation=D_dissipation,
