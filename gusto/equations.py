@@ -7,7 +7,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fields import PrescribedFields
-from gusto.fml.form_manipulation_labelling import Term, all_terms, identity, drop
+from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
                           name, pressure_gradient, coriolis,
@@ -52,6 +52,19 @@ class PrognosticEquation(object, metaclass=ABCMeta):
                 self.bcs[fname] = []
 
         self.bcs[field_name] = []
+
+    def label_terms(self, term_filter, label):
+        """
+        Labels terms in the equation, subject to the term filter.
+
+
+        Args:
+            term_filter (func): a function, taking terms as an argument, that
+                is used to filter terms.
+            label (:class:`Label`): the label to be applied to the terms.
+        """
+        assert type(label, Label)
+        self.residual = self.residual.label_map(term_filter, map_if_true=label)
 
 
 class AdvectionEquation(PrognosticEquation):
@@ -314,7 +327,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         residual = residual.label_map(
             should_linearise,
             map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
-            map_if_false=identity,  # TODO: should "keep" be an alias for identity?
+            map_if_false=keep,
         )
 
         return residual

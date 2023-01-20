@@ -115,6 +115,12 @@ def replace_subject(new, idx=None):
             elif type(new) == ufl.algebra.Sum:
                 replace_dict[subj] = new
 
+            elif isinstance(new, ufl.indexed.Indexed):
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
+                replace_dict[split(subj)[idx]] = new
+
             # Otherwise fail if new is not a function
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
@@ -132,6 +138,9 @@ def replace_subject(new, idx=None):
 
             # Otherwise 'new' is a normal Function
             else:
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
                 replace_dict[split(subj)[idx]] = new
 
         # subj is a normal Function
@@ -141,6 +150,8 @@ def replace_subject(new, idx=None):
                     raise ValueError('idx must be specified to replace_subject'
                                      + ' when new is a tuple')
                 replace_dict[subj] = new[idx]
+            elif isinstance(new, ufl.indexed.Indexed):
+                replace_dict[subj] = new
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
             elif type(new.ufl_element()) == MixedElement:
