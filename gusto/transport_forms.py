@@ -14,12 +14,13 @@ __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "advection_equation_circulation_form", "linear_continuity_form"]
 
 
-def linear_advection_form(state, test, qbar):
+def linear_advection_form(domain, test, qbar):
     """
     The form corresponding to the linearised advective transport operator.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         qbar (:class:`ufl.Expr`): the variable to be transported.
 
@@ -27,22 +28,23 @@ def linear_advection_form(state, test, qbar):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    ubar = Function(state.spaces("HDiv"))
+    ubar = Function(domain.spaces("HDiv"))
 
     # TODO: why is there a k here?
-    L = test*dot(ubar, state.k)*dot(state.k, grad(qbar))*dx
+    L = test*dot(ubar, domain.k)*dot(domain.k, grad(qbar))*dx
 
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.advective)
 
 
-def linear_continuity_form(state, test, qbar, facet_term=False):
+def linear_continuity_form(domain, test, qbar, facet_term=False):
     """
     The form corresponding to the linearised continuity transport operator.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         qbar (:class:`ufl.Expr`): the variable to be transported.
         facet_term (bool, optional): whether to include interior facet terms.
@@ -52,14 +54,14 @@ def linear_continuity_form(state, test, qbar, facet_term=False):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     ubar = Function(Vu)
 
     L = qbar*test*div(ubar)*dx
 
     if facet_term:
-        n = FacetNormal(state.mesh)
-        Vu = state.spaces("HDiv")
+        n = FacetNormal(domain.mesh)
+        Vu = domain.spaces("HDiv")
         dS_ = (dS_v + dS_h) if Vu.extruded else dS
         L += jump(ubar*test, n)*avg(qbar)*dS_
 
@@ -68,7 +70,7 @@ def linear_continuity_form(state, test, qbar, facet_term=False):
     return transport(form, TransportEquationType.conservative)
 
 
-def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the advective transport operator.
 
@@ -77,7 +79,8 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     form is integrated by parts.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -96,7 +99,7 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
 
@@ -106,7 +109,7 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
         L = inner(outer(test, ubar), grad(q))*dx
 
     if ibp != IntegrateByParts.NEVER:
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(domain.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
         L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
@@ -116,7 +119,7 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     if outflow:
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(domain.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
         L += test*un*q*(ds_v + ds_t + ds_b)
 
@@ -125,7 +128,7 @@ def advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     return ibp_label(transport(form, TransportEquationType.advective), ibp)
 
 
-def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the continuity transport operator.
 
@@ -134,7 +137,8 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     form is integrated by parts.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -153,7 +157,7 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
 
@@ -163,7 +167,7 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
         L = inner(test, div(outer(q, ubar)))*dx
 
     if ibp != IntegrateByParts.NEVER:
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(domain.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
 
         L += dot(jump(test), (un('+')*q('+') - un('-')*q('-')))*dS_
@@ -173,7 +177,7 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
                   + inner(test('-'), dot(ubar('-'), n('-'))*q('-')))*dS_
 
     if outflow:
-        n = FacetNormal(state.mesh)
+        n = FacetNormal(domain.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
         L += test*un*q*(ds_v + ds_t + ds_b)
 
@@ -182,7 +186,7 @@ def continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     return ibp_label(transport(form, TransportEquationType.conservative), ibp)
 
 
-def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     """
     Form for advective transport operator including vector manifold correction.
 
@@ -192,7 +196,8 @@ def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, ou
     is based on that of Bernard, Remacle et al (2009).
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -205,13 +210,13 @@ def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, ou
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = advection_form(state, test, q, ibp, outflow)
+    L = advection_form(domain, test, q, ibp, outflow)
 
     # TODO: there should maybe be a restriction on IBP here
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
-    n = FacetNormal(state.mesh)
+    n = FacetNormal(domain.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
     L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
     L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
@@ -219,7 +224,7 @@ def vector_manifold_advection_form(state, test, q, ibp=IntegrateByParts.ONCE, ou
     return L
 
 
-def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     """
     Form for continuity transport operator including vector manifold correction.
 
@@ -229,7 +234,8 @@ def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, o
     is based on that of Bernard, Remacle et al (2009).
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -242,12 +248,12 @@ def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, o
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = continuity_form(state, test, q, ibp, outflow)
+    L = continuity_form(domain, test, q, ibp, outflow)
 
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
-    n = FacetNormal(state.mesh)
+    n = FacetNormal(domain.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
     L += un('+')*inner(test('-'), n('+')+n('-'))*inner(q('+'), n('+'))*dS_
     L += un('-')*inner(test('+'), n('+')+n('-'))*inner(q('-'), n('-'))*dS_
@@ -257,7 +263,7 @@ def vector_manifold_continuity_form(state, test, q, ibp=IntegrateByParts.ONCE, o
     return transport(form)
 
 
-def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     u"""
     The form corresponding to the vector invariant transport operator.
 
@@ -273,7 +279,8 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
     when integrating by parts.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -287,13 +294,13 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    Vu = state.spaces("HDiv")
+    Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
-    n = FacetNormal(state.mesh)
+    n = FacetNormal(domain.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
 
-    if state.mesh.topological_dimension() == 3:
+    if domain.mesh.topological_dimension() == 3:
 
         if ibp != IntegrateByParts.ONCE:
             raise NotImplementedError
@@ -313,9 +320,9 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
 
     else:
 
-        perp = state.perp
-        if state.on_sphere:
-            outward_normals = CellNormal(state.mesh)
+        perp = domain.perp
+        if domain.on_sphere:
+            outward_normals = CellNormal(domain.mesh)
             perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
         else:
             perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
@@ -342,7 +349,7 @@ def vector_invariant_form(state, test, q, ibp=IntegrateByParts.ONCE):
     return transport(form, TransportEquationType.vector_invariant)
 
 
-def kinetic_energy_form(state, test, q):
+def kinetic_energy_form(domain, test, q):
     u"""
     The form corresponding to the kinetic energy term.
 
@@ -351,7 +358,8 @@ def kinetic_energy_form(state, test, q):
     (1/2)∇(u.q).
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
 
@@ -359,7 +367,7 @@ def kinetic_energy_form(state, test, q):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    ubar = Function(state.spaces("HDiv"))
+    ubar = Function(domain.spaces("HDiv"))
     L = 0.5*div(test)*inner(q, ubar)*dx
 
     form = transporting_velocity(L, ubar)
@@ -367,7 +375,7 @@ def kinetic_energy_form(state, test, q):
     return transport(form, TransportEquationType.vector_invariant)
 
 
-def advection_equation_circulation_form(state, test, q,
+def advection_equation_circulation_form(domain, test, q,
                                         ibp=IntegrateByParts.ONCE):
     u"""
     The circulation term in the transport of a vector-valued field.
@@ -384,7 +392,8 @@ def advection_equation_circulation_form(state, test, q,
     term. An an upwind discretisation is used when integrating by parts.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ibp (:class:`IntegrateByParts`, optional): an enumerator representing
@@ -399,8 +408,8 @@ def advection_equation_circulation_form(state, test, q,
     """
 
     form = (
-        vector_invariant_form(state, test, q, ibp=ibp)
-        - kinetic_energy_form(state, test, q)
+        vector_invariant_form(domain, test, q, ibp=ibp)
+        - kinetic_energy_form(domain, test, q)
     )
 
     return form

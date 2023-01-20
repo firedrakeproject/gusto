@@ -12,6 +12,7 @@ from firedrake import Constant
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
+keep = identity
 
 
 class Term(object):
@@ -29,7 +30,7 @@ class Term(object):
         self.form = form
         self.labels = label_dict or {}
 
-    def get(self, label, default=None):
+    def get(self, label):
         """
         Returns the value of a label.
 
@@ -356,8 +357,8 @@ class Label(object):
         # if value is provided, check that we have a validator function
         # and validate the value, otherwise use default value
         if value is not None:
-            assert self.validator
-            assert self.validator(value)
+            assert self.validator, f'Label {self.label} requires a validator'
+            assert self.validator(value), f'Value {value} for label {self.label} does not satisfy validator'
             self.value = value
         else:
             self.value = self.default_value

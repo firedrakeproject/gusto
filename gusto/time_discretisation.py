@@ -73,11 +73,12 @@ def embedded_dg(original_apply):
 class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 
-    def __init__(self, state, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -89,10 +90,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        self.state = state
+        self.domain = domain
         self.field_name = field_name
+        self.equation = None
 
-        self.dt = self.state.dt
+        self.dt = domain.dt
 
         self.limiter = limiter
 
@@ -125,11 +127,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
+        self.equation = equation
         self.residual = equation.residual
 
-        if self.field_name is not None:
+        if self.field_name is not None and hasattr(equation, "field_names"):
             self.idx = equation.field_names.index(self.field_name)
-            self.fs = self.state.fields(self.field_name).function_space()
+            self.fs = equation.spaces[self.idx]
             self.residual = self.residual.label_map(
                 lambda t: t.get(prognostic) == self.field_name,
                 lambda t: Term(
@@ -172,7 +175,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             # construct the embedding space if not specified
             if options.embedding_space is None:
                 V_elt = BrokenElement(self.fs.ufl_element())
-                self.fs = FunctionSpace(self.state.mesh, V_elt)
+                self.fs = FunctionSpace(self.domain.mesh, V_elt)
             else:
                 self.fs = options.embedding_space
             self.xdg_in = Function(self.fs)
@@ -180,7 +183,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if self.idx is None:
                 self.x_projected = Function(equation.function_space)
             else:
-                self.x_projected = Function(self.state.fields(self.field_name).function_space())
+                self.x_projected = Function(equation.spaces[self.idx])
             new_test = TestFunction(self.fs)
             parameters = {'ksp_type': 'cg',
                           'pc_type': 'bjacobi',
@@ -204,7 +207,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.discretisation_option == "supg":
             # construct tau, if it is not specified
-            dim = self.state.mesh.topological_dimension()
+            dim = self.domain.mesh.topological_dimension()
             if options.tau is not None:
                 # if tau is provided, check that is has the right size
                 tau = options.tau
@@ -253,7 +256,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.discretisation_option == "recovered":
             # set up the necessary functions
-            self.x_in = Function(self.state.fields(self.field_name).function_space())
+            if self.idx is not None:
+                self.x_in = Function(equation.spaces[self.idx])
+            else:
+                self.x_in = Function(equation.function_space)
 
             # Operator to recover to higher discontinuous space
             self.x_recoverer = ReversibleRecoverer(self.x_in, self.xdg_in, options)
@@ -371,14 +377,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             # Do the options specify a different ibp to the old transport term?
             if old_transport_term.labels['ibp'] != self.options.ibp:
                 # Set up a new transport term
-                field = self.state.fields(self.field_name)
+                if self.idx is not None:
+                    field = self.equation.X.split()[self.idx]
+                else:
+                    field = self.equation.X
                 test = TestFunction(self.fs)
 
                 # Set up new transport term (depending on the type of transport equation)
                 if old_transport_term.labels['transport'] == TransportEquationType.advective:
-                    new_transport_term = advection_form(self.state, test, field, ibp=self.options.ibp)
+                    new_transport_term = advection_form(self.domain, test, field, ibp=self.options.ibp)
                 elif old_transport_term.labels['transport'] == TransportEquationType.conservative:
-                    new_transport_term = continuity_form(self.state, test, field, ibp=self.options.ibp)
+                    new_transport_term = continuity_form(self.domain, test, field, ibp=self.options.ibp)
                 else:
                     raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_term.labels["transport"]}')
 
@@ -434,11 +443,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
-    def __init__(self, state, field_name=None, subcycles=None,
+    def __init__(self, domain, field_name=None, subcycles=None,
                  solver_parameters=None, limiter=None, options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             subcycles (int, optional): the number of sub-steps to perform.
@@ -452,7 +462,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(state, field_name,
+        super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -774,11 +784,12 @@ class BackwardEuler(TimeDiscretisation):
     The backward Euler method for operator F is the most simple implicit scheme:
     y^(n+1) = y^n + dt*F[y^(n+1)].
     """
-    def __init__(self, state, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             subcycles (int, optional): the number of sub-steps to perform.
@@ -797,7 +808,7 @@ class BackwardEuler(TimeDiscretisation):
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
-        super().__init__(state=state, field_name=field_name,
+        super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -844,11 +855,12 @@ class ThetaMethod(TimeDiscretisation):
     for off-centring parameter theta.
     """
 
-    def __init__(self, state, field_name=None, theta=None,
+    def __init__(self, domain, field_name=None, theta=None,
                  solver_parameters=None, options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             theta (float, optional): the off-centring parameter. theta = 1
@@ -876,7 +888,7 @@ class ThetaMethod(TimeDiscretisation):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        super().__init__(state, field_name,
+        super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          options=options)
 
@@ -926,11 +938,12 @@ class ImplicitMidpoint(ThetaMethod):
     It is equivalent to the "theta" method with theta = 1/2.
     """
 
-    def __init__(self, state, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -940,7 +953,7 @@ class ImplicitMidpoint(ThetaMethod):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(state, field_name, theta=0.5,
+        super().__init__(domain, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
 
@@ -948,11 +961,12 @@ class ImplicitMidpoint(ThetaMethod):
 class MultilevelTimeDiscretisation(TimeDiscretisation):
     """Base class for multi-level timesteppers"""
 
-    def __init__(self, state, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -966,7 +980,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
-        super().__init__(state=state, field_name=field_name,
+        super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.initial_timesteps = 0

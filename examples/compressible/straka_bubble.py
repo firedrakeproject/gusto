@@ -10,6 +10,10 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        conditional)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 if '--running-tests' in sys.argv:
     res_dt = {800.: 4.}
     tmax = 4.
@@ -27,45 +31,65 @@ H = 6400.  # Height position of the model top
 
 for delta, dt in res_dt.items():
 
-    dirname = "straka_dx%s_dt%s" % (delta, dt)
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
     nlayers = int(H/delta)  # horizontal layers
     columns = int(L/delta)  # number of columns
-
     m = PeriodicIntervalMesh(columns, L)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, dt, "CG", 1)
 
+    # Equation
+    parameters = CompressibleParameters()
+    diffusion_options = [
+        ("u", DiffusionParameters(kappa=75., mu=10./delta)),
+        ("theta", DiffusionParameters(kappa=75., mu=10./delta))]
+    eqns = CompressibleEulerEquations(domain, parameters,
+                                      diffusion_options=diffusion_options)
+
+    # I/O
+    dirname = "straka_dx%s_dt%s" % (delta, dt)
     dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
                               dumplist=['u'],
-                              perturbation_fields=['theta', 'rho'],
                               log_level='INFO')
+    diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    parameters = CompressibleParameters()
-    diagnostic_fields = [CourantNumber()]
+    # Transport schemes
+    theta_opts = SUPGOptions()
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "rho"),
+                          SSPRK3(domain, "theta", options=theta_opts)]
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+    # Linear solver
+    linear_solver = CompressibleSolver(eqns)
 
-    diffusion_options = [
-        ("u", DiffusionParameters(kappa=75., mu=10./delta)),
-        ("theta", DiffusionParameters(kappa=75., mu=10./delta))]
+    # Diffusion schemes
+    diffusion_schemes = [BackwardEuler(domain, "u"),
+                         BackwardEuler(domain, "theta")]
 
-    eqns = CompressibleEulerEquations(state, "CG", 1,
-                                      diffusion_options=diffusion_options)
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      linear_solver=linear_solver,
+                                      diffusion_schemes=diffusion_schemes)
 
+    # ------------------------------------------------------------------------ #
     # Initial conditions
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+    # ------------------------------------------------------------------------ #
+
+    u0 = stepper.fields("u")
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = state.spaces("HDiv")
-    Vt = state.spaces("theta")
-    Vr = state.spaces("DG")
+    Vu = domain.spaces("HDiv")
+    Vt = domain.spaces("theta")
+    Vr = domain.spaces("DG")
 
     # Isentropic background state
     Tsurf = Constant(300.)
@@ -75,7 +99,7 @@ for delta, dt in res_dt.items():
     exner = Function(Vr)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(state, theta_b, rho_b, exner0=exner,
+    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner0=exner,
                                      solve_for_rho=True)
 
     x = SpatialCoordinate(mesh)
@@ -89,24 +113,11 @@ for delta, dt in res_dt.items():
     theta0.interpolate(theta_b + T_pert*exner)
     rho0.assign(rho_b)
 
-    state.set_reference_profiles([('rho', rho_b),
-                                  ('theta', theta_b)])
+    stepper.set_reference_profiles([('rho', rho_b),
+                                    ('theta', theta_b)])
 
-    # Set up transport schemes
-    theta_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(state, "u"),
-                          SSPRK3(state, "rho"),
-                          SSPRK3(state, "theta", options=theta_opts)]
-
-    # Set up linear solver
-    linear_solver = CompressibleSolver(state, eqns)
-
-    diffusion_schemes = [BackwardEuler(state, "u"),
-                         BackwardEuler(state, "theta")]
-
-    # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
-                                      linear_solver=linear_solver,
-                                      diffusion_schemes=diffusion_schemes)
+    # ------------------------------------------------------------------------ #
+    # Run
+    # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
