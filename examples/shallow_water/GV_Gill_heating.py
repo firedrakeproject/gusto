@@ -1,6 +1,6 @@
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, exp, Constant, sqrt, cos,
-                       conditional, FunctionSpace, Function)
+                       conditional, FunctionSpace, Function, tricontourf)
 
 # set up mesh
 Lx = 40
@@ -42,6 +42,15 @@ expy = exp(-0.25*(y-(Ly/2))**2)
 # forcing = cos(k*(x-(Lx/2)))*exp(0.25*(y-(Ly/2))**2)
 forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x>((Lx/2)-L), conditional(x<((Lx/2)+L), forcing, 0), 0)
+
+# plot the forcing to check if it is correct
+forcing_space = FunctionSpace(state.mesh, "DG", 1)
+forcing_func = Function(forcing_space)
+forcing_func.interpolate(forcing_expr)
+import matplotlib.pyplot as plt
+tricontourf(forcing_func)
+plt.show()
+
 
 alpha = Constant(0.15)
 eqns = LinearShallowWaterEquations(state, "BDM", 1, fexpr=fexpr,
