@@ -41,8 +41,10 @@ output = OutputParameters(dirname=dirname,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
-                                           'u_radial'],
-                          log_level='INFO')
+                                           'u_radial',
+                                           'rho',
+                                           'theta'],
+                          log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(eqn), CompressibleKineticEnergy(eqn)]
 io = IO(domain, output, diagnostic_fields)
 
