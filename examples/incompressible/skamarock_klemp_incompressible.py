@@ -10,7 +10,14 @@ from firedrake import (as_vector, PeriodicIntervalMesh, ExtrudedMesh,
                        sin, SpatialCoordinate, Function, pi)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 dt = 6.
+L = 3.0e5  # Domain length
+H = 1.0e4  # Height position of the model top
+
 if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
@@ -23,38 +30,47 @@ else:
     columns = 300  # number of columns
     nlayers = 10  # horizontal layers
 
-# set up mesh
-L = 3.0e5
-m = PeriodicIntervalMesh(columns, L)
-H = 1.0e4  # Height position of the model top
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
 
-# output parameters
+# Domain
+m = PeriodicIntervalMesh(columns, L)
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+domain = Domain(mesh, dt, 'CG', 1)
+
+# Equation
+parameters = CompressibleParameters()
+eqns = IncompressibleBoussinesqEquations(domain, parameters)
+
+# I/O
 output = OutputParameters(dirname='skamarock_klemp_incompressible',
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
-                          perturbation_fields=['b'],
                           log_level='INFO')
-
-# physical parameters
-parameters = CompressibleParameters()
-
 # list of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), Divergence()]
+diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-# setup state
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+# Transport schemes
+b_opts = SUPGOptions()
+transported_fields = [ImplicitMidpoint(domain, "u"),
+                      SSPRK3(domain, "b", options=b_opts)]
 
-eqns = IncompressibleBoussinesqEquations(state, "CG", 1)
+# Linear solver
+linear_solver = IncompressibleSolver(eqns)
 
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver)
+
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-b0 = state.fields("b")
-p0 = state.fields("p")
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+b0 = stepper.fields("b")
+p0 = stepper.fields("p")
 
 # spaces
 Vb = b0.function_space()
@@ -75,25 +91,17 @@ b_pert = deltab*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
-incompressible_hydrostatic_balance(state, b_b, p0)
+incompressible_hydrostatic_balance(eqns, b_b, p0)
 
 uinit = (as_vector([20.0, 0.0]))
 u0.project(uinit)
 
 # set the background buoyancy
-state.set_reference_profiles([('b', b_b)])
+stepper.set_reference_profiles([('b', b_b)])
 
-# Set up transport schemes
-b_opts = SUPGOptions()
-transported_fields = [ImplicitMidpoint(state, "u"),
-                      SSPRK3(state, "b", options=b_opts)]
-
-# Set up linear solver for the timestepping scheme
-linear_solver = IncompressibleSolver(state, eqns)
-
-# build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 # Run!
 stepper.run(t=0, tmax=tmax)

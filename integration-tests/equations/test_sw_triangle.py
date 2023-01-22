@@ -22,15 +22,27 @@ u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
 
 def setup_sw(dirname, dt, u_transport_option):
 
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements)
+    domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(x)
 
-    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'], steady_state_error_fields=['D', 'u'])
+    # Equation
     parameters = ShallowWaterParameters(H=H)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
+                                 u_transport_option=u_transport_option)
+
+    # I/O
     diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
                          PotentialVorticity(),
                          ShallowWaterPotentialEnstrophy('RelativeVorticity'),
@@ -48,41 +60,43 @@ def setup_sw(dirname, dt, u_transport_option):
                                     'SWPotentialEnstrophy_from_AbsoluteVorticity'),
                          MeridionalComponent('u'),
                          ZonalComponent('u'),
-                         RadialComponent('u')]
+                         RadialComponent('u'),
+                         SteadyStateError('D'),
+                         SteadyStateError('u')]
+    output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'])
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+    return domain, eqns, io
 
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = ShallowWaterEquations(state, family="BDM", degree=1,
-                                 fexpr=fexpr,
-                                 u_transport_option=u_transport_option)
+
+def set_up_initial_conditions(domain, equation, stepper):
+
+    x = SpatialCoordinate(domain.mesh)
 
     # interpolate initial conditions
-    u0 = state.fields("u")
-    D0 = state.fields("D")
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    g = parameters.g
+    g = equation.parameters.g
+    Omega = equation.parameters.Omega
     Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    vspace = FunctionSpace(state.mesh, "CG", 3)
-    vexpr = (2*u_max/R)*x[2]/R
-    f = state.fields("coriolis")
-    vrel_analytical = state.fields("AnalyticalRelativeVorticity", vspace)
-    vrel_analytical.interpolate(vexpr)
-    vabs_analytical = state.fields("AnalyticalAbsoluteVorticity", vspace)
-    vabs_analytical.interpolate(vexpr + f)
-    pv_analytical = state.fields("AnalyticalPotentialVorticity", vspace)
-    pv_analytical.interpolate((vexpr+f)/D0)
+    Dbar = Function(D0.function_space()).assign(H)
+    stepper.set_reference_profiles([('D', Dbar)])
 
-    return state, eqns
+    vspace = FunctionSpace(domain.mesh, "CG", 3)
+    vexpr = (2*u_max/R)*x[2]/R
+
+    f = stepper.fields("coriolis")
+    vrel_analytical = stepper.fields("AnalyticalRelativeVorticity", space=vspace)
+    vrel_analytical.interpolate(vexpr)
+    vabs_analytical = stepper.fields("AnalyticalAbsoluteVorticity", space=vspace)
+    vabs_analytical.interpolate(vexpr + f)
+    pv_analytical = stepper.fields("AnalyticalPotentialVorticity", space=vspace)
+    pv_analytical.interpolate((vexpr+f)/D0)
 
 
 def check_results(dirname):
@@ -139,12 +153,20 @@ def test_sw_setup(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
     dt = 1500
-    state, eqns = setup_sw(dirname, dt, u_transport_option)
+    domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
+    # Transport schemes
     transported_fields = []
-    transported_fields.append((ImplicitMidpoint(state, "u")))
-    transported_fields.append((SSPRK3(state, "D")))
-    stepper = CrankNicolson(state, eqns, transported_fields)
+    transported_fields.append((ImplicitMidpoint(domain, "u")))
+    transported_fields.append((SSPRK3(domain, "D")))
+
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+
+    # Initial conditions
+    set_up_initial_conditions(domain, eqns, stepper)
+
+    # Run
     stepper.run(t=0, tmax=0.25*day)
 
     check_results(dirname)
@@ -157,9 +179,14 @@ def test_sw_ssprk3(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
     dt = 100
-    state, eqns = setup_sw(dirname, dt, u_transport_option)
+    domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
-    stepper = Timestepper(state, ((eqns, SSPRK3(state)),))
+    stepper = Timestepper(eqns, SSPRK3(domain), io)
+
+    # Initial conditions
+    set_up_initial_conditions(domain, eqns, stepper)
+
+    # Run
     stepper.run(t=0, tmax=0.01*day)
 
     check_results(dirname)

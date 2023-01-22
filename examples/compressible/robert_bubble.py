@@ -9,6 +9,10 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        Constant, pi, cos, Function, sqrt, conditional)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 dt = 1.
 L = 1000.
 H = 1000.
@@ -24,37 +28,54 @@ else:
     nlayers = int(H/10.)
     ncolumns = int(L/10.)
 
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+domain = Domain(mesh, dt, "CG", 1)
 
+# Equation
+parameters = CompressibleParameters()
+eqns = CompressibleEulerEquations(domain, parameters)
+
+# I/O
 dirname = 'robert_bubble'
-
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
+diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-parameters = CompressibleParameters()
-diagnostic_fields = [CourantNumber()]
+# Transport schemes
+theta_opts = EmbeddedDGOptions()
+transported_fields = []
+transported_fields.append(ImplicitMidpoint(domain, "u"))
+transported_fields.append(SSPRK3(domain, "rho"))
+transported_fields.append(SSPRK3(domain, "theta", options=theta_opts))
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
 
-eqns = CompressibleEulerEquations(state, "CG", 1)
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver)
 
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 
 # Isentropic background state
 Tsurf = Constant(300.)
@@ -63,7 +84,7 @@ theta_b = Function(Vt).interpolate(Tsurf)
 rho_b = Function(Vr)
 
 # Calculate hydrostatic exner
-compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+compressible_hydrostatic_balance(eqns, theta_b, rho_b, solve_for_rho=True)
 
 x = SpatialCoordinate(mesh)
 xc = 500.
@@ -75,20 +96,11 @@ theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
 theta0.interpolate(theta_b + theta_pert)
 rho0.interpolate(rho_b)
 
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b)])
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b)])
 
-# Set up transport schemes
-theta_opts = EmbeddedDGOptions()
-transported_fields = []
-transported_fields.append(ImplicitMidpoint(state, "u"))
-transported_fields.append(SSPRK3(state, "rho"))
-transported_fields.append(SSPRK3(state, "theta", options=theta_opts))
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns)
-
-# build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields, linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)

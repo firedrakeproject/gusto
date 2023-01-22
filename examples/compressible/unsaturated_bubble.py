@@ -10,9 +10,13 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace, errornorm)
+                       FunctionSpace, VectorFunctionSpace, errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
+
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
 
 dt = 1.0
 if '--running-tests' in sys.argv:
@@ -28,66 +32,101 @@ L = 3600.
 h = 2400.
 nlayers = int(h/deltax)
 ncolumns = int(L/deltax)
-
-m = PeriodicIntervalMesh(ncolumns, L)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
 degree = 0
 
-dirname = 'unsaturated_bubble'
-output = OutputParameters(dirname=dirname, dumpfreq=tdump,
-                          perturbation_fields=['theta', 'vapour_mixing_ratio', 'rho'],
-                          log_level='INFO')
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain
+m = PeriodicIntervalMesh(ncolumns, L)
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
+domain = Domain(mesh, dt, "CG", degree)
+
+# Equation
 params = CompressibleParameters()
-diagnostic_fields = [RelativeHumidity()]
 tracers = [WaterVapour(), CloudWater(), Rain()]
-
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=params,
-              diagnostic_fields=diagnostic_fields)
-
-eqns = CompressibleEulerEquations(state, "CG", degree,
+eqns = CompressibleEulerEquations(domain, params,
                                   active_tracers=tracers)
 
+# I/O
+dirname = 'unsaturated_bubble'
+output = OutputParameters(dirname=dirname, dumpfreq=tdump,
+                          log_level='INFO')
+diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
+                     Perturbation('water_vapour'), Perturbation('rho')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+# Transport schemes -- specify options for using recovery wrapper
+VDG1 = domain.spaces("DG1_equispaced")
+VCG1 = FunctionSpace(mesh, "CG", 1)
+Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
+Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+u_opts = RecoveryOptions(embedding_space=Vu_DG1,
+                         recovered_space=Vu_CG1,
+                         boundary_method=BoundaryMethod.taylor)
+rho_opts = RecoveryOptions(embedding_space=VDG1,
+                           recovered_space=VCG1,
+                           boundary_method=BoundaryMethod.taylor)
+theta_opts = RecoveryOptions(embedding_space=VDG1, recovered_space=VCG1)
+limiter = VertexBasedLimiter(VDG1)
+
+transported_fields = [SSPRK3(domain, "u", options=u_opts),
+                      SSPRK3(domain, "rho", options=rho_opts),
+                      SSPRK3(domain, "theta", options=theta_opts),
+                      SSPRK3(domain, "water_vapour", options=theta_opts, limiter=limiter),
+                      SSPRK3(domain, "cloud_water", options=theta_opts, limiter=limiter),
+                      SSPRK3(domain, "rain", options=theta_opts, limiter=limiter)]
+
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
+
+# Physics schemes
+# NB: to use wrapper options with Fallout, need to pass field name to time discretisation
+physics_schemes = [(Fallout(eqns, 'rain', domain), SSPRK3(domain, field_name='rain', options=theta_opts, limiter=limiter)),
+                   (Coalescence(eqns), ForwardEuler(domain)),
+                   (EvaporationOfRain(eqns), ForwardEuler(domain)),
+                   (SaturationAdjustment(eqns), ForwardEuler(domain))]
+
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver,
+                                  physics_schemes=physics_schemes)
+
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
-water_v0 = state.fields("vapour_mixing_ratio")
-water_c0 = state.fields("cloud_liquid_mixing_ratio")
-rain0 = state.fields("rain_mixing_ratio", theta0.function_space())
-moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio", "rain_mixing_ratio"]
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
+water_v0 = stepper.fields("water_vapour")
+water_c0 = stepper.fields("cloud_water")
+rain0 = stepper.fields("rain")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
-Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
 
-VDG1 = state.spaces("DG1_equispaced")
-VCG1 = FunctionSpace(mesh, "CG", 1)
-Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-Vu_brok = FunctionSpace(mesh, BrokenElement(Vu.ufl_element()))
-Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-physics_boundary_method = Boundary_Method.physics
+physics_boundary_method = BoundaryMethod.extruded
 
 # Define constant theta_e and water_t
 Tsurf = 283.0
 psurf = 85000.
-exner_surf = (psurf / state.parameters.p_0) ** state.parameters.kappa
+exner_surf = (psurf / eqns.parameters.p_0) ** eqns.parameters.kappa
 humidity = 0.2
 S = 1.3e-5
-theta_surf = thermodynamics.theta(state.parameters, Tsurf, psurf)
+theta_surf = thermodynamics.theta(eqns.parameters, Tsurf, psurf)
 theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
 H = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
-unsaturated_hydrostatic_balance(state, theta_d, H,
+unsaturated_hydrostatic_balance(eqns, stepper.fields, theta_d, H,
                                 exner_boundary=Constant(exner_surf))
 
 # make mean fields
@@ -114,27 +153,26 @@ H.assign(H + H_pert)
 # now need to find perturbed rho, theta_vd and r_v
 # follow approach used in unsaturated hydrostatic setup
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok,
-                          boundary_method=physics_boundary_method)
+rho_recoverer = Recoverer(rho0, rho_averaged, boundary_method=physics_boundary_method)
 rho_h = Function(Vr)
 w_h = Function(Vt)
 delta = 1.0
 
-R_d = state.parameters.R_d
-R_v = state.parameters.R_v
+R_d = eqns.parameters.R_d
+R_v = eqns.parameters.R_v
 epsilon = R_d / R_v
 
 # make expressions for determining water_v0
-exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
-p = thermodynamics.p(state.parameters, exner)
-T = thermodynamics.T(state.parameters, theta0, exner, water_v0)
-r_v_expr = thermodynamics.r_v(state.parameters, H, T, p)
+exner = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
+p = thermodynamics.p(eqns.parameters, exner)
+T = thermodynamics.T(eqns.parameters, theta0, exner, water_v0)
+r_v_expr = thermodynamics.r_v(eqns.parameters, H, T, p)
 
 # make expressions to evaluate residual
-exner_ev = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
-p_ev = thermodynamics.p(state.parameters, exner_ev)
-T_ev = thermodynamics.T(state.parameters, theta0, exner_ev, water_v0)
-RH_ev = thermodynamics.RH(state.parameters, water_v0, T_ev, p_ev)
+exner_ev = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
+p_ev = thermodynamics.p(eqns.parameters, exner_ev)
+T_ev = thermodynamics.T(eqns.parameters, theta0, exner_ev, water_v0)
+RH_ev = thermodynamics.RH(eqns.parameters, water_v0, T_ev, p_ev)
 RH = Function(Vt)
 
 # set-up rho problem to keep exner constant
@@ -152,7 +190,7 @@ for i in range(max_outer_solve_count):
     # calculate averaged rho
     rho_recoverer.project()
 
-    RH.assign(RH_ev)
+    RH.interpolate(RH_ev)
     if errornorm(RH, H) < 1e-10:
         break
 
@@ -162,10 +200,10 @@ for i in range(max_outer_solve_count):
         water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
 
         # compute theta_vd
-        theta0.assign(theta_d * (1 + water_v0 / epsilon))
+        theta0.interpolate(theta_d * (1 + water_v0 / epsilon))
 
         # test quality of solution by re-evaluating expression
-        RH.assign(RH_ev)
+        RH.interpolate(RH_ev)
         if errornorm(RH, H) < 1e-10:
             break
 
@@ -179,41 +217,11 @@ for i in range(max_outer_solve_count):
         raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
 
 # initialise fields
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b),
-                              ('vapour_mixing_ratio', water_vb)])
-
-# Set up transport schemes
-u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                          recovered_space=Vu_CG1,
-                          broken_space=Vu_brok,
-                          boundary_method=Boundary_Method.dynamics)
-rho_opts = RecoveredOptions(embedding_space=VDG1,
-                            recovered_space=VCG1,
-                            broken_space=Vr,
-                            boundary_method=Boundary_Method.dynamics)
-theta_opts = RecoveredOptions(embedding_space=VDG1,
-                              recovered_space=VCG1,
-                              broken_space=Vt_brok)
-limiter = VertexBasedLimiter(VDG1)
-
-transported_fields = [SSPRK3(state, "u", options=u_opts),
-                      SSPRK3(state, "rho", options=rho_opts),
-                      SSPRK3(state, "theta", options=theta_opts),
-                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts, limiter=limiter),
-                      SSPRK3(state, "rain_mixing_ratio", options=theta_opts, limiter=limiter)]
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
-
-# define condensation
-physics_list = [Fallout(state), Coalescence(state), Evaporation(state),
-                Condensation(state)]
-
-# build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver,
-                        physics_list=physics_list)
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b),
+                                ('water_vapour', water_vb)])
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)

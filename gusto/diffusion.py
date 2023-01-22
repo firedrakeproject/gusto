@@ -1,3 +1,5 @@
+"""Provides forms for describing diffusion terms."""
+
 from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v, dS,
                        FacetNormal)
 from gusto.labels import diffusion
@@ -6,28 +8,44 @@ from gusto.labels import diffusion
 __all__ = ["interior_penalty_diffusion_form"]
 
 
-def interior_penalty_diffusion_form(state, test, q, parameters):
+def interior_penalty_diffusion_form(domain, test, q, parameters):
+    u"""
+    Form for the interior penalty discretisation of a diffusion term, ∇.(κ∇q)
+
+    The interior penalty discretisation involves the factor 'mu', the penalty
+    weight function.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the equation's test function.
+        q (:class:`Function`): the variable being diffused.
+        parameters (:class:`DiffusionParameters`): object containing metadata
+            describing the diffusion term. Includes kappa and mu.
+
+    Returns:
+        :class:`ufl.Form`: the diffusion form.
     """
-    Interior penalty diffusion form
 
-    :arg state: :class:`.State` object.
-    :arg V: Function space of diffused field
-    :arg direction: list containing directions in which function space
-    :arg: mu: the penalty weighting function, which is
-    :recommended to be proportional to 1/dx
-    :arg: kappa: strength of diffusion
-
-    """
-
-    dS_ = (dS_v + dS_h) if state.mesh.extruded else dS
+    dS_ = (dS_v + dS_h) if domain.mesh.extruded else dS
     kappa = parameters.kappa
     mu = parameters.mu
 
-    n = FacetNormal(state.mesh)
+    n = FacetNormal(domain.mesh)
 
     form = inner(grad(test), grad(q)*kappa)*dx
 
     def get_flux_form(dS, M):
+        """
+        The facet term for the interior penalty diffusion discretisation.
+
+        Args:
+            dS (:class:`ufl.Measure`): the facet measure.
+            M (:class:`Constant`): the diffusivity.
+
+        Returns:
+            :class:`ufl.Form`: the interior penalty flux form
+        """
 
         fluxes = (
             -inner(2*avg(outer(q, n)), avg(grad(test)*M))

@@ -8,29 +8,32 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
-    state = setup.state
-    V = state.spaces("DG", "DG", 1)
-    if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                                udegree=setup.degree)
-    else:
-        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
-                                 udegree=setup.degree)
-    state.fields("f").interpolate(setup.f_init)
-    state.fields("u").project(setup.uexpr)
+    domain = setup.domain
+    V = domain.spaces("DG")
 
-    transport_scheme = [(eqn, SSPRK3(state))]
-    error = run(state, transport_scheme, setup.tmax, setup.f_end)
+    if equation_form == "advective":
+        eqn = AdvectionEquation(domain, V, "f")
+    else:
+        eqn = ContinuityEquation(domain, V, "f")
+
+    transport_scheme = SSPRK3(domain)
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
@@ -39,20 +42,23 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
-    state = setup.state
-    gdim = state.mesh.geometric_dimension()
+    domain = setup.domain
+    gdim = domain.mesh.geometric_dimension()
     f_init = as_vector([setup.f_init]*gdim)
-    V = VectorFunctionSpace(state.mesh, "DG", 1)
+    V = VectorFunctionSpace(domain.mesh, "DG", 1)
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                                udegree=setup.degree)
+        eqn = AdvectionEquation(domain, V, "f")
     else:
-        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
-                                 udegree=setup.degree)
-    state.fields("f").interpolate(f_init)
-    state.fields("u").project(setup.uexpr)
-    transport_schemes = [(eqn, SSPRK3(state))]
+        eqn = ContinuityEquation(domain, V, "f")
+
+    transport_scheme = SSPRK3(domain)
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(f_init)
+    timestepper.fields("u").project(setup.uexpr)
     f_end = as_vector([setup.f_end]*gdim)
-    error = run(state, transport_schemes, setup.tmax, f_end)
+    error = run(timestepper, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

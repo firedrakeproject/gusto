@@ -3,32 +3,36 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_scheme, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_scheme)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
-                                    "RK4", "Heun"])
+                                    "RK4", "Heun", "BDF2"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     geometry = "sphere"
     setup = tracer_setup(tmpdir, geometry)
-    state = setup.state
-    V = state.spaces("DG", "DG", 1)
+    domain = setup.domain
+    V = domain.spaces("DG")
 
-    eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                            udegree=setup.degree)
-
-    state.fields("f").interpolate(setup.f_init)
-    state.fields("u").project(setup.uexpr)
+    eqn = AdvectionEquation(domain, V, "f")
 
     if scheme == "ssprk":
-        transport_scheme = [(eqn, SSPRK3(state))]
+        transport_scheme = SSPRK3(domain)
     elif scheme == "implicit_midpoint":
-        transport_scheme = [(eqn, ImplicitMidpoint(state))]
+        transport_scheme = ImplicitMidpoint(domain)
     elif scheme == "RK4":
-        transport_scheme = [(eqn, RK4(state))]
+        transport_scheme = RK4(domain)
     elif scheme == "Heun":
-        transport_scheme = [(eqn, Heun(state))]
-    assert run(state, transport_scheme, setup.tmax, setup.f_end) < setup.tol
+        transport_scheme = Heun(domain)
+    elif scheme == "BDF2":
+        transport_scheme = BDF2(domain)
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    assert run(timestepper, setup.tmax, setup.f_end) < setup.tol

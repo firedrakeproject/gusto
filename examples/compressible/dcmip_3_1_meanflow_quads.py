@@ -11,6 +11,9 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
 from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan_2
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
 
 nlayers = 10           # Number of vertical layers
 refinements = 3        # Number of horiz. refinements
@@ -23,7 +26,6 @@ if '--running-tests' in sys.argv:
 else:
     tmax = 3600.0
     dumpfreq = int(tmax / (4*dt))
-
 
 parameters = CompressibleParameters()
 a_ref = 6.37122e6               # Radius of the Earth (m)
@@ -43,18 +45,24 @@ lamda_c = 2.0*pi/3.0            # Longitudinal centerpoint of Theta'
 phi_c = 0.0                     # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0                # Maximum amplitude of Theta' (K)
 L_z = 20000.0                   # Vertical wave length of the Theta' perturb.
+z_top = 1.0e4                   # Height position of the model top
 
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain
 # Cubed-sphere horizontal mesh
 m = CubedSphereMesh(radius=a,
                     refinement_level=refinements,
                     degree=2)
-
 # Build volume mesh
-z_top = 1.0e4                  # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers,
                     layer_height=z_top/nlayers,
                     extrusion_type="radial")
+domain = Domain(mesh, dt, "RTCF", 1)
 x = SpatialCoordinate(mesh)
+
 # Create polar coordinates:
 # Since we use a CG1 field, this is constant on layers
 W_Q1 = FunctionSpace(mesh, "CG", 1)
@@ -64,29 +72,41 @@ lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
 lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
 
-dirname = 'dcmip_3_1_meanflow'
+# Equation
+eqns = CompressibleEulerEquations(domain, parameters)
 
+# I/O
+dirname = 'dcmip_3_1_meanflow'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
-                          perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
+diagnostic_fields = [Perturbation('theta'), Perturbation('rho')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters)
+# Transport schemes
+transported_fields = [ImplicitMidpoint(domain, "u"),
+                      SSPRK3(domain, "rho", subcycles=2),
+                      SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
 
-eqns = CompressibleEulerEquations(state, "RTCF", 1)
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
 
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver)
+
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields.u
-theta0 = state.fields.theta
-rho0 = state.fields.rho
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields('u')
+theta0 = stepper.fields('theta')
+rho0 = stepper.fields('rho')
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 
 # Initial conditions with u0
 uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
@@ -122,7 +142,7 @@ theta_pert = deltaTheta*s*sin(2*pi*z/L_z)
 theta0.interpolate(theta_b)
 
 # Compute the balanced density
-compressible_hydrostatic_balance(state,
+compressible_hydrostatic_balance(eqns,
                                  theta_b,
                                  rho_b,
                                  top=False,
@@ -131,20 +151,11 @@ theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
 
-state.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
-state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
-# Set up transport schemes
-transported_fields = [ImplicitMidpoint(state, "u"),
-                      SSPRK3(state, "rho", subcycles=2),
-                      SSPRK3(state, "theta", options=SUPGOptions(), subcycles=2)]
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns)
-
-# Build time stepper
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 # Run!
 stepper.run(t=0, tmax=tmax)

@@ -6,7 +6,7 @@ steps and ensuring that the resulting velocities are very small.
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Constant, Function,
-                       FunctionSpace, BrokenElement, VectorFunctionSpace)
+                       FunctionSpace, VectorFunctionSpace)
 from os import path
 from netCDF4 import Dataset
 import pytest
@@ -14,7 +14,11 @@ import pytest
 
 def setup_unsaturated(dirname, recovered):
 
-    # set up grid and time stepping parameters
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Parameters
     dt = 1.
     tmax = 3.
     deltax = 400
@@ -24,40 +28,77 @@ def setup_unsaturated(dirname, recovered):
     nlayers = int(H/deltax)
     ncolumns = int(L/deltax)
 
-    m = PeriodicIntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-
     degree = 0 if recovered else 1
 
-    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
-    parameters = CompressibleParameters()
-    diagnostic_fields = [Theta_d(), RelativeHumidity()]
+    # Domain
+    m = PeriodicIntervalMesh(ncolumns, L)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, dt, "CG", degree)
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
-
+    # Equation
     tracers = [WaterVapour(), CloudWater()]
 
     if recovered:
         u_transport_option = "vector_advection_form"
     else:
         u_transport_option = "vector_invariant_form"
+    parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(
-        state, "CG", degree, u_transport_option=u_transport_option, active_tracers=tracers)
+        domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
 
+    # I/O
+    output = OutputParameters(dirname=dirname+'/unsaturated_balance', dumpfreq=1)
+    diagnostic_fields = [Theta_d(eqns), RelativeHumidity(eqns)]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+    # Transport schemes
+    if recovered:
+        VDG1 = domain.spaces("DG1_equispaced")
+        VCG1 = FunctionSpace(mesh, "CG", 1)
+        Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
+        Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+        u_opts = RecoveryOptions(embedding_space=Vu_DG1,
+                                 recovered_space=Vu_CG1,
+                                 boundary_method=BoundaryMethod.taylor)
+        rho_opts = RecoveryOptions(embedding_space=VDG1,
+                                   recovered_space=VCG1,
+                                   boundary_method=BoundaryMethod.taylor)
+        theta_opts = RecoveryOptions(embedding_space=VDG1,
+                                     recovered_space=VCG1)
+    else:
+        rho_opts = None
+        theta_opts = EmbeddedDGOptions()
+
+    transported_fields = [SSPRK3(domain, "rho", options=rho_opts),
+                          SSPRK3(domain, "theta", options=theta_opts),
+                          SSPRK3(domain, "water_vapour", options=theta_opts),
+                          SSPRK3(domain, "cloud_water", options=theta_opts)]
+    if recovered:
+        transported_fields.append(SSPRK3(domain, "u", options=u_opts))
+    else:
+        transported_fields.append(ImplicitMidpoint(domain, "u"))
+
+    # Linear solver
+    linear_solver = CompressibleSolver(eqns)
+
+    # Set up physics
+    physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
+
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      linear_solver=linear_solver,
+                                      physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
     # Initial conditions
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
-    moisture = ['vapour_mixing_ratio', 'cloud_liquid_mixing_ratio']
+    # ------------------------------------------------------------------------ #
+
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = u0.function_space()
     Vt = theta0.function_space()
-    Vr = rho0.function_space()
 
     # Isentropic background state
     Tsurf = Constant(300.)
@@ -66,52 +107,9 @@ def setup_unsaturated(dirname, recovered):
     RH = Function(Vt).interpolate(humidity)
 
     # Calculate hydrostatic exner
-    unsaturated_hydrostatic_balance(state, theta_d, RH)
+    unsaturated_hydrostatic_balance(eqns, stepper.fields, theta_d, RH)
 
-    state.set_reference_profiles([('rho', rho0),
-                                  ('theta', theta0)])
-
-    # Set up transport schemes
-    if recovered:
-        VDG1 = state.spaces("DG1_equispaced")
-        VCG1 = FunctionSpace(mesh, "CG", 1)
-        Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-        Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-        Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-
-        u_opts = RecoveredOptions(embedding_space=Vu_DG1,
-                                  recovered_space=Vu_CG1,
-                                  broken_space=Vu,
-                                  boundary_method=Boundary_Method.dynamics)
-        rho_opts = RecoveredOptions(embedding_space=VDG1,
-                                    recovered_space=VCG1,
-                                    broken_space=Vr,
-                                    boundary_method=Boundary_Method.dynamics)
-        theta_opts = RecoveredOptions(embedding_space=VDG1,
-                                      recovered_space=VCG1,
-                                      broken_space=Vt_brok)
-    else:
-        rho_opts = None
-        theta_opts = EmbeddedDGOptions()
-
-    transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                          SSPRK3(state, "theta", options=theta_opts),
-                          SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
-                          SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts)]
-    if recovered:
-        transported_fields.append(SSPRK3(state, "u", options=u_opts))
-    else:
-        transported_fields.append(ImplicitMidpoint(state, "u"))
-
-    linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
-
-    # Set up physics
-    physics_list = [Condensation(state)]
-
-    # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields,
-                            linear_solver=linear_solver,
-                            physics_list=physics_list)
+    stepper.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 
     return stepper, tmax
 

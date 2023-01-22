@@ -8,10 +8,9 @@ from gusto import *
 import pytest
 
 
-def run(state, transport_schemes, tmax, f_end):
-    timestepper = PrescribedTransport(state, transport_schemes)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
-    return norm(state.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("ibp", [IntegrateByParts.ONCE, IntegrateByParts.TWICE])
@@ -20,25 +19,26 @@ def run(state, transport_schemes, tmax, f_end):
 def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
                                       tracer_setup):
     setup = tracer_setup(tmpdir, geometry="slice")
-    state = setup.state
-    V = state.spaces("theta", degree=1)
+    domain = setup.domain
+    V = domain.spaces("theta")
 
     if space == "broken":
         opts = EmbeddedDGOptions()
     elif space == "dg":
-        opts = EmbeddedDGOptions(embedding_space=state.spaces("DG1", "DG", 1))
+        opts = EmbeddedDGOptions(embedding_space=domain.spaces("DG"))
 
     if equation_form == "advective":
-        eqn = AdvectionEquation(state, V, "f", ufamily=setup.family,
-                                udegree=setup.degree, ibp=ibp)
+        eqn = AdvectionEquation(domain, V, "f", ibp=ibp)
     else:
-        eqn = ContinuityEquation(state, V, "f", ufamily=setup.family,
-                                 udegree=setup.degree, ibp=ibp)
-    state.fields("f").interpolate(setup.f_init)
-    state.fields("u").project(setup.uexpr)
+        eqn = ContinuityEquation(domain, V, "f", ibp=ibp)
 
-    transport_schemes = [(eqn, SSPRK3(state, options=opts))]
+    transport_schemes = SSPRK3(domain, options=opts)
+    timestepper = PrescribedTransport(eqn, transport_schemes, setup.io)
 
-    error = run(state, transport_schemes, setup.tmax, setup.f_end)
+    # Initial conditions
+    timestepper.fields("f").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error = run(timestepper, setup.tmax, setup.f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

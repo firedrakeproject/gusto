@@ -20,42 +20,42 @@ def setup_checkpointing(dirname):
     # build volume mesh
     H = 1.0e4  # Height position of the model top
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    domain = Domain(mesh, dt, "CG", 1)
+
+    parameters = CompressibleParameters()
+    eqns = CompressibleEulerEquations(domain, parameters)
 
     output = OutputParameters(dirname=dirname, dumpfreq=1,
                               chkptfreq=2, log_level='INFO')
-    parameters = CompressibleParameters()
-
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters)
-
-    eqns = CompressibleEulerEquations(state, "CG", 1)
+    io = IO(domain, output)
 
     # Set up transport schemes
     transported_fields = []
-    transported_fields.append(SSPRK3(state, "u"))
-    transported_fields.append(SSPRK3(state, "rho"))
-    transported_fields.append(SSPRK3(state, "theta"))
+    transported_fields.append(SSPRK3(domain, "u"))
+    transported_fields.append(SSPRK3(domain, "rho"))
+    transported_fields.append(SSPRK3(domain, "theta"))
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state, eqns)
+    linear_solver = CompressibleSolver(eqns)
 
     # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields, linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      linear_solver=linear_solver)
 
-    return state, stepper, dt
+    initialise_fields(eqns, stepper)
+
+    return stepper, dt
 
 
-def initialise_fields(state):
+def initialise_fields(eqns, stepper):
 
     L = 1.e5
     H = 1.0e4  # Height position of the model top
 
     # Initial conditions
-    u0 = state.fields("u")
-    rho0 = state.fields("rho")
-    theta0 = state.fields("theta")
+    u0 = stepper.fields("u")
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
 
     # spaces
     Vt = theta0.function_space()
@@ -63,11 +63,11 @@ def initialise_fields(state):
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
-    g = state.parameters.g
-    N = state.parameters.N
+    g = eqns.parameters.g
+    N = eqns.parameters.N
 
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-    x, z = SpatialCoordinate(state.mesh)
+    x, z = SpatialCoordinate(eqns.domain.mesh)
     Tsurf = 300.
     thetab = Tsurf*exp(N**2*z/g)
 
@@ -75,7 +75,7 @@ def initialise_fields(state):
     rho_b = Function(Vr)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(state, theta_b, rho_b)
+    compressible_hydrostatic_balance(eqns, theta_b, rho_b)
 
     a = 5.0e3
     deltaTheta = 1.0e-2
@@ -84,34 +84,32 @@ def initialise_fields(state):
     rho0.assign(rho_b)
     u0.project(as_vector([20.0, 0.0]))
 
-    state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 
 def test_checkpointing(tmpdir):
 
     dirname_1 = str(tmpdir)+'/checkpointing_1'
     dirname_2 = str(tmpdir)+'/checkpointing_2'
-    state_1, stepper_1, dt = setup_checkpointing(dirname_1)
-    state_2, stepper_2, dt = setup_checkpointing(dirname_2)
+    stepper_1, dt = setup_checkpointing(dirname_1)
+    stepper_2, dt = setup_checkpointing(dirname_2)
 
     # ------------------------------------------------------------------------ #
     # Run for 4 time steps and store values
     # ------------------------------------------------------------------------ #
 
-    initialise_fields(state_1)
     stepper_1.run(t=0.0, tmax=4*dt)
 
     # ------------------------------------------------------------------------ #
     # Start again, run for 2 time steps, checkpoint and then run for 2 more
     # ------------------------------------------------------------------------ #
 
-    initialise_fields(state_2)
     stepper_2.run(t=0.0, tmax=2*dt)
 
     # Wipe fields, then pickup
-    state_2.fields('u').project(as_vector([-10.0, 0.0]))
-    state_2.fields('rho').interpolate(Constant(0.0))
-    state_2.fields('theta').interpolate(Constant(0.0))
+    stepper_2.fields('u').project(as_vector([-10.0, 0.0]))
+    stepper_2.fields('rho').interpolate(Constant(0.0))
+    stepper_2.fields('theta').interpolate(Constant(0.0))
 
     stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
 

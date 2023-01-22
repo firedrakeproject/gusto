@@ -1,18 +1,21 @@
-"""
-Some thermodynamic expressions to help declutter the code.
-"""
+"""Some expressions representing common thermodynamic variables."""
+
 from firedrake import exp, ln
 
-__all__ = ["theta", "exner_pressure", "dexner_drho", "dexner_dtheta", "p", "T", "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat", "r_v", "T_dew"]
+__all__ = ["theta", "exner_pressure", "dexner_drho", "dexner_dtheta", "p", "T",
+           "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat",
+           "r_v", "T_dew"]
 
 
 def theta(parameters, T, p):
     """
     Returns an expression for dry potential temperature theta in K.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: temperature in K.
-    :arg p: pressure in Pa.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        T (:class:`ufl.Expr`): temperature in K.
+        p (:class:`ufl.Expr`): pressure in Pa.
     """
 
     kappa = parameters.kappa
@@ -21,65 +24,75 @@ def theta(parameters, T, p):
     return T * (p_0 / p) ** kappa
 
 
-def exner_pressure(parameters, rho, theta_v):
+def exner_pressure(parameters, rho, theta_vd):
     """
     Returns an expression for the Exner pressure.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg rho: the dry density of air in kg / m^3.
-    :arg theta: the potential temperature (or the virtual
-                potential temperature for wet air), in K.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        rho (:class:`ufl.Expr`): the dry density of air in kg / m^3.
+        theta_vd (:class:`ufl.Expr`): the potential temperature (or the virtual
+            dry potential temperature for wet air), in K.
     """
 
     kappa = parameters.kappa
     p_0 = parameters.p_0
     R_d = parameters.R_d
 
-    return (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa))
+    return (rho * R_d * theta_vd / p_0) ** (kappa / (1 - kappa))
 
 
-def dexner_drho(parameters, rho, theta_v):
+def dexner_drho(parameters, rho, theta_vd):
     """
-    Returns an expression for the derivative of Exner pressure
-    with respect to density.
+    Returns an expression for the derivative of Exner pressure w.r.t. density.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg rho: the dry density of air in kg / m^3.
-    :arg theta: the potential temperature (or the virtual
-                potential temperature for wet air), in K.
-    """
+    The derivative of the Exner pressure with respect to density.
 
-    kappa = parameters.kappa
-    p_0 = parameters.p_0
-    R_d = parameters.R_d
-
-    return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / rho
-
-
-def dexner_dtheta(parameters, rho, theta_v):
-    """
-    Returns an expression for the deriavtive of Exner pressure
-    with respect to potential temperature.
-
-    :arg parameters: a CompressibleParameters object.
-    :arg rho: the dry density of air in kg / m^3.
-    :arg theta: the potential temperature (or the virtual
-                potential temperature for wet air), in K.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        rho (:class:`ufl.Expr`): the dry density of air in kg / m^3.
+        theta_vd (:class:`ufl.Expr`): the potential temperature (or the virtual
+            dry potential temperature for wet air), in K.
     """
 
     kappa = parameters.kappa
     p_0 = parameters.p_0
     R_d = parameters.R_d
 
-    return (kappa / (1 - kappa)) * (rho * R_d * theta_v / p_0) ** (kappa / (1 - kappa)) / theta_v
+    return (kappa / (1 - kappa)) * (rho * R_d * theta_vd / p_0) ** (kappa / (1 - kappa)) / rho
+
+
+def dexner_dtheta(parameters, rho, theta_vd):
+    """
+    Returns an expression for the derivative of Exner pressure w.r.t. theta.
+
+    The derivative of the Exner pressure with respect to potential temperature.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        rho (:class:`ufl.Expr`): the dry density of air in kg / m^3.
+        theta_vd (:class:`ufl.Expr`): the potential temperature (or the virtual
+            potential temperature for wet air), in K.
+    """
+
+    kappa = parameters.kappa
+    p_0 = parameters.p_0
+    R_d = parameters.R_d
+
+    return (kappa / (1 - kappa)) * (rho * R_d * theta_vd / p_0) ** (kappa / (1 - kappa)) / theta_vd
 
 
 def p(parameters, exner):
     """
     Returns an expression for the pressure in Pa from the Exner Pi.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg exner: the Exner pressure.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        exner (:class:`ufl.Expr`): the Exner pressure.
     """
 
     kappa = parameters.kappa
@@ -88,14 +101,16 @@ def p(parameters, exner):
     return p_0 * exner ** (1 / kappa)
 
 
-def T(parameters, theta_v, exner, r_v=None):
+def T(parameters, theta_vd, exner, r_v=None):
     """
     Returns an expression for temperature T in K.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg theta_v: the virtual potential temperature in K.
-    :arg exner: the Exner pressure.
-    :arg r_v: the mixing ratio of water vapour.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        theta_vd (:class:`ufl.Expr`): virtual dry potential temperature in K.
+        exner (:class:`ufl.Expr`): the Exner pressure.
+        r_v (:class:`ufl.Expr`): the mixing ratio of water vapour.
     """
 
     R_d = parameters.R_d
@@ -103,37 +118,44 @@ def T(parameters, theta_v, exner, r_v=None):
 
     # if the air is wet, need to divide by (1 + r_v)
     if r_v is not None:
-        return theta_v * exner / (1 + r_v * R_v / R_d)
-    # in the case that r_v is None, theta_v=theta
+        return theta_vd * exner / (1 + r_v * R_v / R_d)
+    # in the case that r_v is None, theta_vd=theta
     else:
-        return theta_v * exner
+        return theta_vd * exner
 
 
-def rho(parameters, theta_v, exner):
+def rho(parameters, theta_vd, exner):
     """
     Returns an expression for the dry density rho in kg / m^3
-    from the (virtual) potential temperature and Exner pressure.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg theta_v: the virtual potential temperature in K.
-    :arg exner: the Exner pressure.
+    This is computed from the dry virtual potential temperature and the Exner
+    pressure.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        theta_vd (:class:`ufl.Expr`): the virtual potential temperature in K.
+        exner (:class:`ufl.Expr`): the Exner pressure.
     """
 
     kappa = parameters.kappa
     p_0 = parameters.p_0
     R_d = parameters.R_d
 
-    return p_0 * exner ** (1 / kappa - 1) / (R_d * theta_v)
+    return p_0 * exner ** (1 / kappa - 1) / (R_d * theta_vd)
 
 
 def r_sat(parameters, T, p):
     """
-    Returns an expression from Tetens' formula for the
-    saturation mixing ratio of water vapour.
+    Returns an expression for the saturation mixing ratio of water vapour.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: the temperature in K.
-    :arg p: the pressure in Pa.
+    It is calculated from the temperature and pressure via Tetens' formula.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        T (:class:`ufl.Expr`): the temperature in K.
+        p (:class:`ufl.Expr`): the pressure in Pa.
     """
 
     epsilon = parameters.R_d / parameters.R_v
@@ -146,8 +168,10 @@ def Lv(parameters, T):
     """
     Returns an expression for the latent heat of vaporisation of water.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: the temperature in K.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        T (:class:`ufl.Expr`): the temperature in K.
     """
 
     L_v0 = parameters.L_v0
@@ -162,11 +186,13 @@ def theta_e(parameters, T, p, r_v, r_t):
     """
     Returns an expression for the wet equivalent potential temperature in K.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: the temperature in K.
-    :arg p: the pressure in Pa.
-    :arg r_v: the mixing ratio of water vapour.
-    :arg r_t: the total mixing ratio of water.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        T (:class:`ufl.Expr`): the temperature in K.
+        p (:class:`ufl.Expr`): the pressure in Pa.
+        r_v (:class:`ufl.Expr`): the mixing ratio of water vapour.
+        r_t (:class:`ufl.Expr`): the total mixing ratio of water.
     """
 
     R_d = parameters.R_d
@@ -184,11 +210,13 @@ def internal_energy(parameters, rho, T, r_v=0.0, r_l=0.0):
     """
     Returns an expression for the (possibly wet) internal energy density in J.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg rho: the dry density in kg / m^3.
-    :arg T: the temperature in K.
-    :arg r_v: the mixing ratio of water vapour.
-    :arg r_l: the mixing ratio of all forms of liquid water.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        rho (:class:`ufl.Expr`): the dry density in kg / m^3.
+        T (:class:`ufl.Expr`): the temperature in K.
+        r_v (:class:`ufl.Expr`): the mixing ratio of water vapour.
+        r_l (:class:`ufl.Expr`): the mixing ratio of all forms of liquid water.
     """
 
     cv = parameters.cv
@@ -203,10 +231,12 @@ def RH(parameters, r_v, T, p):
     """
     Returns an expression for the relative humidity.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg r_v: the mixing ratio of water vapour.
-    :arg T: the temperature in K.
-    :arg p: the pressure in Pa.
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        r_v (:class:`ufl.Expr`): the mixing ratio of water vapour.
+        T (:class:`ufl.Expr`): the temperature in K.
+        p (:class:`ufl.Expr`): the pressure in Pa.
     """
 
     epsilon = parameters.R_d / parameters.R_v
@@ -217,11 +247,14 @@ def RH(parameters, r_v, T, p):
 
 def e_sat(parameters, T):
     """
-    Returns an expression for the saturated partial pressure
-    of water vapour as a function of T, based on Tetens' formula.
+    Returns an expression for the saturated partial pressure of water vapour.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: the temperature in K.
+    It is calculated as a function of T, based on Tetens' formula.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        T (:class:`ufl.Expr`): the temperature in K.
     """
 
     w_sat2 = parameters.w_sat2
@@ -234,12 +267,15 @@ def e_sat(parameters, T):
 
 def e(parameters, p, r_v):
     """
-    Returns an expression for the partial pressure of water vapour
-    from the total pressure and the water vapour mixing ratio.
+    Returns an expression for the partial pressure of water vapour.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg p: the pressure in Pa.
-    :arg r_v: the mixing ratio of water vapour.
+    It is calculated from the total pressure and the water vapour mixing ratio.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        p (:class:`ufl.Expr`): the pressure in Pa.
+        r_v (:class:`ufl.Expr`): the mixing ratio of water vapour.
     """
 
     epsilon = parameters.R_d / parameters.R_v
@@ -249,13 +285,16 @@ def e(parameters, p, r_v):
 
 def r_v(parameters, H, T, p):
     """
-    Returns an expression for the mixing ratio of water vapour
-    from the relative humidity, pressure and temperature.
+    Returns an expression for the mixing ratio of water vapour.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg H: the relative humidity (as a decimal).
-    :arg T: the temperature in K.
-    :arg p: the pressure in Pa.
+    It is calculated from the relative humidity, pressure and temperature.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        H (:class:`ufl.Expr`): the relative humidity (as a decimal).
+        T (:class:`ufl.Expr`): the temperature in K.
+        p (:class:`ufl.Expr`): the pressure in Pa.
     """
 
     epsilon = parameters.R_d / parameters.R_v
@@ -264,14 +303,18 @@ def r_v(parameters, H, T, p):
     return H * rsat / (1 + (1 - H) * rsat / epsilon)
 
 
+# TODO: this seems incorrect!
 def T_dew(parameters, p, r_v):
     """
-    Returns the dewpoint temperature as a function of
-    temperature and the water vapour mixing ratio.
+    Returns an expression for the dewpoint temperature in K.
 
-    :arg parameters: a CompressibleParameters object.
-    :arg T: the temperature in K.
-    :arg r_v: the water vapour mixing ratio.
+    It is calculated as a function of pressure and the water vapour mixing ratio.
+
+    Args:
+        parameters (:class:`CompressibleParameters`): parameters representing
+            the physical constants describing the fluid.
+        p (:class:`ufl.Expr`): the pressure in Pa.
+        r_v (:class:`ufl.Expr`): the water vapour mixing ratio.
     """
 
     R_d = parameters.R_d

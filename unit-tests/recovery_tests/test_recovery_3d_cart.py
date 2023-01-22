@@ -12,7 +12,7 @@ This is tested for:
 from firedrake import (PeriodicRectangleMesh, RectangleMesh, ExtrudedMesh,
                        SpatialCoordinate, FiniteElement, HDiv, FunctionSpace,
                        TensorProductElement, Function, interval, norm, errornorm,
-                       VectorFunctionSpace, BrokenElement, as_vector)
+                       VectorFunctionSpace, as_vector, HCurl)
 from gusto import *
 import numpy as np
 import pytest
@@ -75,36 +75,34 @@ def expr(geometry, mesh):
 @pytest.mark.parametrize("element", ["quadrilateral", "triangular"])
 def test_3D_cartesian_recovery(geometry, element, mesh, expr):
 
-    family = "RTCF" if element == "quadrilateral" else "BDM"
+    if element == "quadrilateral":
+        family = "RTCF"
+    elif geometry == "periodic-in-both":
+        # TODO: NB: boundary recovery does not exactly work for RT with lateral boundaries
+        family = "RT"
+    else:
+        family = "BDM"
 
     # horizontal base spaces
     cell = mesh._base_mesh.ufl_cell().cellname()
-    u_hori = FiniteElement(family, cell, 1)
-    w_hori = FiniteElement("DG", cell, 0)
+    u_div_hori = FiniteElement(family, cell, 1)
+    w_div_hori = FiniteElement("DG", cell, 0)
 
     # vertical base spaces
-    u_vert = FiniteElement("DG", interval, 0)
-    w_vert = FiniteElement("CG", interval, 1)
+    u_div_vert = FiniteElement("DG", interval, 0)
+    w_div_vert = FiniteElement("CG", interval, 1)
 
     # build elements
-    u_element = HDiv(TensorProductElement(u_hori, u_vert))
-    w_element = HDiv(TensorProductElement(w_hori, w_vert))
-    theta_element = TensorProductElement(w_hori, w_vert)
-    v_element = u_element + w_element
-
-    # DG1
-    DG1_hori = FiniteElement("DG", cell, 1, variant="equispaced")
-    DG1_vert = FiniteElement("DG", interval, 1, variant="equispaced")
-    DG1_elt = TensorProductElement(DG1_hori, DG1_vert)
-    DG1 = FunctionSpace(mesh, DG1_elt)
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
+    u_div_element = HDiv(TensorProductElement(u_div_hori, u_div_vert))
+    w_div_element = HDiv(TensorProductElement(w_div_hori, w_div_vert))
+    theta_element = TensorProductElement(w_div_hori, w_div_vert)
+    v_div_element = u_div_element + w_div_element
 
     # spaces
     DG0 = FunctionSpace(mesh, "DG", 0)
     CG1 = FunctionSpace(mesh, "CG", 1)
     Vt = FunctionSpace(mesh, theta_element)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(theta_element))
-    Vu = FunctionSpace(mesh, v_element)
+    Vu_div = FunctionSpace(mesh, v_div_element)
     vec_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
     # our actual theta and rho and v
@@ -118,15 +116,15 @@ def test_3D_cartesian_recovery(geometry, element, mesh, expr):
     rho_CG1 = Function(CG1)
     theta_Vt = Function(Vt).interpolate(expr)
     theta_CG1 = Function(CG1)
-    v_Vu = Function(Vu).project(as_vector([expr, expr, expr]))
+    v_Vu_div = Function(Vu_div).project(as_vector([expr, expr, expr]))
     v_CG1 = Function(vec_CG1)
     rho_Vt = Function(Vt)
 
     # make the recoverers and do the recovery
-    rho_recoverer = Recoverer(rho_DG0, rho_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    theta_recoverer = Recoverer(theta_Vt, theta_CG1, VDG=DG1, boundary_method=Boundary_Method.dynamics)
-    v_recoverer = Recoverer(v_Vu, v_CG1, VDG=vec_DG1, boundary_method=Boundary_Method.dynamics)
-    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, VDG=Vt_brok, boundary_method=Boundary_Method.physics)
+    rho_recoverer = Recoverer(rho_DG0, rho_CG1, boundary_method=BoundaryMethod.taylor)
+    theta_recoverer = Recoverer(theta_Vt, theta_CG1, boundary_method=BoundaryMethod.taylor)
+    v_recoverer = Recoverer(v_Vu_div, v_CG1, boundary_method=BoundaryMethod.taylor)
+    rho_Vt_recoverer = Recoverer(rho_DG0, rho_Vt, boundary_method=BoundaryMethod.extruded)
 
     rho_recoverer.project()
     theta_recoverer.project()
@@ -135,7 +133,7 @@ def test_3D_cartesian_recovery(geometry, element, mesh, expr):
 
     rho_diff = errornorm(rho_CG1, rho_CG1_true) / norm(rho_CG1_true)
     theta_diff = errornorm(theta_CG1, theta_CG1_true) / norm(theta_CG1_true)
-    v_diff = errornorm(v_CG1, v_CG1_true) / norm(v_CG1_true)
+    v_div_diff = errornorm(v_CG1, v_CG1_true) / norm(v_CG1_true)
     rho_Vt_diff = errornorm(rho_Vt, rho_Vt_true) / norm(rho_Vt_true)
 
     tolerance = 1e-7
@@ -143,11 +141,46 @@ def test_3D_cartesian_recovery(geometry, element, mesh, expr):
                      Incorrect recovery for {variable} with {boundary} boundary method
                      on {geometry} 3D Cartesian domain with {element} elements
                      """)
-    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='dynamics',
+    assert rho_diff < tolerance, error_message.format(variable='rho', boundary='taylor',
                                                       geometry=geometry, element=element)
-    assert v_diff < tolerance, error_message.format(variable='v', boundary='dynamics',
-                                                    geometry=geometry, element=element)
-    assert theta_diff < tolerance, error_message.format(variable='rho', boundary='dynamics',
+    assert v_div_diff < tolerance, error_message.format(variable='v', boundary='taylor',
+                                                        geometry=geometry, element=element)
+    assert theta_diff < tolerance, error_message.format(variable='rho', boundary='taylor',
                                                         geometry=geometry, element=element)
     assert rho_Vt_diff < tolerance, error_message.format(variable='rho', boundary='physics',
                                                          geometry=geometry, element=element)
+
+    # ------------------------------------------------------------------------ #
+    # Special test for hcurl boundary recovery
+    # ------------------------------------------------------------------------ #
+
+    if geometry == 'periodic-in-both':
+        family = "RTCE" if element == "quadrilateral" else "RTE"
+
+        u_curl_hori = FiniteElement(family, cell, 1)
+        w_curl_hori = FiniteElement("CG", cell, 1)
+        u_curl_vert = FiniteElement("CG", interval, 1)
+        w_curl_vert = FiniteElement("DG", interval, 0)
+
+        u_curl_element = HCurl(TensorProductElement(u_curl_hori, u_curl_vert))
+        w_curl_element = HCurl(TensorProductElement(w_curl_hori, w_curl_vert))
+        v_curl_element = u_curl_element + w_curl_element
+
+        Vu_curl = FunctionSpace(mesh, v_curl_element)
+
+        # make expression and fields -- x and y components vary linearly in z
+        xyz = SpatialCoordinate(mesh)
+        x_expr = np.random.randn() + np.random.randn()*xyz[2]
+        y_expr = np.random.randn() + np.random.randn()*xyz[2]
+        v_Vu_div = Function(Vu_div).project(as_vector([x_expr, y_expr, 0.0]))
+        v_curl_true = Function(Vu_curl).project(as_vector([x_expr, y_expr, 0.0]))
+        v_curl = Function(Vu_curl)
+
+        # make the recoverers and do the recovery
+        v_curl_recoverer = Recoverer(v_Vu_div, v_curl, method='project', boundary_method=BoundaryMethod.hcurl)
+
+        v_curl_recoverer.project()
+        v_curl_diff = errornorm(v_curl, v_curl_true) / norm(v_curl_true)
+
+        assert v_curl_diff < tolerance, error_message.format(variable='v', boundary='hcurl',
+                                                             geometry=geometry, element=element)

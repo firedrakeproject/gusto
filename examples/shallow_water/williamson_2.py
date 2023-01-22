@@ -10,6 +10,10 @@ from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 day = 24.*60.*60.
 if '--running-tests' in sys.argv:
     ref_dt = {3: 3000.}
@@ -30,38 +34,51 @@ parameters = ShallowWaterParameters(H=H)
 
 for ref_level, dt in ref_dt.items():
 
-    dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=3)
+                                 refinement_level=ref_level, degree=1)
     x = SpatialCoordinate(mesh)
     global_normal = x
     mesh.init_cell_orientations(x)
+    domain = Domain(mesh, dt, 'BDM', 1)
 
+    # Equation
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+
+    # I/O
+    dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
                               dumplist_latlon=['D', 'D_error'],
-                              steady_state_error_fields=['D', 'u'],
                               log_level='INFO')
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
-                         ShallowWaterPotentialEnergy(),
-                         ShallowWaterPotentialEnstrophy()]
+                         ShallowWaterPotentialEnergy(parameters),
+                         ShallowWaterPotentialEnstrophy(),
+                         SteadyStateError('u'), SteadyStateError('D')]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    state = State(mesh,
-                  dt=dt,
-                  output=output,
-                  parameters=parameters,
-                  diagnostic_fields=diagnostic_fields)
+    # Transport schemes
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "D", subcycles=2)]
 
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = ShallowWaterEquations(state, "BDM", 1, fexpr=fexpr)
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
-    # interpolate initial conditions
-    u0 = state.fields("u")
-    D0 = state.fields("D")
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
     x = SpatialCoordinate(mesh)
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
@@ -71,10 +88,11 @@ for ref_level, dt in ref_dt.items():
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    transported_fields = [ImplicitMidpoint(state, "u"),
-                          SSPRK3(state, "D", subcycles=2)]
+    Dbar = Function(D0.function_space()).assign(H)
+    stepper.set_reference_profiles([('D', Dbar)])
 
-    # build time stepper
-    stepper = CrankNicolson(state, eqns, transported_fields)
+    # ------------------------------------------------------------------------ #
+    # Run
+    # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)

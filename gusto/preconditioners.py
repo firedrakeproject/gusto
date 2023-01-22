@@ -1,16 +1,12 @@
-"""
-A module containing some specialized preconditioners for Gusto applications.
-"""
+"""A module containing specialised preconditioners for Gusto applications."""
 
-import numpy as np
-
-from firedrake import (dot, jump, dx, dS_h, ds_b, ds_t, ds,
+from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
-from firedrake.parloops import par_loop, READ, INC
+from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from pyop2.profiling import timed_region, timed_function
 from pyop2.utils import as_tuple
 
@@ -19,34 +15,36 @@ __all__ = ["VerticalHybridizationPC"]
 
 
 class VerticalHybridizationPC(PCBase):
-    """ A Slate-based python preconditioner for solving
-    the hydrostatic pressure equation (after rewriting as
-    a mixed vertical HDiv x L2 system). This preconditioner
-    hybridizes a mixed system in the vertical direction. This
-    means that velocities are rendered discontinuous in the
-    vertical and Lagrange multipliers are introduced
-    on the top/bottom facets to weakly enforce continuity
-    through the top/bottom faces of each cell.
+    """
+    A preconditioner for the vertical hydrostatic pressure system.
 
-    This PC assembles a statically condensed problem for the
-    multipliers and inverts the resulting system using the provided
-    solver options. The original unknowns are recovered element-wise
-    by solving local linear systems.
+    A Slate-based python preconditioner for solving the hydrostatic pressure
+    equation (after rewriting as a mixed vertical HDiv x L2 system). This
+    preconditioner hybridizes a mixed system in the vertical direction. This
+    means that velocities are rendered discontinuous in the vertical and
+    Lagrange multipliers are introduced on the top/bottom facets to weakly
+    enforce continuity through the top/bottom faces of each cell.
 
-    All elimination and recovery kernels are generated using
-    the Slate DSL in Firedrake.
+    This PC assembles a statically condensed problem for the multipliers and
+    inverts the resulting system using the provided solver options. The original
+    unknowns are recovered element-wise by solving local linear systems.
+
+    All elimination and recovery kernels are generated using the Slate DSL in
+    Firedrake. See firedrake/preconditioners/base.py for more details.
     """
 
     @timed_function("VertHybridInit")
     def initialize(self, pc):
-        """ Set up the problem context. Takes the original
-        mixed problem and transforms it into the equivalent
-        hybrid-mixed system.
-
-        A KSP object is created for the Lagrange multipliers
-        on the top/bottom faces of the mesh cells.
         """
+        Set up the problem context.
 
+        Takes the original mixed problem and transforms it into the equivalent
+        hybrid-mixed system. A KSP object is created for the Lagrange
+        multipliers on the top/bottom faces of the mesh cells.
+
+        Args:
+            pc (:class:`PETSc.PC`): preconditioner object to initialize.
+        """
         from firedrake import (FunctionSpace, Function, Constant,
                                FiniteElement, TensorProductElement,
                                TrialFunction, TrialFunctions, TestFunction,
@@ -112,27 +110,13 @@ class VerticalHybridizationPC(PCBase):
         self.unbroken_solution = Function(V)
         self.unbroken_residual = Function(V)
 
-        # Set up transfer kernels to and from the broken velocity space
-        # NOTE: Since this snippet of code is used in a couple places in
-        # in Gusto, might be worth creating a utility function that is
-        # is importable and just called where needed.
-        shapes = {"i": Vv.finat_element.space_dimension(),
-                  "j": np.prod(Vv.shape, dtype=int)}
-        weight_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                w[i*{j} + j] += 1.0;
-        """.format(**shapes)
-
+        weight_kernel = AverageWeightings(Vv)
         self.weight = Function(Vv)
-        par_loop(weight_kernel, dx, {"w": (self.weight, INC)})
+        weight_kernel.apply(self.weight)
 
         # Averaging kernel
-        self.average_kernel = """
-        for (int i=0; i<{i}; ++i)
-            for (int j=0; j<{j}; ++j)
-                vec_out[i*{j} + j] += vec_in[i*{j} + j]/w[i*{j} + j];
-        """.format(**shapes)
+        self.average_kernel = AverageKernel(Vv)
+
         # Original mixed operator replaced with "broken" arguments
         arg_map = {test: TestFunction(V_d),
                    trial: TrialFunction(V_d)}
@@ -232,15 +216,18 @@ class VerticalHybridizationPC(PCBase):
         self._reconstruction_calls(split_mixed_op, split_trace_op)
 
     def _reconstruction_calls(self, split_mixed_op, split_trace_op):
-        """This generates the reconstruction calls for the unknowns using the
+        """
+        Generates reconstruction calls.
+
+        This generates the reconstruction calls for the unknowns using the
         Lagrange multipliers.
 
-        :arg split_mixed_op: a ``dict`` of split forms that make up the broken
-                             mixed operator from the original problem.
-        :arg split_trace_op: a ``dict`` of split forms that make up the trace
-                             contribution in the hybridized mixed system.
+        Args:
+            split_mixed_op (dict): a ``dict`` of split forms that make up the
+                broken mixed operator from the original problem.
+            split_trace_op (dict): a ``dict`` of split forms that make up the
+                trace contribution in the hybridized mixed system.
         """
-
         from firedrake.assemble import OneFormAssembler
 
         # We always eliminate the velocity block first
@@ -281,7 +268,9 @@ class VerticalHybridizationPC(PCBase):
 
     @timed_function("VertHybridRecon")
     def _reconstruct(self):
-        """Reconstructs the system unknowns using the multipliers.
+        """
+        Reconstructs the system unknowns using the multipliers.
+
         Note that the reconstruction calls are assumed to be
         initialized at this point.
         """
@@ -294,19 +283,30 @@ class VerticalHybridizationPC(PCBase):
 
     @timed_function("VertHybridUpdate")
     def update(self, pc):
-        """Update by assembling into the operator. No need to
-        reconstruct symbolic objects.
         """
+        Update by assembling into the operator.
 
+        Args:
+            pc (:class:`PETSc.PC`): preconditioner object.
+        """
+        # No need to reconstruct symbolic objects.
         self._assemble_S()
 
     def apply(self, pc, x, y):
-        """We solve the forward eliminated problem for the
-        approximate traces of the scalar solution (the multipliers)
-        and reconstruct the "broken flux and scalar variable."
+        """
+        Apply the preconditioner to x, putting the result in y.
 
-        Lastly, we project the broken solutions into the mimetic
-        non-broken finite element space.
+        We solve the forward eliminated problem for the approximate traces of
+        the scalar solution (the multipliers) and reconstruct the "broken flux
+        and scalar variable."
+
+        Lastly, we project the broken solutions into the mimetic non-broken
+        finite element space.
+
+        Args:
+            pc (:class:`PETSc.PC`): the preconditioner object.
+            x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
+            y (:class:`PETSc.Vec`): the vector to put the result into.
         """
 
         with timed_region("VertHybridBreak"):
@@ -331,10 +331,7 @@ class VerticalHybridizationPC(PCBase):
             unbroken_res_hdiv = self.unbroken_residual.split()[self.vidx]
             broken_res_hdiv = self.broken_residual.split()[self.vidx]
             broken_res_hdiv.assign(0)
-            par_loop(self.average_kernel, dx,
-                     {"w": (self.weight, READ),
-                      "vec_in": (unbroken_res_hdiv, READ),
-                      "vec_out": (broken_res_hdiv, INC)})
+            self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
             # Compute the rhs for the multiplier system
             self._assemble_Srhs()
@@ -363,21 +360,35 @@ class VerticalHybridizationPC(PCBase):
             unbroken_hdiv = self.unbroken_solution.split()[self.vidx]
             unbroken_hdiv.assign(0)
 
-            par_loop(self.average_kernel, dx,
-                     {"w": (self.weight, READ),
-                      "vec_in": (broken_hdiv, READ),
-                      "vec_out": (unbroken_hdiv, INC)})
+            self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)
 
             with self.unbroken_solution.dat.vec_ro as v:
                 v.copy(y)
 
     def applyTranspose(self, pc, x, y):
-        """Apply the transpose of the preconditioner."""
+        """
+        Apply the transpose of the preconditioner.
+
+        Args:
+            pc (:class:`PETSc.PC`): the preconditioner object.
+            x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
+            y (:class:`PETSc.Vec`): the vector to put the result into.
+
+        Raises:
+            NotImplementedError: this method is currently not implemented.
+        """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
 
     def view(self, pc, viewer=None):
-        """Viewer calls for the various configurable objects in this PC."""
+        """
+        Viewer calls for the various configurable objects in this PC.
+
+        Args:
+            pc (:class:`PETSc.PC`): the preconditioner object.
+            viewer (:class:`PETSc.Viewer`, optional): viewer object. Defaults to
+                None.
+        """
 
         super(VerticalHybridizationPC, self).view(pc, viewer)
         viewer.pushASCIITab()

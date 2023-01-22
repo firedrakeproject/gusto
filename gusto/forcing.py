@@ -1,3 +1,5 @@
+"""Discretisation of dynamic forcing terms, such as the pressure gradient."""
+
 from firedrake import (Function, TrialFunctions, DirichletBC,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
@@ -11,23 +13,27 @@ __all__ = ["Forcing"]
 
 class Forcing(object):
     """
-    Base class for forcing terms for Gusto.
+    Discretises forcing terms.
 
-    :arg state: x :class:`.State` object.
-    :arg euler_poincare: if True then the momentum equation is in Euler
-    Poincare form and we need to add 0.5*grad(u^2) to the forcing term.
-    If False then this term is not added.
-    :arg linear: if True then we are solving a linear equation so nonlinear
-    terms (namely the Euler Poincare term) should not be added.
-    :arg extra_terms: extra terms to add to the u component of the forcing
-    term - these will be multiplied by the appropriate test function.
+    This class describes the evaluation of forcing terms, e.g. the gravitational
+    force, the Coriolis force or the pressure gradient force. These are terms
+    that can simply be evaluated, generally as part of some semi-implicit time
+    discretisation.
     """
 
     def __init__(self, equation, alpha):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the prognostic equations
+                containing the forcing terms.
+            alpha (:class:`Constant`): semi-implicit off-centering factor. An
+                alpha of 0 corresponds to fully explicit, while a factor of 1
+                corresponds to fully implicit.
+        """
 
         self.field_name = equation.field_name
         implicit_terms = ["incompressibility", "sponge"]
-        dt = equation.state.dt
+        dt = equation.domain.dt
 
         W = equation.function_space
         self.x0 = Function(W)
@@ -106,13 +112,20 @@ class Forcing(object):
 
     def apply(self, x_in, x_nl, x_out, label):
         """
-        Function takes x as input, computes F(x_nl) and returns
-        x_out = x + scale*F(x_nl)
-        as output.
+        Applies the discretisation for a forcing term F(x).
 
-        :arg x_in: :class:`.Function` object
-        :arg x_nl: :class:`.Function` object
-        :arg x_out: :class:`.Function` object
+        This takes x_in and x_nl and computes F(x_nl), and updates x_out to
+            x_out = x_in + scale*F(x_nl)
+        where 'scale' is the appropriate semi-implicit factor.
+
+        Args:
+            x_in (:class:`FieldCreator'): the field to be incremented.
+            x_nl (:class:`FieldCreator'): the field which the forcing term is
+                evaluated on.
+            x_out (:class:`FieldCreator'): the output field to be updated.
+            label (str): denotes which forcing to apply. Should be 'explicit' or
+                'implicit'. # TODO: there should be a check on this. Or this
+                should be an actual label.
         """
 
         self.x0.assign(x_nl(self.field_name))
