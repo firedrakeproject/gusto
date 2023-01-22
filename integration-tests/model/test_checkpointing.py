@@ -121,7 +121,7 @@ def test_checkpointing(tmpdir):
     # This is the best way to compare fields from different meshes
     for field_name in ['u', 'rho', 'theta']:
         with CheckpointFile(dirname_1+'/chkpt.h5', 'r') as chkpt:
-            mesh = chkpt.load_mesh(name='firedrake_default_extruded')
+            mesh = chkpt.load_mesh()
             field_1 = chkpt.load_function(mesh, name=field_name)
         with CheckpointFile(dirname_2+'/chkpt.h5', 'r') as chkpt:
             field_2 = chkpt.load_function(mesh, name=field_name)
