@@ -6,7 +6,8 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        TrialFunction, FacetNormal, jump, avg, dS_v,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
-from gusto.fml.form_manipulation_labelling import Term, all_terms, identity, drop
+from gusto.fields import PrescribedFields
+from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
                           name, pressure_gradient, coriolis,
@@ -28,128 +29,126 @@ import ufl
 class PrognosticEquation(object, metaclass=ABCMeta):
     """Base class for prognostic equations."""
 
-    def __init__(self, state, function_space, field_name):
+    def __init__(self, domain, function_space, field_name):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
         """
 
-        self.state = state
+        self.domain = domain
         self.function_space = function_space
+        self.X = Function(function_space)
         self.field_name = field_name
         self.bcs = {}
+        self.prescribed_fields = PrescribedFields()
 
         if len(function_space) > 1:
             assert hasattr(self, "field_names")
-            state.fields(field_name, function_space,
-                         subfield_names=self.field_names, pickup=True)
             for fname in self.field_names:
-                state.diagnostics.register(fname)
                 self.bcs[fname] = []
-        else:
-            state.fields(field_name, function_space)
-            state.diagnostics.register(field_name)
-            self.bcs[field_name] = []
+
+        self.bcs[field_name] = []
+
+    def label_terms(self, term_filter, label):
+        """
+        Labels terms in the equation, subject to the term filter.
+
+
+        Args:
+            term_filter (func): a function, taking terms as an argument, that
+                is used to filter terms.
+            label (:class:`Label`): the label to be applied to the terms.
+        """
+        assert type(label, Label)
+        self.residual = self.residual.label_map(term_filter, map_if_true=label)
 
 
 class AdvectionEquation(PrognosticEquation):
     u"""Discretises the advection equation, ∂q/∂t + (u.∇)q = 0"""
 
-    def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
             **kwargs: any keyword arguments to be passed to the advection form.
         """
-        super().__init__(state, function_space, field_name)
+        super().__init__(domain, function_space, field_name)
 
-        if not hasattr(state.fields, "u"):
-            if Vu is not None:
-                V = state.spaces("HDiv", V=Vu)
-            else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = state.spaces("HDiv", ufamily, udegree)
-            state.fields("u", V)
+        if Vu is not None:
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
+        else:
+            V = domain.spaces("HDiv")
+        self.prescribed_fields("u", V)
+
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
 
         self.residual = subject(
-            mass_form + advection_form(state, test, q, **kwargs), q
+            mass_form + advection_form(domain, test, q, **kwargs), q
         )
 
 
 class ContinuityEquation(PrognosticEquation):
     u"""Discretises the continuity equation, ∂q/∂t + ∇(u*q) = 0"""
 
-    def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
             **kwargs: any keyword arguments to be passed to the advection form.
         """
-        super().__init__(state, function_space, field_name)
+        super().__init__(domain, function_space, field_name)
 
-        if not hasattr(state.fields, "u"):
-            if Vu is not None:
-                V = state.spaces("HDiv", V=Vu)
-            else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = state.spaces("HDiv", ufamily, udegree)
-            state.fields("u", V)
+        if Vu is not None:
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
+        else:
+            V = domain.spaces("HDiv")
+        self.prescribed_fields("u", V)
+
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
 
         self.residual = subject(
-            mass_form + continuity_form(state, test, q, **kwargs), q
+            mass_form + continuity_form(domain, test, q, **kwargs), q
         )
 
 
 class DiffusionEquation(PrognosticEquation):
     u"""Discretises the diffusion equation, ∂q/∂t = ∇.(κ∇q)"""
 
-    def __init__(self, state, function_space, field_name,
+    def __init__(self, domain, function_space, field_name,
                  diffusion_parameters):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
             diffusion_parameters (:class:`DiffusionParameters`): parameters
                 describing the diffusion to be applied.
         """
-        super().__init__(state, function_space, field_name)
+        super().__init__(domain, function_space, field_name)
 
         test = TestFunction(function_space)
         q = Function(function_space)
@@ -158,28 +157,22 @@ class DiffusionEquation(PrognosticEquation):
         self.residual = subject(
             mass_form
             + interior_penalty_diffusion_form(
-                state, test, q, diffusion_parameters), q
+                domain, test, q, diffusion_parameters), q
         )
 
 
 class AdvectionDiffusionEquation(PrognosticEquation):
     u"""The advection-diffusion equation, ∂q/∂t + (u.∇)q = ∇.(κ∇q)"""
 
-    def __init__(self, state, function_space, field_name,
-                 ufamily=None, udegree=None, Vu=None, diffusion_parameters=None,
-                 **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None,
+                 diffusion_parameters=None, **kwargs):
         """
         Args:
-            state (:class:`State`): the model's state object.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            ufamily (str, optional): the family of the function space to use
-                for the velocity field. Only used if `Vu` is not provided.
-                Defaults to None.
-            udegree (int, optional): the degree of the function space to use for
-                the velocity field. Only used if `Vu` is not provided. Defaults
-                to None.
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is  Defaults to None.
             diffusion_parameters (:class:`DiffusionParameters`, optional):
@@ -187,25 +180,23 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             **kwargs: any keyword arguments to be passed to the advection form.
         """
 
-        super().__init__(state, function_space, field_name)
+        super().__init__(domain, function_space, field_name)
 
-        if not hasattr(state.fields, "u"):
-            if Vu is not None:
-                V = state.spaces("HDiv", V=Vu)
-            else:
-                assert ufamily is not None, "Specify the family for u"
-                assert udegree is not None, "Specify the degree of the u space"
-                V = state.spaces("HDiv", ufamily, udegree)
-            state.fields("u", V)
+        if Vu is not None:
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
+        else:
+            V = domain.spaces("HDiv")
+        self.prescribed_fields("u", V)
+
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
 
         self.residual = subject(
             mass_form
-            + advection_form(state, test, q, **kwargs)
+            + advection_form(domain, test, q, **kwargs)
             + interior_penalty_diffusion_form(
-                state, test, q, diffusion_parameters), q
+                domain, test, q, diffusion_parameters), q
         )
 
 
@@ -218,19 +209,15 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     contains common routines for these equation sets.
     """
 
-    def __init__(self, field_names, state, family, degree,
-                 terms_to_linearise=None,
+    def __init__(self, field_names, domain, linearisation_map=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
             field_names (list): a list of strings for names of the prognostic
                 variables for the equation set.
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
-            terms_to_linearise (dict, optional): a dictionary specifying which
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
@@ -242,36 +229,35 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         self.field_names = field_names
         self.active_tracers = active_tracers
-        self.terms_to_linearise = {} if terms_to_linearise is None else terms_to_linearise
+        self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
 
         # Build finite element spaces
-        self.spaces = [space for space in self._build_spaces(state, family, degree)]
+        # TODO: this implies order of spaces matches order of variables
+        # we should not assume this and should instead specify which variable
+        # is in which space
+        self.spaces = [space for space in domain.compatible_spaces]
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
             active_tracers = []
-        self.add_tracers_to_prognostics(state, active_tracers)
+        self.add_tracers_to_prognostics(domain, active_tracers)
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
 
         # Can now call the underlying PrognosticEquation
         full_field_name = "_".join(self.field_names)
-        super().__init__(state, W, full_field_name)
+        super().__init__(domain, W, full_field_name)
 
         # Set up test functions, trials and prognostics
         self.tests = TestFunctions(W)
         self.trials = TrialFunction(W)
-        self.X = Function(W)
         self.X_ref = Function(W)
 
         # Set up no-normal-flow boundary conditions
         if no_normal_flow_bc_ids is None:
             no_normal_flow_bc_ids = []
-        self.set_no_normal_flow_bcs(state, no_normal_flow_bc_ids)
-
-    def _build_spaces(self, state, family, degree):
-        return state.spaces.build_compatible_spaces(family, degree)
+        self.set_no_normal_flow_bcs(domain, no_normal_flow_bc_ids)
 
     # ======================================================================== #
     # Set up time derivative / mass terms
@@ -302,7 +288,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     # Linearisation Routines
     # ======================================================================== #
 
-    def generate_linear_terms(self, residual, terms_to_linearise):
+    def generate_linear_terms(self, residual, linearisation_map):
         """
         Generate the linearised forms for the equation set.
 
@@ -318,7 +304,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         Args:
             residual (:class:`LabelledForm`): the residual of the equation set.
                 A labelled form containing all the terms of the equation set.
-            terms_to_linearise (dict): a dictionary describing the terms to be
+            linearisation_map (func): a function describing the terms to be
                 linearised.
 
         Returns:
@@ -326,17 +312,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 each term as labels.
         """
 
-        # TODO: Neaten up the `terms_to_linearise` variable. This should not be
-        # a dictionary, it should be a filter of some sort
-
         from functools import partial
 
         # Function to check if term should be linearised
-        def should_linearise(term, field):
-            return (not term.has_label(linearisation)
-                    and term.get(prognostic) == field
-                    and any(term.has_label(*terms_to_linearise[field], return_tuple=True))
-                    )
+        def should_linearise(term):
+            return (not term.has_label(linearisation) and linearisation_map(term))
 
         # Linearise a term, and add the linearisation as a label
         def linearise(term, X, X_ref, du):
@@ -344,12 +324,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             return linearisation(term, replace_subject(X_ref)(linear_term))
 
         # Add linearisations to all terms that need linearising
-        for field in self.field_names:
-            residual = residual.label_map(
-                partial(should_linearise, field=field),
-                map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
-                map_if_false=identity,  # TODO: should "keep" be an alias for identity?
-            )
+        residual = residual.label_map(
+            should_linearise,
+            map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
+            map_if_false=keep,
+        )
 
         return residual
 
@@ -377,7 +356,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     # Boundary Condition Routines
     # ======================================================================== #
 
-    def set_no_normal_flow_bcs(self, state, no_normal_flow_bc_ids):
+    def set_no_normal_flow_bcs(self, domain, no_normal_flow_bc_ids):
         """
         Sets up the boundary conditions for no-normal flow at domain boundaries.
 
@@ -386,7 +365,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         a velocity variable named 'u' to apply the boundary conditions to.
 
         Args:
-            state (:class:`State`): the model's state.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             no_normal_flow_bc_ids (list): A list of IDs of the domain boundaries
                 at which no normal flow will be enforced.
 
@@ -400,23 +380,31 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 'No-normal-flow boundary conditions can only be applied '
                 + 'when there is a variable called "u" and none was found')
 
-        Vu = state.spaces("HDiv")
+        Vu = domain.spaces("HDiv")
         if Vu.extruded:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, id))
 
+        # Add all boundary conditions to mixed function space
+        W = self.X.function_space()
+        self.bcs[self.field_name] = []
+        for idx, field_name in enumerate(self.field_names):
+            for bc in self.bcs[field_name]:
+                self.bcs[self.field_name].append(DirichletBC(W.sub(idx), bc.function_arg, bc.sub_domain))
+
     # ======================================================================== #
     # Active Tracer Routines
     # ======================================================================== #
 
-    def add_tracers_to_prognostics(self, state, active_tracers):
+    def add_tracers_to_prognostics(self, domain, active_tracers):
         """
         Augments the equation set with specified active tracer variables.
 
         Args:
-            state (:class:`State`): the model's state.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             active_tracers (list): A list of :class:`ActiveTracer` objects that
                 encode the metadata for the active tracers.
 
@@ -432,19 +420,17 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     self.field_names.append(tracer.name)
                 else:
                     raise ValueError(f'There is already a field named {tracer.name}')
-                self.spaces.append(state.spaces(tracer.space))
-                # Add an item to the terms_to_linearise dictionary
-                if tracer.name not in self.terms_to_linearise.keys():
-                    self.terms_to_linearise[tracer.name] = []
+                self.spaces.append(domain.spaces(tracer.space))
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
-    def generate_tracer_transport_terms(self, state, active_tracers):
+    def generate_tracer_transport_terms(self, domain, active_tracers):
         """
         Adds the transport forms for the active tracers to the equation set.
 
         Args:
-            state (:class:`State`): the model's state.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
             active_tracers (list): A list of :class:`ActiveTracer` objects that
                 encode the metadata for the active tracers.
 
@@ -467,9 +453,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
                 if tracer.transport_eqn == TransportEquationType.advective:
-                    tracer_adv = prognostic(advection_form(state, tracer_test, tracer_prog), tracer.name)
+                    tracer_adv = prognostic(advection_form(domain, tracer_test, tracer_prog), tracer.name)
                 elif tracer.transport_eqn == TransportEquationType.conservative:
-                    tracer_adv = prognostic(continuity_form(state, tracer_test, tracer_prog), tracer.name)
+                    tracer_adv = prognostic(continuity_form(domain, tracer_test, tracer_prog), tracer.name)
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -483,9 +469,68 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         return adv_form
 
 
+class ForcedAdvectionEquation(PrognosticEquationSet):
+    u"""
+    Discretises the advection equation with a source/sink term,
+        ∂q/∂t + (u.∇)q = F,
+    which can also be augmented with active tracers.
+    """
+    def __init__(self, domain, function_space, field_name, Vu=None,
+                 active_tracers=None, **kwargs):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            function_space (:class:`FunctionSpace`): the function space that the
+                equation's prognostic is defined on.
+            field_name (str): name of the prognostic field.
+            Vu (:class:`FunctionSpace`, optional): the function space for the
+                velocity field. If this is not specified, uses the HDiv spaces
+                set up by the domain. Defaults to None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations. Defaults to None.
+            **kwargs: any keyword arguments to be passed to the advection form.
+        """
+
+        self.field_names = [field_name]
+        self.active_tracers = active_tracers
+        self.terms_to_linearise = {}
+
+        # Build finite element spaces
+        self.spaces = [domain.spaces("tracer", V=function_space)]
+
+        # Add active tracers to the list of prognostics
+        if active_tracers is None:
+            active_tracers = []
+        self.add_tracers_to_prognostics(domain, active_tracers)
+
+        # Make the full mixed function space
+        W = MixedFunctionSpace(self.spaces)
+
+        # Can now call the underlying PrognosticEquation
+        full_field_name = "_".join(self.field_names)
+        PrognosticEquation.__init__(self, domain, W, full_field_name)
+
+        if Vu is not None:
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
+        else:
+            V = domain.spaces("HDiv")
+        self.prescribed_fields("u", V)
+
+        self.tests = TestFunctions(W)
+        self.X = Function(W)
+
+        mass_form = self.generate_mass_terms()
+
+        self.residual = subject(
+            mass_form + advection_form(domain, self.tests[0], split(self.X)[0], **kwargs), self.X
+        )
+
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
+
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
@@ -496,26 +541,25 @@ class ShallowWaterEquations(PrognosticEquationSet):
     for Coriolis parameter 'f' and bottom surface 'b'.
     """
 
-    def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'D': [time_derivative, transport],
-                                     'u': [time_derivative, pressure_gradient]},
+    def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+                 linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
             fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
                 surface of the fluid. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                both time derivatives, the 'D' transport term and the pressure
-                gradient term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term and the pressure gradient term.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -534,22 +578,27 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         field_names = ["u", "D"]
 
-        if active_tracers is not None:
-            raise NotImplementedError('Tracers not implemented for shallow water equations')
-
         if active_tracers is None:
             active_tracers = []
 
-        super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient and
+            # transport term from depth equation. Don't include active tracers
+            linearisation_map = lambda t: \
+                t.get(prognostic) in ["u", "D"] \
+                and (any(t.has_label(time_derivative, pressure_gradient))
+                     or (t.get(prognostic) == "D" and t.has_label(transport)))
+        super().__init__(field_names, domain,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        g = state.parameters.g
-        H = state.parameters.H
+        self.parameters = parameters
+        g = parameters.g
+        H = parameters.H
 
-        w, phi = self.tests
-        u, D = split(self.X)
+        w, phi = self.tests[0:2]
+        u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
 
         # -------------------------------------------------------------------- #
@@ -562,28 +611,28 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(state, w, u), "u")
+            u_adv = prognostic(advection_form(domain, w, u), "u")
         elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
+            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Depth transport term
-        D_adv = prognostic(continuity_form(state, phi, D), "D")
+        D_adv = prognostic(continuity_form(domain, phi, D), "D")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['D']:
-            linear_D_adv = linear_continuity_form(state, phi, H).label_map(
+        if self.linearisation_map(D_adv.terms[0]):
+            linear_D_adv = linear_continuity_form(domain, phi, H).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u_trial}), t.labels))
@@ -594,7 +643,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Add transport of tracers
         if len(active_tracers) > 0:
-            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
+            adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
@@ -607,35 +656,31 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis and Topography)
         # -------------------------------------------------------------------- #
+        # TODO: Is there a better way to store the Coriolis / topography fields?
+        # The current approach is that these are prescribed fields, stored in
+        # the equation, and initialised when the equation is
+
         if fexpr is not None:
-            V = FunctionSpace(state.mesh, "CG", 1)
-            f = state.fields("coriolis", space=V)
-            f.interpolate(fexpr)
+            V = FunctionSpace(domain.mesh, "CG", 1)
+            f = self.prescribed_fields("coriolis", V).interpolate(fexpr)
             coriolis_form = coriolis(
-                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
+                subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
             # Add linearisation
             linear_coriolis = coriolis(
-                subject(prognostic(f*inner(state.perp(u_trial), w)*dx, "u"), self.X))
+                subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X))
             coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
         if bexpr is not None:
-            b = state.fields("topography", state.spaces("DG"))
-            b.interpolate(bexpr)
+            b = self.prescribed_fields("topography", domain.spaces("DG")).interpolate(bexpr)
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
             residual += topography_form
 
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        u_ref, D_ref = self.X_ref.split()
-        # Linearise about D = H
-        # TODO: add interface to update linearisation state
-        D_ref.assign(Constant(H))
-        u_ref.assign(Constant(0.0))
-
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
@@ -650,26 +695,25 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     which is then linearised.
     """
 
-    def __init__(self, state, family, degree, fexpr=None, bexpr=None,
-                 terms_to_linearise={'D': [time_derivative, transport],
-                                     'u': [time_derivative, pressure_gradient, coriolis]},
+    def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
             fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
                 surface of the fluid. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                both time derivatives, the 'D' transport term and the pressure
-                gradient term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term, pressure gradient and Coriolis terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -683,8 +727,15 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 in the equations. Defaults to None.
         """
 
-        super().__init__(state, family, degree, fexpr=fexpr, bexpr=bexpr,
-                         terms_to_linearise=terms_to_linearise,
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+
+        super().__init__(domain, parameters, fexpr=fexpr, bexpr=bexpr,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
@@ -695,7 +746,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         # D transport term is a special case -- add facet term
         _, D = split(self.X)
         _, phi = self.tests
-        D_adv = prognostic(linear_continuity_form(state, phi, D, facet_term=True), "D")
+        D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
         self.residual = self.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == "D",
             map_if_true=lambda t: Term(D_adv.form, t.labels)
@@ -715,31 +766,29 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
-    def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 extra_terms=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
+    def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
             sponge (:class:`ufl.Expr`, optional): an expression for a sponge
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the scalar transport terms.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -764,22 +813,29 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
-        super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
+            linearisation_map = lambda t: \
+                t.get(prognostic) in ['u', 'rho', 'theta'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
+        super().__init__(field_names, domain,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        g = state.parameters.g
-        cp = state.parameters.cp
+        self.parameters = parameters
+        g = parameters.g
+        cp = parameters.cp
 
         w, phi, gamma = self.tests[0:3]
         u, rho, theta = split(self.X)[0:3]
         u_trial = split(self.trials)[0]
-        rhobar = state.fields("rhobar", space=state.spaces("DG"), dump=False)
-        thetabar = state.fields("thetabar", space=state.spaces("theta"), dump=False)
+        _, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
-        exner = exner_pressure(state.parameters, rho, theta)
-        n = FacetNormal(state.mesh)
+        exner = exner_pressure(parameters, rho, theta)
+        n = FacetNormal(domain.mesh)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -791,38 +847,38 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(state, w, u), "u")
+            u_adv = prognostic(advection_form(domain, w, u), "u")
         elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
+            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Density transport (conservative form)
-        rho_adv = prognostic(continuity_form(state, phi, rho), "rho")
+        rho_adv = prognostic(continuity_form(domain, phi, rho), "rho")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['rho']:
-            linear_rho_adv = linear_continuity_form(state, phi, rhobar).label_map(
+        if self.linearisation_map(rho_adv.terms[0]):
+            linear_rho_adv = linear_continuity_form(domain, phi, rho_bar).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u_trial}), t.labels))
             rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
-        theta_adv = prognostic(advection_form(state, gamma, theta), "theta")
+        theta_adv = prognostic(advection_form(domain, gamma, theta), "theta")
         # Transport term needs special linearisation
-        if transport in terms_to_linearise['theta']:
-            linear_theta_adv = linear_advection_form(state, gamma, thetabar).label_map(
+        if self.linearisation_map(theta_adv.terms[0]):
+            linear_theta_adv = linear_advection_form(domain, gamma, theta_bar).label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u_trial}), t.labels))
@@ -832,7 +888,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         # Add transport of tracers
         if len(active_tracers) > 0:
-            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
+            adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
@@ -854,7 +910,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(Term(g*inner(state.k, w)*dx), "u"), self.X)
+        gravity_form = subject(prognostic(Term(g*inner(domain.k, w)*dx), "u"), self.X)
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 
@@ -862,12 +918,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Moist Thermodynamic Divergence Term
         # -------------------------------------------------------------------- #
         if len(active_tracers) > 0:
-            cv = state.parameters.cv
-            c_vv = state.parameters.c_vv
-            c_pv = state.parameters.c_pv
-            c_pl = state.parameters.c_pl
-            R_d = state.parameters.R_d
-            R_v = state.parameters.R_v
+            cv = parameters.cv
+            c_vv = parameters.c_vv
+            c_pv = parameters.c_pv
+            c_pl = parameters.c_pl
+            R_d = parameters.R_d
+            R_v = parameters.R_v
 
             # Get gas and liquid moisture mixing ratios
             mr_l = zero_expr
@@ -901,8 +957,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X)
 
         if sponge is not None:
-            W_DG = FunctionSpace(state.mesh, "DG", 2)
-            x = SpatialCoordinate(state.mesh)
+            W_DG = FunctionSpace(domain.mesh, "DG", 2)
+            x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
             H = sponge.H
             zc = sponge.z_level
@@ -911,10 +967,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-            self.mu = Function(W_DG).interpolate(muexpr)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
             residual += name(subject(prognostic(
-                self.mu*inner(w, state.k)*inner(u, state.k)*dx, "u"), self.X), "sponge")
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, "u"), self.X), "sponge")
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
@@ -923,7 +979,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 fn = split(self.X)[idx]
                 residual += subject(
                     prognostic(interior_penalty_diffusion_form(
-                        state, test, fn, diffusion), field), self.X)
+                        domain, test, fn, diffusion), field), self.X)
 
         if extra_terms is not None:
             for field, term in extra_terms:
@@ -935,9 +991,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
 class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
@@ -958,31 +1013,29 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     equations.
     """
 
-    def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 extra_terms=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
+    def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
             sponge (:class:`ufl.Expr`, optional): an expression for a sponge
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the scalar transport terms.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -1002,9 +1055,9 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             NotImplementedError: only mixing ratio tracers are implemented.
         """
 
-        super().__init__(state, family, degree, Omega=Omega, sponge=sponge,
+        super().__init__(domain, parameters, Omega=Omega, sponge=sponge,
                          extra_terms=extra_terms,
-                         terms_to_linearise=terms_to_linearise,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -1015,7 +1068,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             map_if_true=lambda t: hydrostatic(t, self.hydrostatic_projection(t))
         )
 
-        k = self.state.k
+        k = self.domain.k
         u = split(self.X)[0]
         self.residual += name(
             subject(
@@ -1042,8 +1095,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         """
 
         # TODO: make this more general, i.e. should work on the sphere
-        assert not self.state.on_sphere, "the hydrostatic projection is not yet implemented for spherical geometry"
-        k = Constant((*self.state.k, 0, 0))
+        assert not self.domain.on_sphere, "the hydrostatic projection is not yet implemented for spherical geometry"
+        k = Constant((*self.domain.k, 0, 0))
         X = t.get(subject)
 
         new_subj = X - k * inner(X, k)
@@ -1051,7 +1104,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
 
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
-    # TODO: check that these are correct
     """
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
@@ -1064,25 +1116,24 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     where k is the vertical unit vector and, Ω is the planet's rotation vector.
     """
 
-    def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'p': [time_derivative],
-                                     'b': [time_derivative, transport]},
+    def __init__(self, domain, parameters, Omega=None,
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
         """
         Args:
-            state (:class:`State`): the model's state object.
-            family (str): the finite element space family used for the velocity
-                field. This determines the other finite element spaces used via
-                the de Rham complex.
-            degree (int): the element degree used for the velocity space.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
-            terms_to_linearise (dict, optional): a dictionary specifying which
-                terms in the equation set to linearise. By default, includes
-                the time derivatives and the buoyancy transport term.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form',
@@ -1107,16 +1158,25 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
-        super().__init__(field_names, state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
+            linearisation_map = lambda t: \
+                t.get(prognostic) in ['u', 'p', 'b'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
+
+        super().__init__(field_names, domain,
+                         linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
+
+        self.parameters = parameters
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
         u_trial = split(self.trials)[0]
-        bbar = state.fields("bbar", space=state.spaces("theta"), dump=False)
-        bbar = state.fields("pbar", space=state.spaces("DG"), dump=False)
+        b_bar = split(self.X_ref)[2]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -1128,36 +1188,37 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(state, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(state, w, u), "u")
+            u_adv = prognostic(advection_form(domain, w, u), "u")
         elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(state, w, u), "u")
+            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(state, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(state, w, u), "u") + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Buoyancy transport
-        b_adv = prognostic(advection_form(state, gamma, b), "b")
-        linear_b_adv = linear_advection_form(state, gamma, bbar).label_map(
-            lambda t: t.has_label(transporting_velocity),
-            lambda t: Term(ufl.replace(
-                t.form, {t.get(transporting_velocity): u_trial}), t.labels))
-        b_adv = linearisation(b_adv, linear_b_adv)
+        b_adv = prognostic(advection_form(domain, gamma, b), "b")
+        if self.linearisation_map(b_adv.terms[0]):
+            linear_b_adv = linear_advection_form(domain, gamma, b_bar).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): u_trial}), t.labels))
+            b_adv = linearisation(b_adv, linear_b_adv)
 
         adv_form = subject(u_adv + b_adv, self.X)
 
         # Add transport of tracers
         if len(active_tracers) > 0:
-            adv_form += self.generate_tracer_transport_terms(state, active_tracers)
+            adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
@@ -1167,7 +1228,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(-b*inner(w, state.k)*dx, "u"), self.X)
+        gravity_form = subject(prognostic(-b*inner(w, domain.k)*dx, "u"), self.X)
 
         # -------------------------------------------------------------------- #
         # Divergence Term
@@ -1193,6 +1254,5 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
-        self.residual = self.generate_linear_terms(residual, self.terms_to_linearise)
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)

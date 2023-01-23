@@ -9,26 +9,25 @@ from firedrake import (as_vector, VectorFunctionSpace, norm)
 import pytest
 
 
-def run(eqn, transport_scheme, state, tmax, f_end):
-    timestepper = PrescribedTransport(eqn, transport_scheme, state)
+def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
 
-    return norm(state.fields("f") - f_end) / norm(f_end)
+    return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
 @pytest.mark.parametrize("geometry", ["slice"])
 def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
-    # Make mesh and state using routine from conftest
+    # Make domain using routine from conftest
     setup = tracer_setup(tmpdir, geometry, degree=0)
-    state = setup.state
-    mesh = state.mesh
-    gdim = state.mesh.geometric_dimension()
+    domain = setup.domain
+    mesh = domain.mesh
+    gdim = mesh.geometric_dimension()
 
     # Spaces for recovery
-    Vu = state.spaces("HDiv", family=setup.family, degree=setup.degree)
+    Vu = domain.spaces("HDiv")
     if geometry == "slice":
-        VDG1 = state.spaces("DG1_equispaced")
+        VDG1 = domain.spaces("DG1_equispaced")
         Vec_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element(), name='Vec_DG1')
         Vec_CG1 = VectorFunctionSpace(mesh, "CG", 1, name='Vec_CG1')
 
@@ -40,19 +39,18 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
             f'Recovered spaces for geometry {geometry} have not been implemented')
 
     # Make equation
-    eqn = AdvectionEquation(state, Vu, "f",
-                            ufamily=setup.family, udegree=1)
+    eqn = AdvectionEquation(domain, Vu, "f")
+    transport_scheme = SSPRK3(domain, options=rec_opts)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
 
     # Initialise fields
     f_init = as_vector([setup.f_init]*gdim)
-    state.fields("f").project(f_init)
-    state.fields("u").project(setup.uexpr)
-
-    transport_scheme = SSPRK3(state, options=rec_opts)
+    timestepper.fields("f").project(f_init)
+    timestepper.fields("u").project(setup.uexpr)
 
     f_end = as_vector([setup.f_end]*gdim)
 
     # Run and check error
-    error = run(eqn, transport_scheme, state, setup.tmax, f_end)
+    error = run(timestepper, setup.tmax, f_end)
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'

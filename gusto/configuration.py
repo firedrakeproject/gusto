@@ -6,9 +6,11 @@ from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts", "TransportEquationType",
-           "OutputParameters", "CompressibleParameters", "ShallowWaterParameters",
-           "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
+           "TransportEquationType", "OutputParameters",
+           "CompressibleParameters", "ShallowWaterParameters",
+           "ConvectiveMoistShallowWaterParameters", "logger",
+           "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
            "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
@@ -114,10 +116,6 @@ class OutputParameters(Configuration):
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
-    #: List of fields to dump error fields for steady state simulation
-    steady_state_error_fields = []
-    #: List of fields for computing perturbations from the initial state
-    perturbation_fields = []
     #: List of ordered pairs (name, points) where name is the field
     # name and points is the points at which to dump them
     point_data = []
@@ -152,6 +150,17 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+
+
+class ConvectiveMoistShallowWaterParameters(ShallowWaterParameters):
+
+    """
+    Physical parameters for the Bouchut et al moist shallow water equations
+    """
+    gamma = None  # condensation proportionality constant
+    tau = None  # timescale of condensation
+    q_0 = None  # factor in the saturation humidity expr
+    alpha = None  # exponential factor in the saturation humidity expr
 
 
 class TransportOptions(Configuration, metaclass=ABCMeta):

@@ -4,6 +4,7 @@ import ufl
 from firedrake import Function, split, MixedElement
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
+from types import MethodType
 
 
 def replace_test_function(new_test):
@@ -114,6 +115,12 @@ def replace_subject(new, idx=None):
             elif type(new) == ufl.algebra.Sum:
                 replace_dict[subj] = new
 
+            elif isinstance(new, ufl.indexed.Indexed):
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
+                replace_dict[split(subj)[idx]] = new
+
             # Otherwise fail if new is not a function
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
@@ -131,6 +138,9 @@ def replace_subject(new, idx=None):
 
             # Otherwise 'new' is a normal Function
             else:
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
                 replace_dict[split(subj)[idx]] = new
 
         # subj is a normal Function
@@ -140,6 +150,8 @@ def replace_subject(new, idx=None):
                     raise ValueError('idx must be specified to replace_subject'
                                      + ' when new is a tuple')
                 replace_dict[subj] = new[idx]
+            elif isinstance(new, ufl.indexed.Indexed):
+                replace_dict[subj] = new
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
             elif type(new.ufl_element()) == MixedElement:
@@ -164,6 +176,7 @@ def replace_subject(new, idx=None):
 time_derivative = Label("time_derivative")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
+physics = Label("physics", validator=lambda value: type(value) == MethodType)
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) == Function)
 subject = Label("subject", validator=lambda value: type(value) == Function)
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)

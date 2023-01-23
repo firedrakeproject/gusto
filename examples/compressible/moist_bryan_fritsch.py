@@ -15,7 +15,14 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        LinearVariationalProblem, LinearVariationalSolver)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 dt = 1.0
+L = 10000.
+H = 10000.
+
 if '--running-tests' in sys.argv:
     deltax = 1000.
     tmax = 5.
@@ -23,47 +30,65 @@ else:
     deltax = 200
     tmax = 1000.
 
-L = 10000.
-H = 10000.
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain
 nlayers = int(H/deltax)
 ncolumns = int(L/deltax)
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 degree = 1
+domain = Domain(mesh, dt, 'CG', degree)
 
+# Equation
+params = CompressibleParameters()
+tracers = [WaterVapour(), CloudWater()]
+eqns = CompressibleEulerEquations(domain, params, active_tracers=tracers)
+
+# I/O
 dirname = 'moist_bryan_fritsch'
-
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (5*dt)),
                           dumplist=['u'],
-                          perturbation_fields=[],
                           log_level='INFO')
+diagnostic_fields = [Theta_e(eqns)]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-params = CompressibleParameters()
-diagnostic_fields = [Theta_e()]
-tracers = [WaterVapour(), CloudWater()]
+# Transport schemes
+transported_fields = [SSPRK3(domain, "rho"),
+                      SSPRK3(domain, "theta", options=EmbeddedDGOptions()),
+                      SSPRK3(domain, "water_vapour", options=EmbeddedDGOptions()),
+                      SSPRK3(domain, "cloud_water", options=EmbeddedDGOptions()),
+                      ImplicitMidpoint(domain, "u")]
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=params,
-              diagnostic_fields=diagnostic_fields)
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
 
-eqns = CompressibleEulerEquations(state, "CG", degree, active_tracers=tracers)
+# Physics schemes (condensation/evaporation)
+physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver,
+                                  physics_schemes=physics_schemes)
+
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
-water_v0 = state.fields("vapour_mixing_ratio")
-water_c0 = state.fields("cloud_liquid_mixing_ratio")
-moisture = ["vapour_mixing_ratio", "cloud_liquid_mixing_ratio"]
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
+water_v0 = stepper.fields("water_vapour")
+water_c0 = stepper.fields("cloud_water")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)
 dxp = dx(degree=(quadrature_degree))
@@ -75,15 +100,15 @@ theta_e = Function(Vt).assign(Tsurf)
 water_t = Function(Vt).assign(total_water)
 
 # Calculate hydrostatic fields
-saturated_hydrostatic_balance(state, theta_e, water_t)
+saturated_hydrostatic_balance(eqns, stepper.fields, theta_e, water_t)
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
 rho_b = Function(Vr).assign(rho0)
 water_vb = Function(Vt).assign(water_v0)
 water_cb = Function(Vt).assign(water_t - water_vb)
-exner_b = thermodynamics.exner_pressure(state.parameters, rho_b, theta_b)
-Tb = thermodynamics.T(state.parameters, theta_b, exner_b, r_v=water_vb)
+exner_b = thermodynamics.exner_pressure(eqns.parameters, rho_b, theta_b)
+Tb = thermodynamics.T(eqns.parameters, theta_b, exner_b, r_v=water_vb)
 
 # define perturbation
 xc = L / 2
@@ -97,7 +122,7 @@ theta_pert = Function(Vt).interpolate(
                 Tdash * (cos(pi * r / (2.0 * rc))) ** 2))
 
 # define initial theta
-theta0.assign(theta_b * (theta_pert / 300.0 + 1.0))
+theta0.interpolate(theta_b * (theta_pert / 300.0 + 1.0))
 
 # find perturbed rho
 gamma = TestFunction(Vr)
@@ -115,10 +140,10 @@ rho_averaged = Function(Vt)
 rho_recoverer = Recoverer(rho0, rho_averaged)
 rho_recoverer.project()
 
-exner = thermodynamics.exner_pressure(state.parameters, rho_averaged, theta0)
-p = thermodynamics.p(state.parameters, exner)
-T = thermodynamics.T(state.parameters, theta0, exner, r_v=w_v)
-w_sat = thermodynamics.r_sat(state.parameters, T, p)
+exner = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
+p = thermodynamics.p(eqns.parameters, exner)
+T = thermodynamics.T(eqns.parameters, theta0, exner, r_v=w_v)
+w_sat = thermodynamics.r_sat(eqns.parameters, T, p)
 
 w_functional = (phi * w_v * dxp - phi * w_sat * dxp)
 w_problem = NonlinearVariationalProblem(w_functional, w_v)
@@ -128,29 +153,13 @@ w_solver.solve()
 water_v0.assign(w_v)
 water_c0.assign(water_t - water_v0)
 
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b),
-                              ('vapour_mixing_ratio', water_vb)])
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b),
+                                ('water_vapour', water_vb),
+                                ('cloud_water', water_cb)])
 
-rho_opts = None
-theta_opts = EmbeddedDGOptions()
-u_transport = ImplicitMidpoint(state, "u")
-
-transported_fields = [SSPRK3(state, "rho", options=rho_opts),
-                      SSPRK3(state, "theta", options=theta_opts),
-                      SSPRK3(state, "vapour_mixing_ratio", options=theta_opts),
-                      SSPRK3(state, "cloud_liquid_mixing_ratio", options=theta_opts),
-                      u_transport]
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns, moisture=moisture)
-
-# define condensation
-physics_list = [Condensation(state)]
-
-# build time stepper
-stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
-                                  linear_solver=linear_solver,
-                                  physics_list=physics_list)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)

@@ -4,24 +4,31 @@ Tests the replace_subject routine from labels.py
 
 from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
                        VectorFunctionSpace, MixedFunctionSpace, dx, inner,
-                       TrialFunctions)
+                       TrialFunctions, split)
 from gusto.fml import Label
 from gusto import subject, replace_subject
 import pytest
 
 
 @pytest.mark.parametrize('subject_type', ['normal', 'mixed', 'vector'])
-@pytest.mark.parametrize('replacement_type', ['normal', 'mixed', 'vector', 'tuple'])
-def test_replace_subject(subject_type, replacement_type):
+@pytest.mark.parametrize('replacement_type', ['normal', 'mixed', 'mixed-component', 'vector', 'tuple'])
+@pytest.mark.parametrize('function_or_indexed', ['function', 'indexed'])
+def test_replace_subject(subject_type, replacement_type, function_or_indexed):
 
     # ------------------------------------------------------------------------ #
     # Only certain combinations of options are valid
     # ------------------------------------------------------------------------ #
 
     if subject_type == 'vector' and replacement_type != 'vector':
-        return True
+        return
     elif replacement_type == 'vector' and subject_type != 'vector':
-        return True
+        return
+
+    if replacement_type == 'mixed-component':
+        if subject_type != 'mixed':
+            return
+        elif function_or_indexed != 'indexed':
+            return
 
     # ------------------------------------------------------------------------ #
     # Set up
@@ -77,6 +84,9 @@ def test_replace_subject(subject_type, replacement_type):
         V = Vmixed
         if subject_type != 'mixed':
             idx = 0
+    elif replacement_type == 'mixed-component':
+        V = Vmixed
+        idx = 0
     elif replacement_type == 'vector':
         V = V2
     elif replacement_type == 'tuple':
@@ -85,6 +95,12 @@ def test_replace_subject(subject_type, replacement_type):
         raise ValueError
 
     the_replacement = Function(V)
+
+    if function_or_indexed == 'indexed' and replacement_type != 'vector':
+        the_replacement = split(the_replacement)
+
+        if len(the_replacement) == 1 or replacement_type == 'mixed-component':
+            the_replacement = the_replacement[0]
 
     if replacement_type == 'tuple':
         the_replacement = TrialFunctions(Vmixed)

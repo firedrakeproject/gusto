@@ -8,7 +8,7 @@ from gusto.labels import diffusion
 __all__ = ["interior_penalty_diffusion_form"]
 
 
-def interior_penalty_diffusion_form(state, test, q, parameters):
+def interior_penalty_diffusion_form(domain, test, q, parameters):
     u"""
     Form for the interior penalty discretisation of a diffusion term, ∇.(κ∇q)
 
@@ -16,7 +16,8 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
     weight function.
 
     Args:
-        state (:class:`State`): the model's state object.
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the equation's test function.
         q (:class:`Function`): the variable being diffused.
         parameters (:class:`DiffusionParameters`): object containing metadata
@@ -26,11 +27,11 @@ def interior_penalty_diffusion_form(state, test, q, parameters):
         :class:`ufl.Form`: the diffusion form.
     """
 
-    dS_ = (dS_v + dS_h) if state.mesh.extruded else dS
+    dS_ = (dS_v + dS_h) if domain.mesh.extruded else dS
     kappa = parameters.kappa
     mu = parameters.mu
 
-    n = FacetNormal(state.mesh)
+    n = FacetNormal(domain.mesh)
 
     form = inner(grad(test), grad(q)*kappa)*dx
 
