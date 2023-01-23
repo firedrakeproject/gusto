@@ -33,7 +33,7 @@ class Forcing(object):
 
         self.field_name = equation.field_name
         implicit_terms = ["incompressibility", "sponge"]
-        dt = equation.state.dt
+        dt = equation.domain.dt
 
         W = equation.function_space
         self.x0 = Function(W)

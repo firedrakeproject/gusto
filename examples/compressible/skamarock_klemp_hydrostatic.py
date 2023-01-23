@@ -10,6 +10,10 @@ from firedrake import (as_vector, SpatialCoordinate, PeriodicRectangleMesh,
                        ExtrudedMesh, exp, sin, Function, pi)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 dt = 25.
 if '--running-tests' in sys.argv:
     nlayers = 5  # horizontal layers
@@ -22,45 +26,59 @@ else:
     tmax = 60000.0
     dumpfreq = int(tmax / (2*dt))
 
-
-L = 6.0e6
-m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
-
-# build volume mesh
+L = 6.0e6  # Length of domain
 H = 1.0e4  # Height position of the model top
+
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain -- 3D volume mesh
+m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+domain = Domain(mesh, dt, "RTCF", 1)
 
+# Equation
+parameters = CompressibleParameters()
+Omega = as_vector((0., 0., 0.5e-4))
+balanced_pg = as_vector((0., -1.0e-4*20, 0.))
+eqns = CompressibleEulerEquations(domain, parameters, Omega=Omega,
+                                  extra_terms=[("u", balanced_pg)])
+
+# I/O
 dirname = 'skamarock_klemp_hydrostatic'
-
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
+diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-parameters = CompressibleParameters()
-diagnostic_fields = [CourantNumber()]
+# Transport schemes
+transported_fields = []
+transported_fields.append(ImplicitMidpoint(domain, "u"))
+transported_fields.append(SSPRK3(domain, "rho"))
+transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
 
-Omega = as_vector((0., 0., 0.5e-4))
-balanced_pg = as_vector((0., -1.0e-4*20, 0.))
-eqns = CompressibleEulerEquations(state, "RTCF", 1, Omega=Omega,
-                                  extra_terms=[("u", balanced_pg)])
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  linear_solver=linear_solver)
 
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
@@ -85,26 +103,17 @@ deltaTheta = 1.0e-2
 theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
 
-compressible_hydrostatic_balance(state, theta_b, rho_b,
+compressible_hydrostatic_balance(eqns, theta_b, rho_b,
                                  solve_for_rho=True)
 
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0, 0.0]))
 
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b)])
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b)])
 
-# Set up transport schemes
-transported_fields = []
-transported_fields.append(ImplicitMidpoint(state, "u"))
-transported_fields.append(SSPRK3(state, "rho"))
-transported_fields.append(SSPRK3(state, "theta", options=SUPGOptions()))
-
-# Set up linear solver
-linear_solver = CompressibleSolver(state, eqns)
-
-# build time stepper
-stepper = SemiImplicitQuasiNewton(eqns, state, transported_fields,
-                                  linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)
