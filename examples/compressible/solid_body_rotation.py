@@ -1,10 +1,9 @@
-from gusto import *
 from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, Min, Max)
-
+from gusto import *                                              # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -33,11 +32,11 @@ omega = Constant(7.292e-5)
 phi0 = Constant(pi/4)
 f0 = 2 * omega * sin(phi0)
 Omega = as_vector((0, 0, f0))
-phi0 = Constant(pi/4)
-eqn = CompressibleEulerEquations(domain, "RTCF", 1, Omega=Omega, u_transport_option='vector_advection_form')
+
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,   # int(tmax / (ndumps * dt)),
+                          dumpfreq=int(tmax / (ndumps * dt)),
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -45,8 +44,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(eqn), CompressibleKineticEnergy(eqn)]
-io = IO(domain, output, diagnostic_fields)
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]# CompressibleKineticEnergy()]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
 transported_fields = []
@@ -58,11 +57,11 @@ transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
 linear_solver = CompressibleSolver(eqn)
 
 # Time Stepper
-stepper = SemiImplicitQuasiNewton(eqn, domain, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                   linear_solver=linear_solver)
 
 # -------------------------------------------------------------- #
-# Initil Conditions
+# Initial Conditions
 # -------------------------------------------------------------- #
 
 x, y, z = SpatialCoordinate(mesh)
@@ -123,7 +122,7 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(domain, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
+compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
