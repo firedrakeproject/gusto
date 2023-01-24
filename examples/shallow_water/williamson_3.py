@@ -38,7 +38,7 @@ fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain,parameters,fexpr=fexpr, u_transport_option='vector_advection_form')
 
 #Output and IO
-dirname = "williamson_2_ref%s_dt%s" % (ref, dt)
+dirname = 'Williams_sanity_check'  #"williamson_2_ref%s_dt%s" % (ref, dt)
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
@@ -59,6 +59,13 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 u0 = stepper.fields('u')
 D0 = stepper.fields('D')
+
+#Get Vector co-ordinate for the u expression
+e_x =as_vector([Constant(1.0), Constant(0.0), Constant(0.0)])
+e_y =as_vector([Constant(0.0), Constant(1.0), Constant(0.0)])
+R = sqrt(x[0]**2 + x[1]**2)
+
+e_lon = (x[0] * e_y - x[1]*e_x ) / R 
 
 xe = 0.3
 u_0 = 2 * pi * a / (12*day)
@@ -82,18 +89,12 @@ uexpr = conditional(x_mod <= 0, 0.0,
 
 def u_func(y):
     x = xe*(y - lat_b) / lat_diff
-    very_small = 1e-6
+    very_small = 1e-9
     return np.where(x <= 0, very_small, 
                     np.where(x >= xe, very_small,
                              u_0 * en * np.exp(xe /(x*(x-xe)) )
                             )
                     )
-
-#    return np.where(y <= 0, very_small,
-#                    np.where(y >= lat_e, very_small,
-#                                u0 * en * np.exp((lat_diff) / xe*(y - lat_b)) * np.exp((lat_b - lat_e) /(xe * lat_diff - xe*(y - lat_b)) ) 
-#                            )
-#                    )
 
 def h_func(y):
     return a/g*(2*Omega*np.sin(y) + u_func(y)*np.tan(y)/a)*u_func(y)
@@ -105,7 +106,7 @@ h_integral.tabulate(h_func)
 D0_integral.dat.data[:] = h_integral.evaluate_at(lat_VD.dat.data[:])
 Dexpr = h0 - D0_integral
 
-u0.project(as_vector([uexpr, 0, 0]))
+u0.project(as_vector(e_lon * uexpr))
 D0.interpolate(Dexpr)
 
 # Dbar is a background field for diagnostics
