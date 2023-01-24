@@ -17,7 +17,7 @@ replace_funcs = [
 
 
 @pytest.mark.parametrize('subject_type', ['normal', 'mixed', 'vector'])
-@pytest.mark.parametrize('replacement_type', ['normal', 'mixed', 'mixed-component', 'vector', 'tuple'])
+@pytest.mark.parametrize('replacement_type', ['normal', 'mixed', 'vector', 'tuple'])
 @pytest.mark.parametrize('function_or_indexed', ['function', 'indexed'])
 @pytest.mark.parametrize('replace_func', replace_funcs)
 def test_replace_subject(subject_type, replacement_type, function_or_indexed, replace_func):
@@ -26,16 +26,9 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
     # Only certain combinations of options are valid
     # ------------------------------------------------------------------------ #
 
-    if subject_type == 'vector' and replacement_type != 'vector':
+    # only makes sense to replace a vector with a vector
+    if (subject_type == 'vector') ^ (replacement_type == 'vector'):
         pytest.skip("invalid option combination")
-    elif replacement_type == 'vector' and subject_type != 'vector':
-        pytest.skip("invalid option combination")
-
-    if replacement_type == 'mixed-component':
-        if subject_type != 'mixed':
-            pytest.skip("invalid option combination")
-        elif function_or_indexed != 'indexed':
-            pytest.skip("invalid option combination")
 
     # ------------------------------------------------------------------------ #
     # Set up
@@ -59,9 +52,6 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
     # Choose subject
     # ------------------------------------------------------------------------ #
 
-    FunctionType = replace_func[0]
-    replace_map = replace_func[1]
-
     if subject_type == 'normal':
         V = V0
     elif subject_type == 'mixed':
@@ -74,12 +64,7 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
         raise ValueError
 
     the_subject = Function(V)
-
-    if replace_map is replace_trial_function:
-        not_subject = TrialFunction(V)
-    else:
-        not_subject = Function(V)
-
+    not_subject = TrialFunction(V)
     test = TestFunction(V)
 
     form_1 = inner(the_subject, test)*dx
@@ -99,9 +84,6 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
         V = Vmixed
         if subject_type != 'mixed':
             idx = 0
-    elif replacement_type == 'mixed-component':
-        V = Vmixed
-        idx = 0
     elif replacement_type == 'vector':
         V = V2
     elif replacement_type == 'tuple':
@@ -109,12 +91,14 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
     else:
         raise ValueError
 
+    FunctionType = replace_func[0]
+
     the_replacement = FunctionType(V)
 
     if function_or_indexed == 'indexed' and replacement_type != 'vector':
         the_replacement = split(the_replacement)
 
-        if len(the_replacement) == 1 or replacement_type == 'mixed-component':
+        if len(the_replacement) == 1:
             the_replacement = the_replacement[0]
 
     if replacement_type == 'tuple':
@@ -126,6 +110,8 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
     # Test replace_subject
     # ------------------------------------------------------------------------ #
 
+    replace_map = replace_func[1]
+
     if replace_map is replace_trial_function:
         match_label = bar_label
     else:
@@ -135,3 +121,13 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
         lambda t: t.has_label(match_label),
         map_if_true=replace_map(the_replacement, idx=idx)
     )
+
+    # also test indexed
+    if subject_type == 'mixed' and function_or_indexed == 'indexed':
+        idx = 0
+        the_replacement = split(FunctionType(Vmixed))[idx]
+
+        labelled_form = labelled_form.label_map(
+            lambda t: t.has_label(match_label),
+            map_if_true=replace_map(the_replacement, idx=idx)
+        )
