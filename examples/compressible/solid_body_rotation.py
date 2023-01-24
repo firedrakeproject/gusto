@@ -9,7 +9,7 @@ from gusto import *                                              #
 # -------------------------------------------------------------- #
 dt = 1800
 days = 30
-ndumps = days
+ndumps = 10
 tmax = days * 24 * 60 * 60
 deltaz = 2.0e3
 
@@ -35,9 +35,10 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 
-dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
+#dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
+dirname = sbr_rewrite_test 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tmax / (ndumps * dt)),
+                          dumpfreq=int(tmax / (ndumps*dt)),
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
