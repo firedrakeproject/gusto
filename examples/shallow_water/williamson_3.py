@@ -3,8 +3,8 @@ An implementation of the Williams 3 Test case
 """
 
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, cos
-import sys
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
+import numpy as np
 
 # Set up timestepping variables 
 day = 24. * 60. *60.
@@ -24,7 +24,8 @@ parameters = ShallowWaterParameters(H=H)
 # ------------------------------------------------------------------------ #
 
 # Mesh and domain
-mesh = IcosahedralSphereMesh(a, ref=ref, degree=1)
+mesh = IcosahedralSphereMesh(radius=a,
+                            refinement_level=ref, degree=1)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -33,7 +34,7 @@ domain = Domain(mesh, dt, "BDM", 1)
 #Equations
 lat, lon = latlon_coords(mesh)
 Omega = parameters.Omega
-fexpr = 2*Omega * sin(lat)
+fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain,parameters,fexpr=fexpr, u_transport_option='vector_advection_form')
 
 #Output and IO
@@ -43,41 +44,74 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
-diagnostic_fields = [CourantNumber,SteadyStateError('u'), SteadyStateError('D') ]
+diagnostic_fields = [CourantNumber(),SteadyStateError('u'), SteadyStateError('D'),RelativeVorticity() ]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Fields and time stepper
-transported_fields = [ImplicitMidpoint(domain, "u"),
-                     SSPRK3(domain, "D", subcycles=2)]
+transported_fields = [SSPRK3(domain, "u"),
+                     SSPRK3(domain, "D")]
+
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 # ------------------------------------------------------------------------ #
 # Initial Conditions
 # ------------------------------------------------------------------------ #
 
-def b_func(x):
-    b = conditional(x<=0, 0, exp(-x**-1) )
-    return b
-
 u0 = stepper.fields('u')
 D0 = stepper.fields('D')
+
 xe = 0.3
 u_0 = 2 * pi * a / (12*day)
 lat_b = -pi / 6
 lat_e = pi / 2
 g = parameters.g
 h0 = 2.94e4 / g
-
 x_mod = xe*(lat - lat_b )/(lat_e - lat_b)
-u_expr = as_vector([u_0 * b_func(x_mod) * b_func(x_mod - xe) * exp(4 / xe),0])
-h_expr = h0 + 2*a*Omega/g * cos(lat)
+en = exp(4/xe)
+lat_diff = lat_e - lat_b
 
+# -------------------------------------------------------------------- #
+# Obtain u and D (by integration of analytic expression)
+# -------------------------------------------------------------------- #
 
-u0.project(u_expr)
-D0.interpolate(h_expr)
+uexpr = conditional(x_mod <= 0, 0.0,
+                    conditional(x_mod >= xe, 0.0,
+                                (u_0*en * exp(-1/x_mod) * exp(-1/(xe-x_mod)) )
+                                )
+                    )
 
+def u_func(y):
+    x = xe*(y - lat_b) / lat_diff
+    very_small = 1e-6
+    return np.where(x <= 0, very_small, 
+                    np.where(x >= xe, very_small,
+                             u_0 * en * np.exp(xe /(x*(x-xe)) )
+                            )
+                    )
+
+#    return np.where(y <= 0, very_small,
+#                    np.where(y >= lat_e, very_small,
+#                                u0 * en * np.exp((lat_diff) / xe*(y - lat_b)) * np.exp((lat_b - lat_e) /(xe * lat_diff - xe*(y - lat_b)) ) 
+#                            )
+#                    )
+
+def h_func(y):
+    return a/g*(2*Omega*np.sin(y) + u_func(y)*np.tan(y)/a)*u_func(y)
+
+lat_VD = Function(D0.function_space()).interpolate(lat)
+D0_integral = Function(D0.function_space())
+h_integral = NumericalIntegral(-pi/2 , pi/2)
+h_integral.tabulate(h_func)
+D0_integral.dat.data[:] = h_integral.evaluate_at(lat_VD.dat.data[:])
+Dexpr = h0 - D0_integral
+
+u0.project(as_vector([uexpr, 0, 0]))
+D0.interpolate(Dexpr)
+
+# Dbar is a background field for diagnostics
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
-
+# ------------------------------------------------------------------------ #
 # Run!
+# ------------------------------------------------------------------------ #
 stepper.run(t=0, tmax=tmax)
