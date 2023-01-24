@@ -154,7 +154,7 @@ def _replace_dict(old, new, idx, replace_type):
     Build a dictionary to pass to the ufl.replace routine
     The dictionary matches variables in the old term with those in the new
 
-    Does not check types unless indexing is required (leave type-checking to ufl)
+    Does not check types unless indexing is required (leave type-checking to ufl.replace)
     """
 
     replace_dict = {}
@@ -232,7 +232,14 @@ def replace_test_function(new_test, idx=None):
         """
         old_test = t.form.arguments()[0]
         replace_dict = _replace_dict(old_test, new_test, idx, 'test')
-        new_form = ufl.replace(t.form, replace_dict)
+
+        try:
+            new_form = ufl.replace(t.form, replace_dict)
+        except Exception as err:
+            error_message = f"{err} raised by ufl.replace when trying to" \
+                            + f" replace_test_function with {new_test}"
+            raise type(err)(error_message) from err
+
         return Term(new_form, t.labels)
 
     return repl
@@ -268,7 +275,14 @@ def replace_trial_function(new_trial, idx=None):
             raise TypeError('Trying to replace trial function of a form that is not linear')
         old_trial = t.form.arguments()[1]
         replace_dict = _replace_dict(old_trial, new_trial, idx, 'trial')
-        new_form = ufl.replace(t.form, replace_dict)
+
+        try:
+            new_form = ufl.replace(t.form, replace_dict)
+        except Exception as err:
+            error_message = f"{err} raised by ufl.replace when trying to" \
+                            + f" replace_trial_function with {new_trial}"
+            raise type(err)(error_message) from err
+
         return Term(new_form, t.labels)
 
     return repl
@@ -301,7 +315,14 @@ def replace_subject(new_subj, idx=None):
 
         old_subj = t.get(subject)
         replace_dict = _replace_dict(old_subj, new_subj, idx, 'subject')
-        new_form = ufl.replace(t.form, replace_dict)
+
+        try:
+            new_form = ufl.replace(t.form, replace_dict)
+        except Exception as err:
+            error_message = f"{err} raised by ufl.replace when trying to" \
+                            + f" replace_subject with {new_subj}"
+            raise type(err)(error_message) from err
+
         return Term(new_form, t.labels)
 
     return repl
