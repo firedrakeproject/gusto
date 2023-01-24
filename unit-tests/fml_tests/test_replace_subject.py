@@ -20,15 +20,15 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed):
     # ------------------------------------------------------------------------ #
 
     if subject_type == 'vector' and replacement_type != 'vector':
-        return
+        pytest.skip("invalid option combination")
     elif replacement_type == 'vector' and subject_type != 'vector':
-        return
+        pytest.skip("invalid option combination")
 
     if replacement_type == 'mixed-component':
         if subject_type != 'mixed':
-            return
+            pytest.skip("invalid option combination")
         elif function_or_indexed != 'indexed':
-            return
+            pytest.skip("invalid option combination")
 
     # ------------------------------------------------------------------------ #
     # Set up
