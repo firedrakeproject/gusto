@@ -10,7 +10,7 @@ from gusto.fields import PrescribedFields
 from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis,
+                          name, pressure_gradient, coriolis, perp,
                           replace_trial_function, hydrostatic)
 from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
@@ -688,11 +688,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if fexpr is not None:
             V = FunctionSpace(domain.mesh, "CG", 1)
             f = self.prescribed_fields("coriolis", V).interpolate(fexpr)
-            coriolis_form = coriolis(
-                subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+            coriolis_form = perp(
+                coriolis(
+                    subject(prognostic(f*inner(u, w)*dx, "u"), self.X)
+                ), domain.perp)
             # Add linearisation
-            linear_coriolis = coriolis(
-                subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X))
+            linear_coriolis = perp(
+                coriolis(
+                    subject(prognostic(f*inner(u_trial, w)*dx, "u"), self.X)
+                ), domain.perp)
             coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
