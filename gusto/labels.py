@@ -109,10 +109,9 @@ def _replace_dict(old, new, idx, replace_type):
         indexable_new = type(new) is tuple or mixed_new
 
         if indexable_new:
-            new_len = len(new) if type(new) is tuple else len(new.function_space())
             split_new = new if type(new) is tuple else split(new)
 
-            if new_len != len(old.function_space()):
+            if len(split_new) != len(old.function_space()):
                 raise ValueError(f"new {replace_type} of type {new} must be same length"
                                  + f"as replaced mixed {replace_type} of type {old}")
 
