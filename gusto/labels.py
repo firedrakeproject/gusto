@@ -93,62 +93,6 @@ def _replace_dict_old(old, new, idx, replace_type):
     return replace_dict
 
 
-def _replace_dict_dumb1(old, new, idx, replace_type):
-    """
-    Build a dictionary to pass to the ufl.replace routine
-    The dictionary matches variables in the old term with those in the new
-
-    Does not check types unless indexing is required (leave type-checking to ufl)
-    """
-
-    replace_dict = {}
-
-    if type(old.ufl_element()) is MixedElement:
-
-        if type(new) is tuple:
-            if len(new) != len(old.function_space()):
-                raise ValueError(f"tuple of new {replace_type} must be same length as replaced mixed {replace_type} of type {old}")
-            if idx is None:
-                for k, v in zip(split(old), new):
-                    replace_dict[k] = v
-            else:
-                replace_dict[split(old)[idx]] = new[idx]
-
-        elif type(new.ufl_element()) is MixedElement:
-            if len(new.function_space()) != len(old.function_space()):
-                raise ValueError(f"New mixed {replace_type} of type {new} must be same length as replaced mixed {replace_type} of type {old}")
-            if idx is None:
-                for k, v in zip(split(old), split(new)):
-                    replace_dict[k] = v
-            else:
-                replace_dict[split(old)[idx]] = split(new)[idx]
-
-        else:  # new is not indexable
-            if idx is None:
-                raise ValueError(f"idx must be specified to replace_{replace_type}"
-                                 + f" when replaced {replace_type} of type {old} is mixed and new {replace_type} of type {new} is a single component")
-            replace_dict[split(old)[idx]] = new
-
-    else:  # old is not mixed
-
-        if type(new) is tuple:
-            if idx is None:
-                raise ValueError(f"idx must be specified to replace_{replace_type}"
-                                 + f" when replaced {replace_type} of type {old} is not mixed and new {replace_type} is a tuple")
-            replace_dict[old] = new[idx]
-
-        elif type(new.ufl_element()) is MixedElement:
-            if idx is None:
-                raise ValueError(f"idx must be specified to replace_{replace_type}"
-                                 + f" when replaced {replace_type} of type {old} is not mixed and new {replace_type} of type {new} is mixed")
-            replace_dict[old] = split(new)[idx]
-
-        else:  # new is not mixed
-            replace_dict[old] = new
-
-    return replace_dict
-
-
 def _replace_dict(old, new, idx, replace_type):
     """
     Build a dictionary to pass to the ufl.replace routine
@@ -236,7 +180,7 @@ def replace_test_function(new_test, idx=None):
         try:
             new_form = ufl.replace(t.form, replace_dict)
         except Exception as err:
-            error_message = f"{err} raised by ufl.replace when trying to" \
+            error_message = f"{type(err)} raised by ufl.replace when trying to" \
                             + f" replace_test_function with {new_test}"
             raise type(err)(error_message) from err
 
@@ -279,7 +223,7 @@ def replace_trial_function(new_trial, idx=None):
         try:
             new_form = ufl.replace(t.form, replace_dict)
         except Exception as err:
-            error_message = f"{err} raised by ufl.replace when trying to" \
+            error_message = f"{type(err)} raised by ufl.replace when trying to" \
                             + f" replace_trial_function with {new_trial}"
             raise type(err)(error_message) from err
 
@@ -319,7 +263,7 @@ def replace_subject(new_subj, idx=None):
         try:
             new_form = ufl.replace(t.form, replace_dict)
         except Exception as err:
-            error_message = f"{err} raised by ufl.replace when trying to" \
+            error_message = f"{type(err)} raised by ufl.replace when trying to" \
                             + f" replace_subject with {new_subj}"
             raise type(err)(error_message) from err
 
