@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class NumericalIntegral(object):
     """
     A class for numerically evaluating and tabulating some 1D integral.
@@ -18,7 +19,6 @@ class NumericalIntegral(object):
         self.num_points = num_points
         self.tabulated = False
 
-
     def tabulate(self, expression):
         """
         Tabulate some integral expression using Simpson's rule.
@@ -34,7 +34,7 @@ class NumericalIntegral(object):
 
         # Just do Simpson's rule for evaluating area of each interval
         self.interval_areas = ((self.x[1:] - self.x[:-1]) / 6.0
-                               *(f[2::2] + 4.0*f[1::2] + f[:-1:2]))
+                               * (f[2::2] + 4.0 * f[1::2] + f[:-1:2]))
 
         # Add the interval areas together to create cumulative integral
         for i in range(self.num_points - 1):

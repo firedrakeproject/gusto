@@ -3,7 +3,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, Min, Max)
-from gusto import *                                              # 
+from gusto import *                                              #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -45,7 +45,7 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]# CompressibleKineticEnergy()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
