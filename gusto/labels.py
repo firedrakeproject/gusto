@@ -4,7 +4,7 @@ import ufl
 from firedrake import Function, split, MixedElement
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
-from types import MethodType
+from types import MethodType, LambdaType
 
 
 def _replace_dict(old, new, idx, replace_type):
@@ -180,6 +180,13 @@ def replace_subject(new_subj, idx=None):
                             + f" replace_subject with {new_subj}"
             raise type(err)(error_message) from err
 
+        # this is necessary to defer applying the perp until after the
+        # subject is replaced because otherwise replace cannot find
+        # the subject
+        if t.has_label(perp):
+            perp_function = t.get(perp)
+            new_form = ufl.replace(new_form, {split(new_subj)[0]: perp_function(split(new_subj)[0])})
+
         return Term(new_form, t.labels)
 
     return repl
@@ -202,3 +209,4 @@ linearisation = Label("linearisation", validator=lambda value: type(value) in [L
 name = Label("name", validator=lambda value: type(value) == str)
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
 hydrostatic = Label("hydrostatic", validator=lambda value: type(value) in [LabelledForm, Term])
+perp = Label("perp", validator=lambda value: isinstance(value, LambdaType))
