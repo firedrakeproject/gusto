@@ -25,7 +25,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2"]
 
 
 def is_cg(V):
@@ -1084,3 +1084,136 @@ class BDF2(MultilevelTimeDiscretisation):
         self.x1.assign(x_in[1])
         solver.solve()
         x_out.assign(self.x_out)
+
+class TR_BDF2(TimeDiscretisation):
+    """
+    Implements the two stage TR-BDF2 timestepping method, with a trapeziodal stage follwed
+    by a second order backwards difference stage.
+
+    The TR_BDF2 timestepping method for operator F is written as
+    y^(n+g) = y^n + dt*g*F[y^n] + dt*g*F[y^(n+g)] (TR stage)
+    y^(n+1) = 1/(g(2-g))*y^(n+g) - (1-g)**2/(g(2-g))*y^(n) + (1-g)/(2-g)*dt*F[y^(n+1)] (BDF2 stage)
+    for parameter g (gamma).
+    """
+    def __init__(self, domain, field_name=None, gamma=None,
+                 solver_parameters=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            gamma (float, optional): the off-centring parameter
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+
+        Raises:
+            ValueError: if gamma is not provided.
+        """
+        # TODO: would this be better as a non-optional argument? Or should the
+        # check be on the provided value?
+        if gamma is None:
+            raise ValueError("please provide a value for gamma between 0 and 1")
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        if not solver_parameters:
+            # theta method leads to asymmetric matrix, per lhs function below,
+            # so don't use CG
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
+
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         options=options)
+
+        self.gamma = gamma
+
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+        super().setup(equation, uadv, apply_bcs, *active_labels)
+        self.xnpg = Function(self.fs)
+        self.xn = Function(self.fs)
+
+
+    @cached_property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.xnpg, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: 0.5*self.dt*self.gamma*t)
+
+        return l.form
+
+    @cached_property
+    def rhs(self):
+        """Set up the time discretisation's right hand side for the TR stage."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.xn, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -0.5*self.dt*self.gamma*t)
+
+        return r.form
+
+    @cached_property
+    def lhs_bdf2(self):
+        """Set up the discretisation's left hand side (the time derivative) for the BDF2 stage."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: ((1-self.gamma)/(2-self.gamma))*self.dt*t)
+
+        return l.form
+
+    @cached_property
+    def rhs_bdf2(self):
+        """Set up the time discretisation's right hand side for the BDF2 stage."""
+        xn = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xn, self.idx),
+            map_if_false=drop)
+        xnpg = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xnpg, self.idx),
+            map_if_false=drop)
+
+        r = (1/(self.gamma*(2-self.gamma))) * xnpg - ((1-self.gamma)**2/(self.gamma*(2-self.gamma))) * xn
+
+        return r.form
+
+    @cached_property
+    def solver_tr(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_tr"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @cached_property
+    def solver_bdf2(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs_bdf2-self.rhs_bdf2, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_bdf2"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        self.xn.assign(x_in)
+        self.solver_tr.solve()
+        self.solver_bdf2.solve()
+        x_out.assign(self.x_out)
+
