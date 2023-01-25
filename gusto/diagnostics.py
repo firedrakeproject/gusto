@@ -763,20 +763,18 @@ class CompressibleKineticEnergy(Energy):
         """
         super().__init__(space=space, method=method, required_fields=("rho", "u"))
 
-    def compute(self, eqn):
-        """
-        Compute and return the diagnostic field from the current state.
 
+    def setup(self, domain, state_fields):
+        """ 
+        Sets up the :class:`Function` for the diagnostic field
         Args:
-            eqn (:class:`PrognosticEquation`): the model's equation.
-
-        Returns:
-            :class:`Function`: the diagnostic field.
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
         """
-        u = eqn.fields("u")
-        rho = eqn.fields("rho")
-        energy = self.kinetic(u, rho)
-        return self.field.interpolate(energy)
+        u = state_fields("u")
+        rho = state_fields("rho")
+        self.expr = self.kinetic(u, rho)
+        super().setup(domain, state_fields)
 
 
 class Exner(DiagnosticField):
