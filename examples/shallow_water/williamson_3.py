@@ -44,7 +44,7 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
-diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
+diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity(), CompressibleKineticEnergy()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Fields and time stepper
