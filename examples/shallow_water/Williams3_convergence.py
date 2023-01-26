@@ -47,7 +47,7 @@ for i in range(len(ref)):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
     # Output and IO
-    dirname = 'convergenceplotting_ref_%' %ref[i]
+    dirname = 'convergenceplotting_ref_%' %(ref[i])
     dumpfreq = int(tmax / (ndumps*dt[i]))
     output = OutputParameters(dirname=dirname,
                             dumpfreq=dumpfreq,
