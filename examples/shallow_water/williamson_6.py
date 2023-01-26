@@ -8,8 +8,8 @@ from firedrake import IcosahedralSphereMesh, SpatialCoordinate, cos, grad
 # Set up timestepping variables
 day = 24. * 60. * 60.
 ref = 3
-dt = 1000
-tmax = 5*day
+dt = 2000
+tmax = 15*day
 ndumps = 5
 
 # Shallow Water Parameters
@@ -37,7 +37,7 @@ fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
 # Output and IO
-dirname = 'Rossby-Haurwitx_Wave_2'
+dirname = 'Rossby-Haurwitx_Wave_2_long_run'
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
