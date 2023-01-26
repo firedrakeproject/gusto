@@ -80,7 +80,7 @@ dirname = 'dcmip_3_1_meanflow'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           log_level='INFO')
-diagnostic_fields = [Perturbation('theta'), Perturbation('rho')]
+diagnostic_fields = [Perturbation('theta'), Perturbation('rho'),CompressibleKineticEnergy()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes

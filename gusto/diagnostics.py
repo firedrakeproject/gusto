@@ -774,7 +774,8 @@ class CompressibleKineticEnergy(Energy):
         u = state_fields("u")
         rho = state_fields("rho")
         self.expr = self.kinetic(u, rho)
-        super().setup(domain, state_fields)
+        #super().setup(domain, state_fields)
+        super(CompressibleKineticEnergy, self).setup(domain, state_fields)
 
 
 class Exner(DiagnosticField):
