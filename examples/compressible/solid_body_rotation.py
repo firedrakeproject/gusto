@@ -21,7 +21,7 @@ deltaz = 2.0e3
 a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
-ref_level = 3
+ref_level = 4
 m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
@@ -36,9 +36,9 @@ Omega = as_vector((0, 0, f0))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 
 #dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
-dirname = 'sbr_rewrite_test2*'
+dirname = 'sbr_rewrite_ref4*'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=5,
+                          dumpfreq=2,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
