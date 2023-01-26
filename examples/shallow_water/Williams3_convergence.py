@@ -121,7 +121,7 @@ for i in range(len(ref)):
     u0.project(as_vector(e_lon * uexpr))
     D0.interpolate(Dexpr)
 
-    Vu = stepper.spaces("u")
+    Vu = stepper.fields("u")
     uexact = Function('Vu')
     uexact.interpolate(u0)
     # Dbar is a background field for diagnostics
