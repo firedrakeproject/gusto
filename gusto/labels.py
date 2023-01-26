@@ -185,7 +185,14 @@ def replace_subject(new_subj, idx=None):
         # the subject
         if t.has_label(perp):
             perp_function = t.get(perp)
-            new_form = ufl.replace(new_form, {split(new_subj)[0]: perp_function(split(new_subj)[0])})
+            mixed_new = hasattr(new_subj, "ufl_element") and type(new_subj.ufl_element()) is MixedElement
+            if idx == 0:
+                new_form = ufl.replace(new_form,
+                                       {new_subj: perp_function(new_subj)})
+            elif mixed_new:
+                new_form = ufl.replace(
+                    new_form,{split(new_subj)[0]:
+                              perp_function(split(new_subj)[0])})
 
         return Term(new_form, t.labels)
 
