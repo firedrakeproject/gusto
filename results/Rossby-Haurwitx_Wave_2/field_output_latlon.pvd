@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
+<Collection>
+<DataSet timestep="0" file="field_output_latlon_0.vtu" />
+<DataSet timestep="1" file="field_output_latlon_1.vtu" />
+<DataSet timestep="2" file="field_output_latlon_2.vtu" />
+<DataSet timestep="3" file="field_output_latlon_3.vtu" />
+<DataSet timestep="4" file="field_output_latlon_4.vtu" />
+<DataSet timestep="5" file="field_output_latlon_5.vtu" />
+</Collection>
+</VTKFile>
