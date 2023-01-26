@@ -122,7 +122,7 @@ for i in range(len(ref)):
     D0.interpolate(Dexpr)
 
     Vu = stepper.fields("u")
-    uexact = Function('Vu')
+    uexact = Function(Vu)
     uexact.interpolate(u0)
     # Dbar is a background field for diagnostics
     Dbar = Function(D0.function_space()).assign(H)
