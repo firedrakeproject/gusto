@@ -251,7 +251,7 @@ class CourantNumber(DiagnosticField):
 
         self.expr = sqrt(dot(u, u))/sqrt(self.area)*domain.dt
 
-        super(CourantNumber, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 # TODO: unify all component diagnostics
@@ -269,7 +269,7 @@ class VelocityX(DiagnosticField):
         """
         u = state_fields("u")
         self.expr = u[0]
-        super(VelocityX, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 class VelocityZ(DiagnosticField):
@@ -286,7 +286,7 @@ class VelocityZ(DiagnosticField):
         """
         u = state_fields("u")
         self.expr = u[u.geometric_dimension() - 1]
-        super(VelocityZ, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 class VelocityY(DiagnosticField):
@@ -303,7 +303,7 @@ class VelocityY(DiagnosticField):
         """
         u = state_fields("u")
         self.expr = u[1]
-        super(VelocityY, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 class Gradient(DiagnosticField):
@@ -398,7 +398,7 @@ class Divergence(DiagnosticField):
         f = state_fields(self.fname)
         self.expr = div(f)
         space = domain.spaces("DG")
-        super(Divergence, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class SphericalComponent(DiagnosticField):
@@ -763,20 +763,17 @@ class CompressibleKineticEnergy(Energy):
         """
         super().__init__(space=space, method=method, required_fields=("rho", "u"))
 
-    def compute(self, eqn):
+    def setup(self, domain, state_fields):
         """
-        Compute and return the diagnostic field from the current state.
-
+        Sets up the :class:`Function` for the diagnostic field
         Args:
-            eqn (:class:`PrognosticEquation`): the model's equation.
-
-        Returns:
-            :class:`Function`: the diagnostic field.
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
         """
-        u = eqn.fields("u")
-        rho = eqn.fields("rho")
-        energy = self.kinetic(u, rho)
-        return self.field.interpolate(energy)
+        u = state_fields("u")
+        rho = state_fields("rho")
+        self.expr = self.kinetic(u, rho)
+        super().setup(domain, state_fields)
 
 
 class Exner(DiagnosticField):
@@ -856,7 +853,7 @@ class Sum(DiagnosticField):
         field2 = state_fields(self.field_name2)
         space = field1.function_space()
         self.expr = field1 + field2
-        super(Sum, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class Difference(DiagnosticField):
@@ -889,7 +886,7 @@ class Difference(DiagnosticField):
         field2 = state_fields(self.field_name2)
         self.expr = field1 - field2
         space = field1.function_space()
-        super(Difference, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class SteadyStateError(Difference):
@@ -919,7 +916,7 @@ class SteadyStateError(Difference):
         # or computed again (picking up can be easily specified if we change the line above)
         field2.assign(field1)
 
-        super(SteadyStateError, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
     @property
     def name(self):
