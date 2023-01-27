@@ -196,7 +196,7 @@ class StateFields(Fields):
                 else:
                     field_type = "derived"
             else:
-                permitted_types = ["prognostic", "prescribed", "diagnostic", "derived"]
+                permitted_types = ["prognostic", "prescribed", "diagnostic", "derived", "reference"]
                 assert field_type in permitted_types, \
                     f'field_type {field_type} not in permitted types {permitted_types}'
             self._field_types.append(field_type)

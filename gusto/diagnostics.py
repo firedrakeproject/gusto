@@ -911,13 +911,13 @@ class SteadyStateError(Difference):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        # Create and store initial field
         field1 = state_fields(self.field_name1)
-        field2 = state_fields(self.field_name2, space=field1.function_space(), dump=False)
-
-        # TODO: when checkpointing, the initial field should either be picked up
-        # or computed again (picking up can be easily specified if we change the line above)
-        field2.assign(field1)
+        # Check if initial field already exists
+        if not hasattr(state_fields, self.field_name2):
+            # Field needs creating
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pickup=True, dump=False)
+            field2.assign(field1)
 
         super(SteadyStateError, self).setup(domain, state_fields)
 

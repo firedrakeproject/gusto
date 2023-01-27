@@ -12,7 +12,35 @@ from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
-__all__ = ["IO"]
+__all__ = ["pick_up_mesh", "IO"]
+
+
+def pick_up_mesh(output, mesh_name):
+    """
+    Picks up a checkpointed mesh. This must be the first step of any model being
+    picked up from a checkpointing run.
+
+    Args:
+        output (:class:`OutputParameters`): holds and describes the options for
+            outputting.
+        mesh_name (str): the name of the mesh to be picked up. The default names
+            used by Firedrake are "firedrake_default" for non-extruded meshes,
+            or "firedrake_default_extruded" for extruded meshes.
+
+    Returns:
+        :class:`Mesh`: the mesh to be used by the model.
+    """
+    dumpdir = path.join("results", output.dirname)
+
+    # Open the checkpointing file for writing
+    if output.checkpoint_pickup_filename is not None:
+        chkfile = output.checkpoint_pickup_filename
+    else:
+        chkfile = path.join(dumpdir, "chkpt.h5")
+    with CheckpointFile(chkfile, 'r') as chk:
+        mesh = chk.load_mesh(mesh_name)
+
+    return mesh
 
 
 class PointDataOutput(object):
@@ -163,8 +191,8 @@ class IO(object):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            output (:class:`OutputParameters`, optional): holds and describes
-                the options for outputting. Defaults to None.
+            output (:class:`OutputParameters`): holds and describes the options
+                for outputting.
             diagnostics (:class:`Diagnostics`, optional): object holding and
                 controlling the model's diagnostics. Defaults to None.
             diagnostic_fields (list, optional): an iterable of `DiagnosticField`
@@ -335,9 +363,9 @@ class IO(object):
         # if we want to checkpoint and are not picking up from a previous
         # checkpoint file, setup the checkpointing
         if self.output.checkpoint:
-            if not pickup:
-                self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-                self.chkpt.save_mesh(self.mesh)
+            # TODO: this used to be behind an if statement, why?
+            self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
+            self.chkpt.save_mesh(self.mesh)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
@@ -349,8 +377,17 @@ class IO(object):
         # dump initial fields
         self.dump(state_fields, t)
 
-    def pickup_from_checkpoint(self, state_fields):
-        """Picks up the model's variables from a checkpoint file."""
+    def pick_up_from_checkpoint(self, state_fields):
+        """
+        Picks up the model's variables from a checkpoint file.
+
+        Args:
+            state_fields (:class:`StateFields`): the container for the state's
+                field objects.
+
+        Returns:
+            float: the time that the model was checkpointed.
+        """
         # TODO: this duplicates some code from setup_dump. Can this be avoided?
         # It is because we don't know if we are picking up or setting dump first
         if self.to_pickup is None:
@@ -367,17 +404,65 @@ class IO(object):
                 chkfile = path.join(self.dumpdir, "chkpt.h5")
             with CheckpointFile(chkfile, 'r') as chk:
                 # Recover all the fields from the checkpoint
-                mesh = chk.load_mesh(self.mesh.name)
                 for field in self.to_pickup:
-                    field = chk.load_function(mesh, field.name())
+                    field = chk.load_function(self.domain.mesh, field.name())
+                    state_fields(field.name()).assign(field)
                 t = chk.get_attr('/', 'time')
-            # Setup new checkpoint
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-            self.chkpt.save_mesh(self.mesh)
+            # TODO: do we need to write a new file here?
+            # # Setup new checkpoint
+            # self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
+            # self.chkpt.save_mesh(self.mesh)
         else:
             raise ValueError("Must set checkpoint True if pickup")
 
         return t
+
+    def pick_up_reference_fields(self, state_fields):
+        """
+        Picks up the model's reference fields from a checkpoint file.
+
+        This is not done as part of the normal checkpointing routine, as we do
+        not know which (if any) reference profiles have been stored.
+
+        Args:
+            state_fields (:class:`StateFields`): the container for the state's
+                field objects.
+
+        Returns:
+            (list): an iterable of pairs: (field_name, :class:`Function`), which
+                will be used to set the time stepper's reference profiles.
+        """
+        # First, work out all possible reference profiles
+        possible_ref_profiles = []
+        is_prognostic = []
+        reference_profiles = []
+        for field_name, field_type in zip(state_fields._field_names, state_fields._field_types):
+            if field_type == 'prognostic':
+                possible_ref_profiles.append(field_name)
+                is_prognostic.append(True)
+            elif field_type == 'reference':
+                possible_ref_profiles.append(field_name)
+                is_prognostic.append(False)
+
+        if self.output.checkpoint:
+            # Open the checkpointing file for writing
+            if self.output.checkpoint_pickup_filename is not None:
+                chkfile = self.output.checkpoint_pickup_filename
+            else:
+                chkfile = path.join(self.dumpdir, "chkpt.h5")
+            with CheckpointFile(chkfile, 'r') as chk:
+                for i, field_name in enumerate(possible_ref_profiles):
+                    read_name = field_name+'_bar' if is_prognostic[i] else field_name
+                    try:
+                        field = chk.load_function(self.domain.mesh, read_name)
+                        reference_profiles.append((field_name, field))
+                    except RuntimeError:
+                        pass
+        else:
+            raise ValueError("Must set checkpoint True if pickup")
+
+        return reference_profiles
+
 
     def dump(self, state_fields, t):
         """

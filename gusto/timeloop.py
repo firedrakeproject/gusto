@@ -68,7 +68,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
 
         if pickup:
-            t = self.io.pickup_from_checkpoint(self.fields)
+            t = self.io.pick_up_from_checkpoint(self.fields)
+            reference_profiles = self.io.pick_up_reference_fields(self.fields)
+            self.set_reference_profiles(reference_profiles)
 
         self.io.setup_diagnostics(self.fields)
 
@@ -100,18 +102,22 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         reference_profiles (list): an iterable of pairs: (field_name, expr),
             where 'field_name' is the string giving the name of the reference
-            profile field expr is the :class:`ufl.Expr` whose value is used to
-            set the reference field.
+            profile, and field expr is the :class:`ufl.Expr` whose value is used
+            to set the reference field.
         """
         for field_name, profile in reference_profiles:
             if field_name+'_bar' in self.fields:
                 # For reference profiles already added to state, allow
                 # interpolation from expressions
+                assert self.fields.field_type(field_name+'_bar') == 'reference', \
+                    f'There is a field named {field_name}_bar which has not ' + \
+                    'been set as a field with "reference" type'
                 ref = self.fields(field_name+'_bar')
             elif isinstance(profile, Function):
                 # Need to add reference profile to state so profile must be
                 # a Function
-                ref = self.fields(field_name+'_bar', space=profile.function_space(), dump=False)
+                ref = self.fields(field_name+'_bar', space=profile.function_space(),
+                                  pickup=True, dump=False, field_type='reference')
             else:
                 raise ValueError(f'When initialising reference profile {field_name}'
                                  + ' the passed profile must be a Function')
@@ -460,8 +466,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             pickup: (bool): specify whether to pickup from a previous run
         """
 
-        assert self.reference_profiles_initialised, \
-            'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
+        if not pickup:
+            assert self.reference_profiles_initialised, \
+                'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
 
         super().run(t, tmax, pickup=pickup)
 
