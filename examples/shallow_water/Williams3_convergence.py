@@ -1,17 +1,17 @@
 """
-An implementation of the Williams 3 Test case with 
+An implementation of the Williams 3 Test case with
 """
 
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, errornorm
 import numpy as np
-import pickle 
+import pickle
 
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
 ref = [3, 4, 5, 6]
-dt = [4000,2000,1000,500]
+dt = [4000, 2000, 1000, 500]
 tmax = 5*day
 ndumps = 5
 
@@ -34,7 +34,7 @@ for i in range(len(ref)):
 
     # Mesh and domain
     mesh = IcosahedralSphereMesh(radius=a,
-                                refinement_level=ref[i], degree=1)
+                                 refinement_level=ref[i], degree=1)
     x = SpatialCoordinate(mesh)
     global_normal = x
     mesh.init_cell_orientations(x)
@@ -47,18 +47,18 @@ for i in range(len(ref)):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
     # Output and IO
-    dirname = 'convergenceplotting_ref_%s' %ref[i]
+    dirname = 'convergenceplotting_ref_%s' % ref[i]
     dumpfreq = int(tmax / (ndumps*dt[i]))
     output = OutputParameters(dirname=dirname,
-                            dumpfreq=dumpfreq,
-                            dumplist_latlon=['D', 'D_error'],
-                            log_level='INFO')
+                              dumpfreq=dumpfreq,
+                              dumplist_latlon=['D', 'D_error'],
+                              log_level='INFO')
     diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport Fields and time stepper
     transported_fields = [SSPRK3(domain, "u"),
-                        SSPRK3(domain, "D")]
+                          SSPRK3(domain, "D")]
 
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
@@ -96,20 +96,17 @@ for i in range(len(ref)):
                                     )
                         )
 
-
     def u_func(y):
         x = xe*(y - lat_b) / lat_diff
         very_small = 1e-9
         return np.where(x <= 0, very_small,
                         np.where(x >= xe, very_small,
-                                u_0 * en * np.exp(xe / (x * (x - xe)))
-                                )
+                                 u_0 * en * np.exp(xe / (x * (x - xe)))
+                                 )
                         )
-
 
     def h_func(y):
         return a/g*(2*Omega*np.sin(y) + u_func(y)*np.tan(y)/a)*u_func(y)
-
 
     lat_VD = Function(D0.function_space()).interpolate(lat)
     D0_integral = Function(D0.function_space())
@@ -137,7 +134,7 @@ for i in range(len(ref)):
     error.append(L2_error)
     dt_step.append(dt[i])
     ref_level.append(ref[i])
-# Makes use of Pickle to save data 
+# Makes use of Pickle to save data
 plotdata = [error, ref_level, dt_step]
-with open('plotdata','wb') as f:
-    pickle.dump(plotdata,f)
+with open('plotdata', 'wb') as f:
+    pickle.dump(plotdata, f)

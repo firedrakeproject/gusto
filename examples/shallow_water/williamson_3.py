@@ -8,8 +8,8 @@ import numpy as np
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref = 3
-dt = 4000
+ref = 4
+dt = 2000
 tmax = 5*day
 ndumps = 5
 
@@ -38,8 +38,8 @@ fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
 # Output and IO
-dirname = 'Williams_sanity_check'
-dumpfreq = int(tmax / (ndumps*dt))
+dirname = 'Williams3convergence_ref%s' % ref
+dumpfreq = int(tmax / (ndumps * dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
