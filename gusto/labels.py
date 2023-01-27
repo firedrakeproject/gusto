@@ -186,13 +186,20 @@ def replace_subject(new_subj, idx=None):
         if t.has_label(perp):
             perp_function = t.get(perp)
             mixed_new = hasattr(new_subj, "ufl_element") and type(new_subj.ufl_element()) is MixedElement
+            indexable_new = type(new_subj) is tuple or mixed_new
             if idx == 0:
-                new_form = ufl.replace(new_form,
-                                       {new_subj: perp_function(new_subj)})
-            elif mixed_new:
+                if indexable_new:
+                    new_form = ufl.replace(
+                        new_form, {new_subj[0]:
+                                   perp_function(new_subj[0])})
+                else:
+                    new_form = ufl.replace(new_form,
+                                           {new_subj: perp_function(new_subj)})
+            elif indexable_new:
+                split_new = new_subj if type(new_subj) is tuple else split(new_subj)
                 new_form = ufl.replace(
-                    new_form,{split(new_subj)[0]:
-                              perp_function(split(new_subj)[0])})
+                    new_form, {split_new[0]:
+                                   perp_function(split_new[0])})
 
         return Term(new_form, t.labels)
 
