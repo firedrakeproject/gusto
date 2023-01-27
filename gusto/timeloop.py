@@ -412,8 +412,17 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs = self.xrhs
         dy = self.dy
 
+        import numpy as np
+        for field_name in ['u', 'rho', 'theta', 'rho_bar', 'theta_bar']:
+            field = self.fields(field_name).dat.data
+            logger.warning(f'before timestep ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
+
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
+
+        for field_name in ['u', 'rho', 'theta']:
+            field = xstar(field_name).dat.data
+            logger.warning(f'explicit forcing ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
 
         xp(self.field_name).assign(xstar(self.field_name))
 
@@ -424,6 +433,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
 
+            for field_name in ['u', 'rho', 'theta']:
+                field = xp(field_name).dat.data
+                logger.warning(f'transport ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
+
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
             for i in range(self.maxi):
@@ -431,10 +444,20 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
+                for field_name in ['u', 'rho', 'theta']:
+                    field = xnp1(field_name).dat.data
+                    logger.warning(f'implicit forcing ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
+
                 xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+                    for field_idx, field_name in {0:'u', 1:'rho', 2:'theta'}.items():
+                        field = xrhs.dat.data[field_idx]
+                        logger.warning(f'xrhs ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
+                    for field_idx, field_name in {0:'u', 1:'rho', 2:'theta'}.items():
+                        field = dy.dat.data[field_idx]
+                        logger.warning(f'dy ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy

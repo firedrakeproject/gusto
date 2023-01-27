@@ -92,10 +92,13 @@ def test_checkpointing(tmpdir):
 
     dirname_1 = str(tmpdir)+'/checkpointing_1'
     dirname_2 = str(tmpdir)+'/checkpointing_2'
+    dirname_3 = str(tmpdir)+'/checkpointing_3'
 
     output_1 = OutputParameters(dirname=dirname_1, dumpfreq=1,
                                 chkptfreq=4, log_level='INFO')
     output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
+                                chkptfreq=2, log_level='INFO')
+    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
                                 chkptfreq=2, log_level='INFO')
 
 
@@ -118,11 +121,20 @@ def test_checkpointing(tmpdir):
     stepper_2.run(t=0.0, tmax=2*dt)
 
     # ------------------------------------------------------------------------ #
-    # Pick up from checkpoint and run for 2 more time steps
+    # Pick up from checkpoint and run *new* timestepper for 2 time steps
+    # ------------------------------------------------------------------------ #
+
+    mesh = pick_up_mesh(output_3, mesh_name)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
+
+    stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
+
+    # ------------------------------------------------------------------------ #
+    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
     # ------------------------------------------------------------------------ #
 
     mesh = pick_up_mesh(output_2, mesh_name)
-    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2)
+    stepper_2, _ = set_up_model_objects(mesh, dt, output_2)
 
     stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
 
@@ -134,4 +146,9 @@ def test_checkpointing(tmpdir):
         diff_array = stepper_1.fields(field_name).dat.data - stepper_2.fields(field_name).dat.data
         error = np.linalg.norm(diff_array)
         assert error < 1e-14, \
-            f'Checkpointed field {field_name} is not equal to non-checkpointed field'
+            f'Checkpointed field {field_name} with same time stepper is not equal to non-checkpointed field'
+
+        diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+        error = np.linalg.norm(diff_array)
+        assert error < 1e-14, \
+            f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
