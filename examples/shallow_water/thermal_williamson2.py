@@ -10,11 +10,12 @@ tmax = 5*day
 ndumps = 5
 dt = 100
 R = 6371220.
-H = 5960.
 u_max = 20
 phi_0 = 3e4
-epsilon = 0.1
+epsilon = 1/300
 theta_0 = epsilon*phi_0**2
+g = 9.80616
+H = phi_0/g
 
 # ----------------------------------------------------------------- #
 # Set up model objects
@@ -29,23 +30,24 @@ global_normal = x
 mesh.init_cell_orientations(x)
 
 # Equations
-params = ShallowWaterParameters(H=H)
+params = ShallowWaterParameters(H=H, g=g)
 Omega = params.Omega
 fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
 # IO
-dirname = "thermal_williamson2_Jan20"
+dirname = "thermal_williamson2"
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
+
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterKineticEnergy(),
                      ShallowWaterPotentialEnergy(params),
                      ShallowWaterPotentialEnstrophy(),
-                     SteadyStateError('D')]
+                     SteadyStateError('u'), SteadyStateError('D')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Time stepper
@@ -64,7 +66,7 @@ phi, lamda = latlon_coords(mesh)
 uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
 g = params.g
 w = Omega*R*u_max + (u_max**2)/2
-sigma = w/10
+sigma = 0
 
 Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
 
@@ -84,4 +86,4 @@ b0.interpolate(bexpr)
 # Run
 # ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=tmax)
