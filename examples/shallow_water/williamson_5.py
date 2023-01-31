@@ -71,7 +71,8 @@ for ref_level, dt in ref_dt.items():
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    g=2.0-sqrt(2.0)
+    transported_fields = [TR_BDF2(domain, "u", gamma=g),
                           SSPRK3(domain, "D")]
 
     # Time stepper

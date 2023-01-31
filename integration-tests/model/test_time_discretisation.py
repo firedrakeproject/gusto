@@ -9,7 +9,7 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
-                                    "RK4", "Heun", "BDF2","TR_BDF2"])
+                                    "RK4", "Heun", "BDF2","TR_BDF2", "Leapfrog"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     geometry = "sphere"
     setup = tracer_setup(tmpdir, geometry)
@@ -30,6 +30,8 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = BDF2(domain)
     elif scheme == "TR_BDF2":
         transport_scheme = TR_BDF2(domain, gamma=0.5)
+    elif scheme == "Leapfrog":
+        transport_scheme = Leapfrog(domain)
 
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
 

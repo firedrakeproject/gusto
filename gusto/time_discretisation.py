@@ -25,7 +25,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog"]
 
 
 def is_cg(V):
@@ -1144,9 +1144,9 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xnpg, self.idx))
+            map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: 0.5*self.dt*self.gamma*t)
+                        map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
 
         return l.form
 
@@ -1157,7 +1157,7 @@ class TR_BDF2(TimeDiscretisation):
             all_terms,
             map_if_true=replace_subject(self.xn, self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -0.5*self.dt*self.gamma*t)
+                        map_if_false=lambda t: -0.5*self.gamma*self.dt*t)
 
         return r.form
 
@@ -1168,7 +1168,7 @@ class TR_BDF2(TimeDiscretisation):
             all_terms,
             map_if_true=replace_subject(self.x_out, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: ((1-self.gamma)/(2-self.gamma))*self.dt*t)
+                        map_if_false=lambda t: ((1.0-self.gamma)/(2.0-self.gamma))*self.dt*t)
 
         return l.form
 
@@ -1184,7 +1184,7 @@ class TR_BDF2(TimeDiscretisation):
             map_if_true=replace_subject(self.xnpg, self.idx),
             map_if_false=drop)
 
-        r = (1/(self.gamma*(2-self.gamma))) * xnpg - ((1-self.gamma)**2/(self.gamma*(2-self.gamma))) * xn
+        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma))) * xn
 
         return r.form
 
@@ -1192,7 +1192,7 @@ class TR_BDF2(TimeDiscretisation):
     def solver_tr(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -1214,6 +1214,92 @@ class TR_BDF2(TimeDiscretisation):
         """
         self.xn.assign(x_in)
         self.solver_tr.solve()
+        self.xnpg.assign(self.x_out)
         self.solver_bdf2.solve()
         x_out.assign(self.x_out)
 
+class Leapfrog(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 2
+
+    @property
+    def rhs0(self):
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -self.dt*t)
+
+        return r.form
+
+    @property
+    def lhs0(self):
+        """Set up the time discretisation's right hand side."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+        return l.form
+
+    @property
+    def lhs(self):
+        """Set up the time discretisation's right hand side."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+        return l.form
+
+    @property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        xnm1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xnm1, self.idx),
+            map_if_false=drop)
+        rxn = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.x1, self.idx))
+        rxn = rxn.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -2.0*self.dt*t)
+        r = xnm1 + rxn
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-2:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
+
+        self.xnm1.assign(x_in[0])
+        self.x1.assign(x_in[1])
+        solver.solve()
+        x_out.assign(self.x_out)
