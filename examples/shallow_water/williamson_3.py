@@ -6,15 +6,18 @@ from gusto import *
 from plotting import convergenceplots
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
 import numpy as np
+import time
 
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref_levels = [2, 3 ,4, 5, 6, 7]
-time_step = [8000, 4000, 2000, 1000, 500, 250]
+ref_levels = [2, 3 ,4, 5]
+time_step = [8000, 4000, 2000, 1000]
+elapsed_time = []
 
 for index, ref in enumerate(ref_levels):
-    
+
+    st = time.time()
     dt = time_step[index]
     tmax = 5*day
     ndumps = 5
@@ -125,4 +128,9 @@ for index, ref in enumerate(ref_levels):
     # Run!
     # ------------------------------------------------------------------------ #
     stepper.run(t=0, tmax=tmax)
-convergenceplots(ref_levels)
+    et = time.time()
+    elapsed_time.append(et - st)
+
+convergenceplots(ref_levels, elapsed_time, "results/Williams3_ConvergencePlots")
+
+

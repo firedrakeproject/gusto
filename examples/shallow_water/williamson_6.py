@@ -9,8 +9,8 @@ from firedrake import IcosahedralSphereMesh, SpatialCoordinate, cos, grad
 day = 24. * 60. * 60.
 ref = 3
 dt = 1000
-tmax = 5*day
-ndumps = 5
+tmax = 14*day
+ndumps = 14
 
 # Shallow Water Parameters
 a = 6371220.
