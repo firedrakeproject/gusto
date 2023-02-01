@@ -660,6 +660,7 @@ class InstantRain(Physics):
         parameters = self.parameters
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
+        self.saturation = saturation_curve
 
         # check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -683,6 +684,7 @@ class InstantRain(Physics):
             VD = W.sub(self.VD_idx)
             test_D = equation.tests[self.VD_idx]
             self.D = Function(VD)
+            self.sat_func = Function(VD)
 
         # the source function is the difference between the water vapour and
         # the saturation function
@@ -697,6 +699,7 @@ class InstantRain(Physics):
             self.tau = parameters.tau
 
         # lose vapour above the saturation curve
+
         equation.residual += physics(subject(test_v * self.source * dx,
                                              equation.X),
                                      self.evaluate)
@@ -721,8 +724,8 @@ class InstantRain(Physics):
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
-            self.water_v > saturation_curve,
-            (1/self.tau)*(self.water_v - saturation_curve),
+            self.water_v > self.sat_func,
+            (1/self.tau)*(self.water_v - self.sat_func),
             0), Vv)
 
     def evaluate(self, x_in, dt):
@@ -739,6 +742,7 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
+            self.sat_func.interpolate(self.saturation(self.D))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
