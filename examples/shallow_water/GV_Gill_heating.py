@@ -38,8 +38,8 @@ x, y = SpatialCoordinate(mesh)
 params = ShallowWaterParameters(H=H)
 fexpr = beta*(y-(Ly/2))
 expy = exp(-0.25*(y-(Ly/2))**2)
-# forcing = cos(k*(x-(Lx/2)))*exp(0.25*(y-(Ly/2))**2)
-forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
+forcing = cos(k*(x-(Lx/2)))*expy
+# forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x > ((Lx/2) - L), conditional(x < ((Lx/2) + L), forcing, 0), 0)
 eqns = LinearShallowWaterEquations(domain, params, fexpr=fexpr,
                                    forcing_expr=forcing_expr,
@@ -54,7 +54,7 @@ diagnostic_fields = [CourantNumber(), RelativeVorticity()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # timestepper
-stepper = Timestepper(eqns, ForwardEuler(domain), io)
+stepper = Timestepper(eqns, RK4(domain), io)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
@@ -69,6 +69,11 @@ forcing_func = Function(forcing_space)
 forcing_func.interpolate(forcing_expr)
 import matplotlib.pyplot as plt
 tricontourf(forcing_func)
+plt.xlim(10, 35)
+plt.ylim(3, 13)
+ax = plt.gca()
+PCM=ax.get_children()[2]
+plt.colorbar(PCM, ax=ax)
 plt.show()
 
 # D0.interpolate(0.1*forcing_expr)
