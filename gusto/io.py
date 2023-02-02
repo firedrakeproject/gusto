@@ -30,12 +30,12 @@ def pick_up_mesh(output, mesh_name):
     Returns:
         :class:`Mesh`: the mesh to be used by the model.
     """
-    dumpdir = path.join("results", output.dirname)
 
     # Open the checkpointing file for writing
     if output.checkpoint_pickup_filename is not None:
         chkfile = output.checkpoint_pickup_filename
     else:
+        dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
     with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
@@ -331,26 +331,28 @@ class IO(object):
                     val=f.topological, name=name+'_ll')
                 self.to_dump_latlon.append(field)
 
-        # we create new netcdf files to write to, unless pickup=True, in
-        # which case we just need the filenames
+        # we create new netcdf files to write to, unless pickup=True and they
+        # already exist, in which case we just need the filenames
         if self.output.dump_diagnostics:
             diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+            to_create = not (path.isfile(diagnostics_filename) and pickup)
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
                                                        self.mesh.comm,
-                                                       create=not pickup)
+                                                       create=to_create)
 
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
+            to_create = not (path.isfile(pointdata_filename) and pickup)
             self.pointdata_output = PointDataOutput(pointdata_filename,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     state_fields,
                                                     self.mesh.comm,
                                                     self.output.tolerance,
-                                                    create=not pickup)
+                                                    create=to_create)
 
             # make point data dump counter
             self.pddumpcount = itertools.count()

@@ -614,6 +614,7 @@ class SSPRK3(ExplicitTimeDiscretisation):
         self.x1.assign(x_in)
         for i in range(3):
             self.solve_stage(x_in, i)
+
         x_out.assign(self.x1)
 
 

@@ -3,6 +3,7 @@ Runs a compressible Euler test that uses checkpointing. The test runs for two
 timesteps, checkpoints and then starts a new run from the checkpoint file.
 """
 
+from os import path
 import numpy as np
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, norm,
@@ -98,8 +99,6 @@ def test_checkpointing(tmpdir):
                                 chkptfreq=4, log_level='INFO')
     output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
                                 chkptfreq=2, log_level='INFO')
-    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO')
 
 
     stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1)
@@ -123,6 +122,11 @@ def test_checkpointing(tmpdir):
     # ------------------------------------------------------------------------ #
     # Pick up from checkpoint and run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
+
+    chkpt_2_path = path.join(stepper_2.io.dumpdir, "chkpt.h5")
+    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
+                                chkptfreq=2, log_level='INFO',
+                                checkpoint_pickup_filename=chkpt_2_path)
 
     mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
