@@ -45,7 +45,7 @@ for index, ref in enumerate(ref):
                             dumpfreq=dumpfreq,
                             dumplist_latlon=['D', 'D_error'],
                             log_level='INFO')
-    diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity(), PotentialVorticity(), AbsoluteVorticity
+    diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity(), PotentialVorticity(), AbsoluteVorticity(),
                         ShallowWaterKineticEnergy(), ShallowWaterPotentialEnergy(parameters), Divergence(), ShallowWaterPotentialEnstrophy()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
