@@ -1,5 +1,6 @@
 """
-An implementation of the Williams 3 Test case with
+An implementation of the Williams 3 Test case with variations in different timesteppers
+and meshes.
 """
 
 from gusto import *
@@ -24,7 +25,7 @@ ref_level = []
 dt_step = []
 
 parameters = ShallowWaterParameters(H=H)
-
+timediscretisation = [SSPRK3, RK4,  ]
 
 # Starts for loop for different reginement levels
 for i in range(len(ref)):
