@@ -37,13 +37,14 @@ fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
 # Output and IO
-dirname = 'Rossby-Haurwitx_Wave_2'
+dirname = 'Rossby-Haurwitx_Wave_Invariants'
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
-diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
+diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity(), 
+                     ShallowWaterKineticEnergy(), ShallowWaterPotentialEnergy(), Divergence(), ShallowWaterPotentialEnstrophy()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Fields and time stepper
