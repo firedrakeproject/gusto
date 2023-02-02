@@ -665,13 +665,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
             f = self.prescribed_fields("coriolis", V).interpolate(fexpr)
             coriolis_form = perp(
                 coriolis(
-                    subject(prognostic(f*inner(u, w)*dx, "u"), self.X)
+                    subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X)
                 ), domain.perp)
             # Add linearisation
             if self.linearisation_map(coriolis_form.terms[0]):
                 linear_coriolis = perp(
                     coriolis(
-                        subject(prognostic(f*inner(u_trial, w)*dx, "u"), self.X)
+                        subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X)
                     ), domain.perp)
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
@@ -749,13 +749,13 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         self.linearise_equation_set()
 
         # D transport term is a special case -- add facet term
-        _, D = split(self.X)
-        _, phi = self.tests
-        D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-            map_if_true=lambda t: Term(D_adv.form, t.labels)
-        )
+        # _, D = split(self.X)
+        # _, phi = self.tests
+        # D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
+        # self.residual = self.residual.label_map(
+        #     lambda t: t.has_label(transport) and t.get(prognostic) == "D",
+        #     map_if_true=lambda t: Term(D_adv.form, t.labels)
+        # )
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):

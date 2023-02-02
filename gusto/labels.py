@@ -140,6 +140,18 @@ def replace_trial_function(new_trial, idx=None):
                             + f" replace_trial_function with {new_trial}"
             raise type(err)(error_message) from err
 
+        if t.has_label(perp):
+            perp_op = t.get(perp)
+            perp_old = perp_op(old_trial)
+            perp_new = perp_op(new_trial)
+            try:
+                new_form = ufl.replace(t.form, {perp_old: perp_new})
+
+            except Exception as err:
+                error_message = f"{type(err)} raised by ufl.replace when trying to" \
+                    + f" replace_subject with {new_trial}"
+                raise type(err)(error_message) from err
+
         return Term(new_form, t.labels)
 
     return repl
@@ -184,22 +196,16 @@ def replace_subject(new_subj, idx=None):
         # subject is replaced because otherwise replace cannot find
         # the subject
         if t.has_label(perp):
-            perp_function = t.get(perp)
-            mixed_new = hasattr(new_subj, "ufl_element") and type(new_subj.ufl_element()) is MixedElement
-            indexable_new = type(new_subj) is tuple or mixed_new
-            if idx == 0:
-                if indexable_new:
-                    new_form = ufl.replace(
-                        new_form, {new_subj[0]:
-                                   perp_function(new_subj[0])})
-                else:
-                    new_form = ufl.replace(new_form,
-                                           {new_subj: perp_function(new_subj)})
-            elif indexable_new:
-                split_new = new_subj if type(new_subj) is tuple else split(new_subj)
-                new_form = ufl.replace(
-                    new_form, {split_new[0]:
-                                   perp_function(split_new[0])})
+            perp_op = t.get(perp)
+            perp_old = perp_op(t.get(subject))
+            perp_new = perp_op(new_subj)
+            try:
+                new_form = ufl.replace(t.form, {perp_old: perp_new})
+
+            except Exception as err:
+                error_message = f"{type(err)} raised by ufl.replace when trying to" \
+                    + f" replace_subject with {new_subj}"
+                raise type(err)(error_message) from err
 
         return Term(new_form, t.labels)
 
