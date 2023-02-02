@@ -7,7 +7,7 @@ This uses an icosahedral mesh of the sphere, and runs a series of resolutions.
 
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, Min)
+                       as_vector, pi, sqrt, min_value)
 import sys
 
 # ---------------------------------------------------------------------------- #
@@ -55,7 +55,7 @@ for ref_level, dt in ref_dt.items():
     lsq = (lamda - lamda_c)**2
     theta_c = pi/6.
     thsq = (theta - theta_c)**2
-    rsq = Min(R0sq, lsq+thsq)
+    rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R0)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
