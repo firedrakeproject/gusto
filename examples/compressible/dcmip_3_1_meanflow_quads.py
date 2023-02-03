@@ -99,9 +99,9 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
 # Initial conditions
 # ---------------------------------------------------------------------------- #
 
-u0 = stepper.fields.u
-theta0 = stepper.fields.theta
-rho0 = stepper.fields.rho
+u0 = stepper.fields('u')
+theta0 = stepper.fields('theta')
+rho0 = stepper.fields('rho')
 
 # spaces
 Vu = domain.spaces("HDiv")
@@ -151,7 +151,6 @@ theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
 
-stepper.initialise([('u', u0), ('rho', rho0), ('theta', theta0)])
 stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 # ---------------------------------------------------------------------------- #

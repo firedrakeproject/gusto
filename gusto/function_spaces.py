@@ -26,13 +26,14 @@ class Spaces(object):
         self._initialised_base_spaces = False
 
     def __call__(self, name, family=None, degree=None,
-                 horizontal_degree=None, vertical_degree=None, V=None):
+                 horizontal_degree=None, vertical_degree=None,
+                 V=None, overwrite_space=False):
         """
         Returns a space, and also creates it if it is not created yet.
 
         If a space needs creating, it may be that more arguments (such as the
         family and degree) need to be provided. Alternatively a space can be
-        passed in to be stored in the creator.
+        passed in to be stored in the space container.
 
         For extruded meshes, it is possible to seperately specify the horizontal
         and vertical degrees of the elements. Alternatively, if these degrees
@@ -54,17 +55,24 @@ class Spaces(object):
                 stored in the creator object. If this is provided, it will be
                 added to the creator and no other action will be taken. This
                 space will be returned. Defaults to None.
+            overwrite_space (bool, optional): Logical to allow space existing in
+                container to be overwritten by an incoming space. Defaults to
+                False.
 
         Returns:
             :class:`FunctionSpace`: the desired function space.
         """
 
-        if hasattr(self, name) and family is None and V is None:
+        if hasattr(self, name) and (V is None or not overwrite_space):
             # We have requested a space that should already have been created
+            if V is not None:
+                assert getattr(self, name) == V, \
+                    f'There is a conflict between the space {name} already ' + \
+                    'existing in the space container, and the space being passed to it'
             return getattr(self, name)
 
         else:
-            # Space does not exist in creator or needs overwriting
+            # Space does not exist in creator
             if V is not None:
                 # The space itself has been provided (to add it to the creator)
                 value = V
@@ -88,9 +96,9 @@ class Spaces(object):
                 elif family == "DG":
                     value = self.build_dg_space(horizontal_degree, vertical_degree, name=name)
                 elif family == "CG":
-                    value = self.build_cg_space(horizontal_degree, vertical_degree)
+                    value = self.build_cg_space(horizontal_degree, vertical_degree, name=name)
                 else:
-                    raise ValueError(f'State has no space corresponding to {name}')
+                    raise ValueError(f'There is no space corresponding to {name}')
             setattr(self, name, value)
             return value
 
@@ -120,7 +128,7 @@ class Spaces(object):
             self.build_base_spaces(family, horizontal_degree, vertical_degree)
             Vu = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name="DG")
+            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
             setattr(self, "DG", Vdg)
             Vth = self.build_theta_space(horizontal_degree, vertical_degree)
             setattr(self, "theta", Vth)
@@ -128,7 +136,7 @@ class Spaces(object):
         else:
             Vu = self.build_hdiv_space(family, horizontal_degree+1)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree)
+            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
             setattr(self, "DG", Vdg)
             return Vu, Vdg
 
@@ -184,7 +192,7 @@ class Spaces(object):
             V_elt = FiniteElement(family, cell, horizontal_degree)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None, name=None):
+    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None, name='DG'):
         """
         Builds and returns the DG :class:`FunctionSpace`.
 
@@ -197,11 +205,14 @@ class Spaces(object):
             variant (str, optional): the variant of the underlying
                 :class:`FiniteElement` to use. Defaults to None, which will call
                 the default variant.
-            name (str, optional): name to assign to the function space.
+            name (str, optional): name to assign to the function space. Default
+                is "DG".
 
         Returns:
             :class:`FunctionSpace`: the DG space.
         """
+        assert not hasattr(self, name), f'There already exists a function space with name {name}'
+
         if self.extruded_mesh:
             if vertical_degree is None:
                 raise ValueError('vertical_degree must be specified to create DG space on an extruded mesh')
@@ -216,9 +227,6 @@ class Spaces(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, horizontal_degree, variant=variant)
-        # TODO: how should we name this if vertical degree is different?
-        if name is None:
-            name = 'DG'
         return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, horizontal_degree, vertical_degree):
@@ -249,7 +257,7 @@ class Spaces(object):
         V_elt = TensorProductElement(self.S2, self.T0)
         return FunctionSpace(self.mesh, V_elt, name='theta')
 
-    def build_cg_space(self, horizontal_degree, vertical_degree):
+    def build_cg_space(self, horizontal_degree, vertical_degree=None, name='CG'):
         """
         Builds the continuous scalar space at the top of the de Rham complex.
 
@@ -259,10 +267,13 @@ class Spaces(object):
             vertical_degree (int, optional): the polynomial degree of the
                 vertical part of the the CG space. Defaults to None. Must be
                 specified if the mesh is extruded.
+            name (str, optional): name to assign to the function space. Default
+                is "CG".
 
         Returns:
             :class:`FunctionSpace`: the continuous space.
         """
+        assert not hasattr(self, name), f'There already exists a function space with name {name}'
 
         if self.extruded_mesh:
             if vertical_degree is None:
@@ -274,9 +285,6 @@ class Spaces(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("CG", cell, horizontal_degree)
-
-        # How should we name this if the horizontal and vertical degrees are different?
-        name = f'CG{horizontal_degree}'
 
         return FunctionSpace(self.mesh, V_elt, name=name)
 
@@ -303,7 +311,7 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
     if degree is None and horizontal_degree is None:
         raise ValueError(f'Either "degree" or "horizontal_degree" must be passed to {name}')
     if extruded_mesh and degree is None and vertical_degree is None:
-        raise ValueError(f'For extruded meshes, either degree or "vertical_degree" must be passed to {name}')
+        raise ValueError(f'For extruded meshes, either "degree" or "vertical_degree" must be passed to {name}')
     if degree is not None and horizontal_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "horizontal_degree" to {name}')
     if extruded_mesh and degree is not None and vertical_degree is not None:

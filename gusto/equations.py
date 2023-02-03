@@ -7,10 +7,10 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fields import PrescribedFields
-from gusto.fml.form_manipulation_labelling import Term, all_terms, identity, drop
+from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
                           transporting_velocity, replace_subject, linearisation,
-                          name, pressure_gradient, coriolis,
+                          name, pressure_gradient, coriolis, perp,
                           replace_trial_function, hydrostatic)
 from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
@@ -53,6 +53,19 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 
         self.bcs[field_name] = []
 
+    def label_terms(self, term_filter, label):
+        """
+        Labels terms in the equation, subject to the term filter.
+
+
+        Args:
+            term_filter (func): a function, taking terms as an argument, that
+                is used to filter terms.
+            label (:class:`Label`): the label to be applied to the terms.
+        """
+        assert type(label, Label)
+        self.residual = self.residual.label_map(term_filter, map_if_true=label)
+
 
 class AdvectionEquation(PrognosticEquation):
     u"""Discretises the advection equation, ∂q/∂t + (u.∇)q = 0"""
@@ -73,7 +86,7 @@ class AdvectionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -106,7 +119,7 @@ class ContinuityEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -170,7 +183,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -314,7 +327,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         residual = residual.label_map(
             should_linearise,
             map_if_true=partial(linearise, X=self.X, X_ref=self.X_ref, du=self.trials),
-            map_if_false=identity,  # TODO: should "keep" be an alias for identity?
+            map_if_false=keep,
         )
 
         return residual
@@ -500,7 +513,7 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu)
+            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
         self.prescribed_fields("u", V)
@@ -570,12 +583,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
-            # transport term from depth equation
+            # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
                 t.get(prognostic) in ["u", "D"] \
                 and (any(t.has_label(time_derivative, pressure_gradient))
                      or (t.get(prognostic) == "D" and t.has_label(transport)))
-
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -650,14 +662,18 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if fexpr is not None:
             V = FunctionSpace(domain.mesh, "CG", 1)
-            # TODO: link this to state fields
             f = self.prescribed_fields("coriolis", V).interpolate(fexpr)
-            coriolis_form = coriolis(
-                subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+            coriolis_form = perp(
+                coriolis(
+                    subject(prognostic(f*inner(u, w)*dx, "u"), self.X)
+                ), domain.perp)
             # Add linearisation
-            linear_coriolis = coriolis(
-                subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X))
-            coriolis_form = linearisation(coriolis_form, linear_coriolis)
+            if self.linearisation_map(coriolis_form.terms[0]):
+                linear_coriolis = perp(
+                    coriolis(
+                        subject(prognostic(f*inner(u_trial, w)*dx, "u"), self.X)
+                    ), domain.perp)
+                coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
         if bexpr is not None:
@@ -809,7 +825,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 t.get(prognostic) in ['u', 'rho', 'theta'] \
                 and (t.has_label(time_derivative)
                      or (t.get(prognostic) != 'u' and t.has_label(transport)))
-
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -957,7 +972,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-            self.mu = Function(W_DG).interpolate(muexpr)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
             residual += name(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, "u"), self.X), "sponge")
@@ -981,7 +996,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
@@ -1095,7 +1109,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
 
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
-    # TODO: check that these are correct
     """
     Class for the incompressible Boussinesq equations, which evolve the velocity
     'u', the pressure 'p' and the buoyancy 'b'.
@@ -1246,6 +1259,5 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
-        # TODO: add linearisation states for variables
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)

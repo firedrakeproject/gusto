@@ -7,7 +7,7 @@ from os.path import join, abspath, dirname
 from gusto import *
 from gusto import thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, norm)
+                       sqrt, ExtrudedMesh, norm, as_vector)
 
 
 def run_dry_compressible(tmpdir):
@@ -57,6 +57,7 @@ def run_dry_compressible(tmpdir):
 
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
+    u0 = stepper.fields("u")
 
     # Approximate hydrostatic balance
     x, z = SpatialCoordinate(mesh)
@@ -65,6 +66,9 @@ def run_dry_compressible(tmpdir):
     p = Constant(100000.0) * exp(-z / zH)
     theta0.interpolate(tde.theta(parameters, T, p))
     rho0.interpolate(p / (R_d * T))
+
+    # Add horizontal translation to ensure some transport happens
+    u0.project(as_vector([0.5, 0.0]))
 
     stepper.set_reference_profiles([('rho', rho0), ('theta', theta0)])
 

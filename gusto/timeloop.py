@@ -45,7 +45,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
     @abstractmethod
     def setup_fields(self):
         """Set up required fields. Must be implemented in child classes"""
-        # TODO: should we actually implement this?
         pass
 
     @abstractmethod
@@ -104,7 +103,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             profile field expr is the :class:`ufl.Expr` whose value is used to
             set the reference field.
         """
-        # TODO: come back and consider all aspects of this
         for field_name, profile in reference_profiles:
             if field_name+'_bar' in self.fields:
                 # For reference profiles already added to state, allow
@@ -128,22 +126,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 X_ref.assign(ref)
 
         self.reference_profiles_initialised = True
-
-    # TODO: do we need this interface? If so, should we use it in all examples?
-    def initialise(self, initial_conditions):
-        """
-        Initialise the state's fields.
-
-        Args:
-            initial_conditions (list): an iterable of pairs: (field_name, expr),
-                where 'field_name' is the string giving the name of the
-                prognostic field and expr is the :class:`ufl.Expr` whose value
-                is used to set the initial field.
-        """
-        for field_name, ic in initial_conditions:
-            f_init = getattr(self.fields, field_name)
-            f_init.assign(ic)
-            f_init.rename(field_name)
 
 
 class Timestepper(BaseTimestepper):

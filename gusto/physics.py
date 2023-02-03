@@ -124,9 +124,7 @@ class SaturationAdjustment(Physics):
                 V_idxs.append(theta_idx)
 
             # need to evaluate rho at theta-points, and do this via recovery
-            # TODO: make this bit of code neater if possible using domain object
-            v_deg = V.ufl_element().degree()[1]
-            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
             rho_averaged = Function(V)
             self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 
@@ -523,9 +521,7 @@ class EvaporationOfRain(Physics):
                 V_idxs.append(theta_idx)
 
             # need to evaluate rho at theta-points, and do this via recovery
-            # TODO: make this bit of code neater if possible using domain object
-            v_deg = V.ufl_element().degree()[1]
-            boundary_method = BoundaryMethod.extruded if v_deg == 1 else None
+            boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 1 else None
             rho_averaged = Function(V)
             self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
 

@@ -7,7 +7,7 @@ from os.path import join, abspath, dirname
 from gusto import *
 import gusto.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, norm)
+                       sqrt, ExtrudedMesh, norm, as_vector)
 
 
 def run_moist_compressible(tmpdir):
@@ -60,6 +60,10 @@ def run_moist_compressible(tmpdir):
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
     m_v0 = stepper.fields("vapour_mixing_ratio")
+    u0 = stepper.fields("u")
+
+    # Add horizontal translation to ensure some transport happens
+    u0.project(as_vector([0.5, 0.0]))
 
     # Approximate hydrostatic balance
     x, z = SpatialCoordinate(mesh)
