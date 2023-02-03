@@ -24,9 +24,9 @@ if '--running-tests' in sys.argv:
     tmax = 10.
     tdump = tmax
 else:
-    deltax = 240.
-    tmax = 10.
-    tdump = 5
+    deltax = 20.
+    tmax = 600.
+    tdump = 100.
 
 L = 3600.
 h = 2400.

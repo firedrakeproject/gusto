@@ -264,7 +264,7 @@ class IO(object):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
-            print('my rank is', self.mesh.comm.Get_rank())
+
             if self.mesh.comm.Get_rank() == 0:
                 if not running_tests and path.exists(self.dumpdir) and not pickup:
                     raise IOError("results directory '%s' already exists"
