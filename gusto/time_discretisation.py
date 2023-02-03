@@ -25,7 +25,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AB2", "AB3", "AM2"]
 
 
 def is_cg(V):
@@ -995,7 +995,6 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
-
 class BDF2(MultilevelTimeDiscretisation):
 
     @property
@@ -1236,37 +1235,92 @@ class Leapfrog(MultilevelTimeDiscretisation):
         return r.form
 
     @property
-    def lhs0(self):
-        """Set up the time discretisation's right hand side."""
-        l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
-        return l.form
-
-    @property
     def lhs(self):
-        """Set up the time discretisation's right hand side."""
-        l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
-        return l.form
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(Leapfrog, self).lhs
 
     @property
     def rhs(self):
-        """Set up the time discretisation's right hand side."""
-        xnm1 = self.residual.label_map(
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.xnm1, self.idx),
-            map_if_false=drop)
-        rxn = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=drop,
             map_if_false=replace_subject(self.x1, self.idx))
-        rxn = rxn.label_map(lambda t: t.has_label(time_derivative),
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_true=replace_subject(self.xnm1, self.idx),
                         map_if_false=lambda t: -2.0*self.dt*t)
-        r = xnm1 + rxn
+
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-2:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
+
+        self.xnm1.assign(x_in[1])
+        self.x1.assign(x_in[0])
+        solver.solve()
+        x_out.assign(self.x_out)
+
+class AB2(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 2
+
+    @property
+    def rhs0(self):
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -self.dt*t)
+
+        return r.form
+    @property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(AB2, self).lhs
+
+    @property
+    def rhs(self):
+        """Set up the discretisation's right hand side."""
+        rn = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        rn = rn.label_map(lambda t: t.has_label(time_derivative),
+                          map_if_false=lambda t: -(3/2.)*self.dt*t)
+        rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.xnm1, self.idx))
+        rnm1 = rnm1.label_map(all_terms,
+                          map_if_true=lambda t: (1/2.)*self.dt*t)
+        r = rn + rnm1
         return r.form
 
     @property
@@ -1298,7 +1352,170 @@ class Leapfrog(MultilevelTimeDiscretisation):
             solver = self.solver0
         else:
             solver = self.solver
+        self.xnm1.assign(x_in[0])
+        self.x1.assign(x_in[1])
+        solver.solve()
+        x_out.assign(self.x_out)
 
+class AB3(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 3
+
+    @property
+    def rhs0(self):
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -self.dt*t)
+
+        return r.form
+    @property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(AB3, self).lhs
+
+    @property
+    def rhs(self):
+        """Set up the discretisation's right hand side."""
+        rn = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        rn = rn.label_map(lambda t: t.has_label(time_derivative),
+                          map_if_false=lambda t: -(23/12.)*self.dt*t)
+        rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.xnm1, self.idx))
+        rnm1 = rnm1.label_map(all_terms,
+                          map_if_true=lambda t: (16/12.)*self.dt*t)
+        rnm2 = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.xnm2, self.idx))
+        rnm2 = rnm2.label_map(all_terms,
+                          map_if_true=lambda t: -(5/12.)*self.dt*t)
+        r = rn + rnm1 + rnm2
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-2:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
+        self.xnm2.assign(x_in[0])
+        self.xnm1.assign(x_in[1])
+        self.xnm1.assign(x_in[2])
+        solver.solve()
+        x_out.assign(self.x_out)
+
+class AM2(MultilevelTimeDiscretisation):
+
+    @property
+    def nlevels(self):
+        return 2
+
+    @property
+    def rhs0(self):
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -0.5*self.dt*t)
+
+        return r.form
+    @property
+    def lhs0(self):
+        """Set up the time discretisation's right hand side."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: 0.5*self.dt*t)
+        return l.form
+
+
+    @property
+    def lhs(self):
+        """Set up the time discretisation's right hand side."""
+        l = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, self.idx))
+        l = l.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: (5/12.)*self.dt*t)
+        return l.form
+
+    @property
+    def rhs(self):
+        """Set up the discretisation's right hand side."""
+        rn = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        rn = rn.label_map(lambda t: t.has_label(time_derivative),
+                          map_if_false=lambda t: -(8/12.)*self.dt*t)
+        rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.xnm1, self.idx))
+        rnm1 = rnm1.label_map(all_terms,
+                          map_if_true=lambda t: (1/12.)*self.dt*t)
+        r = rn + rnm1
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-2:
+            self.initial_timesteps += 1
+            solver = self.solver0
+        else:
+            solver = self.solver
         self.xnm1.assign(x_in[0])
         self.x1.assign(x_in[1])
         solver.solve()
