@@ -6,9 +6,9 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics
-from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
-                       interval, Function, Mesh, functionspaceimpl, File,
-                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ)
+from gusto.meshes import get_flat_latlon_mesh
+from firedrake import (Function, functionspaceimpl, File,
+                       DumbCheckpoint, FILE_CREATE, FILE_READ)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -287,7 +287,7 @@ class IO(object):
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
-            mesh_ll = get_latlon_mesh(self.mesh)
+            mesh_ll = get_flat_latlon_mesh(self.mesh)
             outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
             self.dumpfile_ll = File(outfile_ll,
                                     project_output=self.output.project_fields,
@@ -417,70 +417,6 @@ class IO(object):
             # dump fields on latlon mesh
             if len(output.dumplist_latlon) > 0:
                 self.dumpfile_ll.write(*self.to_dump_latlon)
-
-
-def get_latlon_mesh(mesh):
-    """
-    Construct a planar latitude-longitude mesh from a spherical mesh.
-
-    Args:
-        mesh (:class:`Mesh`): the mesh on which the simulation is performed.
-    """
-    coords_orig = mesh.coordinates
-    coords_fs = coords_orig.function_space()
-
-    if coords_fs.extruded:
-        cell = mesh._base_mesh.ufl_cell().cellname()
-        DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-        DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-        DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-    else:
-        cell = mesh.ufl_cell().cellname()
-        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
-    coords_dg = Function(vec_DG1).interpolate(coords_orig)
-    coords_latlon = Function(vec_DG1)
-    shapes = {"nDOFs": vec_DG1.finat_element.space_dimension(), 'dim': 3}
-
-    radius = np.min(np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    # lat-lon 'x' = atan2(y, x)
-    coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
-    # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-    coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    # our vertical coordinate is radius - the minimum radius
-    coords_latlon.dat.data[:, 2] = np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2) - radius
-
-# We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
-# This kernel amends the longitude coords so that all longitudes in one cell are close together
-    kernel = op2.Kernel("""
-#define PI 3.141592653589793
-#define TWO_PI 6.283185307179586
-void splat_coords(double *coords) {{
-    double max_diff = 0.0;
-    double diff = 0.0;
-
-    for (int i=0; i<{nDOFs}; i++) {{
-        for (int j=0; j<{nDOFs}; j++) {{
-            diff = coords[i*{dim}] - coords[j*{dim}];
-            if (fabs(diff) > max_diff) {{
-                max_diff = diff;
-            }}
-        }}
-    }}
-
-    if (max_diff > PI) {{
-        for (int i=0; i<{nDOFs}; i++) {{
-            if (coords[i*{dim}] < 0) {{
-                coords[i*{dim}] += TWO_PI;
-            }}
-        }}
-    }}
-}}
-""".format(**shapes), "splat_coords")
-
-    op2.par_loop(kernel, coords_latlon.cell_set,
-                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-    return Mesh(coords_latlon)
 
 
 def topo_sort(field_deps):
