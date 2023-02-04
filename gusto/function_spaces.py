@@ -227,6 +227,7 @@ class Spaces(object):
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, horizontal_degree, variant=variant)
+
         return FunctionSpace(self.mesh, V_elt, name=name)
 
     def build_theta_space(self, horizontal_degree, vertical_degree):

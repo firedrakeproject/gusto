@@ -5,14 +5,12 @@ import itertools
 from netCDF4 import Dataset
 import sys
 import time
-from gusto.coordinates import Coordinates
 from gusto.diagnostics import Diagnostics
 from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl, File,
                        op2, DumbCheckpoint, FILE_CREATE, FILE_READ, VectorElement)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
-from pyop2.mpi import COMM_WORLD
 
 __all__ = ["IO"]
 
@@ -290,7 +288,8 @@ class IO(object):
         if self.output.dump_nc:
             self.nc_filename = path.join(self.dumpdir, "field_output.nc")
             space_names = set([field.function_space().name for field in self.to_dump])
-            self.coords = Coordinates(self.domain, space_names)
+            for space_name in space_names:
+                self.domain.coords.register_space(self.domain, space_name)
 
             if pickup:
                 # Pick up t idx
@@ -451,14 +450,27 @@ class IO(object):
             nc_field_file.createDimension('time', None)
             nc_field_file.createVariable('time', float, ('time',))
 
+            # Add mesh metadata
+            for metadata_key, metadata_value in self.domain.metadata.items():
+                # If the metadata is None or a Boolean, try converting to string
+                # This is because netCDF can't take these types as options
+                if type(metadata_value) in [type(None), type(True)]:
+                    output_value = str(metadata_value)
+                else:
+                    output_value = metadata_value
+
+                # Get the type from the metadata itself
+                nc_field_file.createVariable(metadata_key, type(output_value), [])
+                nc_field_file.variables[metadata_key][0] = output_value
+
             # Add coordinates if they are not already in the file
             for space_name in space_names:
-                coord_fields = self.coords.full_chi_coords[space_name]
-                num_points = len(self.coords.full_chi_coords[space_name][0])
+                coord_fields = self.domain.coords.global_chi_coords[space_name]
+                num_points = len(self.domain.coords.global_chi_coords[space_name][0])
 
                 nc_field_file.createDimension('coords_'+space_name, num_points)
 
-                for (coord_name, coord_field) in zip(self.coords.coords_name, coord_fields):
+                for (coord_name, coord_field) in zip(self.domain.coords.coords_name, coord_fields):
                     nc_field_file.createVariable(coord_name+'_'+space_name, float, 'coords_'+space_name)
                     nc_field_file.variables[coord_name+'_'+space_name][:] = coord_field[:]
 
@@ -503,16 +515,16 @@ class IO(object):
                     comm.send(field.dat.data_ro[:], dest=0, tag=my_tag)
                 else:
                     # Set up array to store full data in
-                    total_data_size = self.coords.parallel_array_lims[space_name][comm_size-1][1]+1
+                    total_data_size = self.domain.coords.parallel_array_lims[space_name][comm_size-1][1]+1
                     single_proc_data = np.zeros(total_data_size)
                     # Get data for this processor first
-                    (low_lim, up_lim) = self.coords.parallel_array_lims[space_name][my_rank][:]
+                    (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][my_rank][:]
                     single_proc_data[low_lim:up_lim+1] = field.dat.data_ro[:]
                     # Receive data from other processors
                     for procid in range(1,comm_size):
                         my_tag = comm_size*(num_fields*j + i) + procid
                         incoming_data = comm.recv(source=procid, tag=my_tag)
-                        (low_lim, up_lim) = self.coords.parallel_array_lims[space_name][procid][:]
+                        (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][procid][:]
                         single_proc_data[low_lim:up_lim+1] = incoming_data[:]
                     # Store whole field data
                     nc_field_file[field_name].variables['field_values'][:, self.field_t_idx] = single_proc_data[:]
