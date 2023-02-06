@@ -715,10 +715,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += topography_form
 
         # forcing and dissipation
-        # print("before forcing")
-        # for t in residual:
-        #     print(t)
         if forcing_expr is not None:
+            print("before forcing")
+            for t in residual:
+                print(t)
             forcing_form = subject(prognostic(forcing_expr*phi*dx,
                                               "D"), self.X)
             residual += forcing_form

@@ -42,8 +42,8 @@ forcing = cos(k*(x-(Lx/2)))*expy
 # forcing = -((y-(Ly/2)) + 1)*(cos(k*(x-(Lx/2)))*expy)
 forcing_expr = conditional(x > ((Lx/2) - L), conditional(x < ((Lx/2) + L), forcing, 0), 0)
 eqns = LinearShallowWaterEquations(domain, params, fexpr=fexpr,
-                                   forcing_expr=forcing_expr,
-                                   u_dissipation=alpha, D_dissipation=alpha,
+                                   # forcing_expr=forcing_expr,
+                                   # u_dissipation=alpha, D_dissipation=alpha,
                                    no_normal_flow_bc_ids=[1, 2])
 
 # I/0
