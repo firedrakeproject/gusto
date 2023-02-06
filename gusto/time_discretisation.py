@@ -1275,14 +1275,14 @@ class Leapfrog(MultilevelTimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field(s).
         """
-        if self.initial_timesteps < self.nlevels-2:
+        if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
             solver = self.solver0
         else:
             solver = self.solver
 
-        self.xnm1.assign(x_in[1])
-        self.x1.assign(x_in[0])
+        self.xnm1.assign(x_in[0])
+        self.x1.assign(x_in[1])
         solver.solve()
         x_out.assign(self.x_out)
 
@@ -1327,7 +1327,7 @@ class AB2(MultilevelTimeDiscretisation):
     def solver0(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -1347,7 +1347,7 @@ class AB2(MultilevelTimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field(s).
         """
-        if self.initial_timesteps < self.nlevels-2:
+        if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
             solver = self.solver0
         else:
@@ -1430,7 +1430,7 @@ class AB3(MultilevelTimeDiscretisation):
             solver = self.solver
         self.xnm2.assign(x_in[0])
         self.xnm1.assign(x_in[1])
-        self.xnm1.assign(x_in[2])
+        self.x1.assign(x_in[2])
         solver.solve()
         x_out.assign(self.x_out)
 
@@ -1511,7 +1511,7 @@ class AM2(MultilevelTimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field(s).
         """
-        if self.initial_timesteps < self.nlevels-2:
+        if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
             solver = self.solver0
         else:

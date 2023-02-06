@@ -27,7 +27,7 @@ def tracer_sphere(tmpdir, degree):
     # Gaussian is translated from (lon=pi/2, lat=0) to (lon=0, lat=0)
     # to demonstrate that transport is working correctly
 
-    dt = pi/3. * 0.02
+    dt = pi/3. * 0.02/4.0
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
     domain = Domain(mesh, dt, family="BDM", degree=degree)
     io = IO(domain, output)
@@ -79,7 +79,7 @@ def tracer_slice(tmpdir, degree):
 
 
 def tracer_blob_slice(tmpdir, degree):
-    dt = 0.01
+    dt = 0.01/2.0
     L = 10.
     m = PeriodicIntervalMesh(10, L)
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
