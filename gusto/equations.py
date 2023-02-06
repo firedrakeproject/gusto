@@ -63,7 +63,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
                 is used to filter terms.
             label (:class:`Label`): the label to be applied to the terms.
         """
-        assert type(label, Label)
+        assert type(label) == Label
         self.residual = self.residual.label_map(term_filter, map_if_true=label)
 
 

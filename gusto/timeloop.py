@@ -6,7 +6,7 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
-from gusto.fml.form_manipulation_labelling import drop
+from gusto.fml.form_manipulation_labelling import drop, Label
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
@@ -188,42 +188,29 @@ class SplitPhysicsTimestepper(Timestepper):
                 None.
         """
 
-        self.equation = equation
-        self.scheme = scheme
-        self.io = io
-        self.dt = self.equation.domain.dt
-        self.t = Constant(0.0)
-
-        self.setup_fields()
-        self.setup_scheme()
+        super().__init__(equation, scheme, io)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
         else:
             self.physics_schemes = []
 
-        for _, scheme in self.physics_schemes:
+        for _, phys_scheme in self.physics_schemes:
             # check that the supplied schemes for physics are explicit
-            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
+            assert isinstance(phys_scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
             apply_bcs = False
-            scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
+            phys_scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 
     @property
     def transporting_velocity(self):
         return "prognostic"
 
-    def setup_fields(self):
-        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
-        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
-                                  *self.io.output.dumplist)
-
     def setup_scheme(self):
-        from gusto.labels import coriolis, pressure_gradient
-        # Extract labels for all dynamics terms to be our active labels
-        # TODO: find a better way of working out what these should be!
-        # we want active labels corresponding to every term that is not physics
-        active_labels = [transport, diffusion, coriolis, pressure_gradient]
-        self.scheme.setup(self.equation, self.transporting_velocity, *active_labels)
+        # Go through and label all non-physics terms with a "dynamics" label
+        dynamics = Label('dynamics')
+        self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
+        apply_bcs = True
+        self.scheme.setup(self.equation, self.transporting_velocity, apply_bcs, dynamics)
 
     def timestep(self):
 
