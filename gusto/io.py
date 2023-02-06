@@ -440,7 +440,6 @@ class IO(object):
                 if len(output.dumplist_latlon) > 0:
                     self.dumpfile_ll.write(*self.to_dump_latlon)
 
-
     def create_nc_dump(self, filename, space_names):
         my_rank = self.mesh.comm.Get_rank()
         self.field_t_idx = 0
@@ -521,7 +520,7 @@ class IO(object):
                     (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][my_rank][:]
                     single_proc_data[low_lim:up_lim+1] = field.dat.data_ro[:]
                     # Receive data from other processors
-                    for procid in range(1,comm_size):
+                    for procid in range(1, comm_size):
                         my_tag = comm_size*(num_fields*j + i) + procid
                         incoming_data = comm.recv(source=procid, tag=my_tag)
                         (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][procid][:]
@@ -533,6 +532,7 @@ class IO(object):
             nc_field_file.close()
 
         self.field_t_idx += 1
+
 
 def get_latlon_mesh(mesh):
     """

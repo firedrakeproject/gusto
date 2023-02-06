@@ -1,5 +1,5 @@
 """
-This file provides a coordinate object, dependent on the domain and mesh.
+This file provides a coordinate object, dependent on the mesh.
 Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
@@ -7,6 +7,7 @@ from gusto.configuration import logger
 from firedrake import (SpatialCoordinate, sqrt, atan_2, asin, Function,
                        VectorElement, TensorElement)
 import numpy as np
+
 
 class Coordinates(object):
     """
@@ -20,15 +21,15 @@ class Coordinates(object):
 
         self.mesh = mesh
 
-        # TODO: is this the best way of determining whether we are on a sp
+        # TODO: is this the best way of determining whether we are on a sphere?
         if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
             on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
             on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
-        #----------------------------------------------------------------------#
+        # -------------------------------------------------------------------- #
         # Set up spatial coordinate
-        #----------------------------------------------------------------------#
+        # -------------------------------------------------------------------- #
 
         if on_sphere:
             xyz = SpatialCoordinate(mesh)
@@ -56,14 +57,13 @@ class Coordinates(object):
             else:
                 raise ValueError('Cannot work out coordinates of domain')
 
-        #----------------------------------------------------------------------#
+        # -------------------------------------------------------------------- #
         # Store chi field
-        #----------------------------------------------------------------------#
+        # -------------------------------------------------------------------- #
 
         self.chi_coords = {}           # Dict of natural coords by space
         self.global_chi_coords = {}    # Dict of whole coords stored on first proc
         self.parallel_array_lims = {}  # Dict of array lengths for each proc
-
 
     def register_space(self, domain, space_name):
         """
@@ -94,8 +94,8 @@ class Coordinates(object):
         space = domain.spaces(space_name)
 
         # Use the appropriate scalar function space if the space is vector
-        if (isinstance(space.ufl_element(), VectorElement) or
-            isinstance(space.ufl_element(), TensorElement)):
+        if (isinstance(space.ufl_element(), VectorElement)
+                or isinstance(space.ufl_element(), TensorElement)):
             raise NotImplementedError('Coordinates for vector or tensor function spaces not implemented')
             # TODO: get scalar space, and only compute coordinates if necessary
 
@@ -122,12 +122,12 @@ class Coordinates(object):
             # First processor has one large array of the global chi data
             self.global_chi_coords[space_name] = np.zeros((topological_dimension, len_coords))
             # Store the limits inside this array telling us how data is partitioned
-            self.parallel_array_lims[space_name] = np.zeros((comm_size,2), dtype=int)
+            self.parallel_array_lims[space_name] = np.zeros((comm_size, 2), dtype=int)
             # First processor has the first bit of data
             self.parallel_array_lims[space_name][my_rank][0] = 0
             self.parallel_array_lims[space_name][my_rank][1] = my_num_dofs - 1
             # Receive number of DoFs on other processors
-            for procid in range(1,comm_size):
+            for procid in range(1, comm_size):
                 other_num_dofs = comm.recv(source=procid)
                 self.parallel_array_lims[space_name][procid][0] = self.parallel_array_lims[space_name][procid-1][1] + 1
                 self.parallel_array_lims[space_name][procid][1] = self.parallel_array_lims[space_name][procid][0] + other_num_dofs - 1
@@ -147,4 +147,4 @@ class Coordinates(object):
                     my_tag = comm_size*i + procid
                     new_coords = comm.recv(source=procid, tag=my_tag)
                     (low_lim, up_lim) = self.parallel_array_lims[space_name][procid][:]
-                    self.global_chi_coords[space_name][i,low_lim:up_lim+1] = new_coords
+                    self.global_chi_coords[space_name][i, low_lim:up_lim+1] = new_coords

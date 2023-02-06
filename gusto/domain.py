@@ -10,6 +10,7 @@ from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        as_vector, inner, interpolate)
 import numpy as np
 
+
 class Domain(object):
     """
     The Domain holds the model's mesh and its compatible function spaces.
@@ -144,11 +145,11 @@ class Domain(object):
         if my_rank == 0:
             chi = self.coords.global_chi_coords['DG1_equispaced']
             if not self.on_sphere:
-                self.metadata['domain_extent_x'] = np.max(chi[0,:]) - np.min(chi[0,:])
+                self.metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
                 if self.metadata['domain_type'] in ['plane', 'extruded_plane']:
-                    self.metadata['domain_extent_y'] = np.max(chi[1,:]) - np.min(chi[1,:])
+                    self.metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
             if mesh.extruded:
-                self.metadata['domain_extent_z'] = np.max(chi[-1,:]) - np.min(chi[-1,:])
+                self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
 
             # Send information to other processors
             for j, metadata_key in enumerate([f'domain_extent_{xyz}' for xyz in ['x', 'y', 'z']]):

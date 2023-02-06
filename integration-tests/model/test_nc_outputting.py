@@ -13,6 +13,7 @@ from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
 from netCDF4 import Dataset
 import pytest
 
+
 @pytest.fixture
 def domain_and_mesh_details(geometry):
 
@@ -140,4 +141,3 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
             assert output_data[metadata_key][0] - output_value < 1e-14, error_message
         else:
             assert output_data[metadata_key][0] == output_value, error_message
-
