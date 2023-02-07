@@ -688,7 +688,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             for t in residual:
                 print(t)
             forcing_form = subject(prognostic(forcing_expr*phi*dx,
-                                                  "D"), self.X)
+                                              "D"), self.X)
             residual += forcing_form
             print("after forcing")
             for t in residual:
@@ -774,6 +774,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                  or (t.get(prognostic) == "D" and t.has_label(transport)))
 
         super().__init__(domain, parameters, fexpr=fexpr, bexpr=bexpr,
+                         forcing_expr=None, u_dissipation=None,
+                         D_dissipation=None,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
