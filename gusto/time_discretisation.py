@@ -659,6 +659,8 @@ class RK4(ExplicitTimeDiscretisation):
             map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
+        print("This is l.form")
+        print(l.form)
         return l.form
 
     @cached_property
@@ -673,6 +675,8 @@ class RK4(ExplicitTimeDiscretisation):
             map_if_true=drop,
             map_if_false=lambda t: -1*t)
 
+        print("This is r.form")
+        print(r.form)
         return r.form
 
     def solve_stage(self, x_in, stage):

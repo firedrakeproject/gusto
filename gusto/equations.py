@@ -542,6 +542,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+                 forcing_expr=None, u_dissipation=None, D_dissipation=None,
                  linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -681,6 +682,38 @@ class ShallowWaterEquations(PrognosticEquationSet):
             topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
             residual += topography_form
 
+        # forcing and dissipation
+        if forcing_expr is not None:
+            print("before forcing")
+            for t in residual:
+                print(t)
+            forcing_form = subject(prognostic(forcing_expr*phi*dx,
+                                                  "D"), self.X)
+            residual += forcing_form
+            print("after forcing")
+            for t in residual:
+                print(t)
+
+        if u_dissipation is not None:
+            u_alpha = u_dissipation
+            u_dissipation_form = subject(prognostic
+                                         (inner(u, w)*u_alpha*dx,
+                                          "u"), self.X)
+            residual += u_dissipation_form
+            print("after u diss")
+            for t in residual:
+                print(t)
+
+        if D_dissipation is not None:
+            D_alpha = D_dissipation
+            D_dissipation_form = subject(prognostic
+                                         (D*D_alpha*phi*dx,
+                                          "D"), self.X)
+            residual += D_dissipation_form
+            print("after D diss")
+            for t in residual:
+                print(t)
+
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
@@ -701,6 +734,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+                 forcing_expr=None, u_dissipation=None, D_dissipation=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
