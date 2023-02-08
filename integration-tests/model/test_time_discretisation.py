@@ -11,12 +11,19 @@ def run(timestepper, tmax, f_end):
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
                                     "RK4", "Heun", "BDF2","TR_BDF2", "AB2", "AB3", "Leapfrog", "AM2"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
-    geometry = "sphere"
-    setup = tracer_setup(tmpdir, geometry)
-    domain = setup.domain
-    V = domain.spaces("DG")
-
-    eqn = AdvectionEquation(domain, V, "f")
+    if (scheme == "AB2" or scheme == "AB3"):
+        # Tighter stability constraints
+        geometry = "sphere"
+        setup = tracer_setup(tmpdir, geometry, small_dt=True)
+        domain = setup.domain
+        V = domain.spaces("DG")
+        eqn = AdvectionEquation(domain, V, "f")
+    else:
+        geometry = "sphere"
+        setup = tracer_setup(tmpdir, geometry)
+        domain = setup.domain
+        V = domain.spaces("DG")
+        eqn = AdvectionEquation(domain, V, "f")
 
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain)
@@ -31,6 +38,9 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     elif scheme == "TR_BDF2":
         transport_scheme = TR_BDF2(domain, gamma=0.5)
     elif scheme == "Leapfrog":
+        # Leapfrog unstable with DG
+        Vf = domain.spaces("CG","CG", 1)
+        eqn = AdvectionEquation(domain, Vf, "f")
         transport_scheme = Leapfrog(domain)
     elif scheme == "AB2":
         transport_scheme = AB2(domain)

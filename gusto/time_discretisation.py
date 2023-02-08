@@ -996,6 +996,12 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
 class BDF2(MultilevelTimeDiscretisation):
+    """
+    Implements the implicit multistep BDF2 timestepping method
+
+    The BDF2 timestepping method for operator F is written as
+    y^(n+1) = (4/3)*y^n - (1/3)*y^(n-1) + (2/3)*dt*F[y^(n+1)]
+    """
 
     @property
     def nlevels(self):
@@ -1086,7 +1092,7 @@ class BDF2(MultilevelTimeDiscretisation):
 
 class TR_BDF2(TimeDiscretisation):
     """
-    Implements the two stage TR-BDF2 timestepping method, with a trapeziodal stage follwed
+    Implements the two stage implicit TR-BDF2 timestepping method, with a trapeziodal stage follwed
     by a second order backwards difference stage.
 
     The TR_BDF2 timestepping method for operator F is written as
@@ -1218,7 +1224,12 @@ class TR_BDF2(TimeDiscretisation):
         x_out.assign(self.x_out)
 
 class Leapfrog(MultilevelTimeDiscretisation):
+    """
+    Implements the multistep Leapfrog timestepping method.
 
+    The Leapfrog timestepping method for operator F is written as
+    y^(n+1) = y^(n-1)  + 2*dt*F[y^n]
+    """
     @property
     def nlevels(self):
         return 2
@@ -1287,7 +1298,12 @@ class Leapfrog(MultilevelTimeDiscretisation):
         x_out.assign(self.x_out)
 
 class AB2(MultilevelTimeDiscretisation):
+    """
+    Implements the explicit multistep Adams-Bashforth 2 timestepping method
 
+    The AB2 timestepping method for operator F is written as
+    y^(n+1) = y^n + dt*((3/2)*F[y^(n) - (1/2)*F[y^(n-1)])
+    """
     @property
     def nlevels(self):
         return 2
@@ -1358,7 +1374,12 @@ class AB2(MultilevelTimeDiscretisation):
         x_out.assign(self.x_out)
 
 class AB3(MultilevelTimeDiscretisation):
+    """
+    Implements the explicit multistep Adams-Bashforth 3 timestepping method
 
+    The AB3 timestepping method for operator F is written as
+    y^(n+1) = y^n + dt*((23/12)*F[y^(n) - (16/12)*F[y^(n-1)] + (5/12)*F[y^(n-2)])
+    """
     @property
     def nlevels(self):
         return 3
@@ -1435,7 +1456,12 @@ class AB3(MultilevelTimeDiscretisation):
         x_out.assign(self.x_out)
 
 class AM2(MultilevelTimeDiscretisation):
+    """
+    Implements the implicit multistep Adams-Moulton 2 timestepping method
 
+    The AM2 timestepping method for operator F is written as
+    y^(n+1) = y^n + dt*((5/12)*F[y^(n+1) + (8/12)*F[y^n] - (1/12)*F[y^(n-1)])
+    """
     @property
     def nlevels(self):
         return 2
