@@ -101,7 +101,7 @@ def tracer_blob_slice(tmpdir, degree):
 @pytest.fixture()
 def tracer_setup():
 
-    def _tracer_setup(tmpdir, geometry, blob=False, degree=1, small_dt = False):
+    def _tracer_setup(tmpdir, geometry, blob=False, degree=1, small_dt=False):
         if geometry == "sphere":
             assert not blob
             return tracer_sphere(tmpdir, degree, small_dt)
