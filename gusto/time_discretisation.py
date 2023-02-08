@@ -995,6 +995,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
+
 class BDF2(MultilevelTimeDiscretisation):
     """
     Implements the implicit multistep BDF2 timestepping method
@@ -1090,6 +1091,7 @@ class BDF2(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class TR_BDF2(TimeDiscretisation):
     """
     Implements the two stage implicit TR-BDF2 timestepping method, with a trapeziodal stage follwed
@@ -1142,7 +1144,6 @@ class TR_BDF2(TimeDiscretisation):
         super().setup(equation, uadv, apply_bcs, *active_labels)
         self.xnpg = Function(self.fs)
         self.xn = Function(self.fs)
-
 
     @cached_property
     def lhs(self):
@@ -1223,6 +1224,7 @@ class TR_BDF2(TimeDiscretisation):
         self.solver_bdf2.solve()
         x_out.assign(self.x_out)
 
+
 class Leapfrog(MultilevelTimeDiscretisation):
     """
     Implements the multistep Leapfrog timestepping method.
@@ -1297,6 +1299,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class AB2(MultilevelTimeDiscretisation):
     """
     Implements the explicit multistep Adams-Bashforth 2 timestepping method
@@ -1318,6 +1321,7 @@ class AB2(MultilevelTimeDiscretisation):
                         map_if_false=lambda t: -self.dt*t)
 
         return r.form
+
     @property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -1327,15 +1331,15 @@ class AB2(MultilevelTimeDiscretisation):
     def rhs(self):
         """Set up the discretisation's right hand side."""
         rn = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+             all_terms,
+             map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(3/2.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=drop,
-                        map_if_false=replace_subject(self.xnm1, self.idx))
+                                       map_if_true=drop,
+                                       map_if_false=replace_subject(self.xnm1, self.idx))
         rnm1 = rnm1.label_map(all_terms,
-                          map_if_true=lambda t: (1/2.)*self.dt*t)
+                              map_if_true=lambda t: (1/2.)*self.dt*t)
         r = rn + rnm1
         return r.form
 
@@ -1373,6 +1377,7 @@ class AB2(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class AB3(MultilevelTimeDiscretisation):
     """
     Implements the explicit multistep Adams-Bashforth 3 timestepping method
@@ -1394,6 +1399,7 @@ class AB3(MultilevelTimeDiscretisation):
                         map_if_false=lambda t: -self.dt*t)
 
         return r.form
+
     @property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -1403,20 +1409,20 @@ class AB3(MultilevelTimeDiscretisation):
     def rhs(self):
         """Set up the discretisation's right hand side."""
         rn = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+             all_terms,
+             map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(23/12.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=drop,
-                        map_if_false=replace_subject(self.xnm1, self.idx))
+                                       map_if_true=drop,
+                                       map_if_false=replace_subject(self.xnm1, self.idx))
         rnm1 = rnm1.label_map(all_terms,
-                          map_if_true=lambda t: (16/12.)*self.dt*t)
+                              map_if_true=lambda t: (16/12.)*self.dt*t)
         rnm2 = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=drop,
-                        map_if_false=replace_subject(self.xnm2, self.idx))
+                                       map_if_true=drop,
+                                       map_if_false=replace_subject(self.xnm2, self.idx))
         rnm2 = rnm2.label_map(all_terms,
-                          map_if_true=lambda t: -(5/12.)*self.dt*t)
+                              map_if_true=lambda t: -(5/12.)*self.dt*t)
         r = rn + rnm1 + rnm2
         return r.form
 
@@ -1455,6 +1461,7 @@ class AB3(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class AM2(MultilevelTimeDiscretisation):
     """
     Implements the implicit multistep Adams-Moulton 2 timestepping method
@@ -1476,6 +1483,7 @@ class AM2(MultilevelTimeDiscretisation):
                         map_if_false=lambda t: -0.5*self.dt*t)
 
         return r.form
+
     @property
     def lhs0(self):
         """Set up the time discretisation's right hand side."""
@@ -1485,7 +1493,6 @@ class AM2(MultilevelTimeDiscretisation):
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: 0.5*self.dt*t)
         return l.form
-
 
     @property
     def lhs(self):
@@ -1501,15 +1508,15 @@ class AM2(MultilevelTimeDiscretisation):
     def rhs(self):
         """Set up the discretisation's right hand side."""
         rn = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+             all_terms,
+             map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(8/12.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=drop,
-                        map_if_false=replace_subject(self.xnm1, self.idx))
+                                       map_if_true=drop,
+                                       map_if_false=replace_subject(self.xnm1, self.idx))
         rnm1 = rnm1.label_map(all_terms,
-                          map_if_true=lambda t: (1/12.)*self.dt*t)
+                              map_if_true=lambda t: (1/12.)*self.dt*t)
         r = rn + rnm1
         return r.form
 
