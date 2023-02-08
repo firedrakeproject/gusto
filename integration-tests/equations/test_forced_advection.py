@@ -27,10 +27,10 @@ def run_forced_advection(tmpdir):
     x = SpatialCoordinate(mesh)[0]
 
     dt = 0.2
-    domain = Domain(mesh, dt, "CG", 3)
+    domain = Domain(mesh, dt, "CG", 1)
 
     VD = domain.spaces("DG")
-    Vu = VectorFunctionSpace(mesh, "CG", 3)
+    Vu = VectorFunctionSpace(mesh, "CG", 1)
 
     # Equation
     u_max = 1
