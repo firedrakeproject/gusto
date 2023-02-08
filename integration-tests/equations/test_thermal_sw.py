@@ -1,8 +1,7 @@
 """
-This tests the thermal shallow water equations with variuos combinations of
-settings. The test uses the initial conditions of the Williamson 2 test and
-checks the errors in the fields. It is set up in the same way as
-test_sw_triangle.py. 
+This tests the thermal shallow water equations using three different transport
+options for u. The test uses the initial conditions of the Williamson 2 test and
+checks the errors in the fields.
 
 """
 
