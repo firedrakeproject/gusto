@@ -1330,9 +1330,8 @@ class AB2(MultilevelTimeDiscretisation):
     @property
     def rhs(self):
         """Set up the discretisation's right hand side."""
-        rn = self.residual.label_map(
-             all_terms,
-             map_if_true=replace_subject(self.x1, self.idx))
+        rn = self.residual.label_map(all_terms,
+                                     map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(3/2.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -1408,9 +1407,8 @@ class AB3(MultilevelTimeDiscretisation):
     @property
     def rhs(self):
         """Set up the discretisation's right hand side."""
-        rn = self.residual.label_map(
-             all_terms,
-             map_if_true=replace_subject(self.x1, self.idx))
+        rn = self.residual.label_map(all_terms,
+                                     map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(23/12.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -1507,9 +1505,8 @@ class AM2(MultilevelTimeDiscretisation):
     @property
     def rhs(self):
         """Set up the discretisation's right hand side."""
-        rn = self.residual.label_map(
-             all_terms,
-             map_if_true=replace_subject(self.x1, self.idx))
+        rn = self.residual.label_map(all_terms,
+                                     map_if_true=replace_subject(self.x1, self.idx))
         rn = rn.label_map(lambda t: t.has_label(time_derivative),
                           map_if_false=lambda t: -(8/12.)*self.dt*t)
         rnm1 = self.residual.label_map(lambda t: t.has_label(time_derivative),
