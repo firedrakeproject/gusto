@@ -8,7 +8,7 @@ checks the errors in the fields.
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, FunctionSpace, pi, sin, cos)
+                       FunctionSpace, pi, sin, cos)
 from netCDF4 import Dataset
 import pytest
 
@@ -66,7 +66,7 @@ def setup_sw(dirname, dt, u_transport_option):
                          SteadyStateError('D'),
                          SteadyStateError('u'),
                          SteadyStateError('b')]
-    
+
     output = OutputParameters(dirname=dirname+"/sw", dumplist_latlon=['D', 'D_error'])
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -90,11 +90,11 @@ def set_up_initial_conditions(domain, equation, stepper):
     w = Omega*R*u_max + (u_max**2)/2
     sigma = 0
     Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
-    
+
     numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
 
     denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
-    
+
     theta = numerator/denominator
 
     bexpr = g * (1 - theta)
@@ -117,7 +117,7 @@ def set_up_initial_conditions(domain, equation, stepper):
     pv_analytical = stepper.fields("AnalyticalPotentialVorticity", space=vspace)
     pv_analytical.interpolate((vexpr+f)/D0)
 
-    
+
 def check_results(dirname):
     filename = path.join(dirname, "sw/diagnostics.nc")
     data = Dataset(filename, "r")
@@ -173,8 +173,6 @@ def check_results(dirname):
 @pytest.mark.parametrize("u_transport_option",
                          ["vector_invariant_form", "circulation_form",
                           "vector_advection_form"])
-
-
 def test_sw_ssprk3(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
