@@ -678,6 +678,15 @@ class InstantRain(Physics):
         Vv = W.sub(self.Vv_idx)
         test_v = equation.tests[self.Vv_idx]
 
+        # check if saturation is a function, and if so what of
+        # Currently this works only when saturation is depth-dependent
+        # TODO: allow other variables, and for saturation to be constant
+        if self.saturation.is_func:
+            if self.saturation.variable == "depth":
+                self.variable_idx = equation.field_names.index("D")
+                Vvar = W.sub(self.variable_idx)
+                self.variable = Function(Vvar)
+
         # depth needed if convective feedback
         if self.convective_feedback:
             self.VD_idx = equation.field_names.index("D")
@@ -741,7 +750,9 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-            self.sat_func.interpolate(self.saturation(self.D))
+        if self.saturation.is_func:
+            self.variable.assign(x_in.split()[self.variable_idx])
+            self.sat_func.interpolate(self.saturation.sat_func(self.variable))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
