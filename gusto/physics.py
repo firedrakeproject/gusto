@@ -678,15 +678,21 @@ class InstantRain(Physics):
         Vv = W.sub(self.Vv_idx)
         test_v = equation.tests[self.Vv_idx]
 
-        # check if saturation is a function, and if so what of
-        # Currently this works only when saturation is depth-dependent
-        # TODO: allow other variables, and for saturation to be constant
-        if self.saturation.is_func:
+        # Check if saturation is a function, and if so what of.
+        # Currently this works only when saturation is depth-dependent or not
+        # changing in time.
+        # TODO: allow saturation to be dependent on other variables
+        if hasattr(self.saturation, "sat_is_function"):
             if self.saturation.variable == "depth":
                 self.variable_idx = equation.field_names.index("D")
                 Vvar_space = W.sub(self.variable_idx)
                 self.variable = Function(Vvar_space)
                 self.sat_func = Function(Vvar_space)
+            else:
+                raise NotImplementedError(
+                    "Saturation function must be either constant in time or a function of depth")
+        else:
+            self.sat_func = saturation_curve
 
         # depth needed if convective feedback
         if self.convective_feedback:
@@ -750,9 +756,11 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-        if self.saturation.is_func:
+        if hasattr(self.saturation, "sat_is_function"):
             self.variable.assign(x_in.split()[self.variable_idx])
             self.sat_func.interpolate(self.saturation.sat_func(self.variable))
+        else:
+            self.sat_func.interpolate(self.saturation)
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
