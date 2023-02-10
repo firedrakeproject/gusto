@@ -684,8 +684,9 @@ class InstantRain(Physics):
         if self.saturation.is_func:
             if self.saturation.variable == "depth":
                 self.variable_idx = equation.field_names.index("D")
-                Vvar = W.sub(self.variable_idx)
-                self.variable = Function(Vvar)
+                Vvar_space = W.sub(self.variable_idx)
+                self.variable = Function(Vvar_space)
+                self.sat_func = Function(Vvar_space)
 
         # depth needed if convective feedback
         if self.convective_feedback:
@@ -693,7 +694,6 @@ class InstantRain(Physics):
             VD = W.sub(self.VD_idx)
             test_D = equation.tests[self.VD_idx]
             self.D = Function(VD)
-            self.sat_func = Function(VD)
 
         # the source function is the difference between the water vapour and
         # the saturation function
