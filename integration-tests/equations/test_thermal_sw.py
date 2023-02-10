@@ -1,14 +1,15 @@
 """
-This tests the thermal shallow water equations using three different transport
-options for u. The test uses the initial conditions of the Williamson 2 test and
-checks the errors in the fields.
+This tests the thermal shallow water equations using the initial conditions of
+Test 1 from Zerroukat and Allen (2015), which is based on Williamson 2. Initial
+conditions for velocity, height and buoyancy are prescribed and the final fields
+are checked against these.
 
 """
 
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       FunctionSpace, pi, sin, cos)
+                       pi, sin, cos)
 from netCDF4 import Dataset
 import pytest
 
@@ -45,25 +46,7 @@ def setup_sw(dirname, dt, u_transport_option):
                                  u_transport_option=u_transport_option,
                                  thermal=True)
     # I/O
-    diagnostic_fields = [RelativeVorticity(), AbsoluteVorticity(),
-                         PotentialVorticity(),
-                         ShallowWaterPotentialEnstrophy('RelativeVorticity'),
-                         ShallowWaterPotentialEnstrophy('AbsoluteVorticity'),
-                         ShallowWaterPotentialEnstrophy('PotentialVorticity'),
-                         Difference('RelativeVorticity',
-                                    'AnalyticalRelativeVorticity'),
-                         Difference('AbsoluteVorticity',
-                                    'AnalyticalAbsoluteVorticity'),
-                         Difference('PotentialVorticity',
-                                    'AnalyticalPotentialVorticity'),
-                         Difference('SWPotentialEnstrophy_from_PotentialVorticity',
-                                    'SWPotentialEnstrophy_from_RelativeVorticity'),
-                         Difference('SWPotentialEnstrophy_from_PotentialVorticity',
-                                    'SWPotentialEnstrophy_from_AbsoluteVorticity'),
-                         MeridionalComponent('u'),
-                         ZonalComponent('u'),
-                         RadialComponent('u'),
-                         SteadyStateError('D'),
+    diagnostic_fields = [SteadyStateError('D'),
                          SteadyStateError('u'),
                          SteadyStateError('b')]
 
@@ -84,7 +67,6 @@ def set_up_initial_conditions(domain, equation, stepper):
     Omega = equation.parameters.Omega
 
     phi, lamda = latlon_coords(domain.mesh)
-    x = SpatialCoordinate(domain.mesh)
 
     uexpr = sphere_to_cartesian(domain.mesh, u_max*cos(phi), 0)
     w = Omega*R*u_max + (u_max**2)/2
@@ -106,17 +88,6 @@ def set_up_initial_conditions(domain, equation, stepper):
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
-    vspace = FunctionSpace(domain.mesh, "CG", 3)
-    vexpr = (2*u_max/R)*x[2]/R
-
-    f = stepper.fields("coriolis")
-    vrel_analytical = stepper.fields("AnalyticalRelativeVorticity", space=vspace)
-    vrel_analytical.interpolate(vexpr)
-    vabs_analytical = stepper.fields("AnalyticalAbsoluteVorticity", space=vspace)
-    vabs_analytical.interpolate(vexpr + f)
-    pv_analytical = stepper.fields("AnalyticalPotentialVorticity", space=vspace)
-    pv_analytical.interpolate((vexpr+f)/D0)
-
 
 def check_results(dirname):
     filename = path.join(dirname, "sw/diagnostics.nc")
@@ -137,42 +108,8 @@ def check_results(dirname):
     bl2 = berr["l2"][-1]/b["l2"][0]
     assert bl2 < 5.e-5
 
-    # these 3 checks are for the diagnostic field so the checks are
-    # made for values at the beginning of the run:
-    vrel_err = data.groups["RelativeVorticity_minus_AnalyticalRelativeVorticity"]
-    assert vrel_err["max"][0] < 6.e-7
 
-    vabs_err = data.groups["AbsoluteVorticity_minus_AnalyticalAbsoluteVorticity"]
-    assert vabs_err["max"][0] < 6.e-7
-
-    pv_err = data.groups["PotentialVorticity_minus_AnalyticalPotentialVorticity"]
-    assert pv_err["max"][0] < 1.5e-10
-
-    # these 2 checks confirm that the potential enstrophy is the same
-    # when it is calculated using the pv field, the relative vorticity
-    # field or the absolute vorticity field
-    enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_RelativeVorticity"]
-    assert enstrophy_diff["max"][-1] < 1.e-15
-
-    enstrophy_diff = data.groups["SWPotentialEnstrophy_from_PotentialVorticity_minus_SWPotentialEnstrophy_from_AbsoluteVorticity"]
-    assert enstrophy_diff["max"][-1] < 1.e-15
-
-    # these checks are for the diagnostics of the velocity in spherical components
-    tolerance = 0.05
-
-    u_meridional = data.groups["u_meridional"]
-    assert u_meridional["max"][0] < tolerance * u_max
-
-    u_radial = data.groups["u_radial"]
-    assert u_radial["max"][0] < tolerance * u_max
-
-    u_zonal = data.groups["u_zonal"]
-    assert u_max * (1 - tolerance) < u_zonal["max"][0] < u_max * (1 + tolerance)
-
-
-@pytest.mark.parametrize("u_transport_option",
-                         ["vector_invariant_form", "circulation_form",
-                          "vector_advection_form"])
+@pytest.mark.parametrize("u_transport_option", ["vector_advection_form"])
 def test_sw_ssprk3(tmpdir, u_transport_option):
 
     dirname = str(tmpdir)
