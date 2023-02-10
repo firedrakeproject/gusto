@@ -232,11 +232,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
 
         # Build finite element spaces
-        # TODO: this implies order of spaces matches order of variables
-        # we should not assume this and should instead specify which variable
-        # is in which space
+        # TODO: this implies order of spaces matches order of variables.
+        # It also assumes that if one additional field is required then it
+        # should live on the DG space.
         self.spaces = [space for space in domain.compatible_spaces]
-        if len(self.field_names) > len(self.spaces):
+        if len(self.field_names) - len(self.spaces) == 1:
             self.spaces.append(domain.spaces("DG"))
 
         # Add active tracers to the list of prognostics
@@ -611,11 +611,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
         u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
 
-        if self.thermal:
-            gamma = self.tests[2]
-            b = split(self.X)[2]
-            n = FacetNormal(domain.mesh)
-
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
@@ -661,6 +656,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
         # Add transport of buoyancy, if thermal shallow water equations
         if self.thermal:
+            gamma = self.tests[2]
+            b = split(self.X)[2]
             b_adv = prognostic(advection_form(domain, gamma, b), "b")
             # TODO: implement correct linearisation
             adv_form += subject(b_adv, self.X)
@@ -703,6 +700,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if bexpr is not None:
             topography = self.prescribed_fields("topography", domain.spaces("DG")).interpolate(bexpr)
             if self.thermal:
+                n = FacetNormal(domain.mesh)
                 topography_form = subject(prognostic
                                           (-topography*div(b*w)*dx
                                            + jump(b*w, n)*avg(topography)*dS,
@@ -715,6 +713,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # thermal source terms not involving topography
         if self.thermal:
+            n = FacetNormal(domain.mesh)
             source_form = subject(prognostic(-D*div(b*w)*dx
                                              - 0.5*b*div(D*w)*dx
                                              + jump(b*w, n)*avg(D)*dS
