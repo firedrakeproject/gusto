@@ -11,7 +11,6 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        pi, sin, cos)
 from netCDF4 import Dataset
-import pytest
 
 R = 6371220.
 g = 9.80616
@@ -109,8 +108,9 @@ def check_results(dirname):
     assert bl2 < 5.e-5
 
 
-@pytest.mark.parametrize("u_transport_option", ["vector_advection_form"])
-def test_sw_ssprk3(tmpdir, u_transport_option):
+def test_sw_ssprk3(tmpdir):
+
+    u_transport_option = "vector_advection_form"
 
     dirname = str(tmpdir)
     dt = 100
