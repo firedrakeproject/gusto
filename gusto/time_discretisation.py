@@ -25,7 +25,7 @@ from gusto.transport_forms import advection_form, continuity_form
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AB2", "AB3", "AM2"]
+           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AB2", "AB3", "AM2","AdamsBashforth"]
 
 
 def is_cg(V):
@@ -1376,6 +1376,151 @@ class AB2(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+class AdamsBashforth(MultilevelTimeDiscretisation):
+    """
+    Implements the explicit multistep Adams-Bashforth timestepping method of general order up to 5
+
+    The general AB timestepping method for operator F is written as
+    y^(n+1) = y^n + dt*(a_0*F[y^(n)] + a_1*F[y^(n-1)] + a_2*F[y^(n-2)] + a_3*F[y^(n-3)] + a_4*F[y^(n-4)])
+    """
+    def __init__(self, domain, field_name=None, order=None,
+                 solver_parameters=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            order (float, optional): order of scheme
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+
+        Raises:
+            ValueError: if order is not provided, or is in incorrect range.
+        """
+        # TODO: would this be better as a non-optional argument? Or should the
+        # check be on the provided value?
+        if order is None:
+            raise ValueError("please provide a value for order between 1 and 5")
+        elif(order>5):
+            raise ValueError("Adams-Bashforth of order greater than 5 not implemented")
+        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
+            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        if not solver_parameters:
+            # theta method leads to asymmetric matrix, per lhs function below,
+            # so don't use CG
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
+
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         options=options)
+
+        self.order = order
+    
+    def setup(self, equation,  uadv=None, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
+                      *active_labels)
+        
+        self.xn = [Function(self.fs) for i in range(self.nlevels)]
+
+        if (self.order==1):
+            self.bn=[1.0]
+        elif(self.order==2):
+            self.bn=[1.5,-0.5]
+        elif(self.order==3):
+            self.bn=[(23.0)/(12.0),-(16.0)/(12.0),(5.0)/(12.0)]
+        elif(self.order==4):
+            self.bn=[(55.0)/(24.0),-(59.0)/(24.0),(37.0)/(24.0),-(9.0)/(24.0)]
+        elif(self.order==5):
+            self.bn=[(1901.0)/(720.0),-(2774.0)/(720.0),(2616.0)/(720.0),-(1274.0)/(720.0),(251.0)/(720.0)]
+
+    @property
+    def nlevels(self):
+        return self.order
+
+    @property
+    def rhs0(self):
+        """Set up the discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+        r = r.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -self.dt*t)
+
+        return r.form
+
+    @property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(AdamsBashforth, self).lhs
+
+    @property
+    def rhs(self):
+        """Set up the discretisation's right hand side."""
+        rn = self.residual.label_map(lambda t: all_terms,
+                                     map_if_true=replace_subject(self.xn[0], self.idx))
+        x = rn.label_map(lambda t: t.has_label(time_derivative),
+                         map_if_false=drop)
+        rhs = rn.label_map(lambda t: t.has_label(time_derivative),
+                           map_if_true= drop,
+                           map_if_false=lambda t: -self.dt*self.bn[0]*t)
+        print('b0', self.bn[0])
+        for n in range(1,self.nlevels):
+            rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                            map_if_true=drop,
+                                            map_if_false=replace_subject(self.xn[n], self.idx))
+            rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
+                        map_if_false=lambda t: -self.dt*self.bn[n]*t)
+            rhs = rhs + rtemp
+            print("bn",self.bn[n])
+            print('n_it',n)
+        r = x + rhs
+        return r.form
+
+    @property
+    def solver0(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"0"
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    @property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+
+    def apply(self, x_out, *x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field(s).
+        """
+        if self.initial_timesteps < self.nlevels-1:
+            self.initial_timesteps += 1
+            print(self.initial_timesteps)
+            solver = self.solver0
+        else:
+            solver = self.solver
+
+        for n in range(0,self.nlevels):
+            self.xn[n].assign(x_in[self.nlevels-1-n])
+            print("n,-(n+1)", n, self.nlevels-1-n)
+        print(self.xn)
+        print(x_in)
+        solver.solve()
+        x_out.assign(self.x_out)
 
 class AB3(MultilevelTimeDiscretisation):
     """
