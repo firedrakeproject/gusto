@@ -37,6 +37,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.setup_scheme()
 
         self.io.log_parameters(equation)
+        self.io.setup_diagnostics(self.fields)
 
     @abstractproperty
     def transporting_velocity(self):
@@ -69,8 +70,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         if pickup:
             t = self.io.pickup_from_checkpoint(self.fields)
-
-        self.io.setup_diagnostics(self.fields)
 
         with timed_stage("Dump output"):
             self.io.setup_dump(self.fields, t, tmax, pickup)
@@ -545,6 +544,8 @@ class MeshMovement(SemiImplicitQuasiNewton):
         self.X1 = Function(mesh.coordinates)
         xold = Function(mesh.coordinates)
         self.mesh_old = Mesh(xold)
+        mesh_generator.monitor.setup(self.fields)
+        mesh_generator.setup()
 
     def timestep(self):
         """Defines the timestep"""
