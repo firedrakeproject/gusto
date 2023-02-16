@@ -246,6 +246,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
+        self.W = W
 
         # Can now call the underlying PrognosticEquation
         full_field_name = "_".join(self.field_names)

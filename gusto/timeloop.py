@@ -1,7 +1,9 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant, Mesh
+from firedrake import Function, Projector, Constant, Mesh, TrialFunction, \
+    TestFunction, assemble, inner, dx
+from firedrake.petsc import PETSc
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
@@ -10,6 +12,7 @@ from gusto.fml.form_manipulation_labelling import drop, Label
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
+from gusto.moving_mesh.utility_functions import spherical_logarithm
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 
@@ -530,6 +533,9 @@ class MeshMovement(SemiImplicitQuasiNewton):
                  mesh_generator=None,
                  **kwargs):
 
+        Vu = equation_set.domain.spaces("HDiv")
+        self.uadv = Function(Vu)
+
         super().__init__(equation_set=equation_set,
                          io=io,
                          transport_schemes=transport_schemes,
@@ -538,23 +544,53 @@ class MeshMovement(SemiImplicitQuasiNewton):
                          diffusion_schemes=diffusion_schemes,
                          physics_schemes=physics_schemes,
                          **kwargs)
+
         self.mesh_generator = mesh_generator
         mesh = self.equation.domain.mesh
+        self.mesh = mesh
         self.X0 = Function(mesh.coordinates)
         self.X1 = Function(mesh.coordinates)
+
         xold = Function(mesh.coordinates)
         self.mesh_old = Mesh(xold)
+
+        self.on_sphere = self.equation.domain.on_sphere
+
+        self.v = Function(mesh.coordinates.function_space())
+        self.v_V1 = Function(Vu)
+        self.v1 = Function(mesh.coordinates.function_space())
+        self.v1_V1 = Function(Vu)
+
         mesh_generator.monitor.setup(self.fields)
         mesh_generator.setup()
+
+    def setup_fields(self):
+        super().setup_fields()
+        self.x.add_fields(self.equation, levels=("mid",))
+
+    @property
+    def transporting_velocity(self):
+        return self.uadv
 
     def timestep(self):
         """Defines the timestep"""
         xn = self.x.n
         xnp1 = self.x.np1
         xstar = self.x.star
+        xmid = self.x.mid
         xp = self.x.p
         xrhs = self.xrhs
         dy = self.dy
+        un = xn("u")
+        unp1 = xnp1("u")
+        X0 = self.X0
+        X1 = self.X1
+        um, Dm = Function(self.equation.W).split()
+        um_, Dm_ = Function(self.equation.W).split()
+        test_u = TestFunction(um.function_space())
+        trial_u = TrialFunction(um.function_space())
+        test_D = TestFunction(Dm.function_space())
+        trial_D = TrialFunction(Dm.function_space())
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
@@ -563,18 +599,87 @@ class MeshMovement(SemiImplicitQuasiNewton):
 
         for k in range(self.maxk):
 
-            # This is used as the "old mesh" domain in projections
-            self.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
-            self.X0.assign(self.X1)
+            X0.assign(X1)
 
             self.mesh_generator.pre_meshgen_callback()
             with timed_stage("Mesh generation"):
-                self.X1.assign(self.mesh_generator.get_new_mesh())
+                X1.assign(self.mesh_generator.get_new_mesh())
+
+            # Compute v (mesh velocity w.r.t. initial mesh) and
+            # v1 (mesh velocity w.r.t. final mesh)
+            # TODO: use Projectors below!
+            if self.on_sphere:
+                spherical_logarithm(X0, X1, self.v, self.mesh._radius)
+                self.v /= self.dt
+                spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
+                self.v1 /= -self.dt
+
+                self.mesh.coordinates.assign(X0)
+                self.v_V1.project(self.v)
+
+                self.mesh.coordinates.assign(X1)
+                self.v1_V1.project(self.v1)
+
+            else:
+                self.mesh.coordinates.assign(X0)
+                self.v_V1.project((X1 - X0)/self.dt)
+
+                self.mesh.coordinates.assign(X1)
+                self.v1_V1.project(-(X0 - X1)/self.dt)
 
             with timed_stage("Transport"):
                 for name, scheme in self.active_transport:
-                    # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+                    # transport field from xstar to xmid on old mesh
+                    self.mesh.coordinates.assign(X0)
+                    self.uadv.assign(0.5*(un - self.v_V1))
+                    scheme.apply(xmid(name), xstar(name))
+                    print("before: ", name, xmid(name).dat.data.min(), xmid(name).dat.data.max())
+
+                    if name == "u":
+                        print("projecting u")
+                        um_.assign(xmid("u"))
+                        rhs = inner(um_, test_u)*dx
+                        with assemble(rhs).dat.vec as v:
+                            Lvec = v
+
+                    elif name == "D":
+                        print("projecting D")
+                        Dm_.assign(xmid("D"))
+                        rhs = inner(Dm_, test_D)*dx
+                        with assemble(rhs).dat.vec as v:
+                            Lvec = v
+
+                    # put mesh_new into mesh
+                    self.mesh.coordinates.assign(X1)
+
+                    if name == "u":
+                        lhs = inner(trial_u, test_u)*dx
+                        amat = assemble(lhs)
+                        a = amat.M.handle
+                        ksp = PETSc.KSP().create()
+                        ksp.setOperators(a)
+                        ksp.setFromOptions()
+
+                        with um.dat.vec as x_:
+                            ksp.solve(Lvec, x_)
+                        xmid(name).assign(um)
+
+                    elif name == "D":
+                        lhs = inner(trial_D, test_D)*dx
+                        amat = assemble(lhs)
+                        a = amat.M.handle
+                        ksp = PETSc.KSP().create()
+                        ksp.setOperators(a)
+                        ksp.setFromOptions()
+
+                        with Dm.dat.vec as x_:
+                            ksp.solve(Lvec, x_)
+                        xmid(name).assign(Dm)
+                    print("after: ", name, xmid(name).dat.data.min(), xmid(name).dat.data.max())
+
+                    # transport field from xmid to xp on new mesh
+                    self.uadv.assign(0.5*(unp1 - self.v1_V1))
+                    scheme.apply(xp(name), xmid(name))
 
             self.mesh_generator.post_meshgen_callback()
 
