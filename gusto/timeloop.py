@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant
+from firedrake import Function, Projector, Constant, Mesh
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
@@ -14,7 +14,7 @@ from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
-           "PrescribedTransport"]
+           "PrescribedTransport", "MeshMovement"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -519,3 +519,92 @@ class PrescribedTransport(Timestepper):
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+
+class MeshMovement(SemiImplicitQuasiNewton):
+
+    def __init__(self, equation_set, io, transport_schemes,
+                 auxiliary_equations_and_schemes=None,
+                 linear_solver=None,
+                 diffusion_schemes=None,
+                 physics_schemes=None,
+                 mesh_generator=None,
+                 **kwargs):
+
+        super().__init__(equation_set=equation_set,
+                         io=io,
+                         transport_schemes=transport_schemes,
+                         auxiliary_equations_and_schemes=auxiliary_equations_and_schemes,
+                         linear_solver=linear_solver,
+                         diffusion_schemes=diffusion_schemes,
+                         physics_schemes=physics_schemes,
+                         **kwargs)
+        self.mesh_generator = mesh_generator
+        mesh = self.equation.domain.mesh
+        self.X0 = Function(mesh.coordinates)
+        self.X1 = Function(mesh.coordinates)
+        xold = Function(mesh.coordinates)
+        self.mesh_old = Mesh(xold)
+
+    def timestep(self):
+        """Defines the timestep"""
+        xn = self.x.n
+        xnp1 = self.x.np1
+        xstar = self.x.star
+        xp = self.x.p
+        xrhs = self.xrhs
+        dy = self.dy
+
+        with timed_stage("Apply forcing terms"):
+            self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
+
+        xp(self.field_name).assign(xstar(self.field_name))
+
+        for k in range(self.maxk):
+
+            # This is used as the "old mesh" domain in projections
+            self.mesh_old.coordinates.dat.data[:] = self.X1.dat.data[:]
+            self.X0.assign(self.X1)
+
+            self.mesh_generator.pre_meshgen_callback()
+            with timed_stage("Mesh generation"):
+                self.X1.assign(self.mesh_generator.get_new_mesh())
+
+            with timed_stage("Transport"):
+                for name, scheme in self.active_transport:
+                    # transports a field from xstar and puts result in xp
+                    scheme.apply(xp(name), xstar(name))
+
+            self.mesh_generator.post_meshgen_callback()
+
+            xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+
+            for i in range(self.maxi):
+
+                with timed_stage("Apply forcing terms"):
+                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
+
+                xrhs -= xnp1(self.field_name)
+
+                with timed_stage("Implicit solve"):
+                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+
+                xnp1X = xnp1(self.field_name)
+                xnp1X += dy
+
+            # Update xnp1 values for active tracers not included in the linear solve
+            self.copy_active_tracers(xp, xnp1)
+
+            self._apply_bcs()
+
+        for name, scheme in self.auxiliary_schemes:
+            # transports a field from xn and puts result in xnp1
+            scheme.apply(xnp1(name), xn(name))
+
+        with timed_stage("Diffusion"):
+            for name, scheme in self.diffusion_schemes:
+                scheme.apply(xnp1(name), xnp1(name))
+
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
