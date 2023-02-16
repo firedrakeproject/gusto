@@ -11,16 +11,15 @@ import time
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref_levels = [2, 3 ,4, 5]
-time_step = [8000, 4000, 2000, 1000]
+ref_levels = [5]
+time_step = [70,80,90,100,110,120]
 elapsed_time = []
 
-for index, ref in enumerate(ref_levels):
-
+for dt in time_step:
+    ref = ref_levels[0]
     st = time.time()
-    dt = time_step[index]
-    tmax = 5*day
-    ndumps = 5
+    tmax = 1*day
+    ndumps = 1
 
     # Shallow Water Parameters
     a = 6371220.
@@ -47,12 +46,12 @@ for index, ref in enumerate(ref_levels):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
     # Output and IO
-    dirname = 'Williams3convergence_ref%s' % ref
+    dirname = f'SIQN_scheme_dt={dt}'
     dumpfreq = int(tmax / (ndumps * dt))
     output = OutputParameters(dirname=dirname,
-                            dumpfreq=dumpfreq,
-                            dumplist_latlon=['D', 'D_error'],
-                            log_level='INFO')
+                              dumpfreq=dumpfreq,
+                              dumplist_latlon=['D', 'D_error'],
+                              log_level='INFO')
     diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
