@@ -801,6 +801,7 @@ class ReversibleAdjustment(Physics):
 
         parameters = self.parameters
         self.set_tau_to_dt = set_tau_to_dt
+        self.saturation = saturation_curve
 
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -840,15 +841,15 @@ class ReversibleAdjustment(Physics):
         # vapour interpolator does the conversion of vapour to cloud, and cloud
         # interpolator does the reverse
         gamma1 = 0.9
-        self.source_v.interpolator = Interpolator(conditional(
+        self.v_loss_interpolator = Interpolator(conditional(
             self.water_v > saturation_curve, gamma1 * (
-                self.water_v - saturation_curve), 0))
+                self.water_v - saturation_curve), 0), Vv)
 
-        self.source_c.interpolator = Interpolator(conditional(
+        self.c_loss_interpolator = Interpolator(conditional(
             self.water_v < saturation_curve, conditional(
                 saturation_curve < self.cloud + self.water_v, gamma1 * (
-                    saturation - water_v), cloud),
-            0))
+                    saturation_curve - self.water_v), self.cloud),
+            0), Vc)
 
     def evaluate(self, x_in, dt):
         """
@@ -863,11 +864,11 @@ class ReversibleAdjustment(Physics):
                 interval for the scheme.
         """
 
-        if hasattr(self.saturation, "sat_is_function"):
-            self.variable.assign(x_in.split()[self.variable_idx])
-            self.sat_func.interpolate(self.saturation.sat_func(self.variable))
-        else:
-            self.sat_func.interpolate(self.saturation)
         if self.set_tau_to_dt:
             self.tau.assign(dt)
-        self.water_v.assign(x_in.split()[self.Vv_idx])   
+        self.water_v.assign(x_in.split()[self.Vv_idx])
+        self.cloud.assign(x_in.split()[self.Vc_idx])
+        self.source_v.assign(
+            self.c_loss_interpolator.interpolate() - self.v_loss_interpolator.interpolate())
+        self.source_c.assign(
+            self.v_loss_interpolator.interpolate() - self.c_loss_interpolator.interpolate())
