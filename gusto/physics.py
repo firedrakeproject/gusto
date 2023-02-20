@@ -868,7 +868,8 @@ class ReversibleAdjustment(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.cloud.assign(x_in.split()[self.Vc_idx])
-        self.source_v.assign(
-            self.c_loss_interpolator.interpolate() - self.v_loss_interpolator.interpolate())
-        self.source_c.assign(
-            self.v_loss_interpolator.interpolate() - self.c_loss_interpolator.interpolate())
+        self.source_c.assign(1/self.tau * (
+            self.v_loss_interpolator.interpolate() - self.c_loss_interpolator.interpolate()))
+        self.source_v.assign(1/self.tau * (
+            self.c_loss_interpolator.interpolate() - self.v_loss_interpolator.interpolate()))
+        
