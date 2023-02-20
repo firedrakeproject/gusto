@@ -20,6 +20,7 @@ from gusto import thermodynamics
 import ufl
 import math
 from enum import Enum
+from types import FunctionType
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
@@ -632,14 +633,18 @@ class InstantRain(Physics):
     timestep dt or over a specified time interval tau.
      """
 
-    def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
-                 rain_name=None, convective_feedback=False, set_tau_to_dt=False,
+    def __init__(self, equation, saturation_curve, saturation_variable=None,
+                 vapour_name="water_vapour", rain_name=None,
+                 convective_feedback=False, set_tau_to_dt=False,
                  parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
             saturation_curve (ufl.Expr): the saturation function, above which
                 excess moisture is converted.
+            saturation_variable (str, optional): name of the variable that the
+                saturation curve depends on, if the saturation curve changes in
+                time.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
@@ -661,6 +666,7 @@ class InstantRain(Physics):
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
         self.saturation = saturation_curve
+        self.saturation_variable = saturation_variable
 
         # check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -682,8 +688,8 @@ class InstantRain(Physics):
         # Currently this works only when saturation is depth-dependent or not
         # changing in time.
         # TODO: allow saturation to be dependent on other variables
-        if hasattr(self.saturation, "sat_is_function"):
-            if self.saturation.variable == "depth":
+        if isinstance(self.saturation, FunctionType):
+            if self.saturation_variable == "depth":
                 self.variable_idx = equation.field_names.index("D")
                 Vvar_space = W.sub(self.variable_idx)
                 self.variable = Function(Vvar_space)
@@ -756,9 +762,9 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-        if hasattr(self.saturation, "sat_is_function"):
+        if isinstance(self.saturation, FunctionType):
             self.variable.assign(x_in.split()[self.variable_idx])
-            self.sat_func.interpolate(self.saturation.sat_func(self.variable))
+            self.sat_func.interpolate(self.saturation(self.variable))
         else:
             self.sat_func.interpolate(self.saturation)
         if self.set_tau_to_dt:
