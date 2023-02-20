@@ -49,7 +49,8 @@ def run_instant_rain(dirname):
 
     # Physics schemes
     # define saturation function
-    saturation = Constant(0.5)
+    VD = FunctionSpace(mesh, "DG", 1)
+    saturation = Function(VD).assign(0.5)
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(domain))]
 
@@ -72,7 +73,6 @@ def run_instant_rain(dirname):
 
     vapour0.interpolate(vapour_expr)
 
-    VD = FunctionSpace(mesh, "DG", 1)
     initial_vapour = Function(VD).interpolate(vapour_expr)
 
     # define expected solutions; vapour should be equal to saturation and rain
@@ -95,7 +95,7 @@ def test_instant_rain_setup(tmpdir):
     r = stepper.fields("rain")
 
     # check that the maximum of the vapour field is equal to the saturation
-    assert v.dat.data.max() - saturation.values() < 0.001, "The maximum of the final vapour field should be equal to saturation"
+    assert v.dat.data.max() - saturation.dat.data.max() < 0.001, "The maximum of the final vapour field should be equal to saturation"
 
     # check that the minimum of the vapour field hasn't changed
     assert v.dat.data.min() - initial_vapour.dat.data.min() < 0.001, "The minimum of the vapour field should not change"
