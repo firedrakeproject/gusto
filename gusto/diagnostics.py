@@ -285,8 +285,10 @@ class VelocityZ(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
         u = state_fields("u")
-        self.expr = u[u.geometric_dimension() - 1]
+        self.expr = u[domain.mesh.geometric_dimension() - 1]
         super().setup(domain, state_fields)
+
+
 
 
 class VelocityY(DiagnosticField):

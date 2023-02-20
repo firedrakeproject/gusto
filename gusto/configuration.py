@@ -104,6 +104,7 @@ class OutputParameters(Configuration):
     #: default value "warning"
     log_level = WARNING
     dump_vtus = True
+    dump_nc = False
     dumpfreq = 1
     pddumpfreq = None
     dumplist = None
