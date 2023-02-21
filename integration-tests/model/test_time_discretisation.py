@@ -9,9 +9,9 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
-                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AB2", "AB3", "Leapfrog", "AM2"])
+                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
-    if (scheme == "AB2" or scheme == "AB3"):
+    if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
         geometry = "sphere"
         setup = tracer_setup(tmpdir, geometry, small_dt=True)
@@ -42,12 +42,10 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         Vf = domain.spaces("CG", "CG", 1)
         eqn = AdvectionEquation(domain, Vf, "f")
         transport_scheme = Leapfrog(domain)
-    elif scheme == "AB2":
-        transport_scheme = AB2(domain)
-    elif scheme == "AB3":
-        transport_scheme = AB3(domain)
-    elif scheme == "AM2":
-        transport_scheme = AM2(domain)
+    elif scheme == "AdamsBashforth":
+        transport_scheme = AdamsBashforth(domain, order=2)
+    elif scheme == "AdamsMoulton":
+        transport_scheme = AdamsMoulton(domain, order=2)
 
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
 
