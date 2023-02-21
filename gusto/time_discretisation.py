@@ -1299,6 +1299,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class AdamsBashforth(MultilevelTimeDiscretisation):
     """
     Implements the explicit multistep Adams-Bashforth timestepping method of general order up to 5
@@ -1325,7 +1326,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         Raises:
             ValueError: if order is not provided, or is in incorrect range.
         """
-        if(order > 5 or order < 1):
+
+        if (order > 5 or order < 1):
             raise ValueError("Adams-Bashforth of order greater than 5 not implemented")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -1341,23 +1343,23 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                          options=options)
 
         self.order = order
-    
-    def setup(self, equation,  uadv=None, apply_bcs=True, *active_labels):
+
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
         super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
                       *active_labels)
-        
+
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 
         if (self.order == 1):
             self.b = [1.0]
-        elif(self.order == 2):
-            self.b = [-(1.0/2.0),(3.0/2.0)]
-        elif(self.order == 3):
-            self.b = [(5.0)/(12.0),-(16.0)/(12.0),(23.0)/(12.0)]
-        elif(self.order == 4):
-            self.b = [-(9.0)/(24.0),(37.0)/(24.0),-(59.0)/(24.0),(55.0)/(24.0)]
-        elif(self.order == 5):
-            self.b = [(251.0)/(720.0),-(1274.0)/(720.0),(2616.0)/(720.0),-(2774.0)/(720.0),(2901.0)/(720.0)]
+        elif (self.order == 2):
+            self.b = [-(1.0/2.0), (3.0/2.0)]
+        elif (self.order == 3):
+            self.b = [(5.0)/(12.0), -(16.0)/(12.0), (23.0)/(12.0)]
+        elif (self.order == 4):
+            self.b = [-(9.0)/(24.0), (37.0)/(24.0), -(59.0)/(24.0), (55.0)/(24.0)]
+        elif (self.order == 5):
+            self.b = [(251.0)/(720.0), -(1274.0)/(720.0), (2616.0)/(720.0), -(2774.0)/(720.0), (2901.0)/(720.0)]
 
     @property
     def nlevels(self):
@@ -1431,6 +1433,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         solver.solve()
         x_out.assign(self.x_out)
 
+
 class AdamsMoulton(MultilevelTimeDiscretisation):
     """
     Implements the implicit multistep Adams-Moulton timestepping method of general order up to 5
@@ -1457,7 +1460,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         Raises:
             ValueError: if order is not provided, or is in incorrect range.
         """
-        if(order > 4 or order < 1):
+        if (order > 4 or order < 1):
             raise ValueError("Adams-Moulton of order greater than 5 not implemented")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -1473,25 +1476,26 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
                          options=options)
 
         self.order = order
-    
-    def setup(self, equation,  uadv=None, apply_bcs=True, *active_labels):
+
+    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
         super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
                       *active_labels)
-        
+
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 
         if (self.order == 1):
             self.bl = (1.0/2.0)
             self.br = [(1.0/2.0)]
-        elif(self.order == 2):
+        elif (self.order == 2):
             self.bl = (5.0/12.0)
-            self.br = [-(1.0/12.0),(8.0/12.0)]
-        elif(self.order == 3):
+            self.br = [-(1.0/12.0), (8.0/12.0)]
+        elif (self.order == 3):
             self.bl = (9.0/24.0)
-            self.br = [(1.0/24.0),-(5.0/24.0),(19.0/24.0)]
-        elif(self.order == 4):
+            self.br = [(1.0/24.0), -(5.0/24.0), (19.0/24.0)]
+        elif (self.order == 4):
             self.bl = (251.0/720.0)
-            self.br = [-(19.0/720.0),(106.0/720.0),-(254.0/720.0),(646.0/720.0)]
+            self.br = [-(19.0/720.0), (106.0/720.0), -(254.0/720.0), (646.0/720.0)]
+
     @property
     def nlevels(self):
         return self.order
