@@ -10,7 +10,7 @@ day = 24. * 60. * 60.
 ref = 5
 dt_val = [1000, 500, 250]
 tmax = 5*day
-ndumps = 5
+ndumps = 10
 
 # Shallow Water Parameters
 a = 6371220.
@@ -38,7 +38,7 @@ fexpr = 2*Omega * x[2] / a
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
 # Output and IO
-dirname = 'W6_SIQN_Ref=6_dt=250'
+dirname = 'W6_SIQN_Ref=5_dt=500_diagnostics'
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                         dumpfreq=dumpfreq,
