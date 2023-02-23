@@ -289,8 +289,6 @@ class VelocityZ(DiagnosticField):
         super().setup(domain, state_fields)
 
 
-
-
 class VelocityY(DiagnosticField):
     """The geocentric Cartesian Y component of the velocity field."""
     name = "VelocityY"
