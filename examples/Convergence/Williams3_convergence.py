@@ -11,7 +11,6 @@ import numpy as np
 # Set up timestepping variables
 day = 24. * 60. * 60.
 ref = 5.
-
 tmax = 1 * day
 
 # Shallow Water Parameters
@@ -20,8 +19,8 @@ H = 5960.
 ref = 5
 
 parameters = ShallowWaterParameters(H=H)
-step = [70, 80, 90, 100, 110, 120]
-timediscretisation = [SSPRK3, RK4, ForwardEuler]
+step = [250,70, 80, 90, 100, 110, 120]
+timediscretisation = [SSPRK3, RK4, Heun, ImplicitMidpoint]
 
 # Starts for loop for different reginement levels
 for scheme in timediscretisation:
@@ -32,7 +31,7 @@ for scheme in timediscretisation:
 
         # Mesh and domain
         mesh = IcosahedralSphereMesh(radius=a,
-                                    refinement_level=ref, degree=1)
+                                    refinement_level=ref, degree=3)
         x = SpatialCoordinate(mesh)
         global_normal = x
         mesh.init_cell_orientations(x)
@@ -42,11 +41,11 @@ for scheme in timediscretisation:
         lat, lon = latlon_coords(mesh)
         Omega = parameters.Omega
         fexpr = 2*Omega * x[2] / a
-        eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
+        eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_manifold_advection_form')
 
         # Output and IO
-        dirname = f'{scheme.__name__}_scheme_dt={dt}'
-        dumpfreq = int(tmax)
+        dirname = f'{scheme.__name__}_scheme_dt={dt}_degree=3'
+        dumpfreq = 1  #int(tmax)
         output = OutputParameters(dirname=dirname,
                                 dumpfreq=dumpfreq,
                                 dumplist_latlon=['D', 'D_error'],
@@ -54,7 +53,6 @@ for scheme in timediscretisation:
         diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
     
         io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
 
         stepper = Timestepper(eqns, scheme(domain), io)
 
