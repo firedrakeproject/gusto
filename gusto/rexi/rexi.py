@@ -1,7 +1,7 @@
 from rexi import *
 from firedrake import Function, TrialFunctions, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
-from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term
+from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp
 from firedrake.formmanipulation import split_form
 
 
@@ -105,28 +105,40 @@ class Rexi(object):
         ur_mass_form = u_mass_form.label_map(
             all_terms,
             replace_test_function(tests_r[0]))
-        aur_mass_form = ur_mass_form.label_map(
+        aurr_mass_form = ur_mass_form.label_map(
             all_terms,
             replace_subject(trials_r[0], 0))
-
-        hr_mass_form = h_mass_form.label_map(
+        auri_mass_form = ur_mass_form.label_map(
             all_terms,
-            replace_test_function(tests_r[1]))
-        ahr_mass_form = hr_mass_form.label_map(
-            all_terms,
-            replace_subject(trials_r[1], 1))
+            replace_subject(trials_i[0], 0))
 
         ui_mass_form = u_mass_form.label_map(
             all_terms,
             replace_test_function(tests_i[0]))
-        aui_mass_form = ui_mass_form.label_map(
+        auir_mass_form = ui_mass_form.label_map(
+            all_terms,
+            replace_subject(trials_r[0], 0))
+        auii_mass_form = ui_mass_form.label_map(
             all_terms,
             replace_subject(trials_i[0], 0))
+
+        hr_mass_form = h_mass_form.label_map(
+            all_terms,
+            replace_test_function(tests_r[1]))
+        ahrr_mass_form = hr_mass_form.label_map(
+            all_terms,
+            replace_subject(trials_r[1], 1))
+        ahri_mass_form = hr_mass_form.label_map(
+            all_terms,
+            replace_subject(trials_i[1], 1))
 
         hi_mass_form = h_mass_form.label_map(
             all_terms,
             replace_test_function(tests_i[1]))
-        ahi_mass_form = hi_mass_form.label_map(
+        ahir_mass_form = hi_mass_form.label_map(
+            all_terms,
+            replace_subject(trials_r[1], 1))
+        ahii_mass_form = hi_mass_form.label_map(
             all_terms,
             replace_subject(trials_i[1], 1))
 
@@ -134,86 +146,135 @@ class Rexi(object):
             lambda t: t.has_label(time_derivative),
             drop)
 
-        Lu_form = L_form.label_map(
+        Lu = L_form.label_map(
             lambda t: t.get(prognostic) == "u",
             lambda t: Term(
                 split_form(t.form)[0].form,
                 t.labels),
             drop)
 
-        Lh_form = L_form.label_map(
+        Lh = L_form.label_map(
             lambda t: t.get(prognostic) == "D",
             lambda t: Term(
                 split_form(t.form)[1].form,
                 t.labels),
             drop)
         
-        Lru = Lu_form.label_map(
-            all_terms,
-            replace_subject(trials_r[0], 0))
-        Lru = Lru.label_map(
-            all_terms,
-            replace_subject(trials_r[1], 1))
-        Lru = Lru.label_map(
+        Lru = Lu.label_map(
             all_terms,
             replace_test_function(tests_r[0]))
-
-        Lrh = Lh_form.label_map(
+        Lrru = Lru.label_map(
             all_terms,
             replace_subject(trials_r[0], 0))
-        Lrh = Lrh.label_map(
+        Lrru = Lrru.label_map(
             all_terms,
             replace_subject(trials_r[1], 1))
-        Lrh = Lrh.label_map(
-            all_terms,
-            replace_test_function(tests_r[1]))
-
-        Liu = Lu_form.label_map(
+        Lriu = Lru.label_map(
             all_terms,
             replace_subject(trials_i[0], 0))
-        Liu = Liu.label_map(
+        Lriu = Lriu.label_map(
             all_terms,
             replace_subject(trials_i[1], 1))
-        Liu = Liu.label_map(
+
+        Liu = Lu.label_map(
             all_terms,
             replace_test_function(tests_i[0]))
-
-        Lih = Lh_form.label_map(
+        Liru = Liu.label_map(
+            all_terms,
+            replace_subject(trials_r[0], 0))
+        Liru = Liru.label_map(
+            all_terms,
+            replace_subject(trials_r[1], 1))
+        Liiu = Liu.label_map(
             all_terms,
             replace_subject(trials_i[0], 0))
-        Lih = Lih.label_map(
+        Liiu = Liiu.label_map(
             all_terms,
             replace_subject(trials_i[1], 1))
-        Lih = Lih.label_map(
+
+        Lrh = Lh.label_map(
+            all_terms,
+            replace_test_function(tests_r[1]))
+        Lrrh = Lrh.label_map(
+            all_terms,
+            replace_subject(trials_r[0], 0))
+        Lrrh = Lrrh.label_map(
+            all_terms,
+            replace_subject(trials_r[1], 1))
+        Lrih = Lrh.label_map(
+            all_terms,
+            replace_subject(trials_i[0], 0))
+        Lrih = Lrih.label_map(
+            all_terms,
+            replace_subject(trials_i[1], 1))
+
+        Lih = Lh.label_map(
             all_terms,
             replace_test_function(tests_i[1]))
+        Lirh = Lih.label_map(
+            all_terms,
+            replace_subject(trials_r[0], 0))
+        Lirh = Lirh.label_map(
+            all_terms,
+            replace_subject(trials_r[1], 1))
+        Liih = Lih.label_map(
+            all_terms,
+            replace_subject(trials_i[0], 0))
+        Liih = Liih.label_map(
+            all_terms,
+            replace_subject(trials_i[1], 1))
 
-
+        #a_mass_form = (
+        #    self.ar*inner(trials_r[0], tests_r[0])
+        #    + self.ar*inner(trials_r[2], tests_r[2])
+        #    + self.ai*inner(trials_r[1], tests_r[1])
+        #    + self.ai*inner(trials_r[3], tests_r[3])
+        #)
+        
         a = (
-            self.ar * aur_mass_form
-            + self.ar * aui_mass_form
-            + self.ai * aur_mass_form
-            - self.ai * aui_mass_form
-            - self.tau * (Lru + Lrh)
-            + self.ar * ahr_mass_form
-            + self.ar * ahi_mass_form
-            + self.ai * ahr_mass_form
-            - self.ai * ahi_mass_form
-            - self.tau * (Liu + Lih)
-            + self.ai * aui_mass_form
+            self.ar * aurr_mass_form
+            + self.ar * auri_mass_form
+            + self.ar * auir_mass_form
+            - self.ar * auii_mass_form
+            + self.ai * aurr_mass_form
+            - self.ai * auri_mass_form
+            - self.ai * auir_mass_form
+            - self.ai * auii_mass_form
+            + self.tau * (Lrru + Lrrh + Lriu +Liru + Lrih +Lirh)
+            + self.ar * ahrr_mass_form
+            + self.ar * ahri_mass_form
+            + self.ar * ahir_mass_form
+            - self.ar * ahii_mass_form
+            + self.ai * ahrr_mass_form
+            - self.ai * ahri_mass_form
+            - self.ai * ahir_mass_form
+            - self.ai * ahii_mass_form
+            - self.tau * (Liiu + Liih)
         )
 
         L = (
             ur_mass_form.label_map(
                 all_terms,
                 replace_subject(ur, 0))
+            + ur_mass_form.label_map(
+                all_terms,
+                replace_subject(ui, 0))
             + ui_mass_form.label_map(
+                all_terms,
+                replace_subject(ur, 0))
+            - ui_mass_form.label_map(
                 all_terms,
                 replace_subject(ui, 0))
             + hr_mass_form.label_map(
                 all_terms,
                 replace_subject(hr, 1))
+            + hr_mass_form.label_map(
+                all_terms,
+                replace_subject(hi, 1))
             + hi_mass_form.label_map(
+                all_terms,
+                replace_subject(hr, 1))
+            - hi_mass_form.label_map(
                 all_terms,
                 replace_subject(hi, 1))
         )

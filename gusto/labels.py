@@ -192,60 +192,60 @@ def replace_subject(new_subj, idx=None):
         # vs cases of new being Function vs MixedFunction vs tuple
         # Ideally catch all cases or fail gracefully
         if type(subj.ufl_element()) is MixedElement:
-            if type(new) == tuple:
-                assert len(new) == len(subj.function_space())
-                for k, v in zip(split(subj), new):
+            if type(new_subj) == tuple:
+                assert len(new_subj) == len(subj.function_space())
+                for k, v in zip(split(subj), new_subj):
                     replace_dict[k] = v
 
-            elif type(new) == ufl.algebra.Sum:
-                replace_dict[subj] = new
+            elif type(new_subj) == ufl.algebra.Sum:
+                replace_dict[subj] = new_subj
 
-            elif isinstance(new, (ufl.tensors.ListTensor, ufl.indexed.Indexed)):
+            elif isinstance(new_subj, (ufl.tensors.ListTensor, ufl.indexed.Indexed)):
                 if idx is None:
                     raise ValueError('idx must be specified to replace_subject'
                                      + ' when subject is Mixed and new is a single component')
-                replace_dict[split(subj)[idx]] = new
+                replace_dict[split(subj)[idx]] = new_subj
 
-            # Otherwise fail if new is not a function
-            elif not isinstance(new, Function):
-                raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
+            # Otherwise fail if new_subj is not a function
+            elif not isinstance(new_subj, Function):
+                raise ValueError(f'new_subj must be a tuple or Function, not type {type(new_subj)}')
 
             # Now handle MixedElements separately as these need indexing
-            elif type(new.ufl_element()) is MixedElement:
-                assert len(new.function_space()) == len(subj.function_space())
+            elif type(new_subj.ufl_element()) is MixedElement:
+                assert len(new_subj.function_space()) == len(subj.function_space())
                 # If idx specified, replace only that component
                 if idx is not None:
-                    replace_dict[split(subj)[idx]] = split(new)[idx]
+                    replace_dict[split(subj)[idx]] = split(new_subj)[idx]
                 # Otherwise replace all components
                 else:
-                    for k, v in zip(split(subj), split(new)):
+                    for k, v in zip(split(subj), split(new_subj)):
                         replace_dict[k] = v
 
-            # Otherwise 'new' is a normal Function
+            # Otherwise 'new_subj' is a normal Function
             else:
                 if idx is None:
                     raise ValueError('idx must be specified to replace_subject'
-                                     + ' when subject is Mixed and new is a single component')
-                replace_dict[split(subj)[idx]] = new
+                                     + ' when subject is Mixed and new_subj is a single component')
+                replace_dict[split(subj)[idx]] = new_subj
 
         # subj is a normal Function
         else:
-            if type(new) is tuple:
+            if type(new_subj) is tuple:
                 if idx is None:
                     raise ValueError('idx must be specified to replace_subject'
-                                     + ' when new is a tuple')
-                replace_dict[subj] = new[idx]
-            elif isinstance(new, ufl.indexed.Indexed):
-                replace_dict[subj] = new
-            elif not isinstance(new, Function):
-                raise ValueError(f'new must be a Function, not type {type(new)}')
-            elif type(new.ufl_element()) == MixedElement:
+                                     + ' when new_subj is a tuple')
+                replace_dict[subj] = new_subj[idx]
+            elif isinstance(new_subj, ufl.indexed.Indexed):
+                replace_dict[subj] = new_subj
+            elif not isinstance(new_subj, Function):
+                raise ValueError(f'new_subj must be a Function, not type {type(new_subj)}')
+            elif type(new_subj.ufl_element()) == MixedElement:
                 if idx is None:
                     raise ValueError('idx must be specified to replace_subject'
-                                     + ' when new is a tuple')
-                replace_dict[subj] = split(new)[idx]
+                                     + ' when new_subj is a tuple')
+                replace_dict[subj] = split(new_subj)[idx]
             else:
-                replace_dict[subj] = new
+                replace_dict[subj] = new_subj
 
         try:
             new_form = ufl.replace(t.form, replace_dict)
@@ -257,7 +257,7 @@ def replace_subject(new_subj, idx=None):
         # this is necessary to defer applying the perp until after the
         # subject is replaced because otherwise replace cannot find
         # the subject
-        if t.has_label(perp):
+        if t.has_label(perp) and idx in[0, None]:
             perp_op = t.get(perp)
             perp_old = perp_op(t.get(subject))
             perp_new = perp_op(new_subj)

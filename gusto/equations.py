@@ -796,12 +796,12 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
         D_adv = subject(
             prognostic(linear_continuity_form(domain, phi, H), "D"), self.X)
-        D_adv = D_adv.label_map(
-            all_terms,
-            lambda t: Term(ufl.replace(
-                t.form,
-                {t.get(transporting_velocity): split(t.get(subject))[0]}
-            ), t.labels))
+        #D_adv = D_adv.label_map(
+        #    all_terms,
+        #    lambda t: Term(ufl.replace(
+        #        t.form,
+        #        {t.get(transporting_velocity): split(t.get(subject))[0]}
+        #    ), t.labels))
         pressure_gradient_form = pressure_gradient(
             subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 
@@ -813,17 +813,9 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
             f.interpolate(fexpr)
             coriolis_form = coriolis(
                 subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+            if not domain.on_sphere:
+                coriolis_form = perp(coriolis_form, domain.perp)
             self.residual += coriolis_form
-=======
-        # D transport term is a special case -- add facet term
-        # _, D = split(self.X)
-        # _, phi = self.tests
-        # D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
-        # self.residual = self.residual.label_map(
-        #     lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-        #     map_if_true=lambda t: Term(D_adv.form, t.labels)
-        # )
->>>>>>> 90e813637a5eddbba90b81021c536b904b6c98fc
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
