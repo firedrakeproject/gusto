@@ -1,8 +1,8 @@
 class ExponentialEuler(object):
 
-    def __init__(self, state, method):
+    def __init__(self, domain, method):
         self.nlevels = 1
-        self.dt = state.dt
+        self.dt = domain.dt
         self.compute_exponential = method
 
     def setup(self, eqn, ubar):

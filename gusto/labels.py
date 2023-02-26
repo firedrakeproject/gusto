@@ -115,14 +115,14 @@ def replace_subject(new, idx=None):
             elif type(new) == ufl.algebra.Sum:
                 replace_dict[subj] = new
 
-            elif isinstance(new, ufl.indexed.Indexed):
+            elif isinstance(new, (ufl.tensors.ListTensor, ufl.indexed.Indexed)):
                 if idx is None:
                     raise ValueError('idx must be specified to replace_subject'
                                      + ' when subject is Mixed and new is a single component')
                 replace_dict[split(subj)[idx]] = new
 
             # Otherwise fail if new is not a function
-            elif isinstance(new, Function):
+            elif not isinstance(new, Function):
                 raise ValueError(f'new must be a tuple or Function, not type {type(new)}')
 
             # Now handle MixedElements separately as these need indexing

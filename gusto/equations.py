@@ -786,8 +786,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        g = state.parameters.g
-        H = state.parameters.H
+        g = parameters.g
+        H = parameters.H
 
         u, D = split(self.X)
         w, phi = self.tests
@@ -795,7 +795,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         mass_form = self.generate_mass_terms()        
 
         D_adv = subject(
-            prognostic(linear_continuity_form(state, phi, H), "D"), self.X)
+            prognostic(linear_continuity_form(domain, phi, H), "D"), self.X)
         D_adv = D_adv.label_map(
             all_terms,
             lambda t: Term(ufl.replace(
@@ -808,11 +808,11 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         self.residual = mass_form + D_adv + pressure_gradient_form
 
         if fexpr is not None:
-            V = FunctionSpace(state.mesh, "CG", 1)
-            f = state.fields("coriolis", space=V)
+            V = FunctionSpace(domain.mesh, "CG", 1)
+            f = self.prescribed_fields("coriolis", space=V)
             f.interpolate(fexpr)
             coriolis_form = coriolis(
-                subject(prognostic(f*inner(state.perp(u), w)*dx, "u"), self.X))
+                subject(prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
             self.residual += coriolis_form
 
 
