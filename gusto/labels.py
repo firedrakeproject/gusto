@@ -5,7 +5,7 @@ import firedrake
 from firedrake import Function, split, MixedElement
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
-from types import MethodType
+from types import MethodType, LambdaType
 
 
 def replace_test_function(new_test):
@@ -116,7 +116,10 @@ def replace_subject(new, idx=None):
             elif type(new) == ufl.algebra.Sum:
                 replace_dict[subj] = new
 
-            elif isinstance(new, (ufl.tensors.ListTensor, ufl.indexed.Indexed, firedrake.function.Function)) :
+            elif isinstance(new, ufl.indexed.Indexed):
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
                 replace_dict[split(subj)[idx]] = new
 
             # Otherwise fail if new is not a function
@@ -136,6 +139,9 @@ def replace_subject(new, idx=None):
 
             # Otherwise 'new' is a normal Function
             else:
+                if idx is None:
+                    raise ValueError('idx must be specified to replace_subject'
+                                     + ' when subject is Mixed and new is a single component')
                 replace_dict[split(subj)[idx]] = new
 
         # subj is a normal Function
@@ -145,6 +151,8 @@ def replace_subject(new, idx=None):
                     raise ValueError('idx must be specified to replace_subject'
                                      + ' when new is a tuple')
                 replace_dict[subj] = new[idx]
+            elif isinstance(new, ufl.indexed.Indexed):
+                replace_dict[subj] = new
             elif not isinstance(new, Function):
                 raise ValueError(f'new must be a Function, not type {type(new)}')
             elif type(new.ufl_element()) == MixedElement:
@@ -156,6 +164,13 @@ def replace_subject(new, idx=None):
                 replace_dict[subj] = new
 
         new_form = ufl.replace(t.form, replace_dict)
+
+        # this is necessary to defer applying the perp until after the
+        # subject is replaced because otherwise replace cannot find
+        # the subject
+        if t.has_label(perp):
+            perp_function = t.get(perp)
+            new_form = ufl.replace(new_form, {split(new)[0]: perp_function(split(new)[0])})
 
         return Term(new_form, t.labels)
 
@@ -179,3 +194,4 @@ linearisation = Label("linearisation", validator=lambda value: type(value) in [L
 name = Label("name", validator=lambda value: type(value) == str)
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
 hydrostatic = Label("hydrostatic", validator=lambda value: type(value) in [LabelledForm, Term])
+perp = Label("perp", validator=lambda value: isinstance(value, LambdaType))

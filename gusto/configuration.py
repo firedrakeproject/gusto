@@ -105,6 +105,7 @@ class OutputParameters(Configuration):
     #: default value "warning"
     log_level = WARNING
     dump_vtus = True
+    dump_nc = False
     dumpfreq = 1
     pddumpfreq = None
     dumplist = None
@@ -117,10 +118,6 @@ class OutputParameters(Configuration):
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
-    #: List of fields to dump error fields for steady state simulation
-    steady_state_error_fields = []
-    #: List of fields for computing perturbations from the initial state
-    perturbation_fields = []
     #: List of ordered pairs (name, points) where name is the field
     # name and points is the points at which to dump them
     point_data = []
