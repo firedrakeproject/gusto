@@ -79,6 +79,7 @@ def initialise_fields(eqns, stepper):
 def test_checkpointing(tmpdir):
 
     mesh_name = 'checkpointing_mesh'
+    checkpoint_method = 'old'
 
     # Set up mesh
     nlayers = 5   # horizontal layers
@@ -96,9 +97,11 @@ def test_checkpointing(tmpdir):
     dirname_3 = str(tmpdir)+'/checkpointing_3'
 
     output_1 = OutputParameters(dirname=dirname_1, dumpfreq=1,
-                                chkptfreq=4, log_level='INFO')
+                                chkptfreq=4, log_level='INFO',
+                                checkpoint_method=checkpoint_method)
     output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO')
+                                chkptfreq=2, log_level='INFO',
+                                checkpoint_method=checkpoint_method)
 
 
     stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1)
@@ -123,22 +126,34 @@ def test_checkpointing(tmpdir):
     # Pick up from checkpoint and run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
-    chkpt_2_path = path.join(stepper_2.io.dumpdir, "chkpt.h5")
+    if checkpoint_method == 'new':
+        chkpt_filename = 'chkpt.h5'
+    else:
+        chkpt_filename = 'chkpt'
+    chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
     output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
                                 chkptfreq=2, log_level='INFO',
-                                checkpoint_pickup_filename=chkpt_2_path)
+                                checkpoint_pickup_filename=chkpt_2_path,
+                                checkpoint_method=checkpoint_method)
 
-    mesh = pick_up_mesh(output_3, mesh_name)
+    if checkpoint_method == 'new':
+        mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
 
-    stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
+    if checkpoint_method == 'new':
+        stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
 
     # ------------------------------------------------------------------------ #
     # Pick up from checkpoint and run *same* timestepper for 2 more time steps
     # ------------------------------------------------------------------------ #
 
-    mesh = pick_up_mesh(output_2, mesh_name)
+    if checkpoint_method == 'new':
+        mesh = pick_up_mesh(output_2, mesh_name)
     stepper_2, _ = set_up_model_objects(mesh, dt, output_2)
+
+    if checkpoint_method == 'old':
+        stepper_2.set_reference_profiles([('rho', stepper_1.fields('rho_bar')),
+                                          ('theta', stepper_1.fields('theta_bar'))])
 
     stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
 
@@ -152,7 +167,8 @@ def test_checkpointing(tmpdir):
         assert error < 1e-14, \
             f'Checkpointed field {field_name} with same time stepper is not equal to non-checkpointed field'
 
-        diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
-        error = np.linalg.norm(diff_array)
-        assert error < 1e-14, \
-            f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
+        if checkpoint_method == 'new':
+            diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+            error = np.linalg.norm(diff_array)
+            assert error < 1e-14, \
+                f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'

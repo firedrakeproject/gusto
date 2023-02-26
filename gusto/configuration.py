@@ -104,6 +104,7 @@ class OutputParameters(Configuration):
     #: default value "warning"
     log_level = WARNING
     dump_vtus = True
+    dump_nc = False
     dumpfreq = 1
     pddumpfreq = None
     dumplist = None
@@ -111,6 +112,7 @@ class OutputParameters(Configuration):
     dump_diagnostics = True
     checkpoint = True
     checkpoint_pickup_filename = None
+    checkpoint_method = 'old'
     chkptfreq = 1
     dirname = None
     #: TODO: Should the output fields be interpolated or projected to

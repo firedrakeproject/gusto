@@ -8,7 +8,8 @@ import time
 from gusto.diagnostics import Diagnostics
 from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl, File,
-                       op2, CheckpointFile)
+                       op2, CheckpointFile, VectorElement,
+                       DumbCheckpoint, FILE_CREATE, FILE_READ)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -284,33 +285,50 @@ class IO(object):
                 not picking up or running in test mode.
         """
 
-        if any([self.output.dump_vtus, self.output.dumplist_latlon,
-                self.output.dump_diagnostics, self.output.point_data,
-                self.output.checkpoint and not pickup]):
+        if any([self.output.dump_vtus, self.output.dump_nc,
+                self.output.dumplist_latlon, self.output.dump_diagnostics,
+                self.output.point_data, self.output.checkpoint and not pickup]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
-            if self.mesh.comm.rank == 0:
-                if not running_tests and path.exists(self.dumpdir) and not pickup:
-                    raise IOError("results directory '%s' already exists"
-                                  % self.dumpdir)
-                else:
-                    if not running_tests:
+
+            if self.mesh.comm.Get_rank() == 0:
+                if not running_tests and not pickup:
+                    if path.exists(self.dumpdir):
+                        raise IOError("results directory '%s' already exists"
+                                    % self.dumpdir)
+                    else:
                         makedirs(self.dumpdir)
 
-        if self.output.dump_vtus:
-
-            # setup pvd output file
-            outfile = path.join(self.dumpdir, "field_output.pvd")
-            self.dumpfile = File(
-                outfile, project_output=self.output.project_fields,
-                comm=self.mesh.comm)
-
+        if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
             self.to_dump = [f for f in state_fields.fields if f.name() in state_fields.to_dump]
 
-            # make dump counter
-            self.dumpcount = itertools.count()
+        # make dump counter
+        self.dumpcount = itertools.count()
+
+        if self.output.dump_vtus:
+            # setup pvd output file
+            outfile_pvd = path.join(self.dumpdir, "field_output.pvd")
+            self.pvd_dumpfile = File(
+                outfile_pvd, project_output=self.output.project_fields,
+                comm=self.mesh.comm)
+
+        if self.output.dump_nc:
+            self.nc_filename = path.join(self.dumpdir, "field_output.nc")
+            space_names = set([field.function_space().name for field in self.to_dump])
+            for space_name in space_names:
+                self.domain.coords.register_space(self.domain, space_name)
+
+            if pickup:
+                # Pick up t idx
+                if self.mesh.comm.Get_rank() == 0:
+                    nc_field_file = Dataset(self.nc_filename, 'r')
+                    self.field_t_idx = len(nc_field_file['time'][:])
+                    nc_field_file.close()
+            else:
+                # File needs creating
+                self.create_nc_dump(self.nc_filename, space_names)
 
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
@@ -366,8 +384,14 @@ class IO(object):
         # checkpoint file, setup the checkpointing
         if self.output.checkpoint:
             # TODO: this used to be behind an if statement, why?
-            self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-            self.chkpt.save_mesh(self.mesh)
+            if self.output.checkpoint_method == 'new':
+                self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
+                self.chkpt.save_mesh(self.mesh)
+            elif self.output.checkpoint_method == 'old':
+                if not pickup:
+                    self.chkpt = DumbCheckpoint(path.join(self.dumpdir, 'chkpt'), mode=FILE_CREATE)
+            else:
+                raise ValueError(f'Checkpoint method {self.output.checkpoint_method} not valid')
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
@@ -400,20 +424,32 @@ class IO(object):
 
         if self.output.checkpoint:
             # Open the checkpointing file for writing
-            if self.output.checkpoint_pickup_filename is not None:
-                chkfile = self.output.checkpoint_pickup_filename
+            if self.output.checkpoint_method == 'new':
+                if self.output.checkpoint_pickup_filename is not None:
+                    chkfile = self.output.checkpoint_pickup_filename
+                else:
+                    chkfile = path.join(self.dumpdir, "chkpt.h5")
+                with CheckpointFile(chkfile, 'r') as chk:
+                    # Recover all the fields from the checkpoint
+                    for field in self.to_pickup:
+                        field = chk.load_function(self.domain.mesh, field.name())
+                        state_fields(field.name()).assign(field)
+                    t = chk.get_attr('/', 'time')
+            elif self.output.checkpoint_method == 'old':
+                # Open the checkpointing file for writing
+                if self.output.checkpoint_pickup_filename is not None:
+                    chkfile = self.output.checkpoint_pickup_filename
+                else:
+                    chkfile = path.join(self.dumpdir, "chkpt")
+                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                    # Recover all the fields from the checkpoint
+                    for field in self.to_pickup:
+                        chk.load(field)
+                    t = chk.read_attribute("/", "time")
+                # Setup new checkpoint
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
             else:
-                chkfile = path.join(self.dumpdir, "chkpt.h5")
-            with CheckpointFile(chkfile, 'r') as chk:
-                # Recover all the fields from the checkpoint
-                for field in self.to_pickup:
-                    field = chk.load_function(self.domain.mesh, field.name())
-                    state_fields(field.name()).assign(field)
-                t = chk.get_attr('/', 'time')
-            # TODO: do we need to write a new file here?
-            # # Setup new checkpoint
-            # self.chkpt = CheckpointFile(path.join(self.dumpdir, 'chkpt.h5'), 'w')
-            # self.chkpt.save_mesh(self.mesh)
+                raise ValueError(f'Checkpoint method {self.output.checkpoint_method} not valid')
         else:
             raise ValueError("Must set checkpoint True if pickup")
 
@@ -447,19 +483,26 @@ class IO(object):
                 is_prognostic.append(False)
 
         if self.output.checkpoint:
-            # Open the checkpointing file for writing
-            if self.output.checkpoint_pickup_filename is not None:
-                chkfile = self.output.checkpoint_pickup_filename
-            else:
-                chkfile = path.join(self.dumpdir, "chkpt.h5")
-            with CheckpointFile(chkfile, 'r') as chk:
-                for i, field_name in enumerate(possible_ref_profiles):
-                    read_name = field_name+'_bar' if is_prognostic[i] else field_name
-                    try:
-                        field = chk.load_function(self.domain.mesh, read_name)
-                        reference_profiles.append((field_name, field))
-                    except RuntimeError:
-                        pass
+            if self.output.checkpoint_method == 'new':
+                # Open the checkpointing file for writing
+                if self.output.checkpoint_pickup_filename is not None:
+                    chkfile = self.output.checkpoint_pickup_filename
+                else:
+                    chkfile = path.join(self.dumpdir, "chkpt.h5")
+                with CheckpointFile(chkfile, 'r') as chk:
+                    for i, field_name in enumerate(possible_ref_profiles):
+                        read_name = field_name+'_bar' if is_prognostic[i] else field_name
+                        try:
+                            field = chk.load_function(self.domain.mesh, read_name)
+                            reference_profiles.append((field_name, field))
+                        except RuntimeError:
+                            pass
+            elif self.output.checkpoint_method == 'old':
+                # Open the checkpointing file for writing
+                if self.output.checkpoint_pickup_filename is not None:
+                    chkfile = self.output.checkpoint_pickup_filename
+                else:
+                    pass
         else:
             raise ValueError("Must set checkpoint True if pickup")
 
@@ -495,17 +538,120 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            for field in self.to_pickup:
-                self.chkpt.save_function(field)
-            self.chkpt.set_attr('/', 'time', t)
+            if output.checkpoint_method == 'new':
+                for field in self.to_pickup:
+                    self.chkpt.save_function(field)
+                self.chkpt.set_attr('/', 'time', t)
+            elif output.checkpoint_method == 'old':
+                for field in self.to_pickup:
+                    self.chkpt.store(field)
+                self.chkpt.write_attribute("/", "time", t)
 
-        if output.dump_vtus and (next(self.dumpcount) % output.dumpfreq) == 0:
-            # dump fields
-            self.dumpfile.write(*self.to_dump)
+        if (next(self.dumpcount) % output.dumpfreq) == 0:
+            if output.dump_nc:
+                # dump fields
+                self.write_nc_dump(t)
 
-            # dump fields on latlon mesh
-            if len(output.dumplist_latlon) > 0:
-                self.dumpfile_ll.write(*self.to_dump_latlon)
+            if output.dump_vtus:
+                # dump fields
+                self.pvd_dumpfile.write(*self.to_dump)
+
+                # dump fields on latlon mesh
+                if len(output.dumplist_latlon) > 0:
+                    self.dumpfile_ll.write(*self.to_dump_latlon)
+
+    def create_nc_dump(self, filename, space_names):
+        my_rank = self.mesh.comm.Get_rank()
+        self.field_t_idx = 0
+
+        if my_rank == 0:
+            nc_field_file = Dataset(filename, 'w')
+            nc_field_file.createDimension('time', None)
+            nc_field_file.createVariable('time', float, ('time',))
+
+            # Add mesh metadata
+            for metadata_key, metadata_value in self.domain.metadata.items():
+                # If the metadata is None or a Boolean, try converting to string
+                # This is because netCDF can't take these types as options
+                if type(metadata_value) in [type(None), type(True)]:
+                    output_value = str(metadata_value)
+                else:
+                    output_value = metadata_value
+
+                # Get the type from the metadata itself
+                nc_field_file.createVariable(metadata_key, type(output_value), [])
+                nc_field_file.variables[metadata_key][0] = output_value
+
+            # Add coordinates if they are not already in the file
+            for space_name in space_names:
+                coord_fields = self.domain.coords.global_chi_coords[space_name]
+                num_points = len(self.domain.coords.global_chi_coords[space_name][0])
+
+                nc_field_file.createDimension('coords_'+space_name, num_points)
+
+                for (coord_name, coord_field) in zip(self.domain.coords.coords_name, coord_fields):
+                    nc_field_file.createVariable(coord_name+'_'+space_name, float, 'coords_'+space_name)
+                    nc_field_file.variables[coord_name+'_'+space_name][:] = coord_field[:]
+
+            # Create variable for storing the field values
+            for field in self.to_dump:
+                field_name = field.name()
+                space_name = field.function_space().name
+                nc_field_file.createGroup(field_name)
+                nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
+
+            nc_field_file.close()
+
+    def write_nc_dump(self, t):
+
+        comm = self.mesh.comm
+        my_rank = comm.Get_rank()
+        comm_size = comm.Get_size()
+
+        # Open file to add time
+        if my_rank == 0:
+            nc_field_file = Dataset(self.nc_filename, 'a')
+            nc_field_file['time'][self.field_t_idx] = t
+
+        # Loop through output field data here
+        num_fields = len(self.to_dump)
+        for i, field in enumerate(self.to_dump):
+            field_name = field.name()
+            space_name = field.function_space().name
+
+            if isinstance(field.ufl_element(), VectorElement):
+                raise NotImplementedError('Vector outputting not yet implemented')
+
+            # -------------------------------------------------------- #
+            # Scalar elements
+            # -------------------------------------------------------- #
+            else:
+                j = 0
+                # For most processors send data to first processor
+                if my_rank != 0:
+                    # Make a tag to uniquely identify this call
+                    my_tag = comm_size*(num_fields*j + i) + my_rank
+                    comm.send(field.dat.data_ro[:], dest=0, tag=my_tag)
+                else:
+                    # Set up array to store full data in
+                    total_data_size = self.domain.coords.parallel_array_lims[space_name][comm_size-1][1]+1
+                    single_proc_data = np.zeros(total_data_size)
+                    # Get data for this processor first
+                    (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][my_rank][:]
+                    single_proc_data[low_lim:up_lim+1] = field.dat.data_ro[:]
+                    # Receive data from other processors
+                    for procid in range(1, comm_size):
+                        my_tag = comm_size*(num_fields*j + i) + procid
+                        incoming_data = comm.recv(source=procid, tag=my_tag)
+                        (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][procid][:]
+                        single_proc_data[low_lim:up_lim+1] = incoming_data[:]
+                    # Store whole field data
+                    nc_field_file[field_name].variables['field_values'][:, self.field_t_idx] = single_proc_data[:]
+
+        if my_rank == 0:
+            nc_field_file.close()
+
+        self.field_t_idx += 1
 
 
 def get_latlon_mesh(mesh):
