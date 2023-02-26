@@ -789,7 +789,6 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         g = state.parameters.g
         H = state.parameters.H
 
-<<<<<<< HEAD
         u, D = split(self.X)
         w, phi = self.tests
 
