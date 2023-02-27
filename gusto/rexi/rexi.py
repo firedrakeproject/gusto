@@ -1,5 +1,5 @@
 from rexi import *
-from firedrake import Function, TrialFunctions, Constant, \
+from firedrake import Function, TrialFunctions, Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
 from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp, NullTerm
 from firedrake.formmanipulation import split_form
@@ -165,7 +165,14 @@ class Rexi(object):
         else:
             aP = None
 
+        # Boundary conditions (assumes extruded mesh)
+        # BCs are declared for the plain velocity space. As we need them in
+        # extended mixed problem, we replicate the BCs but for subspace of W
+        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain)
+               for bc in equation.bcs['u']]
+
         rexi_prob = LinearVariationalProblem(a.form, L.form, self.w, aP=aP,
+                                             bcs=bcs,
                                              constant_jacobian=False)
 
         #if solver_parameters is None:
