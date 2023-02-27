@@ -260,7 +260,10 @@ def replace_subject(new_subj, idx=None):
         if t.has_label(perp) and idx in[0, None]:
             perp_op = t.get(perp)
             perp_old = perp_op(t.get(subject))
-            perp_new = perp_op(new_subj)
+            if type(new_subj) == tuple:
+                perp_new = perp_op(new_subj[0])
+            else:
+                perp_new = perp_op(new_subj)
             try:
                 new_form = ufl.replace(t.form, {perp_old: perp_new})
 

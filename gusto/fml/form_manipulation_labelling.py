@@ -114,7 +114,7 @@ class Term(object):
         """
         if type(other) in (float, int):
             other = Constant(other)
-        elif type(other) not in [Constant, ufl.algebra.Product]:
+        elif type(other) not in [Constant, ufl.algebra.Product, ufl.algebra.Sum]:
             return NotImplemented
         return Term(other*self.form, self.labels)
 
@@ -233,7 +233,7 @@ class LabelledForm(object):
         # UFL can cancel constants to a Zero type which needs treating separately
         elif type(other) is ufl.constantvalue.Zero:
             other = Constant(0.0)
-        elif type(other) not in [Constant, ufl.algebra.Product]:
+        elif type(other) not in [Constant, ufl.algebra.Product, ufl.algebra.Sum]:
             return NotImplemented
         return self.label_map(all_terms, lambda t: Term(other*t.form, t.labels))
 

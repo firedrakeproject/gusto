@@ -796,12 +796,12 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
         D_adv = subject(
             prognostic(linear_continuity_form(domain, phi, H), "D"), self.X)
-        #D_adv = D_adv.label_map(
-        #    all_terms,
-        #    lambda t: Term(ufl.replace(
-        #        t.form,
-        #        {t.get(transporting_velocity): split(t.get(subject))[0]}
-        #    ), t.labels))
+        D_adv = D_adv.label_map(
+            all_terms,
+            lambda t: Term(ufl.replace(
+                t.form,
+                {t.get(transporting_velocity): split(t.get(subject))[0]}
+            ), t.labels))
         pressure_gradient_form = pressure_gradient(
             subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 
