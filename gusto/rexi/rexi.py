@@ -214,8 +214,9 @@ class Rexi(object):
         else:
             self.w_sum.assign(self.w_)
 
-        u_sum, _, h_sum, _ = self.w_sum.split()
-        u_out, h_out = self.w_out.split()
-        u_out.assign(u_sum)
-        h_out.assign(h_sum)
+        w_sum = self.w_sum.split()
+        w_out = self.w_out.split()
+        for i in range(len(w_out)):
+            w_out[i].assign(w_sum[2*i])
+
         return self.w_out
