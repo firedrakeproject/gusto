@@ -204,9 +204,9 @@ class Rexi(object):
             self.ar.assign(self.alpha[j].real)
             self.ai.assign(self.alpha[j].imag)
             self.solver.solve()
-            for i in range(len(Uin)):
-                wi = w_[i]
-                wi += Constant(self.beta[j].real)*w[2*i] - Constant(self.beta[j].imag)*w[2*i+1]
+            for k in range(len(Uin)):
+                wk = w_[2*k]
+                wk += Constant(self.beta[j].real)*w[2*k] - Constant(self.beta[j].imag)*w[2*k+1]
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:
