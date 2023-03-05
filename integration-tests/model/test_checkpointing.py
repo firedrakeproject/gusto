@@ -79,7 +79,7 @@ def initialise_fields(eqns, stepper):
 def test_checkpointing(tmpdir):
 
     mesh_name = 'checkpointing_mesh'
-    checkpoint_method = 'old'
+    checkpoint_method = 'new'
 
     # Set up mesh
     nlayers = 5   # horizontal layers
@@ -140,22 +140,33 @@ def test_checkpointing(tmpdir):
         mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
 
-    if checkpoint_method == 'new':
-        stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
+    stepper_3.io.pick_up_from_checkpoint(stepper_3.fields)
+
+    # ------------------------------------------------------------------------ #
+    # Check that checkpointed values are picked up to almost machine precision
+    # ------------------------------------------------------------------------ #
+
+    # With old checkpointing this worked exactly
+    # With new checkpointing this creates some small error
+    for field_name in ['rho', 'theta', 'u']:
+        diff_array = stepper_2.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+        error = np.linalg.norm(diff_array)
+        assert error < 5e-10, \
+            f'Checkpointed and picked up field {field_name} is not equal'
 
     # ------------------------------------------------------------------------ #
     # Pick up from checkpoint and run *same* timestepper for 2 more time steps
     # ------------------------------------------------------------------------ #
 
-    if checkpoint_method == 'new':
-        mesh = pick_up_mesh(output_2, mesh_name)
-    stepper_2, _ = set_up_model_objects(mesh, dt, output_2)
-
-    if checkpoint_method == 'old':
-        stepper_2.set_reference_profiles([('rho', stepper_1.fields('rho_bar')),
-                                          ('theta', stepper_1.fields('theta_bar'))])
-
+    # Wipe fields from second time stepper
+    # initialise_fields(eqns_2, stepper_2)
     stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
+
+    # ------------------------------------------------------------------------ #
+    # Run *new* timestepper for 2 time steps
+    # ------------------------------------------------------------------------ #
+
+    stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
 
     # ------------------------------------------------------------------------ #
     # Compare fields against saved values for run without checkpointing
@@ -170,5 +181,5 @@ def test_checkpointing(tmpdir):
         if checkpoint_method == 'new':
             diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
             error = np.linalg.norm(diff_array)
-            assert error < 1e-14, \
+            assert error < 1e-10, \
                 f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'

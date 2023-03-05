@@ -432,6 +432,7 @@ class IO(object):
                 with CheckpointFile(chkfile, 'r') as chk:
                     # Recover all the fields from the checkpoint
                     for field in self.to_pickup:
+                        import pdb; pdb.set_trace()
                         field = chk.load_function(self.domain.mesh, field.name())
                         state_fields(field.name()).assign(field)
                     t = chk.get_attr('/', 'time')
@@ -448,6 +449,7 @@ class IO(object):
                     t = chk.read_attribute("/", "time")
                 # Setup new checkpoint
                 self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+                self.output.checkpoint_pickup_filename = None
             else:
                 raise ValueError(f'Checkpoint method {self.output.checkpoint_method} not valid')
         else:
@@ -493,6 +495,7 @@ class IO(object):
                     for i, field_name in enumerate(possible_ref_profiles):
                         read_name = field_name+'_bar' if is_prognostic[i] else field_name
                         try:
+                            import pdb; pdb.set_trace()
                             field = chk.load_function(self.domain.mesh, read_name)
                             reference_profiles.append((field_name, field))
                         except RuntimeError:

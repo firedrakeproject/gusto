@@ -68,9 +68,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
 
         if pickup:
+            # reference_profiles = self.io.pick_up_reference_fields(self.fields)
+            # self.set_reference_profiles(reference_profiles)
             t = self.io.pick_up_from_checkpoint(self.fields)
-            reference_profiles = self.io.pick_up_reference_fields(self.fields)
-            self.set_reference_profiles(reference_profiles)
 
         self.io.setup_diagnostics(self.fields)
 
@@ -170,16 +170,7 @@ class Timestepper(BaseTimestepper):
         name = self.equation.field_name
         x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
 
-        import numpy as np
-        for field_name in ['u', 'rho', 'theta']:
-            field = self.x.n(field_name).dat.data
-            logger.warning(f'Xn ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
-
         self.scheme.apply(xnp1(name), *x_in)
-
-        for field_name in ['u', 'rho', 'theta']:
-            field = self.x.np1(field_name).dat.data
-            logger.warning(f'Xnp1 ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
 
 
 class SplitPhysicsTimestepper(Timestepper):
@@ -408,17 +399,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs = self.xrhs
         dy = self.dy
 
-        import numpy as np
-        for field_name in ['u', 'rho', 'theta', 'rho_bar', 'theta_bar']:
-            field = self.fields(field_name).dat.data
-            logger.warning(f'before timestep ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
-
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
-
-        for field_name in ['u', 'rho', 'theta']:
-            field = xstar(field_name).dat.data
-            logger.warning(f'explicit forcing ... {field_name}: min={np.min(field)}, max={np.max(field)}, norm={np.linalg.norm(field)}, std={np.std(field)}, mean={np.mean(field)}')
 
         xp(self.field_name).assign(xstar(self.field_name))
 
