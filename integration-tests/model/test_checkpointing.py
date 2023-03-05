@@ -3,30 +3,20 @@ Runs a compressible Euler test that uses checkpointing. The test runs for two
 timesteps, checkpoints and then starts a new run from the checkpoint file.
 """
 
+from os import path
+import numpy as np
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, norm,
-                       SpatialCoordinate, exp, sin, Function, as_vector,
-                       pi, DumbCheckpoint, FILE_READ)
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, pi,
+                       SpatialCoordinate, exp, sin, Function, as_vector)
 
 
-def setup_checkpointing(dirname):
+def set_up_model_objects(mesh, dt, output):
 
-    nlayers = 5   # horizontal layers
-    columns = 15  # number of columns
-    L = 3.e5
-    m = PeriodicIntervalMesh(columns, L)
-    dt = 2.0
-
-    # build volume mesh
-    H = 1.0e4  # Height position of the model top
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
     domain = Domain(mesh, dt, "CG", 1)
 
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
 
-    output = OutputParameters(dirname=dirname, dumpfreq=1,
-                              chkptfreq=2, log_level='INFO')
     io = IO(domain, output)
 
     # Set up transport schemes
@@ -42,9 +32,7 @@ def setup_checkpointing(dirname):
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       linear_solver=linear_solver)
 
-    initialise_fields(eqns, stepper)
-
-    return stepper, dt
+    return stepper, eqns
 
 
 def initialise_fields(eqns, stepper):
@@ -89,10 +77,34 @@ def initialise_fields(eqns, stepper):
 
 def test_checkpointing(tmpdir):
 
+    mesh_name = 'checkpointing_mesh'
+
+    # Set up mesh
+    nlayers = 5   # horizontal layers
+    columns = 15  # number of columns
+    L = 3.e5
+    m = PeriodicIntervalMesh(columns, L)
+    dt = 2.0
+
+    # build volume mesh
+    H = 1.0e4  # Height position of the model top
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers, name=mesh_name)
+
     dirname_1 = str(tmpdir)+'/checkpointing_1'
     dirname_2 = str(tmpdir)+'/checkpointing_2'
-    stepper_1, dt = setup_checkpointing(dirname_1)
-    stepper_2, dt = setup_checkpointing(dirname_2)
+    dirname_3 = str(tmpdir)+'/checkpointing_3'
+
+    output_1 = OutputParameters(dirname=dirname_1, dumpfreq=1,
+                                chkptfreq=4, log_level='INFO')
+    output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
+                                chkptfreq=2, log_level='INFO')
+
+
+    stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1)
+    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2)
+
+    initialise_fields(eqns_1, stepper_1)
+    initialise_fields(eqns_2, stepper_2)
 
     # ------------------------------------------------------------------------ #
     # Run for 4 time steps and store values
@@ -101,39 +113,65 @@ def test_checkpointing(tmpdir):
     stepper_1.run(t=0.0, tmax=4*dt)
 
     # ------------------------------------------------------------------------ #
-    # Start again, run for 2 time steps, checkpoint and then run for 2 more
+    # Run other timestepper for 2 time steps and checkpoint
     # ------------------------------------------------------------------------ #
 
     stepper_2.run(t=0.0, tmax=2*dt)
 
-    # Wipe fields, then pickup
-    stepper_2.fields('u').project(as_vector([-10.0, 0.0]))
-    stepper_2.fields('rho').interpolate(Constant(0.0))
-    stepper_2.fields('theta').interpolate(Constant(0.0))
+    # ------------------------------------------------------------------------ #
+    # Pick up from checkpoint and run *new* timestepper for 2 time steps
+    # ------------------------------------------------------------------------ #
 
+    # chkpt_filename = 'chkpt.h5'
+    chkpt_filename = 'chkpt'
+    chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
+    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
+                                chkptfreq=2, log_level='INFO',
+                                checkpoint_pickup_filename=chkpt_2_path)
+
+    # mesh = pick_up_mesh(output_3, mesh_name)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
+
+    stepper_3.io.pick_up_from_checkpoint(stepper_3.fields)
+
+    # ------------------------------------------------------------------------ #
+    # Check that checkpointed values are picked up to almost machine precision
+    # ------------------------------------------------------------------------ #
+
+    # With old checkpointing this worked exactly
+    # With new checkpointing this creates some small error
+    for field_name in ['rho', 'theta', 'u']:
+        diff_array = stepper_2.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+        error = np.linalg.norm(diff_array)
+        assert error < 5e-10, \
+            f'Checkpointed and picked up field {field_name} is not equal'
+
+    # ------------------------------------------------------------------------ #
+    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
+    # ------------------------------------------------------------------------ #
+
+    # Wipe fields from second time stepper
+    # initialise_fields(eqns_2, stepper_2)
     stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
+
+    # ------------------------------------------------------------------------ #
+    # Run *new* timestepper for 2 time steps
+    # ------------------------------------------------------------------------ #
+
+    stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
 
     # ------------------------------------------------------------------------ #
     # Compare fields against saved values for run without checkpointing
     # ------------------------------------------------------------------------ #
 
-    # Pick up from both stored checkpoint files
-    # This is the best way to compare fields from different meshes
-    for field_name in ['u', 'rho', 'theta']:
-        with DumbCheckpoint(dirname_1+'/chkpt', mode=FILE_READ) as chkpt:
-            field_1 = Function(stepper_1.fields(field_name).function_space(),
-                               name=field_name)
-            chkpt.load(field_1)
-            # These are preserved in the comments for when we can use CheckpointFile
-            # mesh = chkpt.load_mesh(name='firedrake_default_extruded')
-            # field_1 = chkpt.load_function(mesh, name=field_name)
-        with DumbCheckpoint(dirname_2+'/chkpt', mode=FILE_READ) as chkpt:
-            field_2 = Function(stepper_1.fields(field_name).function_space(),
-                               name=field_name)
-            chkpt.load(field_2)
-            # These are preserved in the comments for when we can use CheckpointFile
-            # field_2 = chkpt.load_function(mesh, name=field_name)
+    for field_name in ['rho', 'theta', 'u']:
+        diff_array = stepper_1.fields(field_name).dat.data - stepper_2.fields(field_name).dat.data
+        error = np.linalg.norm(diff_array)
+        assert error < 1e-14, \
+            f'Checkpointed field {field_name} with same time stepper is not equal to non-checkpointed field'
 
-        error = norm(field_1 - field_2)
-        assert error < 1e-15, \
-            f'Checkpointed field {field_name} is not equal to non-checkpointed field'
+        if checkpoint_method == 'new':
+            diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+            error = np.linalg.norm(diff_array)
+            assert error < 1e-10, \
+                f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
