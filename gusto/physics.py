@@ -813,12 +813,9 @@ class ReversibleAdjustment(Physics):
         W = equation.function_space
         Vv = W.sub(self.Vv_idx)
         Vc = W.sub(self.Vc_idx)
-        test_v = equation.tests[self.Vv_idx]
-        test_c = equation.tests[self.Vc_idx]
+        V_idxs = [self.Vv_idx, self.Vc_idx]
 
-        # Source functions for both the vapour and cloud equation
-        self.source_v = Function(Vv)
-        self.source_c = Function(Vc)
+        # Source functions for both vapour and cloud
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
 
@@ -826,30 +823,30 @@ class ReversibleAdjustment(Physics):
         if self.set_tau_to_dt:
             self.tau = Constant(0)
         else:
-            assert parameters.tau is not None, "If the relaxation timescale is not the same as the timestep then you must sepcify tau"
+            assert parameters.tau is not None, "If the relaxation timescale is not the same as the timestep then you must specify tau"
             self.tau = parameters.tau
 
-        # adjust the amount of vapour
-        equation.residual += physics(subject(test_v * self.source_v * dx,
-                                             equation.X),
-                                     self.evaluate)
-        # adjust the amount of cloud
-        equation.residual += physics(subject(test_c * self.source_c * dx,
-                                             equation.X),
-                                     self.evaluate)
+        # Saturation adjustment expression, adjusted to stop negative values
+        sat_adj_expr = (self.water_v - saturation_curve) / self.tau
+        sat_adj_expr = conditional(sat_adj_expr < 0,
+                                   max_value(sat_adj_expr,
+                                             -self.cloud / self.tau),
+                                   min_value(sat_adj_expr,
+                                             self.water_v / self.tau))
 
-        # vapour interpolator does the conversion of vapour to cloud, and cloud
-        # interpolator does the reverse
-        gamma1 = 0.9
-        self.v_loss_interpolator = Interpolator(conditional(
-            self.water_v > saturation_curve, gamma1 * (
-                self.water_v - saturation_curve), 0), Vv)
+        # Factors for multiplying source for different variables
+        factors = [Constant(0.9), Constant(-0.9)]
 
-        self.c_loss_interpolator = Interpolator(conditional(
-            self.water_v < saturation_curve, conditional(
-                saturation_curve < self.cloud + self.water_v, gamma1 * (
-                    saturation_curve - self.water_v), self.cloud),
-            0), Vc)
+        # Add terms to equations and make interpolators
+        self.source = [Function(Vc) for factor in factors]
+        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+                                     for factor, source in zip(factors, self.source)]
+        tests = [equation.tests[idx] for idx in V_idxs]
+
+        # Add source terms to residual
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
+                                                 equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -868,8 +865,5 @@ class ReversibleAdjustment(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.cloud.assign(x_in.split()[self.Vc_idx])
-        self.source_c.assign(1/self.tau * (
-            self.v_loss_interpolator.interpolate() - self.c_loss_interpolator.interpolate()))
-        self.source_v.assign(1/self.tau * (
-            self.c_loss_interpolator.interpolate() - self.v_loss_interpolator.interpolate()))
-        
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()

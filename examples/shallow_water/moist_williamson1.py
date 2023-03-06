@@ -47,7 +47,7 @@ msat = Function(VD)
 msat.interpolate(msat_expr)
 
 # I/O
-dirname = "second_williamson1_orig"
+dirname = "moist_williamson1"
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           log_level='INFO')
