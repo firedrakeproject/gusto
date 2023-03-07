@@ -685,18 +685,17 @@ class InstantRain(Physics):
         test_v = equation.tests[self.Vv_idx]
 
         # Check if saturation is a function, and if so what of.
-        # Currently this works only when saturation is depth-dependent or not
-        # changing in time.
-        # TODO: allow saturation to be dependent on other variables
+        # This works if saturation is function of one of the equation variables.
         if isinstance(self.saturation, FunctionType):
-            if self.saturation_variable == "depth":
-                self.variable_idx = equation.field_names.index("D")
+            if self.saturation_variable in equation.field_names:
+                self.variable_idx = equation.field_names.index(
+                    self.saturation_variable)
                 Vvar_space = W.sub(self.variable_idx)
                 self.variable = Function(Vvar_space)
                 self.saturation_function = Function(Vvar_space)
             else:
                 raise NotImplementedError(
-                    "Saturation function must be either constant in time or a function of depth")
+                    "Saturation function must be either constant in time or a function of an equation variable")
         else:
             self.saturation_function = saturation_curve
 
