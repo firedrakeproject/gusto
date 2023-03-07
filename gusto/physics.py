@@ -835,7 +835,7 @@ class ReversibleAdjustment(Physics):
                                              self.water_v / self.tau))
 
         # Factors for multiplying source for different variables
-        factors = [Constant(0.9), Constant(-0.9)]
+        factors = [Constant(1.0), Constant(-1.0)]
 
         # Add terms to equations and make interpolators
         self.source = [Function(Vc) for factor in factors]
