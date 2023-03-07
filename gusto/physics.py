@@ -693,12 +693,12 @@ class InstantRain(Physics):
                 self.variable_idx = equation.field_names.index("D")
                 Vvar_space = W.sub(self.variable_idx)
                 self.variable = Function(Vvar_space)
-                self.sat_func = Function(Vvar_space)
+                self.saturation_function = Function(Vvar_space)
             else:
                 raise NotImplementedError(
                     "Saturation function must be either constant in time or a function of depth")
         else:
-            self.sat_func = saturation_curve
+            self.saturation_function = saturation_curve
 
         # depth needed if convective feedback
         if self.convective_feedback:
@@ -744,8 +744,8 @@ class InstantRain(Physics):
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
-            self.water_v > self.sat_func,
-            (1/self.tau)*(self.water_v - self.sat_func),
+            self.water_v > self.saturation_function,
+            (1/self.tau)*(self.water_v - self.saturation_function),
             0), Vv)
 
     def evaluate(self, x_in, dt):
@@ -764,9 +764,9 @@ class InstantRain(Physics):
             self.D.assign(x_in.split()[self.VD_idx])
         if isinstance(self.saturation, FunctionType):
             self.variable.assign(x_in.split()[self.variable_idx])
-            self.sat_func.interpolate(self.saturation(self.variable))
+            self.saturation_function.interpolate(self.saturation(self.variable))
         else:
-            self.sat_func.interpolate(self.saturation)
+            self.saturation_function.assign(self.saturation)
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
