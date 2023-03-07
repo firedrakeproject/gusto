@@ -49,8 +49,7 @@ def run_instant_rain(dirname):
 
     # Physics schemes
     # define saturation function
-    VD = FunctionSpace(mesh, "DG", 1)
-    saturation = Function(VD).assign(0.5)
+    saturation = Constant(0.5)
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
                                     set_tau_to_dt=True), ForwardEuler(domain))]
 
@@ -73,6 +72,7 @@ def run_instant_rain(dirname):
 
     vapour0.interpolate(vapour_expr)
 
+    VD = FunctionSpace(mesh, "DG", 1)
     initial_vapour = Function(VD).interpolate(vapour_expr)
 
     # define expected solutions; vapour should be equal to saturation and rain
