@@ -1,9 +1,6 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, pi,
-                       cos, sin, acos, conditional, VectorFunctionSpace,
-                       FiniteElement, exp)
-from os import path
-from netCDF4 import Dataset
+                       cos, sin, acos, conditional, exp)
 
 # ---------------------------------------------------------------- #
 # Test case parameters
