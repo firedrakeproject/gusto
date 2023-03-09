@@ -34,16 +34,14 @@ mesh.init_cell_orientations(x)
 domain = Domain(mesh, dt, 'BDM', 1)
 theta, lamda = latlon_coords(mesh)
 
-Vu = VectorFunctionSpace(mesh, "CG", 1)
-eltDG = FiniteElement("DG", "interval", 1, variant="equispaced")
-VD = FunctionSpace(mesh, eltDG)
+DG_space = domain.spaces.DG
 tracers = [CloudWater(space='tracer')]
-eqns = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
+eqns = ForcedAdvectionEquation(domain, DG_space, field_name="water_vapour",
                                active_tracers=tracers)
 
 # saturation field (SSHS lat only)
 alpha_0 = 0
-msat_expr = 90 * exp(-(theta**2/(pi/3)**2) - alpha_0 * (lamda - pi)**2/(2*pi/3)**2)
+msat_expr = 110 * exp(-(theta**2/(pi/3)**2) - alpha_0 * (lamda - pi)**2/(2*pi/3)**2)
 VD = FunctionSpace(mesh, "DG", 1)
 msat = Function(VD)
 msat.interpolate(msat_expr)
@@ -53,9 +51,8 @@ dirname = "moist_williamson1"
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           log_level='INFO')
-diagnostic_fields = [CourantNumber()]
-diagnostics = Diagnostics( "water_vapour", "cloud_water")
-io = IO(domain, output, diagnostic_fields=diagnostic_fields, diagnostics=diagnostics)
+diagnostic_fields = [CourantNumber(), Sum("water_vapour", "cloud_water")]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 physics_schemes = [(ReversibleAdjustment(eqns, msat, vapour_name='water_vapour',
                                          cloud_name='cloud_water',
@@ -87,8 +84,8 @@ v0.project(conditional(r < R, h_expr, 0))
 sat_field = stepper.fields("sat_field", space=VD)
 sat_field.interpolate(msat)
 
-total_moisture = stepper.fields("total_moisture", space=VD)
-total_moisture.interpolate(v0)
+# total_moisture = stepper.fields("total_moisture", space=VD)
+# total_moisture.interpolate(v0)
 
 # ------------------------------------------------------------------------ #
 # Run
