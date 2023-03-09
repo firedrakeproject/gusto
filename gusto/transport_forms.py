@@ -368,7 +368,7 @@ def kinetic_energy_form(domain, test, q):
     """
 
     ubar = Function(domain.spaces("HDiv"))
-    L = 0.5*div(test)*inner(q, ubar)*dx
+    L = div(test)*inner(q, ubar)*dx
 
     form = transporting_velocity(L, ubar)
 

@@ -635,7 +635,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + 0.5*ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
