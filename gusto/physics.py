@@ -818,6 +818,7 @@ class ReversibleAdjustment(Physics):
         # Source functions for both vapour and cloud
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
+        self.total_moisture = Function(Vv)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
         if self.set_tau_to_dt:
@@ -847,6 +848,9 @@ class ReversibleAdjustment(Physics):
         for test, source in zip(tests, self.source):
             equation.residual += physics(subject(test * source * dx,
                                                  equation.X), self.evaluate)
+        # Interpolator for total moisture
+        self.total_moisture_interpolator = Interpolator(
+            self.water_v + self.cloud,  Vv)
 
     def evaluate(self, x_in, dt):
         """
@@ -865,5 +869,8 @@ class ReversibleAdjustment(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.cloud.assign(x_in.split()[self.Vc_idx])
+        # self.total_moisture.assign(self.water_v)
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+        # self.total_moisture.assign(self.total_moisture_interpolator.interpolate())
+        self.total_moisture.interpolate(self.water_v)

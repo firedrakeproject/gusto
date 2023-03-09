@@ -2,6 +2,8 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, pi,
                        cos, sin, acos, conditional, VectorFunctionSpace,
                        FiniteElement, exp)
+from os import path
+from netCDF4 import Dataset
 
 # ---------------------------------------------------------------- #
 # Test case parameters
@@ -52,7 +54,8 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           log_level='INFO')
 diagnostic_fields = [CourantNumber()]
-io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+diagnostics = Diagnostics( "water_vapour", "cloud_water")
+io = IO(domain, output, diagnostic_fields=diagnostic_fields, diagnostics=diagnostics)
 
 physics_schemes = [(ReversibleAdjustment(eqns, msat, vapour_name='water_vapour',
                                          cloud_name='cloud_water',
@@ -83,6 +86,9 @@ v0.project(conditional(r < R, h_expr, 0))
 
 sat_field = stepper.fields("sat_field", space=VD)
 sat_field.interpolate(msat)
+
+total_moisture = stepper.fields("total_moisture", space=VD)
+total_moisture.interpolate(v0)
 
 # ------------------------------------------------------------------------ #
 # Run
