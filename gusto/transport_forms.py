@@ -368,7 +368,7 @@ def kinetic_energy_form(domain, test, q):
     """
 
     ubar = Function(domain.spaces("HDiv"))
-    L = div(test)*inner(q, ubar)*dx
+    L = -0.5*div(test)*inner(q, ubar)*dx
 
     form = transporting_velocity(L, ubar)
 
@@ -409,7 +409,7 @@ def advection_equation_circulation_form(domain, test, q,
 
     form = (
         vector_invariant_form(domain, test, q, ibp=ibp)
-        - kinetic_energy_form(domain, test, q)
+        + kinetic_energy_form(domain, test, q)
     )
 
     return form
