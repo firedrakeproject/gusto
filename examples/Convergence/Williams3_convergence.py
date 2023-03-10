@@ -19,7 +19,7 @@ H = 5960.
 ref = 5
 
 parameters = ShallowWaterParameters(H=H)
-step = [100, 300, 350, 400, 450, 500]
+step = [300, 350, 400, 450, 500]
 timediscretisation = [ImplicitMidpoint]
 
 # Starts for loop for different reginement levels
