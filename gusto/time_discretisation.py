@@ -1021,7 +1021,7 @@ class BDF2(MultilevelTimeDiscretisation):
 
     @property
     def rhs0(self):
-        """Set up the time discretisation's right hand side."""
+        """Set up the time discretisation's right hand side for inital BDF step."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, self.idx),
@@ -1042,7 +1042,7 @@ class BDF2(MultilevelTimeDiscretisation):
 
     @property
     def rhs(self):
-        """Set up the time discretisation's right hand side."""
+        """Set up the time discretisation's right hand side for BDF2 steps."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, self.idx),
@@ -1058,7 +1058,7 @@ class BDF2(MultilevelTimeDiscretisation):
 
     @property
     def solver0(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for initial BDF step."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
@@ -1066,7 +1066,7 @@ class BDF2(MultilevelTimeDiscretisation):
 
     @property
     def solver(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for BDF2 steps."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
@@ -1094,15 +1094,15 @@ class BDF2(MultilevelTimeDiscretisation):
 
 class TR_BDF2(TimeDiscretisation):
     """
-    Implements the two stage implicit TR-BDF2 timestepping method, with a trapeziodal stage follwed
-    by a second order backwards difference stage.
+    Implements the two stage implicit TR-BDF2 time stepping method, with a trapezoidal stage (TR) followed
+    by a second order backwards difference stage (BDF2).
 
-    The TR_BDF2 timestepping method for operator F is written as
-    y^(n+g) = y^n + dt*g*F[y^n] + dt*g*F[y^(n+g)] (TR stage)
+    The TR-BDF2 time stepping method for operator F is written as
+    y^(n+g) = y^n + dt*g/2*F[y^n] + dt*g/2*F[y^(n+g)] (TR stage)
     y^(n+1) = 1/(g(2-g))*y^(n+g) - (1-g)**2/(g(2-g))*y^(n) + (1-g)/(2-g)*dt*F[y^(n+1)] (BDF2 stage)
-    for parameter g (gamma).
+    for an off-centring parameter g (gamma).
     """
-    def __init__(self, domain, field_name=None, gamma=None,
+    def __init__(self, domain, gamma, field_name=None,
                  solver_parameters=None, options=None):
         """
         Args:
@@ -1110,20 +1110,15 @@ class TR_BDF2(TimeDiscretisation):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            gamma (float, optional): the off-centring parameter
+            gamma (float): the off-centring parameter
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
-
-        Raises:
-            ValueError: if gamma is not provided.
         """
-        # TODO: would this be better as a non-optional argument? Or should the
-        # check be on the provided value?
-        if gamma is None:
+        if ( gamma < 0. or gamma > 1. ):
             raise ValueError("please provide a value for gamma between 0 and 1")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -1198,7 +1193,7 @@ class TR_BDF2(TimeDiscretisation):
     def solver_tr(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_npg, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
@@ -1220,7 +1215,6 @@ class TR_BDF2(TimeDiscretisation):
         """
         self.xn.assign(x_in)
         self.solver_tr.solve()
-        self.xnpg.assign(self.x_out)
         self.solver_bdf2.solve()
         x_out.assign(self.x_out)
 
@@ -1238,7 +1232,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
     @property
     def rhs0(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for initial forward euler step."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x1, self.idx))
@@ -1254,7 +1248,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
     @property
     def rhs(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for leapfrog steps."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=replace_subject(self.x1, self.idx))
@@ -1266,7 +1260,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
     @property
     def solver0(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for initial forward euler step."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
@@ -1274,7 +1268,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
     @property
     def solver(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for leapfrog steps."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
@@ -1332,8 +1326,6 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
-            # theta method leads to asymmetric matrix, per lhs function below,
-            # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
@@ -1367,7 +1359,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
     @property
     def rhs0(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for initial forward euler step."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x[-1], self.idx))
@@ -1383,7 +1375,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
     @property
     def rhs(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for Adams Bashforth steps."""
         r = self.residual.label_map(all_terms,
                                     map_if_true=replace_subject(self.x[-1], self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
@@ -1399,7 +1391,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
     @property
     def solver0(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solverfor initial forward euler step."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
@@ -1407,7 +1399,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
     @property
     def solver(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for Adams Bashforth steps."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
@@ -1465,8 +1457,6 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
-            # theta method leads to asymmetric matrix, per lhs function below,
-            # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
@@ -1502,7 +1492,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def rhs0(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for initial trapeziodal step."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x[-1], self.idx))
@@ -1513,7 +1503,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def lhs0(self):
-        """Set up the time discretisation's right hand side."""
+        """Set up the time discretisation's right hand side for initial trapeziodal step."""
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x_out, self.idx))
@@ -1523,7 +1513,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def lhs(self):
-        """Set up the time discretisation's right hand side."""
+        """Set up the time discretisation's right hand side for Adams Moulton steps."""
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x_out, self.idx))
@@ -1533,7 +1523,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def rhs(self):
-        """Set up the discretisation's right hand side."""
+        """Set up the discretisation's right hand side for Adams Moulton steps."""
         r = self.residual.label_map(all_terms,
                                     map_if_true=replace_subject(self.x[-1], self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
@@ -1549,7 +1539,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def solver0(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for initial trapeziodal step."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
@@ -1557,7 +1547,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def solver(self):
-        """Set up the problem and the solver."""
+        """Set up the problem and the solver for Adams Moulton steps."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
