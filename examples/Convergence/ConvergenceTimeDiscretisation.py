@@ -17,6 +17,7 @@ def finderror(scheme, dt, ref=5):
         normalised_U2_error = data.groups['u_error']['l2'][:] / data.groups['u']['l2'][0]
         error.append(normalised_U2_error[-1])
     return error
+#explicit steppers
 
 time = findtime()
 dt = [120, 110, 100, 90, 80, 70]
@@ -28,6 +29,13 @@ for schemes in ['SSPRK3', 'RK4', 'Heun']:
     plt.plot(dt, log(finderror(schemes, dt)), label=f'{schemes}')
     plt.show()
 ax.set_xlim(max(dt), min(dt))
-#plt.legend()
-#plt.show()
-#fig.savefig("%s/Williams3_timediscretisation_convergence" % (examples/Convergence/plots))
+
+# Implicit midpoint
+dt = [100, 150, 200, 250, 300, 350, 400, 450, 500]
+fig, ax = plt.subplots()
+plt.xlabel('TimeStep')
+plt.ylabel('Normalise L2 velocity Error')
+fig.suptitle('Convergence plots of different timesteppers')
+plt.plot(dt, log(finderror('ImplicitMidpoint', dt)))
+plt.show()
+ax.set_xlim(max(dt), min(dt))
