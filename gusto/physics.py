@@ -633,18 +633,19 @@ class InstantRain(Physics):
     timestep dt or over a specified time interval tau.
      """
 
-    def __init__(self, equation, saturation_curve, saturation_variable=None,
+    def __init__(self, equation, saturation_curve, saturation_dependency=None,
                  vapour_name="water_vapour", rain_name=None,
                  convective_feedback=False, set_tau_to_dt=False,
                  parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
-            saturation_curve (ufl.Expr): the saturation function, above which
-                excess moisture is converted.
-            saturation_variable (str, optional): name of the variable that the
+            saturation_curve (ufl.Expr or :class: `function`): the saturation
+                function, above which excess moisture is converted. Can be
+                constant in time or a function of one of the equation fields.
+            saturation_dependency (str, optional): name of the field that the
                 saturation curve depends on, if the saturation curve changes in
-                time.
+                time. This field must be one of the equation variables.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
@@ -665,8 +666,7 @@ class InstantRain(Physics):
         parameters = self.parameters
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
-        self.saturation = saturation_curve
-        self.saturation_variable = saturation_variable
+        self.saturation_curve = saturation_curve
 
         # check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -685,19 +685,20 @@ class InstantRain(Physics):
         test_v = equation.tests[self.Vv_idx]
 
         # Check if saturation is a function, and if so what of.
-        # This works if saturation is function of one of the equation variables.
-        if isinstance(self.saturation, FunctionType):
-            if self.saturation_variable in equation.field_names:
-                self.variable_idx = equation.field_names.index(
-                    self.saturation_variable)
-                Vvar_space = W.sub(self.variable_idx)
-                self.variable = Function(Vvar_space)
-                self.saturation_function = Function(Vvar_space)
+        # The dependency must be one of the equation variables.
+        if isinstance(self.saturation_curve, FunctionType):
+            if saturation_dependency in equation.field_names:
+                self.dependency_idx = equation.field_names.index(
+                    saturation_dependency)
+                dependency_space = W.sub(self.dependency_idx)
+                self.saturation_dependency = Function(dependency_space)
+                # make a Firedrake function to store the saturation function
+                self.saturation_function = Function(dependency_space)
             else:
                 raise NotImplementedError(
                     "Saturation function must be either constant in time or a function of an equation variable")
         else:
-            self.saturation_function = saturation_curve
+            self.saturation_function = self.saturation_curve
 
         # depth needed if convective feedback
         if self.convective_feedback:
@@ -761,11 +762,10 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-        if isinstance(self.saturation, FunctionType):
-            self.variable.assign(x_in.split()[self.variable_idx])
-            self.saturation_function.interpolate(self.saturation(self.variable))
-        else:
-            self.saturation_function.assign(self.saturation)
+        if isinstance(self.saturation_curve, FunctionType):
+            self.saturation_dependency.assign(x_in.split()[self.dependency_idx])
+            self.saturation_function.interpolate(self.saturation_curve(
+                self.saturation_dependency))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
