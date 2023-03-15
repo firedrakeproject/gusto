@@ -143,7 +143,7 @@ def test_checkpointing(tmpdir):
     for field_name in ['rho', 'theta', 'u']:
         diff_array = stepper_2.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
         error = np.linalg.norm(diff_array)
-        assert error < 5e-10, \
+        assert error < 5e-16, \
             f'Checkpointed and picked up field {field_name} is not equal'
 
     # ------------------------------------------------------------------------ #
@@ -158,6 +158,10 @@ def test_checkpointing(tmpdir):
     # Run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
+    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
+                                chkptfreq=2, log_level='INFO',
+                                checkpoint_pickup_filename=chkpt_2_path)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
     stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
 
     # ------------------------------------------------------------------------ #
@@ -170,8 +174,7 @@ def test_checkpointing(tmpdir):
         assert error < 1e-14, \
             f'Checkpointed field {field_name} with same time stepper is not equal to non-checkpointed field'
 
-        if checkpoint_method == 'new':
-            diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
-            error = np.linalg.norm(diff_array)
-            assert error < 1e-10, \
-                f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
+        diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
+        error = np.linalg.norm(diff_array)
+        assert error < 1e-10, \
+            f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'

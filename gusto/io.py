@@ -12,8 +12,34 @@ from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
-__all__ = ["IO"]
+__all__ = ["pick_up_mesh", "IO"]
 
+def pick_up_mesh(output, mesh_name):
+    """
+    Picks up a checkpointed mesh. This must be the first step of any model being
+    picked up from a checkpointing run.
+
+    Args:
+        output (:class:`OutputParameters`): holds and describes the options for
+            outputting.
+        mesh_name (str): the name of the mesh to be picked up. The default names
+            used by Firedrake are "firedrake_default" for non-extruded meshes,
+            or "firedrake_default_extruded" for extruded meshes.
+
+    Returns:
+        :class:`Mesh`: the mesh to be used by the model.
+    """
+
+    # Open the checkpointing file for writing
+    if output.checkpoint_pickup_filename is not None:
+        chkfile = output.checkpoint_pickup_filename
+    else:
+        dumpdir = path.join("results", output.dirname)
+        chkfile = path.join(dumpdir, "chkpt.h5")
+    with CheckpointFile(chkfile, 'r') as chk:
+        mesh = chk.load_mesh(mesh_name)
+
+    return mesh
 
 class PointDataOutput(object):
     """Object for outputting field point data."""
@@ -235,7 +261,7 @@ class IO(object):
             if fname in state_fields.to_dump:
                 self.diagnostics.register(fname)
 
-    def setup_dump(self, state_fields, t, tmax, pickup=False):
+    def setup_dump(self, state_fields, t, pickup=False):
         """
         Sets up a series of things used for outputting.
 
@@ -247,7 +273,6 @@ class IO(object):
         Args:
             state_fields (:class:`StateFields`): the model's field container.
             t (float): the current model time.
-            tmax (float): the end time of the model's simulation.
             pickup (bool, optional): whether to pick up the model's initial
                 state from a checkpointing file. Defaults to False.
 
@@ -267,9 +292,8 @@ class IO(object):
                 if not running_tests and path.exists(self.dumpdir) and not pickup:
                     raise IOError("results directory '%s' already exists"
                                   % self.dumpdir)
-                else:
-                    if not running_tests:
-                        makedirs(self.dumpdir)
+                elif not running_tests:
+                    makedirs(self.dumpdir)
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
@@ -324,22 +348,24 @@ class IO(object):
         # which case we just need the filenames
         if self.output.dump_diagnostics:
             diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+            to_create = not (path.isfile(diagnostics_filename) and pickup)
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
                                                        self.mesh.comm,
-                                                       create=not pickup)
+                                                       create=to_create)
 
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
+            to_create = not (path.isfile(pointdata_filename) and pickup)
             self.pointdata_output = PointDataOutput(pointdata_filename,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     state_fields,
                                                     self.mesh.comm,
                                                     self.output.tolerance,
-                                                    create=not pickup)
+                                                    create=to_create)
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
@@ -349,12 +375,11 @@ class IO(object):
             if self.output.pddumpfreq is None:
                 self.output.pddumpfreq = self.output.dumpfreq
 
-        # if we want to checkpoint and are not picking up from a previous
-        # checkpoint file, setup the checkpointing
+        # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if not pickup:
-                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                            mode=FILE_CREATE)
+            # should have already picked up, so can create a new file
+            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                        mode=FILE_CREATE)
             # make list of fields to pickup (this doesn't include
             # diagnostic fields)
             self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
@@ -366,7 +391,7 @@ class IO(object):
         # dump initial fields
         self.dump(state_fields, t)
 
-    def pickup_from_checkpoint(self, state_fields):
+    def pick_up_from_checkpoint(self, state_fields):
         """Picks up the model's variables from a checkpoint file."""
         # TODO: this duplicates some code from setup_dump. Can this be avoided?
         # It is because we don't know if we are picking up or setting dump first
@@ -387,8 +412,9 @@ class IO(object):
                 for field in self.to_pickup:
                     chk.load(field)
                 t = chk.read_attribute("/", "time")
-            # Setup new checkpoint
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+            # If we have picked up from a non-standard file, reset this name
+            # so that we will checkpoint using normal file name from now on
+            self.output.checkpoint_pickup_filename = None
         else:
             raise ValueError("Must set checkpoint True if pickup")
 

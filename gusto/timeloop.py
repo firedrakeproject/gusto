@@ -68,12 +68,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
 
         if pickup:
-            t = self.io.pickup_from_checkpoint(self.fields)
+            t = self.io.pick_up_from_checkpoint(self.fields)
 
         self.io.setup_diagnostics(self.fields)
 
         with timed_stage("Dump output"):
-            self.io.setup_dump(self.fields, t, tmax, pickup)
+            self.io.setup_dump(self.fields, t, pickup)
 
         self.t.assign(t)
 
@@ -447,8 +447,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             pickup: (bool): specify whether to pickup from a previous run
         """
 
-        assert self.reference_profiles_initialised, \
-            'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
+        if not pickup:
+            assert self.reference_profiles_initialised, \
+                'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
 
         super().run(t, tmax, pickup=pickup)
 
