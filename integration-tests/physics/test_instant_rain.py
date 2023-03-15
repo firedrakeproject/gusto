@@ -95,7 +95,7 @@ def test_instant_rain_setup(tmpdir):
     r = stepper.fields("rain")
 
     # check that the maximum of the vapour field is equal to the saturation
-    assert v.dat.data.max() - saturation.dat.data.max() < 0.001, "The maximum of the final vapour field should be equal to saturation"
+    assert v.dat.data.max() - saturation.values() < 0.001, "The maximum of the final vapour field should be equal to saturation"
 
     # check that the minimum of the vapour field hasn't changed
     assert v.dat.data.min() - initial_vapour.dat.data.min() < 0.001, "The minimum of the vapour field should not change"
