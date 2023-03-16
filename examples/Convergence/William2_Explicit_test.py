@@ -1,6 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
-import sys
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, CubedSphereMesh
+
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
@@ -8,7 +8,7 @@ import sys
 day = 24 * 60 * 60
 # setup resolution and timestepping parameters for convergence test
 ref = 5
-timestep = [50, 100, 150, 200, 225, 250, 275, 300]
+timestep = [200, 150, 100]
 tmax = 1 * day
 ndumps = 1
 steppers = [SSPRK3, RK4, Heun]
@@ -27,12 +27,12 @@ for scheme in steppers:
         # ------------------------------------------------------------------------ #
 
         # Domain
-        mesh = IcosahedralSphereMesh(radius=R,
-                                    refinement_level=ref, degree=2)
+        mesh = CubedSphereMesh(radius=R, 
+                            refinement_level=ref, degree=2)
         x = SpatialCoordinate(mesh)
         global_normal = x
         mesh.init_cell_orientations(x)
-        domain = Domain(mesh, dt, 'BDM', 1)
+        domain = Domain(mesh, dt, 'BDM', 2)
 
         # Equation
         Omega = parameters.Omega
@@ -40,7 +40,7 @@ for scheme in steppers:
         eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_manifold_advection_form')
 
         # I/O
-        dirname = f'Williams2_{scheme.__name__}_dt={dt}_degree=2'
+        dirname = f'Williams2_cubed_{scheme.__name__}_dt={dt}_degree=2'
         dumpfreq = 1 # int(tmax / (ndumps*dt))
         output = OutputParameters(dirname=dirname,
                                 dumpfreq=dumpfreq,
