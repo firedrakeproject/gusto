@@ -1118,7 +1118,7 @@ class TR_BDF2(TimeDiscretisation):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        if ( gamma < 0. or gamma > 1. ):
+        if (gamma < 0. or gamma > 1.):
             raise ValueError("please provide a value for gamma between 0 and 1")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -1145,7 +1145,7 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.xnpg, self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
 
@@ -1193,7 +1193,7 @@ class TR_BDF2(TimeDiscretisation):
     def solver_tr(self):
         """Set up the problem and the solver."""
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_npg, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
