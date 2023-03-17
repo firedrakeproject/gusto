@@ -1325,10 +1325,6 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
             raise ValueError("Adams-Bashforth of order greater than 5 not implemented")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
-        if not solver_parameters:
-            solver_parameters = {'ksp_type': 'gmres',
-                                 'pc_type': 'bjacobi',
-                                 'sub_pc_type': 'ilu'}
 
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
