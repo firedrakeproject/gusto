@@ -640,12 +640,13 @@ class InstantRain(Physics):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
-            saturation_curve (ufl.Expr or :class: `function`): the saturation
-                function, above which excess moisture is converted. Can be
-                constant in time or a function of one of the equation fields.
+            saturation_curve (ufl.Expr or :class: `function`, optional): the
+                curve above which excess moisture is converted. Can be constant
+                in time, constant in time and space, or a function of one of
+                the equation's prognostic fields.
             saturation_dependency (str, optional): name of the field that the
                 saturation curve depends on, if the saturation curve changes in
-                time. This field must be one of the equation variables.
+                time. This must be one of the equation's prognostic fields.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
@@ -696,7 +697,7 @@ class InstantRain(Physics):
                 self.saturation_function = Function(dependency_space)
             else:
                 raise NotImplementedError(
-                    "Saturation function must be either constant in time or a function of an equation variable")
+                    "Saturation function must be either constant in time or a function of an equation prognostic field")
         else:
             self.saturation_function = self.saturation_curve
 
