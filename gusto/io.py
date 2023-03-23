@@ -8,7 +8,8 @@ import time
 from gusto.diagnostics import Diagnostics
 from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
                        interval, Function, Mesh, functionspaceimpl, File,
-                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ, VectorElement)
+                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ,
+                       CheckpointFile, VectorElement)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
@@ -388,9 +389,16 @@ class IO(object):
 
         # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            # should have already picked up, so can create a new file
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                        mode=FILE_CREATE)
+            if self.output.checkpoint_method == 'old':
+                # should have already picked up, so can create a new file
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                            mode=FILE_CREATE)
+            elif self.output.checkpoint_method == 'new':
+                # should have already picked up, so can create a new file
+                self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
+            else:
+                raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
+
             # make list of fields to pick_up (this doesn't include
             # diagnostic fields)
             self.to_pick_up = [fname for fname in state_fields.to_pick_up]
@@ -440,35 +448,68 @@ class IO(object):
             # Open the checkpointing file for writing
             if self.output.checkpoint_pickup_filename is not None:
                 chkfile = self.output.checkpoint_pickup_filename
-            else:
+            elif self.output.checkpoint_method == 'old':
                 chkfile = path.join(self.dumpdir, "chkpt")
+            elif self.output.checkpoint_method == 'new':
+                chkfile = path.join(self.dumpdir, "chkpt.h5")
 
-            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                # Recover compulsory fields from the checkpoint
-                for field_name in self.to_pick_up:
-                    chk.load(state_fields(field_name), name=field_name)
+            if self.output.checkpoint_method == 'old':
+                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                    # Recover compulsory fields from the checkpoint
+                    for field_name in self.to_pick_up:
+                        chk.load(state_fields(field_name), name=field_name)
 
-                # Read in reference profiles -- failures are allowed here
-                for field_name in possible_ref_profiles:
-                    ref_name = f'{field_name}_bar'
-                    ref_field = Function(state_fields(field_name).function_space(), name=ref_name)
+                    # Read in reference profiles -- failures are allowed here
+                    for field_name in possible_ref_profiles:
+                        ref_name = f'{field_name}_bar'
+                        ref_field = Function(state_fields(field_name).function_space(), name=ref_name)
+                        try:
+                            chk.load(ref_field, name=ref_name)
+                            reference_profiles.append((field_name, ref_field))
+                            # Field exists, so add to to_pick_up
+                            self.to_pick_up.append(ref_name)
+                        except RuntimeError:
+                            pass
+
+                    # Try to pick up number of initial steps for multi level scheme
+                    # Not compulsory so errors allowed
                     try:
-                        chk.load(ref_field, name=ref_name)
-                        reference_profiles.append((field_name, ref_field))
-                        # Field exists, so add to to_pick_up
-                        self.to_pick_up.append(ref_name)
-                    except RuntimeError:
-                        pass
+                        initial_steps = chk.read_attribute("/", "initial_steps")
+                    except AttributeError:
+                        initial_steps = None
 
-                # Try to pick up number of initial steps for multi level scheme
-                # Not compulsory so errors allowed
-                try:
-                    initial_steps = chk.read_attribute("/", "initial_steps")
-                except AttributeError:
-                    initial_steps = None
+                    # Finally pick up time
+                    t = chk.read_attribute("/", "time")
 
-                # Finally pick up time
-                t = chk.read_attribute("/", "time")
+            else:
+                mesh_name = self.domain.mesh.name
+                with CheckpointFile(chkfile, 'r') as chk:
+                    mesh = chk.load_mesh(mesh_name)
+                    # Recover compulsory fields from the checkpoint
+                    for field_name in self.to_pick_up:
+                        field = chk.load_function(mesh, field_name)
+                        state_fields(field_name).assign(field)
+
+                    # Read in reference profiles -- failures are allowed here
+                    for field_name in possible_ref_profiles:
+                        ref_name = f'{field_name}_bar'
+                        try:
+                            ref_field = chk.load_function(mesh, ref_name)
+                            reference_profiles.append((field_name, ref_field))
+                            # Field exists, so add to to_pick_up
+                            self.to_pick_up.append(ref_name)
+                        except RuntimeError:
+                            pass
+
+                    # Try to pick up number of initial steps for multi level scheme
+                    # Not compulsory so errors allowed
+                    if chk.has_attr("/", "initial_steps"):
+                        initial_steps = chk.get_attr("/", "initial_steps")
+                    else:
+                        initial_steps = None
+
+                    # Finally pick up time
+                    t = chk.get_attr("/", "time")
 
             # If we have picked up from a non-standard file, reset this name
             # so that we will checkpoint using normal file name from now on
@@ -509,11 +550,21 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            for field_name in self.to_pick_up:
-                self.chkpt.store(state_fields(field_name), name=field_name)
-            self.chkpt.write_attribute("/", "time", t)
-            if initial_steps is not None:
-                self.chkpt.write_attribute("/", "initial_steps", initial_steps)
+            if self.output.checkpoint_method == 'old':
+                for field_name in self.to_pick_up:
+                    self.chkpt.store(state_fields(field_name), name=field_name)
+                self.chkpt.write_attribute("/", "time", t)
+                if initial_steps is not None:
+                    self.chkpt.write_attribute("/", "initial_steps", initial_steps)
+            else:
+                with CheckpointFile(self.chkpt_path, 'w') as chk:
+                    chk.save_mesh(self.domain.mesh)
+                    for field_name in self.to_pick_up:
+                        chk.save_function(state_fields(field_name), name=field_name)
+                    chk.set_attr("/", "time", t)
+                    if initial_steps is not None:
+                        chk.set_attr("/", "initial_steps", initial_steps)
+
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:
