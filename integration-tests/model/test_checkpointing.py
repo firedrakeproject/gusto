@@ -8,29 +8,41 @@ import numpy as np
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, pi,
                        SpatialCoordinate, exp, sin, Function, as_vector)
+import pytest
 
-
-def set_up_model_objects(mesh, dt, output):
+def set_up_model_objects(mesh, dt, output, stepper_type):
 
     domain = Domain(mesh, dt, "CG", 1)
 
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
 
-    io = IO(domain, output)
+    # Have two diagnostic fields that depend on initial values -- check if
+    # these diagnostics are preserved by checkpointing
+    diagnostic_fields = [SteadyStateError('rho'), Perturbation('theta')]
 
-    # Set up transport schemes
-    transported_fields = []
-    transported_fields.append(SSPRK3(domain, "u"))
-    transported_fields.append(SSPRK3(domain, "rho"))
-    transported_fields.append(SSPRK3(domain, "theta"))
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Set up linear solver
-    linear_solver = CompressibleSolver(eqns)
+    if stepper_type == 'semi_implicit':
+        # Set up transport schemes
+        transported_fields = []
+        transported_fields.append(SSPRK3(domain, "u"))
+        transported_fields.append(SSPRK3(domain, "rho"))
+        transported_fields.append(SSPRK3(domain, "theta"))
 
-    # build time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                      linear_solver=linear_solver)
+        # Set up linear solver
+        linear_solver = CompressibleSolver(eqns)
+
+        # build time stepper
+        stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                          linear_solver=linear_solver)
+
+    elif stepper_type == 'multi_level':
+        scheme = BDF2(domain)
+        stepper = Timestepper(eqns, scheme, io)
+
+    else:
+        raise ValueError(f'stepper_type {stepper_type} not recognised')
 
     return stepper, eqns
 
@@ -74,8 +86,8 @@ def initialise_fields(eqns, stepper):
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
-
-def test_checkpointing(tmpdir):
+@pytest.mark.parametrize("stepper_type", ["multi_level", "semi_implicit"])
+def test_checkpointing(tmpdir, stepper_type):
 
     mesh_name = 'checkpointing_mesh'
 
@@ -100,8 +112,8 @@ def test_checkpointing(tmpdir):
                                 chkptfreq=2, log_level='INFO')
 
 
-    stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1)
-    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2)
+    stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type)
+    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type)
 
     initialise_fields(eqns_1, stepper_1)
     initialise_fields(eqns_2, stepper_2)
@@ -130,7 +142,7 @@ def test_checkpointing(tmpdir):
                                 checkpoint_pickup_filename=chkpt_2_path)
 
     # mesh = pick_up_mesh(output_3, mesh_name)
-    stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
 
     stepper_3.io.pick_up_from_checkpoint(stepper_3.fields)
 
@@ -151,8 +163,8 @@ def test_checkpointing(tmpdir):
     # ------------------------------------------------------------------------ #
 
     # Wipe fields from second time stepper
-    # initialise_fields(eqns_2, stepper_2)
-    stepper_2.run(t=2*dt, tmax=4*dt, pickup=True)
+    initialise_fields(eqns_2, stepper_2)
+    stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
 
     # ------------------------------------------------------------------------ #
     # Run *new* timestepper for 2 time steps
@@ -161,20 +173,29 @@ def test_checkpointing(tmpdir):
     output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
                                 chkptfreq=2, log_level='INFO',
                                 checkpoint_pickup_filename=chkpt_2_path)
-    stepper_3, _ = set_up_model_objects(mesh, dt, output_3)
-    stepper_3.run(t=2*dt, tmax=4*dt, pickup=True)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
+    stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
 
     # ------------------------------------------------------------------------ #
     # Compare fields against saved values for run without checkpointing
     # ------------------------------------------------------------------------ #
 
-    for field_name in ['rho', 'theta', 'u']:
+    # Rather than use Firedrake norm routine, take numpy norm of data arrays.
+    # This is because Firedrake may see the fields from the different time
+    # steppers as being on different meshes
+
+    for field_name in ['rho', 'theta', 'u', 'rho_error', 'theta_perturbation']:
+        # Check final fields are the same when checkpointing with the same time
+        # stepper -- very tight tolerance as there should be no error
         diff_array = stepper_1.fields(field_name).dat.data - stepper_2.fields(field_name).dat.data
-        error = np.linalg.norm(diff_array)
-        assert error < 1e-14, \
+        error = np.linalg.norm(diff_array) / np.linalg.norm(stepper_1.fields(field_name).dat.data)
+        assert error < 1e-15, \
             f'Checkpointed field {field_name} with same time stepper is not equal to non-checkpointed field'
 
+        # Check final fields when picking up with a new time stepper. As the
+        # solver objects are different, certain cached information will no
+        # longer be available so expect a bigger error
         diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
-        error = np.linalg.norm(diff_array)
-        assert error < 1e-10, \
+        error = np.linalg.norm(diff_array) / np.linalg.norm(stepper_1.fields(field_name).dat.data)
+        assert error < 5e-11, \
             f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
