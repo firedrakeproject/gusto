@@ -706,8 +706,12 @@ class InstantRain(Physics):
             self.tau = parameters.tau
 
         if self.time_varying_saturation:
-            self.saturation_computation = saturation_curve
-            self.saturation_curve = 10000000000
+            if isinstance(saturation_curve, FunctionType):
+                self.saturation_computation = saturation_curve
+                self.saturation_curve = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If the saturation curve is varying in time then currently it should depend on a prognostic field")
         else:
             self.saturation_curve = saturation_curve
 
@@ -748,9 +752,7 @@ class InstantRain(Physics):
             x_in (:class: 'Function'): the (mixed) field that evolves.
 
         """
-        self.saturation_curve = self.saturation_computation(x_in)
-        print("in update saturation")
-
+        self.saturation_curve.interpolate(self.saturation_computation(x_in))
 
     def evaluate(self, x_in, dt):
         """
@@ -768,7 +770,6 @@ class InstantRain(Physics):
             self.D.assign(x_in.split()[self.VD_idx])
         if self.time_varying_saturation:
             self.update_saturation(x_in)
-            print("time-varying is true")
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
