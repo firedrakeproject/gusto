@@ -633,7 +633,8 @@ class InstantRain(Physics):
     timestep dt or over a specified time interval tau.
      """
 
-    def __init__(self, equation, saturation_curve, saturation_dependency=None,
+    def __init__(self, equation, saturation_curve,
+                 time_varying_saturation=False,
                  vapour_name="water_vapour", rain_name=None,
                  convective_feedback=False, set_tau_to_dt=False,
                  parameters=None):
@@ -644,9 +645,9 @@ class InstantRain(Physics):
                 curve above which excess moisture is converted. Can be constant
                 in time, constant in time and space, or a function of one of
                 the equation's prognostic fields.
-            saturation_dependency (str, optional): name of the field that the
-                saturation curve depends on, if the saturation curve changes in
-                time. This must be one of the equation's prognostic fields.
+            time_varying_saturation (bool, optional): True if the saturation
+                curve is changing in time, whether this is because it is
+                dependent on a prognostic field ot not. Defaults to False.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
@@ -667,7 +668,7 @@ class InstantRain(Physics):
         parameters = self.parameters
         self.convective_feedback = convective_feedback
         self.set_tau_to_dt = set_tau_to_dt
-        self.saturation_curve = saturation_curve
+        self.time_varying_saturation = time_varying_saturation
 
         # check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -684,22 +685,6 @@ class InstantRain(Physics):
         W = equation.function_space
         Vv = W.sub(self.Vv_idx)
         test_v = equation.tests[self.Vv_idx]
-
-        # Check if saturation is a function, and if so what of.
-        # The dependency must be one of the equation variables.
-        if isinstance(self.saturation_curve, FunctionType):
-            if saturation_dependency in equation.field_names:
-                self.dependency_idx = equation.field_names.index(
-                    saturation_dependency)
-                dependency_space = W.sub(self.dependency_idx)
-                self.saturation_dependency = Function(dependency_space)
-                # make a Firedrake function to store the saturation function
-                self.saturation_function = Function(dependency_space)
-            else:
-                raise NotImplementedError(
-                    "Saturation function must be either constant in time or a function of an equation prognostic field")
-        else:
-            self.saturation_function = self.saturation_curve
 
         # depth needed if convective feedback
         if self.convective_feedback:
@@ -719,6 +704,12 @@ class InstantRain(Physics):
         else:
             assert parameters.tau is not None, "If the relaxation timescale is not dt then you must specify tau"
             self.tau = parameters.tau
+
+        if self.time_varying_saturation:
+            self.saturation_computation = saturation_curve
+            self.saturation_curve = 10000000000
+        else:
+            self.saturation_curve = saturation_curve
 
         # lose vapour above the saturation curve
         equation.residual += physics(subject(test_v * self.source * dx,
@@ -745,9 +736,21 @@ class InstantRain(Physics):
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
-            self.water_v > self.saturation_function,
-            (1/self.tau)*(self.water_v - self.saturation_function),
+            self.water_v > self.saturation_curve,
+            (1/self.tau)*(self.water_v - self.saturation_curve),
             0), Vv)
+
+    def update_saturation(self, x_in):
+        """"
+        Updates a time-dependent saturation curve.
+
+        Args:
+            x_in (:class: 'Function'): the (mixed) field that evolves.
+
+        """
+        self.saturation_curve = self.saturation_computation(x_in)
+        print("in update saturation")
+
 
     def evaluate(self, x_in, dt):
         """
@@ -763,10 +766,9 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
-        if isinstance(self.saturation_curve, FunctionType):
-            self.saturation_dependency.assign(x_in.split()[self.dependency_idx])
-            self.saturation_function.interpolate(self.saturation_curve(
-                self.saturation_dependency))
+        if self.time_varying_saturation:
+            self.update_saturation(x_in)
+            print("time-varying is true")
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
