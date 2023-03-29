@@ -1488,7 +1488,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def rhs0(self):
-        """Set up the discretisation's right hand side for initial trapeziodal step."""
+        """Set up the discretisation's right hand side for initial trapezoidal step."""
         r = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x[-1], self.idx))
@@ -1499,7 +1499,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def lhs0(self):
-        """Set up the time discretisation's right hand side for initial trapeziodal step."""
+        """Set up the time discretisation's right hand side for initial trapezoidal step."""
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x_out, self.idx))
@@ -1535,7 +1535,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
     @property
     def solver0(self):
-        """Set up the problem and the solver for initial trapeziodal step."""
+        """Set up the problem and the solver for initial trapezoidal step."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
