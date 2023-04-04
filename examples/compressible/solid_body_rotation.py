@@ -98,7 +98,7 @@ Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
 s = (r / a) * cos(lat)
 Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
 # solving fields as per the staniforth paper
-q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
+q_expr = Q_expr - ((g * a**2) / (Rd * T0)) * (a**-1 - r**-1)
 p_expr = p0 * exp(q_expr)
 theta_expr = T0 * (p_expr / p0) ** (-params.kappa)
 pie_expr = T0 / theta_expr
