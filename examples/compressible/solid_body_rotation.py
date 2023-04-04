@@ -2,7 +2,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
-                       errornorm, norm, Min, Max)
+                       errornorm, norm)
 from gusto import *                                              # 
 # -------------------------------------------------------------- #
 # Test case Parameters
