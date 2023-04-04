@@ -38,7 +38,7 @@ def set_up_model_objects(mesh, dt, output, stepper_type):
                                           linear_solver=linear_solver)
 
     elif stepper_type == 'multi_level':
-        scheme = BDF2(domain)
+        scheme = TR_BDF2(domain, gamma=0.5)
         stepper = Timestepper(eqns, scheme, io)
 
     else:
@@ -86,7 +86,7 @@ def initialise_fields(eqns, stepper):
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
-@pytest.mark.parametrize("stepper_type", ["semi_implicit"])
+@pytest.mark.parametrize("stepper_type", ["multi_level", "semi_implicit"])
 @pytest.mark.parametrize("checkpoint_method", ["old", "new"])
 def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
@@ -97,7 +97,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     columns = 15  # number of columns
     L = 3.e5
     m = PeriodicIntervalMesh(columns, L)
-    dt = 2.0
+    dt = 0.2
 
     # build volume mesh
     H = 1.0e4  # Height position of the model top
