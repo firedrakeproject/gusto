@@ -35,8 +35,7 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 
-#dirname = 'sbr_quadratic_%i_day_dt_%i_degree%i_solveforrho' % (days, dt, 2)
-dirname = 'solidbody_ref4_layers30'
+dirname = 'Animation_sbr'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
