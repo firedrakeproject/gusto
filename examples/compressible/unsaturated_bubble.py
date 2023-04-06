@@ -51,8 +51,9 @@ eqns = CompressibleEulerEquations(domain, params,
 
 # I/O
 dirname = 'unsaturated_bubble'
-output = OutputParameters(dirname=dirname, dumpfreq=tdump,
-                          log_level='INFO')
+output = OutputParameters(dirname=dirname, dumpfreq=tdump, dump_nc=True,
+                          dumplist=['cloud_water', 'rain'], log_level='INFO',
+                          checkpoint=False)
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)

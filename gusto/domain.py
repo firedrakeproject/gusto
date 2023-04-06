@@ -4,9 +4,11 @@ the set of compatible function spaces defined upon it. It also contains the
 model's time interval.
 """
 
+from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        as_vector, inner, interpolate)
+import numpy as np
 
 
 class Domain(object):
@@ -44,12 +46,21 @@ class Domain(object):
                 both "degree" and "horizontal_degree").
         """
 
+        # -------------------------------------------------------------------- #
+        # Time step
+        # -------------------------------------------------------------------- #
+
+        # Store central dt for use in the rest of the model
         if type(dt) is Constant:
             self.dt = dt
         elif type(dt) in (float, int):
             self.dt = Constant(dt)
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
+
+        # -------------------------------------------------------------------- #
+        # Build compatible function spaces
+        # -------------------------------------------------------------------- #
 
         check_degree_args('Domain', mesh, degree, horizontal_degree, vertical_degree)
 
@@ -63,8 +74,13 @@ class Domain(object):
         # Build and store compatible spaces
         self.compatible_spaces = [space for space in self.spaces.build_compatible_spaces(self.family, self.horizontal_degree, self.vertical_degree)]
 
+        # -------------------------------------------------------------------- #
+        # Determine some useful aspects of domain
+        # -------------------------------------------------------------------- #
+
         # Figure out if we're on a sphere
         # TODO: could we run on other domains that could confuse this?
+        # TODO: could this be combined with domain metadata below?
         if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
@@ -85,3 +101,69 @@ class Domain(object):
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = lambda u: as_vector([-u[1], u[0]])
+
+        # -------------------------------------------------------------------- #
+        # Set up coordinates
+        # -------------------------------------------------------------------- #
+
+        self.coords = Coordinates(mesh)
+        # Set up DG1 equispaced space, used for making metadata
+        _ = self.spaces('DG1_equispaced')
+        self.coords.register_space(self, 'DG1_equispaced')
+
+        # -------------------------------------------------------------------- #
+        # Construct metadata about domain
+        # -------------------------------------------------------------------- #
+
+        # TODO: would this be better as an object?
+        self.metadata = {}
+        self.metadata['extruded'] = mesh.extruded
+
+        if self.on_sphere and hasattr(mesh, "_base_mesh"):
+            self.metadata['domain_type'] = 'extruded_spherical_shell'
+        elif self.on_sphere:
+            self.metadata['domain_type'] = 'spherical_shell'
+        elif mesh.geometric_dimension() == 1 and mesh.topological_dimension() == 1:
+            self.metadata['domain_type'] = 'interval'
+        elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2 and mesh.extruded:
+            self.metadata['domain_type'] = 'vertical_slice'
+        elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2:
+            self.metadata['domain_type'] = 'plane'
+        elif mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 3 and mesh.extruded:
+            self.metadata['domain_type'] = 'extruded_plane'
+        else:
+            raise ValueError('Unable to determine domain type')
+
+        comm = self.mesh.comm
+        comm_size = comm.Get_size()
+        my_rank = comm.Get_rank()
+        max_num_domain_infos = 3
+
+        # Properties of domain will be determined from full coords, so need
+        # doing on the first processor then broadcasting to others
+
+        if my_rank == 0:
+            chi = self.coords.global_chi_coords['DG1_equispaced']
+            if not self.on_sphere:
+                self.metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
+                if self.metadata['domain_type'] in ['plane', 'extruded_plane']:
+                    self.metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
+            if mesh.extruded:
+                self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
+
+            # Send information to other processors
+            for j, metadata_key in enumerate([f'domain_extent_{xyz}' for xyz in ['x', 'y', 'z']]):
+                if metadata_key in self.metadata.keys():
+                    metadata_value = self.metadata[metadata_key]
+                else:
+                    metadata_value = None
+                for procid in range(1, comm_size):
+                    my_tag = comm_size*j + my_rank
+                    comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
+        else:
+            # Need to receive information and store in metadata
+            for j in range(max_num_domain_infos):
+                my_tag = comm_size*j + my_rank
+                metadata_key, metadata_value = comm.recv(source=0, tag=my_tag)
+                if metadata_value is not None:
+                    self.metadata[metadata_key] = metadata_value
