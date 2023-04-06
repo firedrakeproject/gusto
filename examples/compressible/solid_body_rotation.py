@@ -46,7 +46,7 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]# CompressibleKineticEnergy()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
@@ -70,10 +70,6 @@ x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
 r = sqrt(x**2 + y**2 + z**2)
 l = sqrt(x**2 + y**2)
-unsafe_xl = x/l
-safe_xl = Min(Max(unsafe_xl, -1.0), 1.0)
-unsafe_yl = y/l
-safe_yl = Min(Max(unsafe_yl, -1.0), 1.0)
 
 # set up parameters
 Rd = params.R_d
@@ -110,8 +106,8 @@ merid_u = Constant(0.0)
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
-u_x_expr = zonal_u * -safe_yl
-u_y_expr = zonal_u * safe_xl
+u_x_expr = zonal_u * -y
+u_y_expr = zonal_u * x
 u_z_expr = Constant(0.0)
 
 # obtain initial conditions
