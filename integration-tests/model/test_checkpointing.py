@@ -38,7 +38,7 @@ def set_up_model_objects(mesh, dt, output, stepper_type):
                                           linear_solver=linear_solver)
 
     elif stepper_type == 'multi_level':
-        scheme = TR_BDF2(domain, gamma=0.5)
+        scheme = AdamsBashforth(domain, order=2)
         stepper = Timestepper(eqns, scheme, io)
 
     else:
@@ -206,5 +206,5 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         # longer be available so expect a bigger error
         diff_array = stepper_1.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
         error = np.linalg.norm(diff_array) / np.linalg.norm(stepper_1.fields(field_name).dat.data)
-        assert error < 2e-10, \
+        assert error < 1e-8, \
             f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'

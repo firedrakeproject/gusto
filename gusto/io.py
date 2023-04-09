@@ -482,9 +482,8 @@ class IO(object):
                     t = chk.read_attribute("/", "time")
 
             else:
-                mesh_name = self.domain.mesh.name
                 with CheckpointFile(chkfile, 'r') as chk:
-                    mesh = chk.load_mesh(mesh_name)
+                    mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
                         field = chk.load_function(mesh, field_name)
