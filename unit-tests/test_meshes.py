@@ -7,8 +7,9 @@ from gusto import GeneralIcosahedralSphereMesh, GeneralCubedSphereMesh
 from firedrake import dx, Function, FunctionSpace, assemble, pi
 import pytest
 
+
 @pytest.mark.parametrize("mesh_type", ["icosahedral", "cubed_sphere"])
-@pytest.mark.parametrize("num", [1,3,7])
+@pytest.mark.parametrize("num", [1, 3, 7])
 def test_build_mesh(mesh_type, num):
 
     # n is the number of cells per edge of panel
@@ -48,5 +49,4 @@ def test_build_mesh(mesh_type, num):
     ones = Function(V).assign(1.0)
     area = assemble(ones * dx)
     assert abs(area - sphere_area) / sphere_area < 0.02, \
-       f'area of {mesh_type} mesh appears to be incorrect'
-
+        f'area of {mesh_type} mesh appears to be incorrect'

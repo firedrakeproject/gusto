@@ -3,7 +3,7 @@ This file provides some specialised meshes not provided by Firedrake
 """
 
 from firedrake import (FiniteElement, par_loop, READ, WRITE,
-                       VectorFunctionSpace, dx,
+                       VectorFunctionSpace, dx, interval, TensorProductElement,
                        functionspace, function, mesh, Constant,
                        Function, op2, Mesh, PeriodicRectangleMesh)
 from firedrake.petsc import PETSc
@@ -14,6 +14,7 @@ from pyop2.mpi import COMM_WORLD
 
 __all__ = ["GeneralIcosahedralSphereMesh", "GeneralCubedSphereMesh",
            "get_flat_latlon_mesh"]
+
 
 @PETSc.Log.EventDecorator()
 def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
@@ -80,7 +81,7 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
                               [phi, 0, 1],
                               [-phi, 0, -1],
                               [-phi, 0, 1]],
-                              dtype=np.double)
+                             dtype=np.double)
 
     # edges of the base icosahedron
     panel_edges = np.array([[0, 11],
@@ -207,15 +208,14 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
     num_faces_per_panel = int(big_N * (big_N + 1) / 2
                               + big_N * (big_N - 1) / 2)
 
-
     # This is the number of panels * triangle number of faces per icosahedral panel
     total_num_faces = 20 * num_faces_per_panel
 
-    #--------------------------------------------------------------------------#
-    # Fill array with all vertex values                                        #
-    #--------------------------------------------------------------------------#
+    # ------------------------------------------------------------------------ #
+    # Fill array with all vertex values
+    # ------------------------------------------------------------------------ #
 
-    # First find vertices on edges --------------------------------------------#
+    # First find vertices on edges ------------------------------------------- #
     edge_vertices = np.zeros((num_edge_vertices, 3))
 
     edge_weights = np.linspace(0, 1, num=(big_N+1))
@@ -231,10 +231,10 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
             # Loop through vertices associated with panel edge
             for j in range(big_N - 1):
                 w = edge_weights[j+1]
-                edge_vertices[edge_vertex_counter,:] = x0 + w * (x1 - x0)
+                edge_vertices[edge_vertex_counter, :] = x0 + w * (x1 - x0)
                 edge_vertex_counter += 1
 
-    # Second find vertices on faces -------------------------------------------#
+    # Second find vertices on faces ------------------------------------------ #
     face_vertices = np.zeros((num_face_vertices, 3))
 
     if big_N > 2:
@@ -254,19 +254,19 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
 
                 for k in range(big_N - j - 2):
                     w = face_row_weights[k+1]
-                    face_vertices[face_vertex_counter,:] = x0 + w * (x1 - x0)
+                    face_vertices[face_vertex_counter, :] = x0 + w * (x1 - x0)
                     face_vertex_counter += 1
 
-    # Put all vertices together into array ------------------------------------#
+    # Put all vertices together into array ----------------------------------- #
     all_vertices = np.zeros((total_num_vertices, 3))
 
     all_vertices[0:num_base_vertices] = base_vertices[:]
     all_vertices[num_base_vertices:num_base_vertices+num_edge_vertices] = edge_vertices[:]
     all_vertices[num_base_vertices+num_edge_vertices:] = face_vertices[:]
 
-    #--------------------------------------------------------------------------#
-    # Fill array with all vertex values                                        #
-    #--------------------------------------------------------------------------#
+    # ------------------------------------------------------------------------ #
+    # Fill array with all vertex values
+    # ------------------------------------------------------------------------ #
     all_faces = np.zeros((total_num_faces, 3), dtype=np.int32)
     vertices_per_edge = int(num_edge_vertices / len(panel_edges))
     vertices_per_face = int(num_face_vertices / len(panels))
@@ -276,7 +276,7 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
         # Loop over panels
         for i in range(len(panels)):
 
-            # Find indices of vertices ----------------------------------------#
+            # Find indices of vertices --------------------------------------- #
 
             # We need to find the indices in all_vertices of the vertices for this panel
             # We break this down into those associated with faces, edges and base vertices
@@ -286,18 +286,18 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
 
             # The vertices on edges. Store these indices as a list of indices (for each edge)
             edge_indices = panels_to_edges[i]
-            indices_of_edge_vertices = np.empty((3,vertices_per_edge), dtype=np.int32)
+            indices_of_edge_vertices = np.empty((3, vertices_per_edge), dtype=np.int32)
 
             for j, edge in enumerate(edge_indices):
-                indices_of_edge_vertices[j,:] = range(num_base_vertices + edge * vertices_per_edge,
-                                                      num_base_vertices + (edge+1) * vertices_per_edge)
+                indices_of_edge_vertices[j, :] = range(num_base_vertices + edge * vertices_per_edge,
+                                                       num_base_vertices + (edge+1) * vertices_per_edge)
 
             # Get indices of vertices associated with faces
             face_offset = num_base_vertices + num_edge_vertices
             indices_of_face_vertices = range(face_offset + i * vertices_per_face,
                                              face_offset + (i+1) * vertices_per_face)
 
-            # Iterate through to obtain the vertices for each new face --------#
+            # Iterate through to obtain the vertices for each new face ------- #
             # If we are here then we have at least two cells per panel edge
             this_panel_faces = np.empty((num_faces_per_panel, 3), dtype=np.int32)
 
@@ -332,42 +332,42 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
                     # First focus on vertex[0] and vertex[1]
                     if j == 0:
                         if k == 0:
-                            this_panel_faces[face_counter,0] = indices_of_base_vertices[0]
+                            this_panel_faces[face_counter, 0] = indices_of_base_vertices[0]
                         else:
-                            this_panel_faces[face_counter,0] = indices_of_edge_vertices[0,k-1]
+                            this_panel_faces[face_counter, 0] = indices_of_edge_vertices[0, k-1]
 
                         if k == (big_N - j - 1):
-                            this_panel_faces[face_counter,1] = indices_of_base_vertices[1]
+                            this_panel_faces[face_counter, 1] = indices_of_base_vertices[1]
                         else:
-                            this_panel_faces[face_counter,1] = indices_of_edge_vertices[0,k]
+                            this_panel_faces[face_counter, 1] = indices_of_edge_vertices[0, k]
 
                     else:
                         if k == 0:
-                            this_panel_faces[face_counter,0] = indices_of_edge_vertices[1,j-1]
+                            this_panel_faces[face_counter, 0] = indices_of_edge_vertices[1, j-1]
                         else:
                             # Total number per face, subtract triangle number below row
                             face_index = vertices_per_face - int((big_N-j-1)*(big_N-j) / 2) + k - 1
-                            this_panel_faces[face_counter,0] = indices_of_face_vertices[face_index]
+                            this_panel_faces[face_counter, 0] = indices_of_face_vertices[face_index]
 
-                        if k == (big_N - j -1):
-                            this_panel_faces[face_counter, 1] = indices_of_edge_vertices[2,j-1]
+                        if k == (big_N - j - 1):
+                            this_panel_faces[face_counter, 1] = indices_of_edge_vertices[2, j-1]
                         else:
                             # Total number per face, subtract triangle number below row
                             face_index = vertices_per_face - int((big_N-j-1)*(big_N-j) / 2) + k
-                            this_panel_faces[face_counter,1] = indices_of_face_vertices[face_index]
+                            this_panel_faces[face_counter, 1] = indices_of_face_vertices[face_index]
 
                     # Now do vertex[2]
                     if j == (big_N - 1):
-                        this_panel_faces[face_counter,2] = indices_of_base_vertices[2]
+                        this_panel_faces[face_counter, 2] = indices_of_base_vertices[2]
 
                     elif k == 0:
-                        this_panel_faces[face_counter,2] = indices_of_edge_vertices[1,j]
+                        this_panel_faces[face_counter, 2] = indices_of_edge_vertices[1, j]
                     elif k == (big_N - j - 1):
-                        this_panel_faces[face_counter,2] = indices_of_edge_vertices[2,j]
+                        this_panel_faces[face_counter, 2] = indices_of_edge_vertices[2, j]
                     else:
                         # Total number per face, subtract triangle number below row
                         face_index = vertices_per_face - int((big_N-j-2)*(big_N-j-1) / 2) + k - 1
-                        this_panel_faces[face_counter,2] = indices_of_face_vertices[face_index]
+                        this_panel_faces[face_counter, 2] = indices_of_face_vertices[face_index]
 
                     face_counter += 1
 
@@ -381,31 +381,31 @@ def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
 
                         # vertex[0]
                         if j == 0:
-                            this_panel_faces[face_counter,0] = indices_of_edge_vertices[0,k]
+                            this_panel_faces[face_counter, 0] = indices_of_edge_vertices[0, k]
                         else:
                             # Total number per face, subtract triangle number below row
                             face_index = vertices_per_face - int((big_N-j-1)*(big_N-j) / 2) + k
-                            this_panel_faces[face_counter,0] = indices_of_face_vertices[face_index]
+                            this_panel_faces[face_counter, 0] = indices_of_face_vertices[face_index]
 
                         # vertex[1]
                         if k == (big_N - j - 2):
-                            this_panel_faces[face_counter,1] = indices_of_edge_vertices[2,j]
+                            this_panel_faces[face_counter, 1] = indices_of_edge_vertices[2, j]
                         else:
                             # Total number per face, subtract triangle number below row
                             face_index = vertices_per_face - int((big_N-j-2)*(big_N-j-1) / 2) + k
-                            this_panel_faces[face_counter,1] = indices_of_face_vertices[face_index]
+                            this_panel_faces[face_counter, 1] = indices_of_face_vertices[face_index]
 
                         # vertex[2]
                         if k == 0:
-                            this_panel_faces[face_counter,2] = indices_of_edge_vertices[1,j]
+                            this_panel_faces[face_counter, 2] = indices_of_edge_vertices[1, j]
                         else:
                             # Total number per face, subtract triangle number below row
                             face_index = vertices_per_face - int((big_N-j-2)*(big_N-j-1) / 2) + k - 1
-                            this_panel_faces[face_counter,2] = indices_of_face_vertices[face_index]
+                            this_panel_faces[face_counter, 2] = indices_of_face_vertices[face_index]
 
                         face_counter += 1
 
-            all_faces[i*num_faces_per_panel:(i+1)*num_faces_per_panel,:] = this_panel_faces[:,:]
+            all_faces[i*num_faces_per_panel:(i+1)*num_faces_per_panel, :] = this_panel_faces[:, :]
     else:
         # If there is no refinement then we just use the original panels
         all_faces = panels
