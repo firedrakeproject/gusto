@@ -195,7 +195,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
                 f'Diagnostics {self.name} is using a function space which does not have a name'
             domain.spaces(space.name, V=space)
 
-            self.field = state_fields(self.name, space=space, dump=True, pickup=False)
+            self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
 
             if self.method != 'solve':
                 assert self.expr is not None, \
@@ -251,7 +251,7 @@ class CourantNumber(DiagnosticField):
 
         self.expr = sqrt(dot(u, u))/sqrt(self.area)*domain.dt
 
-        super(CourantNumber, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 # TODO: unify all component diagnostics
@@ -269,7 +269,7 @@ class VelocityX(DiagnosticField):
         """
         u = state_fields("u")
         self.expr = u[0]
-        super(VelocityX, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 class VelocityZ(DiagnosticField):
@@ -285,8 +285,8 @@ class VelocityZ(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
         u = state_fields("u")
-        self.expr = u[u.geometric_dimension() - 1]
-        super(VelocityZ, self).setup(domain, state_fields)
+        self.expr = u[domain.mesh.geometric_dimension() - 1]
+        super().setup(domain, state_fields)
 
 
 class VelocityY(DiagnosticField):
@@ -303,7 +303,7 @@ class VelocityY(DiagnosticField):
         """
         u = state_fields("u")
         self.expr = u[1]
-        super(VelocityY, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
 
 class Gradient(DiagnosticField):
@@ -398,7 +398,7 @@ class Divergence(DiagnosticField):
         f = state_fields(self.fname)
         self.expr = div(f)
         space = domain.spaces("DG")
-        super(Divergence, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class SphericalComponent(DiagnosticField):
@@ -763,20 +763,17 @@ class CompressibleKineticEnergy(Energy):
         """
         super().__init__(space=space, method=method, required_fields=("rho", "u"))
 
-    def compute(self, eqn):
+    def setup(self, domain, state_fields):
         """
-        Compute and return the diagnostic field from the current state.
-
+        Sets up the :class:`Function` for the diagnostic field
         Args:
-            eqn (:class:`PrognosticEquation`): the model's equation.
-
-        Returns:
-            :class:`Function`: the diagnostic field.
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
         """
-        u = eqn.fields("u")
-        rho = eqn.fields("rho")
-        energy = self.kinetic(u, rho)
-        return self.field.interpolate(energy)
+        u = state_fields("u")
+        rho = state_fields("rho")
+        self.expr = self.kinetic(u, rho)
+        super().setup(domain, state_fields)
 
 
 class Exner(DiagnosticField):
@@ -856,7 +853,7 @@ class Sum(DiagnosticField):
         field2 = state_fields(self.field_name2)
         space = field1.function_space()
         self.expr = field1 + field2
-        super(Sum, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class Difference(DiagnosticField):
@@ -889,7 +886,7 @@ class Difference(DiagnosticField):
         field2 = state_fields(self.field_name2)
         self.expr = field1 - field2
         space = field1.function_space()
-        super(Difference, self).setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=space)
 
 
 class SteadyStateError(Difference):
@@ -901,7 +898,7 @@ class SteadyStateError(Difference):
         """
         self.field_name1 = name
         self.field_name2 = name+'_init'
-        DiagnosticField.__init__(self, method='assign', required_fields=(name))
+        DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
 
     def setup(self, domain, state_fields):
         """
@@ -911,15 +908,16 @@ class SteadyStateError(Difference):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        # Create and store initial field
-        field1 = state_fields(self.field_name1)
-        field2 = state_fields(self.field_name2, space=field1.function_space(), dump=False)
+        # Check if initial field already exists -- otherwise needs creating
+        if not hasattr(state_fields, self.field_name2):
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
+            # By default set this new field to the current value
+            # This may be overwritten if picking up from a checkpoint
+            field2.assign(field1)
 
-        # TODO: when checkpointing, the initial field should either be picked up
-        # or computed again (picking up can be easily specified if we change the line above)
-        field2.assign(field1)
-
-        super(SteadyStateError, self).setup(domain, state_fields)
+        super().setup(domain, state_fields)
 
     @property
     def name(self):
@@ -934,14 +932,30 @@ class Perturbation(Difference):
         Args:
             name (str): name of the field to take the perturbation of.
         """
-        field_name1 = name
-        field_name2 = name+'_bar'
-        Difference.__init__(self, field_name1, field_name2)
+        self.field_name1 = name
+        self.field_name2 = name+'_bar'
+        DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
 
     @property
     def name(self):
         """Gives the name of this diagnostic field."""
         return self.field_name1+"_perturbation"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        # Check if initial field already exists -- otherwise needs creating
+        if not hasattr(state_fields, self.field_name2):
+            field1 = state_fields(self.field_name1)
+            _ = state_fields(self.field_name2, space=field1.function_space(),
+                             pick_up=True, dump=False)
+
+        super().setup(domain, state_fields)
 
 
 # TODO: unify thermodynamic diagnostics
@@ -1326,7 +1340,7 @@ class Precipitation(DiagnosticField):
         problem = LinearVariationalProblem(a, L, self.flux)
         self.solver = LinearVariationalSolver(problem)
         self.space = space
-        self.field = state_fields(self.name, space=space, dump=True, pickup=False)
+        self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
         # TODO: might we want to pick up this field? Otherwise initialise to zero
         self.field.assign(0.0)
 
