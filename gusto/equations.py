@@ -529,6 +529,10 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             mass_form + advection_form(domain, self.tests[0], split(self.X)[0], **kwargs), self.X
         )
 
+        # Add transport of tracers
+        if len(active_tracers) > 0:
+            self.residual += self.generate_tracer_transport_terms(domain, active_tracers)
+
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #

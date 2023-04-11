@@ -14,12 +14,14 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.transport_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
+from gusto.configuration import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics
 import ufl
 import math
 from enum import Enum
+from types import FunctionType
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
@@ -632,24 +634,31 @@ class InstantRain(Physics):
     timestep dt or over a specified time interval tau.
      """
 
-    def __init__(self, equation, saturation_curve, vapour_name="water_vapour",
-                 rain_name=None, convective_feedback=False, set_tau_to_dt=False,
+    def __init__(self, equation, saturation_curve,
+                 time_varying_saturation=False,
+                 vapour_name="water_vapour", rain_name=None,
+                 convective_feedback=False, gamma=None, tau=None,
                  parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation.
-            saturation_curve (ufl.Expr): the saturation function, above which
-                excess moisture is converted.
+            saturation_curve (ufl expression or :class: `function`): the
+                curve above which excess moisture is converted to rain. Is
+                either prescribed or dependent on a prognostic field.
+            time_varying_saturation (bool, optional): set this to True if the
+                saturation curve is changing in time. Defaults to False.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
                 None.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            set_tau_to_dt (bool, optional): True if the timescale for the
-                conversion is equal to the timestep and False if not. If False
-                then the user must provide a timescale, tau, that gets passed to
-                the parameters list.
+            gamma (float, optional): Condensation proportionality constant,
+                used if convection causes a response in the height equation.
+                Defaults to None, but must be specified if convective_feedback
+                is True.
+            tau (float, optional): Timescale for condensation. Defaults to None,
+                in which case the timestep dt is used.
             parameters (:class:`Configuration`, optional): parameters containing
                 the values of gas constants. Defaults to None, in which case the
                 parameters are obtained from the equation.
@@ -657,9 +666,8 @@ class InstantRain(Physics):
 
         super().__init__(equation, parameters=None)
 
-        parameters = self.parameters
         self.convective_feedback = convective_feedback
-        self.set_tau_to_dt = set_tau_to_dt
+        self.time_varying_saturation = time_varying_saturation
 
         # check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -670,7 +678,7 @@ class InstantRain(Physics):
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
-            assert parameters.gamma is not None, "If convective feedback is used, gamma parameter must be specified"
+            assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
 
         # obtain function space and functions; vapour needed for all cases
         W = equation.function_space
@@ -690,11 +698,24 @@ class InstantRain(Physics):
         self.source = Function(Vv)
 
         # tau is the timescale for conversion (may or may not be the timestep)
-        if self.set_tau_to_dt:
-            self.tau = Constant(0)
+        if tau is not None:
+            self.set_tau_to_dt = False
+            self.tau = tau
         else:
-            assert parameters.tau is not None, "If the relaxation timescale is not dt then you must specify tau"
-            self.tau = parameters.tau
+            self.set_tau_to_dt = True
+            self.tau = Constant(0)
+            logger.info("Timescale for moisture conversion has been set to dt. If this is not the intention then set a tau parameter.")
+
+        if self.time_varying_saturation:
+            if isinstance(saturation_curve, FunctionType):
+                self.saturation_computation = saturation_curve
+                self.saturation_curve = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If time_varying_saturation is True then saturation must be a Python function of a prognostic field.")
+        else:
+            assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
+            self.saturation_curve = saturation_curve
 
         # lose vapour above the saturation curve
         equation.residual += physics(subject(test_v * self.source * dx,
@@ -713,7 +734,6 @@ class InstantRain(Physics):
         # if feeding back on the height adjust the height equation
         if convective_feedback:
             test_D = equation.tests[self.VD_idx]
-            gamma = parameters.gamma
             equation.residual += physics(subject
                                          (test_D * gamma * self.source * dx,
                                           equation.X),
@@ -721,8 +741,8 @@ class InstantRain(Physics):
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
-            self.water_v > saturation_curve,
-            (1/self.tau)*(self.water_v - saturation_curve),
+            self.water_v > self.saturation_curve,
+            (1/self.tau)*(self.water_v - self.saturation_curve),
             0), Vv)
 
     def evaluate(self, x_in, dt):
@@ -739,6 +759,8 @@ class InstantRain(Physics):
         """
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
+        if self.time_varying_saturation:
+            self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
