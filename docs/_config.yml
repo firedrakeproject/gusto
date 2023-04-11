@@ -28,6 +28,7 @@ twitter_username:
 github_username:  tommbendall
 
 # Build settings
+theme: slate
 remote_theme: pages-themes/slate@v0.2.0
 plugins:
   - jekyll-feed
