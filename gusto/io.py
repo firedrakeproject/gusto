@@ -15,6 +15,7 @@ from gusto.configuration import logger, set_log_handler
 
 __all__ = ["pick_up_mesh", "IO"]
 
+
 def pick_up_mesh(output, mesh_name):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
@@ -41,6 +42,7 @@ def pick_up_mesh(output, mesh_name):
         mesh = chk.load_mesh(mesh_name)
 
     return mesh
+
 
 class PointDataOutput(object):
     """Object for outputting field point data."""
@@ -563,7 +565,6 @@ class IO(object):
                     chk.set_attr("/", "time", t)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
-
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:

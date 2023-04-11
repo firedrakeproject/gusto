@@ -10,6 +10,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, pi,
                        SpatialCoordinate, exp, sin, Function, as_vector)
 import pytest
 
+
 def set_up_model_objects(mesh, dt, output, stepper_type):
 
     domain = Domain(mesh, dt, "CG", 1)
@@ -86,6 +87,7 @@ def initialise_fields(eqns, stepper):
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
+
 @pytest.mark.parametrize("stepper_type", ["multi_level", "semi_implicit"])
 @pytest.mark.parametrize("checkpoint_method", ["old", "new"])
 def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
@@ -113,7 +115,6 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
                                 checkpoint_method=checkpoint_method,
                                 chkptfreq=2, log_level='INFO')
-
 
     stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type)
     stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type)
