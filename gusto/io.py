@@ -6,9 +6,9 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics
-from firedrake import (get_flat_latlon_mesh, Function, functionspaceimpl, File,
-                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
-                       VectorElement)
+from gusto.meshes import get_flat_latlon_mesh
+from firedrake import (VectorElement, Function, functionspaceimpl, File,
+                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
