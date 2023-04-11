@@ -43,8 +43,6 @@ help:
 
 TARGETS = html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
 
-GENERATED_FILES = source/teamgrid.rst # source/demos
-
 publish: html
 # Note that godaddy don't currently do rsync, unfortunately.
 # The raw IP address is used to circumvent some dns fiddling which
@@ -71,9 +69,6 @@ copy_demos:
 	install -d source/demos
 	cp ../demos/*/*.rst ../demos/*/*.bib ../demos/*/*.geo ../demos/*/*.png source/demos
 	for file in source/demos/*.py.rst; do ../pylit/pylit.py $$file; done
-
-source/teamgrid.rst: source/team.py
-	cd source; python team.py
 
 apidoc: $(GENERATED_FILES) # copy_demos
 	sphinx-apidoc ../gusto -o source/ -f -T
