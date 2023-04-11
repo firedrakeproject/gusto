@@ -195,7 +195,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
                 f'Diagnostics {self.name} is using a function space which does not have a name'
             domain.spaces(space.name, V=space)
 
-            self.field = state_fields(self.name, space=space, dump=True, pickup=False)
+            self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
 
             if self.method != 'solve':
                 assert self.expr is not None, \
@@ -898,7 +898,7 @@ class SteadyStateError(Difference):
         """
         self.field_name1 = name
         self.field_name2 = name+'_init'
-        DiagnosticField.__init__(self, method='assign', required_fields=(name))
+        DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
 
     def setup(self, domain, state_fields):
         """
@@ -908,13 +908,14 @@ class SteadyStateError(Difference):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        # Create and store initial field
-        field1 = state_fields(self.field_name1)
-        field2 = state_fields(self.field_name2, space=field1.function_space(), dump=False)
-
-        # TODO: when checkpointing, the initial field should either be picked up
-        # or computed again (picking up can be easily specified if we change the line above)
-        field2.assign(field1)
+        # Check if initial field already exists -- otherwise needs creating
+        if not hasattr(state_fields, self.field_name2):
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
+            # By default set this new field to the current value
+            # This may be overwritten if picking up from a checkpoint
+            field2.assign(field1)
 
         super().setup(domain, state_fields)
 
@@ -931,14 +932,30 @@ class Perturbation(Difference):
         Args:
             name (str): name of the field to take the perturbation of.
         """
-        field_name1 = name
-        field_name2 = name+'_bar'
-        Difference.__init__(self, field_name1, field_name2)
+        self.field_name1 = name
+        self.field_name2 = name+'_bar'
+        DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
 
     @property
     def name(self):
         """Gives the name of this diagnostic field."""
         return self.field_name1+"_perturbation"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        # Check if initial field already exists -- otherwise needs creating
+        if not hasattr(state_fields, self.field_name2):
+            field1 = state_fields(self.field_name1)
+            _ = state_fields(self.field_name2, space=field1.function_space(),
+                             pick_up=True, dump=False)
+
+        super().setup(domain, state_fields)
 
 
 # TODO: unify thermodynamic diagnostics
@@ -1323,7 +1340,7 @@ class Precipitation(DiagnosticField):
         problem = LinearVariationalProblem(a, L, self.flux)
         self.solver = LinearVariationalSolver(problem)
         self.space = space
-        self.field = state_fields(self.name, space=space, dump=True, pickup=False)
+        self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
         # TODO: might we want to pick up this field? Otherwise initialise to zero
         self.field.assign(0.0)
 
