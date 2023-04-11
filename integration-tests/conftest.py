@@ -21,7 +21,6 @@ def tracer_sphere(tmpdir, degree, small_dt):
                                  refinement_level=3,
                                  degree=1)
     x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
 
     # Parameters chosen so that dt != 1
     # Gaussian is translated from (lon=pi/2, lat=0) to (lon=0, lat=0)
