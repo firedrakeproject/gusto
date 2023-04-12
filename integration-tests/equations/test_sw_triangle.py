@@ -33,7 +33,6 @@ def setup_sw(dirname, dt, u_transport_option):
                                  refinement_level=refinements)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
 
     # Equation
     parameters = ShallowWaterParameters(H=H)
