@@ -698,6 +698,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                     coriolis(
                         subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X)
                     ), domain.perp)
+                if not domain.on_sphere:
+                    linear_coriolis = perp(linear_coriolis, domain.perp)
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
