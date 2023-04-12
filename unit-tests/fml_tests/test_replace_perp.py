@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import (UnitSquareMesh,
-                       FiniteElement, SpatialCoordinate,
-                       as_vector, FunctionSpace, TestFunctions,
+                       SpatialCoordinate,
+                       as_vector, TestFunctions,
                        TrialFunctions, solve,
                        inner, dx, errornorm)
 

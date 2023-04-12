@@ -48,13 +48,12 @@ def run_sw_fplane(tmpdir):
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
     x, y = SpatialCoordinate(mesh)
-    Ly = Lx
     N0 = 0.1
     gamma = sqrt(g*H)
     ###############################
     #  Fast wave:
     k1 = 5*(2*pi/Lx)
-    
+
     K1sq = k1**2
     psi1 = sqrt(f0**2 + g*H*K1sq)
     xi1 = sqrt(2*K1sq)*psi1
@@ -125,4 +124,3 @@ def test_sw_fplane(tmpdir):
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \
             'shallow water fplane test do not match KGO values'
-
