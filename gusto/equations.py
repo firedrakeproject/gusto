@@ -794,13 +794,13 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         self.linearise_equation_set()
 
         # D transport term is a special case -- add facet term
-        # _, D = split(self.X)
-        # _, phi = self.tests
-        # D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
-        # self.residual = self.residual.label_map(
-        #     lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-        #     map_if_true=lambda t: Term(D_adv.form, t.labels)
-        # )
+        _, D = split(self.X)
+        _, phi = self.tests
+        D_adv = prognostic(linear_continuity_form(domain, phi, D, facet_term=True), "D")
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
+            map_if_true=lambda t: Term(D_adv.form, t.labels)
+        )
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
