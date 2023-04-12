@@ -96,8 +96,6 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     # ------------------------------------------------------------------------ #
 
     xyz = SpatialCoordinate(domain.mesh)
-    if geometry == "spherical_shell":
-        domain.mesh.init_cell_orientations(xyz)
 
     f = stepper.fields('f')
     u = stepper.fields('u')
