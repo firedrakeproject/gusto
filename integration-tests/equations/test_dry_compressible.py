@@ -92,7 +92,7 @@ def run_dry_compressible(tmpdir):
     check_io = IO(domain, check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
     check_stepper.set_reference_profiles([])
-    check_stepper.run(t=0, tmax=0, pickup=True)
+    check_stepper.run(t=0, tmax=0, pick_up=True)
 
     return stepper, check_stepper
 

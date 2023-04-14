@@ -6,13 +6,41 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics
-from firedrake import (FiniteElement, TensorProductElement, VectorFunctionSpace,
-                       interval, Function, Mesh, functionspaceimpl, File,
-                       op2, DumbCheckpoint, FILE_CREATE, FILE_READ, VectorElement)
+from gusto.meshes import get_flat_latlon_mesh
+from firedrake import (VectorElement, Function, functionspaceimpl, File,
+                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
 
-__all__ = ["IO"]
+__all__ = ["pick_up_mesh", "IO"]
+
+
+def pick_up_mesh(output, mesh_name):
+    """
+    Picks up a checkpointed mesh. This must be the first step of any model being
+    picked up from a checkpointing run.
+
+    Args:
+        output (:class:`OutputParameters`): holds and describes the options for
+            outputting.
+        mesh_name (str): the name of the mesh to be picked up. The default names
+            used by Firedrake are "firedrake_default" for non-extruded meshes,
+            or "firedrake_default_extruded" for extruded meshes.
+
+    Returns:
+        :class:`Mesh`: the mesh to be used by the model.
+    """
+
+    # Open the checkpointing file for writing
+    if output.checkpoint_pickup_filename is not None:
+        chkfile = output.checkpoint_pickup_filename
+    else:
+        dumpdir = path.join("results", output.dirname)
+        chkfile = path.join(dumpdir, "chkpt.h5")
+    with CheckpointFile(chkfile, 'r') as chk:
+        mesh = chk.load_mesh(mesh_name)
+
+    return mesh
 
 
 class PointDataOutput(object):
@@ -163,8 +191,8 @@ class IO(object):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            output (:class:`OutputParameters`, optional): holds and describes
-                the options for outputting. Defaults to None.
+            output (:class:`OutputParameters`): holds and describes the options
+                for outputting.
             diagnostics (:class:`Diagnostics`, optional): object holding and
                 controlling the model's diagnostics. Defaults to None.
             diagnostic_fields (list, optional): an iterable of `DiagnosticField`
@@ -192,7 +220,7 @@ class IO(object):
 
         self.dumpdir = None
         self.dumpfile = None
-        self.to_pickup = None
+        self.to_pick_up = None
 
         # setup logger
         logger.setLevel(output.log_level)
@@ -221,10 +249,19 @@ class IO(object):
 
         diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
         non_diagnostics = [fname for fname in state_fields._field_names if state_fields.field_type(fname) != "diagnostic" or fname not in diagnostic_names]
-        # Filter out non-diagnostic fields
+
+        # Set up any reference or initial fields that are necessary for diagnostics
+        all_required_fields = {r for d in self.diagnostic_fields for r in d.required_fields}
+        ref_fields = list(filter(lambda fname: fname[-4:] == '_bar', all_required_fields))
+        init_fields = list(filter(lambda fname: fname[-5:] == '_init', all_required_fields))
+        non_diagnostics = non_diagnostics + ref_fields + init_fields
+
+        # Set up order for diagnostic fields -- filter out non-diagnostic fields
         field_deps = [(d, sorted(set(d.required_fields).difference(non_diagnostics),)) for d in self.diagnostic_fields]
         schedule = topo_sort(field_deps)
         self.diagnostic_fields = schedule
+
+        # Set up and register all diagnostic fields
         for diagnostic in self.diagnostic_fields:
             diagnostic.setup(self.domain, state_fields)
             self.diagnostics.register(diagnostic.name)
@@ -235,7 +272,7 @@ class IO(object):
             if fname in state_fields.to_dump:
                 self.diagnostics.register(fname)
 
-    def setup_dump(self, state_fields, t, tmax, pickup=False):
+    def setup_dump(self, state_fields, t, pick_up=False):
         """
         Sets up a series of things used for outputting.
 
@@ -247,8 +284,7 @@ class IO(object):
         Args:
             state_fields (:class:`StateFields`): the model's field container.
             t (float): the current model time.
-            tmax (float): the end time of the model's simulation.
-            pickup (bool, optional): whether to pick up the model's initial
+            pick_up (bool, optional): whether to pick up the model's initial
                 state from a checkpointing file. Defaults to False.
 
         Raises:
@@ -258,18 +294,19 @@ class IO(object):
 
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
-                self.output.point_data, self.output.checkpoint and not pickup]):
+                self.output.point_data, self.output.checkpoint and not pick_up]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             if self.mesh.comm.Get_rank() == 0:
-                if not running_tests and path.exists(self.dumpdir) and not pickup:
-                    raise IOError("results directory '%s' already exists"
-                                  % self.dumpdir)
-                else:
-                    if not running_tests:
-                        makedirs(self.dumpdir)
+                # Create results directory if it doesn't already exist
+                if not path.exists(self.dumpdir):
+                    makedirs(self.dumpdir)
+                elif not (running_tests or pick_up):
+                    # Throw an error if directory already exists, unless we
+                    # are picking up or running tests
+                    raise IOError(f'results directory {self.dumpdir} already exists')
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
@@ -291,7 +328,7 @@ class IO(object):
             for space_name in space_names:
                 self.domain.coords.register_space(self.domain, space_name)
 
-            if pickup:
+            if pick_up:
                 # Pick up t idx
                 if self.mesh.comm.Get_rank() == 0:
                     nc_field_file = Dataset(self.nc_filename, 'r')
@@ -304,7 +341,7 @@ class IO(object):
         # if there are fields to be dumped in latlon coordinates,
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
-            mesh_ll = get_latlon_mesh(self.mesh)
+            mesh_ll = get_flat_latlon_mesh(self.mesh)
             outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
             self.dumpfile_ll = File(outfile_ll,
                                     project_output=self.output.project_fields,
@@ -320,26 +357,28 @@ class IO(object):
                     val=f.topological, name=name+'_ll')
                 self.to_dump_latlon.append(field)
 
-        # we create new netcdf files to write to, unless pickup=True, in
-        # which case we just need the filenames
+        # we create new netcdf files to write to, unless pick_up=True and they
+        # already exist, in which case we just need the filenames
         if self.output.dump_diagnostics:
             diagnostics_filename = self.dumpdir+"/diagnostics.nc"
+            to_create = not (path.isfile(diagnostics_filename) and pick_up)
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
                                                        self.mesh.comm,
-                                                       create=not pickup)
+                                                       create=to_create)
 
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
+            to_create = not (path.isfile(pointdata_filename) and pick_up)
             self.pointdata_output = PointDataOutput(pointdata_filename,
                                                     self.output.point_data,
                                                     self.output.dirname,
                                                     state_fields,
                                                     self.mesh.comm,
                                                     self.output.tolerance,
-                                                    create=not pickup)
+                                                    create=to_create)
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
@@ -349,52 +388,138 @@ class IO(object):
             if self.output.pddumpfreq is None:
                 self.output.pddumpfreq = self.output.dumpfreq
 
-        # if we want to checkpoint and are not picking up from a previous
-        # checkpoint file, setup the checkpointing
+        # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if not pickup:
+            if self.output.checkpoint_method == 'old':
+                # should have already picked up, so can create a new file
                 self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
                                             mode=FILE_CREATE)
-            # make list of fields to pickup (this doesn't include
-            # diagnostic fields)
-            self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
+            elif self.output.checkpoint_method == 'new':
+                # should have already picked up, so can create a new file
+                self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
+            else:
+                raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
 
-        # if we want to checkpoint then make a checkpoint counter
-        if self.output.checkpoint:
+            # make list of fields to pick_up (this doesn't include
+            # diagnostic fields)
+            self.to_pick_up = [fname for fname in state_fields.to_pick_up]
+
+            # make a checkpoint counter
             self.chkptcount = itertools.count()
 
         # dump initial fields
-        self.dump(state_fields, t)
+        if not pick_up:
+            self.dump(state_fields, t)
 
-    def pickup_from_checkpoint(self, state_fields):
-        """Picks up the model's variables from a checkpoint file."""
-        # TODO: this duplicates some code from setup_dump. Can this be avoided?
-        # It is because we don't know if we are picking up or setting dump first
-        if self.to_pickup is None:
-            self.to_pickup = [state_fields(f) for f in state_fields.to_pickup]
+    def pick_up_from_checkpoint(self, state_fields):
+        """
+        Picks up the model's variables from a checkpoint file.
+
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+
+        Returns:
+            float: the checkpointed model time.
+        """
+
+        # -------------------------------------------------------------------- #
+        # Preparation for picking up
+        # -------------------------------------------------------------------- #
+
+        # Make list of fields that must be picked up
+        if self.to_pick_up is None:
+            self.to_pick_up = [fname for fname in state_fields.to_pick_up]
+
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
+
+        # Need to pick up reference profiles, but don't know which are stored
+        possible_ref_profiles = []
+        reference_profiles = []
+        for field_name, field_type in zip(state_fields._field_names, state_fields._field_types):
+            if field_type != 'reference':
+                possible_ref_profiles.append(field_name)
+
+        # -------------------------------------------------------------------- #
+        # Pick up fields
+        # -------------------------------------------------------------------- #
 
         if self.output.checkpoint:
             # Open the checkpointing file for writing
             if self.output.checkpoint_pickup_filename is not None:
                 chkfile = self.output.checkpoint_pickup_filename
-            else:
+            elif self.output.checkpoint_method == 'old':
                 chkfile = path.join(self.dumpdir, "chkpt")
-            with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
-                # Recover all the fields from the checkpoint
-                for field in self.to_pickup:
-                    chk.load(field)
-                t = chk.read_attribute("/", "time")
-            # Setup new checkpoint
-            self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"), mode=FILE_CREATE)
+            elif self.output.checkpoint_method == 'new':
+                chkfile = path.join(self.dumpdir, "chkpt.h5")
+
+            if self.output.checkpoint_method == 'old':
+                with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
+                    # Recover compulsory fields from the checkpoint
+                    for field_name in self.to_pick_up:
+                        chk.load(state_fields(field_name), name=field_name)
+
+                    # Read in reference profiles -- failures are allowed here
+                    for field_name in possible_ref_profiles:
+                        ref_name = f'{field_name}_bar'
+                        ref_field = Function(state_fields(field_name).function_space(), name=ref_name)
+                        try:
+                            chk.load(ref_field, name=ref_name)
+                            reference_profiles.append((field_name, ref_field))
+                            # Field exists, so add to to_pick_up
+                            self.to_pick_up.append(ref_name)
+                        except RuntimeError:
+                            pass
+
+                    # Try to pick up number of initial steps for multi level scheme
+                    # Not compulsory so errors allowed
+                    try:
+                        initial_steps = chk.read_attribute("/", "initial_steps")
+                    except AttributeError:
+                        initial_steps = None
+
+                    # Finally pick up time
+                    t = chk.read_attribute("/", "time")
+
+            else:
+                with CheckpointFile(chkfile, 'r') as chk:
+                    mesh = self.domain.mesh
+                    # Recover compulsory fields from the checkpoint
+                    for field_name in self.to_pick_up:
+                        field = chk.load_function(mesh, field_name)
+                        state_fields(field_name).assign(field)
+
+                    # Read in reference profiles -- failures are allowed here
+                    for field_name in possible_ref_profiles:
+                        ref_name = f'{field_name}_bar'
+                        try:
+                            ref_field = chk.load_function(mesh, ref_name)
+                            reference_profiles.append((field_name, ref_field))
+                            # Field exists, so add to to_pick_up
+                            self.to_pick_up.append(ref_name)
+                        except RuntimeError:
+                            pass
+
+                    # Try to pick up number of initial steps for multi level scheme
+                    # Not compulsory so errors allowed
+                    if chk.has_attr("/", "initial_steps"):
+                        initial_steps = chk.get_attr("/", "initial_steps")
+                    else:
+                        initial_steps = None
+
+                    # Finally pick up time
+                    t = chk.get_attr("/", "time")
+
+            # If we have picked up from a non-standard file, reset this name
+            # so that we will checkpoint using normal file name from now on
+            self.output.checkpoint_pickup_filename = None
         else:
-            raise ValueError("Must set checkpoint True if pickup")
+            raise ValueError("Must set checkpoint True if picking up")
 
-        return t
+        return t, reference_profiles, initial_steps
 
-    def dump(self, state_fields, t):
+    def dump(self, state_fields, t, initial_steps=None):
         """
         Dumps all of the required model output.
 
@@ -405,6 +530,8 @@ class IO(object):
         Args:
             state_fields (:class:`StateFields`): the model's field container.
             t (float): the simulation's current time.
+            initial_steps (int, optional): the number of initial time steps
+                completed by a multi-level time scheme. Defaults to None.
         """
         output = self.output
 
@@ -423,9 +550,20 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            for field in self.to_pickup:
-                self.chkpt.store(field)
-            self.chkpt.write_attribute("/", "time", t)
+            if self.output.checkpoint_method == 'old':
+                for field_name in self.to_pick_up:
+                    self.chkpt.store(state_fields(field_name), name=field_name)
+                self.chkpt.write_attribute("/", "time", t)
+                if initial_steps is not None:
+                    self.chkpt.write_attribute("/", "initial_steps", initial_steps)
+            else:
+                with CheckpointFile(self.chkpt_path, 'w') as chk:
+                    chk.save_mesh(self.domain.mesh)
+                    for field_name in self.to_pick_up:
+                        chk.save_function(state_fields(field_name), name=field_name)
+                    chk.set_attr("/", "time", t)
+                    if initial_steps is not None:
+                        chk.set_attr("/", "initial_steps", initial_steps)
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:
@@ -532,70 +670,6 @@ class IO(object):
             nc_field_file.close()
 
         self.field_t_idx += 1
-
-
-def get_latlon_mesh(mesh):
-    """
-    Construct a planar latitude-longitude mesh from a spherical mesh.
-
-    Args:
-        mesh (:class:`Mesh`): the mesh on which the simulation is performed.
-    """
-    coords_orig = mesh.coordinates
-    coords_fs = coords_orig.function_space()
-
-    if coords_fs.extruded:
-        cell = mesh._base_mesh.ufl_cell().cellname()
-        DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-        DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
-        DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
-    else:
-        cell = mesh.ufl_cell().cellname()
-        DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
-    vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
-    coords_dg = Function(vec_DG1).interpolate(coords_orig)
-    coords_latlon = Function(vec_DG1)
-    shapes = {"nDOFs": vec_DG1.finat_element.space_dimension(), 'dim': 3}
-
-    radius = np.min(np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    # lat-lon 'x' = atan2(y, x)
-    coords_latlon.dat.data[:, 0] = np.arctan2(coords_dg.dat.data[:, 1], coords_dg.dat.data[:, 0])
-    # lat-lon 'y' = asin(z/sqrt(x^2 + y^2 + z^2))
-    coords_latlon.dat.data[:, 1] = np.arcsin(coords_dg.dat.data[:, 2]/np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2))
-    # our vertical coordinate is radius - the minimum radius
-    coords_latlon.dat.data[:, 2] = np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2) - radius
-
-# We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
-# This kernel amends the longitude coords so that all longitudes in one cell are close together
-    kernel = op2.Kernel("""
-#define PI 3.141592653589793
-#define TWO_PI 6.283185307179586
-void splat_coords(double *coords) {{
-    double max_diff = 0.0;
-    double diff = 0.0;
-
-    for (int i=0; i<{nDOFs}; i++) {{
-        for (int j=0; j<{nDOFs}; j++) {{
-            diff = coords[i*{dim}] - coords[j*{dim}];
-            if (fabs(diff) > max_diff) {{
-                max_diff = diff;
-            }}
-        }}
-    }}
-
-    if (max_diff > PI) {{
-        for (int i=0; i<{nDOFs}; i++) {{
-            if (coords[i*{dim}] < 0) {{
-                coords[i*{dim}] += TWO_PI;
-            }}
-        }}
-    }}
-}}
-""".format(**shapes), "splat_coords")
-
-    op2.par_loop(kernel, coords_latlon.cell_set,
-                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
-    return Mesh(coords_latlon)
 
 
 def topo_sort(field_deps):
