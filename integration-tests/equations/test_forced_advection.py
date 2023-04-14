@@ -50,7 +50,7 @@ def run_forced_advection(tmpdir):
     meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
-                                    set_tau_to_dt=True, parameters=None), ForwardEuler(domain))]
+                                    parameters=None), ForwardEuler(domain))]
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)

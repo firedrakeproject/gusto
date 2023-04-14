@@ -3,7 +3,7 @@
 from abc import ABCMeta
 from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunction, FacetNormal, jump, avg, dS_v,
+                       TrialFunction, FacetNormal, jump, avg, dS_v, dS,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fields import PrescribedFields
@@ -63,7 +63,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
                 is used to filter terms.
             label (:class:`Label`): the label to be applied to the terms.
         """
-        assert type(label, Label)
+        assert type(label) == Label
         self.residual = self.residual.label_map(term_filter, map_if_true=label)
 
 
@@ -232,10 +232,12 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
 
         # Build finite element spaces
-        # TODO: this implies order of spaces matches order of variables
-        # we should not assume this and should instead specify which variable
-        # is in which space
+        # TODO: this implies order of spaces matches order of variables.
+        # It also assumes that if one additional field is required then it
+        # should live on the DG space.
         self.spaces = [space for space in domain.compatible_spaces]
+        if len(self.field_names) - len(self.spaces) == 1:
+            self.spaces.append(domain.spaces("DG"))
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -527,6 +529,10 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             mass_form + advection_form(domain, self.tests[0], split(self.X)[0], **kwargs), self.X
         )
 
+        # Add transport of tracers
+        if len(active_tracers) > 0:
+            self.residual += self.generate_tracer_transport_terms(domain, active_tracers)
+
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
@@ -544,7 +550,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
                  linearisation_map='default',
                  u_transport_option='vector_invariant_form',
-                 no_normal_flow_bc_ids=None, active_tracers=None):
+                 no_normal_flow_bc_ids=None, active_tracers=None,
+                 thermal=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -571,15 +578,22 @@ class ShallowWaterEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
+            thermal (flag, optional): specifies whether the equations have a
+                thermal or buoyancy variable that feeds back on the momentum.
+                Defaults to False.
 
         Raises:
             NotImplementedError: active tracers are not yet implemented.
         """
 
+        self.thermal = thermal
         field_names = ["u", "D"]
 
         if active_tracers is None:
             active_tracers = []
+
+        if self.thermal:
+            field_names.append("b")
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
@@ -644,17 +658,28 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Add transport of tracers
         if len(active_tracers) > 0:
             adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
+        # Add transport of buoyancy, if thermal shallow water equations
+        if self.thermal:
+            gamma = self.tests[2]
+            b = split(self.X)[2]
+            b_adv = prognostic(advection_form(domain, gamma, b), "b")
+            # TODO: implement correct linearisation
+            adv_form += subject(b_adv, self.X)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = pressure_gradient(
-            subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
+        # Add pressure gradient only if not doing thermal
+        if self.thermal:
+            residual = (mass_form + adv_form)
+        else:
+            pressure_gradient_form = pressure_gradient(
+                subject(prognostic(-g*div(w)*D*dx, "u"), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form)
+            residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
-        # Extra Terms (Coriolis and Topography)
+        # Extra Terms (Coriolis, Topography and Thermal)
         # -------------------------------------------------------------------- #
         # TODO: Is there a better way to store the Coriolis / topography fields?
         # The current approach is that these are prescribed fields, stored in
@@ -677,9 +702,28 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += coriolis_form
 
         if bexpr is not None:
-            b = self.prescribed_fields("topography", domain.spaces("DG")).interpolate(bexpr)
-            topography_form = subject(prognostic(-g*div(w)*b*dx, "u"), self.X)
+            topography = self.prescribed_fields("topography", domain.spaces("DG")).interpolate(bexpr)
+            if self.thermal:
+                n = FacetNormal(domain.mesh)
+                topography_form = subject(prognostic
+                                          (-topography*div(b*w)*dx
+                                           + jump(b*w, n)*avg(topography)*dS,
+                                           "u"), self.X)
+            else:
+                topography_form = subject(prognostic
+                                          (-g*div(w)*topography*dx, "u"),
+                                          self.X)
             residual += topography_form
+
+        # thermal source terms not involving topography
+        if self.thermal:
+            n = FacetNormal(domain.mesh)
+            source_form = subject(prognostic(-D*div(b*w)*dx
+                                             - 0.5*b*div(D*w)*dx
+                                             + jump(b*w, n)*avg(D)*dS
+                                             + 0.5*jump(D*w, n)*avg(b)*dS,
+                                             "u"), self.X)
+            residual += source_form
 
         # -------------------------------------------------------------------- #
         # Linearise equations
@@ -739,7 +783,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
                  or (t.get(prognostic) == "D" and t.has_label(transport)))
 
-        super().__init__(domain, parameters, fexpr=fexpr, bexpr=bexpr,
+        super().__init__(domain, parameters,
+                         fexpr=fexpr, bexpr=bexpr,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,

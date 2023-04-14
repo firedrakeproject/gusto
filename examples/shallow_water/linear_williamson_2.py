@@ -35,7 +35,6 @@ H = 2000.
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=refinements, degree=3)
 x = SpatialCoordinate(mesh)
-mesh.init_cell_orientations(x)
 domain = Domain(mesh, dt, 'BDM', 1)
 
 # Equation
