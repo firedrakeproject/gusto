@@ -28,11 +28,11 @@ class BoundaryMethod(Enum):
 
     An enumerator object encoding methods for correcting boundary recovery:
     extruded: which corrects a scalar field on an extruded mesh at the top and
-              bottom boundaries.
+    bottom boundaries.                                                        \n
     hcurl: this corrects the recovery of a HDiv field into a HCurl space at the
-           top and bottom boundaries of an extruded mesh.
+    top and bottom boundaries of an extruded mesh.                            \n
     taylor: uses a Taylor expansion to correct the field at all the boundaries
-            of the domain. Should only be used in Cartesian domains.
+    of the domain. Should only be used in Cartesian domains.
     """
 
     extruded = 0

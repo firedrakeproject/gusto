@@ -17,24 +17,27 @@ __all__ = ["GeneralIcosahedralSphereMesh", "GeneralCubedSphereMesh",
 
 
 @PETSc.Log.EventDecorator()
-def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel=1,
+def GeneralIcosahedralSphereMesh(radius, num_cells_per_edge_of_panel,
                                  degree=1, reorder=None,
                                  distribution_parameters=None, comm=COMM_WORLD,
                                  name=mesh.DEFAULT_MESH_NAME):
-    """Generate an icosahedral approximation to the surface of the
-    sphere.
-    :arg radius: The radius of the sphere to approximate.
-         For a radius R the edge length of the underlying
-         icosahedron will be.
-         .. math::
-             a = \\frac{R}{\\sin(2 \\pi / 5)}
-    :kwarg num_cells_per_edge_of_panel: optional number of cells per edge
-        of icosahedral panel (1 is an icosahedron).
-    :kwarg degree: polynomial degree of coordinate space (defaults
-        to 1: flat triangles)
-    :kwarg reorder: (optional), should the mesh be reordered?
-    :kwarg comm: Optional communicator to build the mesh on (defaults to
-        COMM_WORLD).
+    """
+    Generate an icosahedral approximation to the surface of the sphere.
+
+    Args:
+        radius (float): The radius of the sphere to approximate. For a radius R
+            the edge length of the underlying icosahedron will be             \n
+            a = \\frac{R}{\\sin(2 \\pi / 5)}
+        num_cells_per_edge_of_panel (int): number of cells per edge of each of
+            the 20 panels of the icosahedron (1 gives an icosahedron).
+        degree (int, optional): polynomial degree of coordinate space used to
+            approximate the sphere. Defaults to 1, describing flat triangles.
+        reorder: (bool, optional): optional flag indicating whether to reorder
+           meshes for better cache locality. Defaults to False.
+        comm (communicator, optional): optional communicator to build the mesh
+            on. Defaults to COMM_WORLD.
+        name (str, optional): optional name to give to the mesh. Defaults to
+            Firedrake's default mesh name.
     """
     if num_cells_per_edge_of_panel < 1 or num_cells_per_edge_of_panel % 1:
         raise RuntimeError("Number of cells per edge must be a positive integer")
@@ -563,21 +566,26 @@ def _cubedsphere_cells_and_coords(radius, cells_per_cube_edge):
 
 
 @PETSc.Log.EventDecorator()
-def GeneralCubedSphereMesh(radius, num_cells_per_edge_of_panel=1, degree=1,
+def GeneralCubedSphereMesh(radius, num_cells_per_edge_of_panel, degree=1,
                            reorder=None, distribution_parameters=None,
                            comm=COMM_WORLD, name=mesh.DEFAULT_MESH_NAME):
-    """Generate an cubed approximation to the surface of the
-    sphere.
-    :arg radius: The radius of the sphere to approximate.
-    :kwarg num_cells_per_edge_of_panel: optional number of cells per edge
-        of cubed sphere panel (1 is a cube).
-    :kwarg degree: polynomial degree of coordinate space (defaults
-        to 1: bilinear quads)
-    :kwarg cells_per_cube_edge: overrides the refinement level to specify
-        the number of cells running along the edge of one cube panel
-    :kwarg reorder: (optional), should the mesh be reordered?
-    :kwarg comm: Optional communicator to build the mesh on (defaults to
-        COMM_WORLD).
+    """
+    Generate an cubed approximation to the surface of the sphere.
+
+    Args:
+        radius (float): The radius of the sphere to approximate.
+    num_cells_per_edge_of_panel (int): number of cells per edge of each of
+        the 6 panels of the cubed sphere (1 gives a cube).
+    degree (int, optional): polynomial degree of coordinate space used to
+        approximate the sphere. Defaults to 1, describing flat quadrilaterals.
+    reorder: (bool, optional): optional flag indicating whether to reorder
+        meshes for better cache locality. Defaults to False.
+    distribution_parameters (dict, optional): a dictionary of options for
+           parallel mesh distribution. Defaults to None.
+    comm (communicator, optional): optional communicator to build the mesh
+        on. Defaults to COMM_WORLD.
+    name (str, optional): optional name to give to the mesh. Defaults to
+        Firedrake's default mesh name.
     """
     if num_cells_per_edge_of_panel < 1 or num_cells_per_edge_of_panel % 1:
         raise RuntimeError("Number of cells per edge must be a positive integer")
@@ -599,64 +607,6 @@ def GeneralCubedSphereMesh(radius, num_cells_per_edge_of_panel=1, degree=1,
         m = mesh.Mesh(new_coords, name=name, comm=comm)
     m._radius = radius
     return m
-
-
-@PETSc.Log.EventDecorator()
-def PeriodicCylinderMesh(nr, nl, radius=1, depth=1,
-                         quadrilateral=False, reorder=None,
-                         distribution_parameters=None,
-                         diagonal=None,
-                         comm=COMM_WORLD):
-    """Generate a periodic cylinder mesh
-    :arg nr: number of cells the cylinder circumference should be
-         divided into (min 3)
-    :arg nl: number of cells along the longitudinal axis of the cylinder (min 3)
-    :kwarg radius: (optional) radius of the cylinder to approximate
-         (default 1).
-    :kwarg depth: (optional) depth of the cylinder to approximate
-         (default 1).
-    :kwarg quadrilateral: (optional), creates quadrilateral mesh, defaults to False
-    :kwarg reorder: (optional), should the mesh be reordered
-    :kwarg diagonal: (optional), one of ``"crossed"``, ``"left"``, ``"right"``. ``"left"`` is the default.
-        Not valid for quad meshes. Only used for direction ``"x"`` or direction ``"y"``.
-    :kwarg comm: Optional communicator to build the mesh on (defaults to
-        COMM_WORLD).
-    """
-
-    if nr < 3 or nl < 3:
-        raise ValueError("2D periodic meshes with fewer than 3 \
-cells in each direction are not currently supported")
-
-    m = PeriodicRectangleMesh(nr, nl, 1.0, 1.0, direction='both',
-                              quadrilateral=quadrilateral, reorder=reorder,
-                              distribution_parameters=distribution_parameters, comm=comm)
-    coord_family = 'DQ' if quadrilateral else 'DG'
-    cell = 'quadrilateral' if quadrilateral else 'triangle'
-    coord_fs = VectorFunctionSpace(m, FiniteElement(coord_family, cell, 1, variant="equispaced"), dim=3)
-    old_coordinates = m.coordinates
-    new_coordinates = Function(coord_fs)
-
-    domain = "{[j]:0 <= j < new_coords.dofs}"
-    instructions = f"""
-    <{RealType}> pi = 3.141592653589793
-    for j
-        new_coords[j, 0] = r[0]*cos(2*pi*old_coords[j, 0])
-        new_coords[j, 1] = r[0]*sin(2*pi*old_coords[j, 0])
-        new_coords[j, 2] = Lz[0]*old_coords[j, 1]
-    end
-    """
-
-    cr = Constant(radius)
-    cLz = Constant(depth)
-
-    par_loop((domain, instructions), dx,
-             {"new_coords": (new_coordinates, WRITE),
-              "old_coords": (old_coordinates, READ),
-              "r": (cr, READ),
-              "Lz": (cLz, READ)},
-             is_loopy_kernel=True)
-
-    return mesh.Mesh(new_coordinates)
 
 
 def get_flat_latlon_mesh(mesh):

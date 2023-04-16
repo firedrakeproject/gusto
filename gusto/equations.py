@@ -101,7 +101,7 @@ class AdvectionEquation(PrognosticEquation):
 
 
 class ContinuityEquation(PrognosticEquation):
-    u"""Discretises the continuity equation, ∂q/∂t + ∇(u*q) = 0"""
+    u"""Discretises the continuity equation, ∂q/∂t + ∇.(u*q) = 0"""
 
     def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
         """
@@ -473,8 +473,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
 class ForcedAdvectionEquation(PrognosticEquationSet):
     u"""
-    Discretises the advection equation with a source/sink term,
-        ∂q/∂t + (u.∇)q = F,
+    Discretises the advection equation with a source/sink term,               \n
+    ∂q/∂t + (u.∇)q = F,
     which can also be augmented with active tracers.
     """
     def __init__(self, domain, function_space, field_name, Vu=None,
@@ -541,9 +541,9 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
     Class for the (rotating) shallow-water equations, which evolve the velocity
-    'u' and the depth field 'D', via some variant of:
-        ∂u/∂t + (u.∇)u + f×u + g*∇(D+b) = 0
-        ∂D/∂t + ∇.(D*u) = 0
+    'u' and the depth field 'D', via some variant of:                         \n
+    ∂u/∂t + (u.∇)u + f×u + g*∇(D+b) = 0,                                      \n
+    ∂D/∂t + ∇.(D*u) = 0,                                                      \n
     for Coriolis parameter 'f' and bottom surface 'b'.
     """
 
@@ -735,9 +735,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
 class LinearShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the linear (rotating) shallow-water equations, which describe the
-    velocity 'u' and the depth field 'D', solving some variant of:
-        ∂u/∂t + f×u + g*∇(D+b) = 0
-        ∂D/∂t + H*∇.(u) = 0
+    velocity 'u' and the depth field 'D', solving some variant of:            \n
+    ∂u/∂t + f×u + g*∇(D+b) = 0,                                               \n
+    ∂D/∂t + H*∇.(u) = 0,                                                      \n
     for mean depth 'H', Coriolis parameter 'f' and bottom surface 'b'.
 
     This is set up the from the underlying :class:`ShallowWaterEquations`,
@@ -807,10 +807,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     """
     Class for the compressible Euler equations, which evolve the velocity 'u',
     the dry density 'rho' and the (virtual dry) potential temperature 'theta',
-    solving:
-        ∂u/∂t + (u.∇)u + 2Ω×u + c_p*θ*∇Π + g = 0
-        ∂ρ/∂t + ∇.(ρ*u) = 0
-        ∂θ/∂t + (u.∇)θ = 0,
+    solving:                                                                  \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + c_p*θ*∇Π + g = 0,                                 \n
+    ∂ρ/∂t + ∇.(ρ*u) = 0,                                                      \n
+    ∂θ/∂t + (u.∇)θ = 0,                                                       \n
     where Π is the Exner pressure, g is the gravitational vector, Ω is the
     planet's rotation vector and c_p is the heat capacity of dry air at constant
     pressure.
@@ -1051,10 +1051,10 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     vertical velocity derivative is zero in the equations, so only 'u_h', the
     horizontal component of the velocity is allowed to vary in time. The
     equations, for velocity 'u', dry density 'rho' and (dry) potential
-    temperature 'theta' are:
-        ∂u_h/∂t + (u.∇)u_h + 2Ω×u + c_p*θ*∇Π + g = 0
-        ∂ρ/∂t + ∇.(ρ*u) = 0
-        ∂θ/∂t + (u.∇)θ = 0,
+    temperature 'theta' are:                                                  \n
+    ∂u_h/∂t + (u.∇)u_h + 2Ω×u + c_p*θ*∇Π + g = 0,                             \n
+    ∂ρ/∂t + ∇.(ρ*u) = 0,                                                      \n
+    ∂θ/∂t + (u.∇)θ = 0,                                                       \n
     where Π is the Exner pressure, g is the gravitational vector, Ω is the
     planet's rotation vector and c_p is the heat capacity of dry air at constant
     pressure.
@@ -1159,10 +1159,10 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     'u', the pressure 'p' and the buoyancy 'b'.
 
     The pressure features as a Lagrange multiplier to enforce the
-    incompressibility of the equations. The equations are then
-        ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0
-        ∇.u = p
-        ∂b/∂t + (u.∇)b = 0,
+    incompressibility of the equations. The equations are then                \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∇.u = p,                                                                  \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector and, Ω is the planet's rotation vector.
     """
 

@@ -105,3 +105,21 @@ div.menu li {
 * html #access ul li a:hover {
 	color: #fff;
 }
+
+@media only screen and (max-width: 600px) {
+	div .logo {
+		display: none;
+	}
+
+	#gusto-logo {
+		display: block;
+		float: left;
+	}
+
+	#hamburger-icon {
+		display: block;
+		float: right;
+		padding-top: 12px;
+		padding-right: 20px;
+	}
+}

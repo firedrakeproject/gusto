@@ -2,8 +2,8 @@
 This module provides kernels for performing element-wise operations.
 
 Kernels are held in classes containing the instructions and an apply method,
-which calls the kernel using a par_loop. The code snippets used in the kernels
-are written using loopy: https://documen.tician.de/loopy/index.html
+which calls the kernel using a par loop. The code snippets used in the kernels
+are written using loopy (https://documen.tician.de/loopy/index.html)
 
 Kernels are contained in this module so that they can be easily imported and
 tested.
@@ -65,9 +65,9 @@ class LimitMidpoints():
             field_hat (:class:`Function`): The field to write to in the broken
                 temperature :class:`FunctionSpace`.
             field_DG1 (:class:`Function`): A field in the equispaced DG1
-                :class:`FunctionSpace`space whose vertex values have already
+                :class:`FunctionSpace` space whose vertex values have already
                 been limited.
-            field_old (:class:`Function`): The original un-limited field in the
+            field_old (:class:`Function`): The original unlimited field in the
                 broken temperature :class:`FunctionSpace`.
         """
         par_loop(self._kernel, dx,

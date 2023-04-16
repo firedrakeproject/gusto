@@ -292,12 +292,12 @@ def saturated_hydrostatic_balance(equation, state_fields, theta_e, mr_t,
     moisture content, mr_t, compute a hydrostatically balanced virtual dry
     potential temperature, dry density and water vapour profile.
 
-    The general strategy is to split up the solving into two steps:
-    1) finding rho to balance the theta profile
-    2) finding theta_vd and r_v to get back theta_e and saturation, using a fixed
-        point iteration.
-    We iteratively solve these steps until we (hopefully)
-    converge to a solution.
+    The general strategy is to split up the solving into two steps:           \n
+    1) finding rho to balance the theta profile                               \n
+    2) finding theta_vd and r_v to get back theta_e and saturation, using a
+    fixed point iteration.                                                    \n
+    We iteratively solve these steps until we (hopefully) converge to a
+    solution.
 
     Args:
         equation (:class:`PrognosticEquation`): the model's equation object.
@@ -423,10 +423,10 @@ def unsaturated_hydrostatic_balance(equation, state_fields, theta_d, H,
     computes hydrostatically balanced virtual dry potential temperature, dry
     density and water vapour profiles.
 
-    The general strategy is to split up the solving into two steps:
-    1) finding rho to balance the theta profile
+    The general strategy is to split up the solving into two steps:           \n
+    1) finding rho to balance the theta profile                               \n
     2) finding theta_v and r_v to get back theta_d and H, using a fixed-point
-       iteration.
+    iteration.                                                                \n
     These steps are iterated until we (hopefully) converge to a solution.
 
     Args:
