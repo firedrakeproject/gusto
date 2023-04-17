@@ -2,12 +2,10 @@
 This file provides some specialised meshes not provided by Firedrake
 """
 
-from firedrake import (FiniteElement, par_loop, READ, WRITE,
-                       VectorFunctionSpace, dx, interval, TensorProductElement,
-                       functionspace, function, mesh, Constant,
-                       Function, op2, Mesh, PeriodicRectangleMesh)
+from firedrake import (FiniteElement, VectorFunctionSpace, interval,
+                       TensorProductElement, functionspace, function, mesh,
+                       Function, op2, Mesh)
 from firedrake.petsc import PETSc
-from firedrake.utils import RealType
 import numpy as np
 import ufl
 from pyop2.mpi import COMM_WORLD
