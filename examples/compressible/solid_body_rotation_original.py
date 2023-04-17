@@ -11,7 +11,7 @@ dt = 1000.
 days = 30.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
-deltaz = 2e3
+deltaz = 2.0e3
 
 # -------------------------------------------------------------- #
 # Set up Model
@@ -91,9 +91,10 @@ Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
 
 # expressions for variables from paper
 s = (r / a) * cos(lat)
-Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
+#Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
+Q_expr = 0.5 * u0**2 * s**2 +  omega * a * u0 * s**2
 # solving fields as per the staniforth paper
-q_expr = Q_expr - ((g * a**2) / (Rd * T0)) * (a**-1 - r**-1)
+q_expr = (Q_expr + (g * a) * (a - r) / (r * a)) / (Rd * T0)
 p_expr = p0 * exp(q_expr)
 theta_expr = T0 * (p_expr / p0) ** (-params.kappa)
 pie_expr = T0 / theta_expr
