@@ -167,12 +167,12 @@ class NoLimiter(object):
     """A blank limiter that does nothing."""
 
     def __init__(self):
-        """Initialise the blank limiter."""
         pass
 
     def apply(self, field):
         """
         The application of the blank limiter.
+
         Args:
             field (:class:`Function`): the field to which the limiter would be
                 applied, if this was not a blank limiter.

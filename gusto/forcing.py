@@ -15,10 +15,10 @@ class Forcing(object):
     """
     Discretises forcing terms.
 
-    This class describes the evaluation of forcing terms, e.g. the gravitational
-    force, the Coriolis force or the pressure gradient force. These are terms
-    that can simply be evaluated, generally as part of some semi-implicit time
-    discretisation.
+    This class describes the evaluation of forcing terms, for instance the
+    gravitational force, the Coriolis force or the pressure gradient force.
+    These are terms that can simply be evaluated, generally as part of some
+    semi-implicit time discretisation.
     """
 
     def __init__(self, equation, alpha):
@@ -114,17 +114,17 @@ class Forcing(object):
         """
         Applies the discretisation for a forcing term F(x).
 
-        This takes x_in and x_nl and computes F(x_nl), and updates x_out to
-            x_out = x_in + scale*F(x_nl)
+        This takes x_in and x_nl and computes F(x_nl), and updates x_out to   \n
+        x_out = x_in + scale*F(x_nl)                                          \n
         where 'scale' is the appropriate semi-implicit factor.
 
         Args:
-            x_in (:class:`FieldCreator'): the field to be incremented.
-            x_nl (:class:`FieldCreator'): the field which the forcing term is
+            x_in (:class:`FieldCreator`): the field to be incremented.
+            x_nl (:class:`FieldCreator`): the field which the forcing term is
                 evaluated on.
-            x_out (:class:`FieldCreator'): the output field to be updated.
+            x_out (:class:`FieldCreator`): the output field to be updated.
             label (str): denotes which forcing to apply. Should be 'explicit' or
-                'implicit'. # TODO: there should be a check on this. Or this
+                'implicit'. TODO: there should be a check on this. Or this
                 should be an actual label.
         """
 
