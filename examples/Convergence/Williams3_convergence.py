@@ -11,16 +11,16 @@ import numpy as np
 # Set up timestepping variables
 day = 24. * 60. * 60.
 ref = 5.
-tmax = 1 * day
+tmax = 5 * day
 
 # Shallow Water Parameters
 a = 6371220.
 H = 5960.
-ref = 5
+ref = 4
 
 parameters = ShallowWaterParameters(H=H)
-step = [300, 350, 400, 450, 500]
-timediscretisation = [ImplicitMidpoint]
+step = [100]
+timediscretisation = [SSPRK3]
 
 # Starts for loop for different reginement levels
 for scheme in timediscretisation:
@@ -31,20 +31,19 @@ for scheme in timediscretisation:
 
         # Mesh and domain
         mesh = IcosahedralSphereMesh(radius=a,
-                                    refinement_level=ref, degree=3)
+                                    refinement_level=ref, degree=2)
         x = SpatialCoordinate(mesh)
         global_normal = x
-        mesh.init_cell_orientations(x)
         domain = Domain(mesh, dt, "BDM", 1)
 
         # Equations
         lat, lon = latlon_coords(mesh)
         Omega = parameters.Omega
         fexpr = 2*Omega * x[2] / a
-        eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_manifold_advection_form')
+        eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_invariant_form')
 
         # Output and IO
-        dirname = f'{scheme.__name__}_scheme_dt={dt}_degree=3'
+        dirname = f'{scheme.__name__}_scheme_dt={dt}_degree=2'
         dumpfreq = 1  #int(tmax)
         output = OutputParameters(dirname=dirname,
                                 dumpfreq=dumpfreq,
