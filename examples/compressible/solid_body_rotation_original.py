@@ -2,12 +2,12 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh,
                        SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
-                       errornorm, norm)
+                       errornorm, norm, min_value, max_value)
 from gusto import *                                              # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 1000.
+dt = 500.
 days = 30.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
@@ -69,6 +69,10 @@ x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
 r = sqrt(x**2 + y**2 + z**2)
 l = sqrt(x**2 + y**2)
+unsafe_x = x / 1
+unsafe_y = y / 1
+safe_x = min_value(max_value(unsafe_x, -1), 1)
+safe_y = min_value(max_value(unsafe_y, -1), 1)
 
 # set up parameters
 Rd = params.R_d
@@ -105,8 +109,8 @@ merid_u = Constant(0.0)
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
-u_x_expr = zonal_u * -y
-u_y_expr = zonal_u * x
+u_x_expr = zonal_u * -safe_y
+u_y_expr = zonal_u * safe_x
 u_z_expr = Constant(0.0)
 
 # obtain initial conditions
