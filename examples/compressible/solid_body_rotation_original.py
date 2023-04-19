@@ -35,7 +35,7 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_advection_form')
 
-dirname = 'SBR_Vector_manifold_degree=2'
+dirname = 'SBR_Vector_manifold_degree=1'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
@@ -69,8 +69,8 @@ x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
 r = sqrt(x**2 + y**2 + z**2)
 l = sqrt(x**2 + y**2)
-unsafe_x = x / 1
-unsafe_y = y / 1
+unsafe_x = x / l
+unsafe_y = y / l
 safe_x = min_value(max_value(unsafe_x, -1), 1)
 safe_y = min_value(max_value(unsafe_y, -1), 1)
 
