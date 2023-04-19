@@ -7,7 +7,7 @@ from gusto import *                                              #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 500.
+dt = 1000.
 days = 30.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
@@ -33,7 +33,7 @@ phi0 = Constant(pi/4)
 f0 = 2 * omega * sin(phi0)
 Omega = as_vector((0, 0, f0))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_advection_form')
 
 dirname = 'SBR_Vector_manifold_degree=2'
 output = OutputParameters(dirname=dirname,
