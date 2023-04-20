@@ -21,7 +21,7 @@ deltaz = 2.0e3
 a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
-ref_level = 4
+ref_level = 2
 m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=1)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
@@ -35,7 +35,7 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_advection_form')
 
-dirname = 'SBR_Vector_manifold_degree=1'
+dirname = 'SBR_Vector_manifold_degree=1_ref2'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
