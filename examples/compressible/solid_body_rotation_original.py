@@ -21,9 +21,9 @@ deltaz = 2.0e3
 a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
-ref_level = 2
+ref_level = 3
 m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=1)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=5.0, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
 # Equations
