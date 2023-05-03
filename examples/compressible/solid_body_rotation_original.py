@@ -8,7 +8,7 @@ from gusto import *                                              #
 # Test case Parameters
 # -------------------------------------------------------------- #
 dt = 1000.
-days = 30.
+days = 10.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
 deltaz = 2.0e3
@@ -21,8 +21,8 @@ deltaz = 2.0e3
 a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
-ref_level = 3
-m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=1)
+ref_level = 5
+m = CubedSphereMesh(radius=a, refinement_level=ref_level, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -33,9 +33,9 @@ phi0 = Constant(pi/4)
 f0 = 2 * omega * sin(phi0)
 Omega = as_vector((0, 0, f0))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_advection_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_Vector_manifold_degree=1_ref2'
+dirname = 'SBR_Vector_invariant_degree=2_ref=5_test'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
@@ -123,7 +123,7 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
+compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
