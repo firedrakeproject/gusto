@@ -34,7 +34,7 @@ def run_linear_sw_wave(tmpdir):
     output = OutputParameters(dirname=str(tmpdir)+"/linear_sw_wave",
                               dumpfreq=1,
                               log_level='INFO')
-    io = IO(domain, output, diagnostic_fields=[CourantNumber()])
+    io = IO(domain, output)
 
     # Timestepper
     stepper = Timestepper(eqns, RK4(domain), io)
@@ -84,7 +84,6 @@ def test_linear_sw_wave(tmpdir):
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
         error = norm(new_variable - check_variable) / norm(check_variable)
-        print(error)
 
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \
