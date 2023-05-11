@@ -35,7 +35,7 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_manifold_no_rho_solve'
+dirname = 'SBR_invariant_solve'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
