@@ -33,7 +33,7 @@ phi0 = Constant(pi/4)
 f0 = 2 * omega * sin(phi0)
 Omega = as_vector((0, 0, f0))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_manifold_advection_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
 dirname = 'SBR_manifold_no_rho_solve'
 output = OutputParameters(dirname=dirname,
@@ -123,7 +123,7 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie)
+compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
