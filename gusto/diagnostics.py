@@ -1,9 +1,9 @@
 """Common diagnostic fields."""
 
 from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, TrialFunction, Constant, grad, inner, curl, \
+    TestFunction, TrialFunction, Constant, grad, inner, curl, cross, sin,  \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_v, div, avg, jump, \
+    ds_b, ds_v, ds_t, dS_v, div, avg, jump, pi,\
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator
 from firedrake.assign import Assigner
@@ -1290,6 +1290,80 @@ class HydrostaticImbalance(DiagnosticField):
              - cp*div(thetabar*w)*(exner-exnerbar)*dx
              + cp*jump(thetabar*w, n)*avg(exner-exnerbar)*dS_v)
 
+        bcs = self.equations.bcs['u']
+
+        imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
+        self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
+        self.expr = dot(imbalance, domain.k)
+        super().setup(domain, state_fields)
+
+    def compute(self):
+        """Compute and return the diagnostic field from the current state.
+        """
+        self.imbalance_solver.solve()
+        super().compute()
+
+class GeostrophicImbalance(DiagnosticField):
+    """Geostrophic imbalance diagnostic field."""
+    name = "GeostrophicImbalance"
+
+    def __init__(self, equations, space=None, method='interpolate'):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        # Work out required fields
+        if isinstance(equations, CompressibleEulerEquations):
+            required_fields = ['rho', 'theta', 'u']
+            self.equations = equations
+            self.parameters = equations.parameters
+        else:
+            raise NotImplementedError(f'Geostrophic Imbalance not implemented for {type(equations)}')
+        super().__init__(space=space, method=method, required_fields=required_fields)
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        Vu = domain.spaces("HDiv")
+        u = state_fields("u")
+        rho = state_fields("rho")
+        theta = state_fields("theta")
+        exner = tde.exner_pressure(self.parameters, rho, theta)
+
+
+        cp = Constant(self.parameters.cp)
+        g = Constant(self.parameters.g)
+        n = FacetNormal(domain.mesh)
+        # TODO: Generilise this for cases that aren't solid body rotation case 
+        omega = Constant(7.292e-5)
+        phi0 = Constant(pi/4)
+        f0 = 2 * omega * sin(phi0)
+        Omega = as_vector((0, 0, f0))
+
+        # TODO: Geostophic imbalance diagnostic
+        F = TrialFunction(Vu)
+        w = TestFunction(Vu)
+
+        imbalance = Function(Vu)
+        a = inner(w, F)*dx
+
+        # TODO: most likely will need a non-linear term too but let us test this for now.
+        L = (- cp*div((theta)*w)*exner*dx
+             + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
+             - w*cross(2*Omega,u) # Coriolis
+             - w*g) # gravity discretisation
         bcs = self.equations.bcs['u']
 
         imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
