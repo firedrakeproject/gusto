@@ -857,41 +857,47 @@ class BackwardEuler(TimeDiscretisation):
 
 class IMEX_Euler(TimeDiscretisation):
 
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        residual = residual.label_map(
+            lambda t: any(t.has_label(time_derivative, transport)),
+            map_if_false=lambda t: implicit(t))
+
+        residual = residual.label_map(
+            lambda t: t.has_label(transport),
+            map_if_true=lambda t: explicit(t))
+
+        super().setup(equation, uadv, residual=residual)
+
     @property
     def lhs(self):
         l = self.residual.label_map(
+            lambda t: any(t.has_label(implicit, time_derivative)),
+            map_if_true=replace_subject(self.x_out),
+            map_if_false=drop)
+        l = l.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: self.dt*t)
-
-        l = l.label_map(
-            lambda t: any(t.has_label(implicit, time_derivative)),
-            replace_subject(self.x_out),
-            drop
-        )
         return l.form
 
     @property
     def rhs(self):
         r = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: self.dt*t)
-
-        r = r.label_map(
             lambda t: any(t.has_label(explicit, time_derivative)),
-            replace_subject(self.x1.split()),
-            drop
-        )
-
+            map_if_true=replace_subject(self.x1),
+            map_if_false=drop)
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
-            lambda t: -1*t
-        )
+            map_if_false=lambda t: -self.dt*t)
+
         return r.form
 
     @cached_property
     def solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs + self.rhs, self.x_out, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, options_prefix=solver_name)
 
@@ -1972,18 +1978,8 @@ class IMEX_SDC(SDC):
 
     def setup(self, equation, uadv=None):
 
-        residual = equation.residual
-
-        residual = residual.label_map(
-            lambda t: any(t.has_label(time_derivative, transport)),
-            map_if_false=lambda t: implicit(t))
-
-        residual = residual.label_map(
-            lambda t: t.has_label(transport),
-            lambda t: explicit(t))
-
         self.IMEX = IMEX_Euler(self.domain)
-        self.IMEX.setup(equation, residual=residual)
+        self.IMEX.setup(equation)
         self.residual = self.IMEX.residual
 
         # set up SDC form and solver
@@ -2043,7 +2039,7 @@ class IMEX_SDC(SDC):
                                     drop)
         L = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     drop,
-                                    replace_subject(self.Uin.split()))
+                                    replace_subject(self.Uin))
         Frhs = a - L
         prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
         self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
