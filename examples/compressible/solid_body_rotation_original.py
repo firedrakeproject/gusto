@@ -3,7 +3,8 @@ from firedrake import (ExtrudedMesh,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, min_value, max_value)
-from gusto import *                                              # 
+from gusto import *
+from gusto.diagnostics import GeostrophicImbalance                                              # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -31,7 +32,7 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 phi0 = Constant(pi/4)
 f0 = 2 * omega * sin(phi0)
-Omega = as_vector((0, 0, f0))
+Omega = as_vector((0., 0., f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
