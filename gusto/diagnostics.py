@@ -4,7 +4,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, cross, sin,  \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_v, div, avg, jump, pi,\
-    TensorFunctionSpace, SpatialCoordinate, as_vector, \
+    TensorFunctionSpace, SpatialCoordinate, as_vector, as_tensor, \
     Projector, Interpolator
 from firedrake.assign import Assigner
 
@@ -1303,6 +1303,7 @@ class HydrostaticImbalance(DiagnosticField):
         self.imbalance_solver.solve()
         super().compute()
 
+
 class GeostrophicImbalance(DiagnosticField):
     """Geostrophic imbalance diagnostic field."""
     name = "GeostrophicImbalance"
@@ -1350,7 +1351,9 @@ class GeostrophicImbalance(DiagnosticField):
         omega = Constant(7.292e-5)
         phi0 = Constant(pi/4)
         f0 = 2 * omega * sin(phi0)
-        Omega = as_vector((0, 0, f0))
+        #Omega = as_vector((0, 0, f0))
+        Omega = (0.0, 0.0, f0)
+
 
         # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
@@ -1362,7 +1365,7 @@ class GeostrophicImbalance(DiagnosticField):
         # TODO: most likely will need a non-linear term too but let us test this for now.
         L = (- cp*div((theta)*w)*exner*dx
              + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - w*cross(2*Omega,u) # Coriolis
+             - w*cross(Omega,u) # Coriolis
              - w*g) # gravity discretisation
         bcs = self.equations.bcs['u']
 
