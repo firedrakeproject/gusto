@@ -33,7 +33,7 @@ phi0 = Constant(pi/4)
 f0 = omega * sin(phi0)
 Omega = as_vector((0, 0, f0))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_Invariant_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
 dirname = 'SBR_invariant_solve_newcoriolis'
 output = OutputParameters(dirname=dirname,
