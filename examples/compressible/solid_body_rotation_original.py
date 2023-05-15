@@ -31,7 +31,7 @@ domain = Domain(mesh, dt, "RTCF", degree=1)
 params = CompressibleParameters()
 omega = Constant(7.292e-5)
 phi0 = Constant(pi/4)
-f0 = 2 * omega * sin(phi0)
+f0 =  omega * sin(phi0)
 Omega = as_vector((0., 0., f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
@@ -39,7 +39,7 @@ eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option
 dirname = 'geoimbalance_test'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
-                          dumplist=['u', 'rho', 'theta'],
+                          dumplist=['u', 'rho', 'theta' ],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
                                            'u_radial',

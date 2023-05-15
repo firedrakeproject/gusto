@@ -1338,10 +1338,12 @@ class GeostrophicImbalance(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
         Vu = domain.spaces("HDiv")
-        u = state_fields("u")
-        rho = state_fields("rho")
-        theta = state_fields("theta")
+        u = state_fields('u')
+        rho = state_fields('rho')
+        theta = state_fields('theta')
+ 
         exner = tde.exner_pressure(self.parameters, rho, theta)
+
 
 
         cp = Constant(self.parameters.cp)
@@ -1350,9 +1352,8 @@ class GeostrophicImbalance(DiagnosticField):
         # TODO: Generilise this for cases that aren't solid body rotation case 
         omega = Constant(7.292e-5)
         phi0 = Constant(pi/4)
-        f0 = 2 * omega * sin(phi0)
-        #Omega = as_vector((0, 0, f0))
-        Omega = (0.0, 0.0, f0)
+        f0 =  omega * sin(phi0)
+        Omega = as_vector((0., 0., f0))
 
 
         # TODO: Geostophic imbalance diagnostic
@@ -1365,8 +1366,8 @@ class GeostrophicImbalance(DiagnosticField):
         # TODO: most likely will need a non-linear term too but let us test this for now.
         L = (- cp*div((theta)*w)*exner*dx
              + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - w*cross(Omega,u) # Coriolis
-             - w*g) # gravity discretisation
+             - inner(w, cross(2*Omega, u))*dx) # coriolis
+             #- w*g*dx) # gravity discretisation
         bcs = self.equations.bcs['u']
 
         imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
