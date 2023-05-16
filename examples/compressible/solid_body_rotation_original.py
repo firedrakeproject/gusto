@@ -35,7 +35,7 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_invariant_solve_newcoriolis'
+dirname = 'SBR_invariant_solve_newcoriolis_norho'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=2000,
                           dumplist=['u', 'rho', 'theta'],
@@ -123,7 +123,7 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
+compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=False)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
