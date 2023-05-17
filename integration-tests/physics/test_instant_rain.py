@@ -50,8 +50,8 @@ def run_instant_rain(dirname):
     # Physics schemes
     # define saturation function
     saturation = Constant(0.5)
-    physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain",
-                                    set_tau_to_dt=True), ForwardEuler(domain))]
+    physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain"),
+                        ForwardEuler(domain))]
 
     # Time stepper
     stepper = PrescribedTransport(eqns, RK4(domain), io,
