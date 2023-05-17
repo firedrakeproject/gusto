@@ -26,8 +26,6 @@ tmax = 12*day
 mesh = IcosahedralSphereMesh(radius=a,
                              refinement_level=ref_level, degree=1)
 x = SpatialCoordinate(mesh)
-global_normal = x
-mesh.init_cell_orientations(x)
 domain = Domain(mesh, dt, 'BDM', 1)
 theta, lamda = latlon_coords(mesh)
 
@@ -44,7 +42,7 @@ msat = Function(VD)
 msat.interpolate(msat_expr)
 
 # I/O
-dirname = "moist_williamson1"
+dirname = "moist_williamson1_temp"
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1,
                           log_level='INFO')
@@ -52,8 +50,8 @@ diagnostic_fields = [CourantNumber(), Sum("water_vapour", "cloud_water")]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 physics_schemes = [(ReversibleAdjustment(eqns, msat, vapour_name='water_vapour',
-                                         cloud_name='cloud_water',
-                                         set_tau_to_dt=True), RK4(domain))]
+                                         cloud_name='cloud_water'),
+                    RK4(domain))]
 
 # Time stepper
 stepper = PrescribedTransport(eqns, RK4(domain), io)
@@ -80,9 +78,6 @@ v0.project(conditional(r < R, h_expr, 0))
 
 sat_field = stepper.fields("sat_field", space=VD)
 sat_field.interpolate(msat)
-
-# total_moisture = stepper.fields("total_moisture", space=VD)
-# total_moisture.interpolate(v0)
 
 # ------------------------------------------------------------------------ #
 # Run
