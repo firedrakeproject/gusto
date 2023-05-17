@@ -733,7 +733,6 @@ class InstantRain(Physics):
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            test_D = equation.tests[self.VD_idx]
             equation.residual += physics(subject
                                          (test_D * gamma * self.source * dx,
                                           equation.X),
@@ -772,26 +771,39 @@ class ReversibleAdjustment(Physics):
     Represents the process of adjusting water vapour and cloud water according
     to a saturation function, via condensation and evaporation processes.
 
-    This physics scheme follows that of Zerroukat and Allen (2020).
+    This physics scheme follows that of Zerroukat and Allen (2020), with the
+    choice of their gamma constants to be 1 in both cases.
 
     """
 
-    def __init__(self, equation, saturation_curve, vapour_name='water_vapour',
-                 cloud_name='cloud_water', set_tau_to_dt=False,
-                 parameters=None):
+    def __init__(self, equation, saturation_curve,
+                 time_varying_saturation=False, vapour_name='water_vapour',
+                 cloud_name='cloud_water', convective_feedback=False,
+                 gamma=None, tau=None, parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
-            saturation_curve (ufl.Expr): the saturation function, which dictates
-                when phase changes occur
+            saturation_curve (ufl expression or :class: `function`): the
+                curve which dictates when phase changes occur. In a saturated
+                atmosphere vapour above the saturation curve becomes cloud,
+                and if the atmosphere is sub-saturated and there is cloud
+                present cloud will become vapour until the saturation curve is
+                reached. The saturation curve is either prescribed or
+                dependent on a prognostic field.
+            time_varying_saturation (bool, optional): set this to True if the
+                saturation curve is changing in time. Defaults to False.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             cloud_name (str, optional): name of the cloud variable. Defaults to
                 'cloud_water'.
-            set_tau_to_dt (bool, optional): True if the timescale for
-                condensation/evaporation is equal to the timestep and False if
-                not. If False then the user must provide a timescale, tau, that
-                gets passed to the parameters list.
+            convective_feedback (bool, optional): True if the conversion of
+                vapour affects the height equation. Defaults to False.
+            gamma (float, optional): Condensation proportionality constant,
+                used if convection causes a response in the height equation.
+                Defaults to None, but must be specified if convective_feedback
+                is True.
+            tau (float, optional): Timescale for condensation and evaporation.
+                Defaults to None, in which case the timestep dt is used.
             parameters (:class:`Configuration`, optional): parameters containing
                 the values of constants. Defaults to None, in which case the
                 parameters are obtained from the equation.
@@ -799,15 +811,18 @@ class ReversibleAdjustment(Physics):
 
         super().__init__(equation, parameters=None)
 
-        parameters = self.parameters
-        self.set_tau_to_dt = set_tau_to_dt
-        self.saturation = saturation_curve
+        self.convective_feedback = convective_feedback
+        self.time_varying_saturation = time_varying_saturation
 
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
         self.Vv_idx = equation.field_names.index(vapour_name)
         self.Vc_idx = equation.field_names.index(cloud_name)
+
+        if self.convective_feedback:
+            assert "D" in equation.field_names, "Depth field must exist for convective feedback"
+            assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
 
         # Obtain function spaces and functions
         W = equation.function_space
@@ -819,15 +834,35 @@ class ReversibleAdjustment(Physics):
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
 
+        # depth needed if convective feedback
+        if self.convective_feedback:
+            self.VD_idx = equation.field_names.index("D")
+            VD = W.sub(self.VD_idx)
+            test_D = equation.tests[self.VD_idx]
+            self.D = Function(VD)
+
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
-        if self.set_tau_to_dt:
-            self.tau = Constant(0)
+        if tau is not None:
+            self.set_tau_to_dt = False
+            self.tau = tau
         else:
-            assert parameters.tau is not None, "If the relaxation timescale is not the same as the timestep then you must specify tau"
-            self.tau = parameters.tau
+            self.set_tau_to_dt = True
+            self.tau = Constant(0)
+            logger.info("Timescale for moisture conversion has been set to dt. If this is not the intention then set a tau parameter.")
+
+        if self.time_varying_saturation:
+            if isinstance(saturation_curve, FunctionType):
+                self.saturation_computation = saturation_curve
+                self.saturation_curve = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If time_varying_saturation is True then saturation must be a Python function of a prognostic field.")
+        else:
+            assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
+            self.saturation_curve = saturation_curve
 
         # Saturation adjustment expression, adjusted to stop negative values
-        sat_adj_expr = (self.water_v - saturation_curve) / self.tau
+        sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr,
                                              -self.cloud / self.tau),
@@ -848,6 +883,16 @@ class ReversibleAdjustment(Physics):
             equation.residual += physics(subject(test * source * dx,
                                                  equation.X), self.evaluate)
 
+        # If feeding back on height adjust the height equation
+        if convective_feedback:
+            # same source that is subtracted from vapour is subtracted from
+            # height (scaled by gamma)
+            source_D = self.source[0]
+            equation.residual += physics(subject
+                                         (test_D * gamma * source_D * dx,
+                                          equation.X),
+                                         self.evaluate)
+
     def evaluate(self, x_in, dt):
         """
         Evaluates the source term generated by the physics.
@@ -861,6 +906,10 @@ class ReversibleAdjustment(Physics):
                 interval for the scheme.
         """
 
+        if self.convective_feedback:
+            self.D.assign(x_in.split()[self.VD_idx])
+        if self.time_varying_saturation:
+            self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
