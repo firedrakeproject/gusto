@@ -24,10 +24,10 @@
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc',
-              'sphinx.ext.mathjax', 'sphinx.ext.intersphinx',
+              'sphinx.ext.mathjax',
+              'sphinx.ext.intersphinx',
               'sphinx.ext.viewcode',
-              #'sphinxcontrib.youtube',
-              'sphinxcontrib.bibtex']
+              'sphinx.ext.napoleon']
 
 mathjax_path = 'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'
 
@@ -99,7 +99,7 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'gusto'
+html_theme = 'sphinx_rtd_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -192,8 +192,7 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-    ('index', 'Gusto.tex', u'Gusto Documentation',
-     u'the Gusto team', 'manual'),
+    ('index', 'Gusto.tex', u'Gusto Documentation', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -222,8 +221,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'gusto', u'Gusto Documentation',
-     [u'the Gusto team'], 1)
+    ('index', 'gusto', u'Gusto Documentation', 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -237,7 +235,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     ('index', 'Gusto', u'Gusto Documentation',
-     u'the Gusto team', 'Gusto', 'One line description of project.',
+     'Gusto', 'One line description of project.',
      'Miscellaneous'),
 ]
 

@@ -40,9 +40,8 @@ for ref_level, dt in ref_dt.items():
 
     # Domain
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=1)
+                                 refinement_level=ref_level, degree=2)
     x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation

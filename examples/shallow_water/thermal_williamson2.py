@@ -26,8 +26,6 @@ mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
 degree = 1
 domain = Domain(mesh, dt, 'BDM', degree)
 x = SpatialCoordinate(mesh)
-global_normal = x
-mesh.init_cell_orientations(x)
 
 # Equations
 params = ShallowWaterParameters(H=H, g=g)
