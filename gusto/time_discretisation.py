@@ -1635,7 +1635,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, domain, M, maxk):
 
         self.domain = domain
-        self.dt = Constant(domain.dt)
+        self.dt = domain.dt
         self.M = M
         self.maxk = maxk
 
@@ -1976,6 +1976,9 @@ class BE_SDC(SDC):
 
 class IMEX_SDC(SDC):
 
+    def __init__(self, domain, M, maxk):
+        super().__init__(domain, M, maxk)
+
     def setup(self, equation, uadv=None):
 
         self.IMEX = IMEX_Euler(self.domain)
@@ -2060,12 +2063,12 @@ class IMEX_SDC(SDC):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
-
             self.compute_quad()
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
                 self.dt.assign(self.dtau[m-1])
+                print('dtau', self.dt.dat.data)
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
