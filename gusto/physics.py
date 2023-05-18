@@ -779,7 +779,7 @@ class ReversibleAdjustment(Physics):
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
-                 gamma=None, thermal_feedback=False, beta2=None, tau=None,
+                 beta1=None, thermal_feedback=False, beta2=None, tau=None,
                  parameters=None):
         """
         Args:
@@ -799,7 +799,7 @@ class ReversibleAdjustment(Physics):
                 'cloud_water'.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            gamma (float, optional): Condensation proportionality constant,
+            beta1 (float, optional): Condensation proportionality constant,
                 used if convection causes a response in the height equation.
                 Defaults to None, but must be specified if convective_feedback
                 is True.
@@ -829,7 +829,7 @@ class ReversibleAdjustment(Physics):
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
-            assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
+            assert beta1 is not None, "If convective feedback is used, beta1 parameter must be specified"
 
         if self.thermal_feedback:
             assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
@@ -907,7 +907,7 @@ class ReversibleAdjustment(Physics):
             # height (scaled by gamma)
             source_D = self.source[0]
             equation.residual += physics(subject
-                                         (test_D * gamma * source_D * dx,
+                                         (test_D * beta1 * source_D * dx,
                                           equation.X),
                                          self.evaluate)
 
