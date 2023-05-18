@@ -4,7 +4,7 @@ from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, cross, sin,  \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_v, div, avg, jump, pi,\
-    TensorFunctionSpace, SpatialCoordinate, as_vector, as_tensor, \
+    TensorFunctionSpace, SpatialCoordinate, as_vector,  \
     Projector, Interpolator
 from firedrake.assign import Assigner
 
@@ -13,6 +13,7 @@ import gusto.thermodynamics as tde
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
+from gusto.initialisation_tools import latlon_coords
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
@@ -1343,18 +1344,14 @@ class GeostrophicImbalance(DiagnosticField):
         theta = state_fields('theta')
  
         exner = tde.exner_pressure(self.parameters, rho, theta)
-
-
-
         cp = Constant(self.parameters.cp)
-        g = Constant(self.parameters.g)
         n = FacetNormal(domain.mesh)
         # TODO: Generilise this for cases that aren't solid body rotation case 
         omega = Constant(7.292e-5)
         phi0 = Constant(pi/4)
         f0 =  omega * sin(phi0)
         Omega = as_vector((0., 0., f0))
-
+        k = domain.k
 
         # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
@@ -1363,11 +1360,15 @@ class GeostrophicImbalance(DiagnosticField):
         imbalance = Function(Vu)
         a = inner(w, F)*dx
 
-        # TODO: most likely will need a non-linear term too but let us test this for now.
+        # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
         L = (- cp*div((theta)*w)*exner*dx
              + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
              - inner(w, cross(2*Omega, u))*dx) # coriolis
-             #- w*g*dx) # gravity discretisation
+            # + dot(k, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
+           #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
+           #  - inner(w, cross(2*Omega, u))*dx)*k )
+            
+
         bcs = self.equations.bcs['u']
 
         imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
