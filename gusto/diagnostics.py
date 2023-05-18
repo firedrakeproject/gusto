@@ -1351,6 +1351,7 @@ class GeostrophicImbalance(DiagnosticField):
         phi0 = Constant(pi/4)
         f0 =  omega * sin(phi0)
         Omega = as_vector((0., 0., f0))
+        k = domain.k
 
         # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
@@ -1362,10 +1363,10 @@ class GeostrophicImbalance(DiagnosticField):
         # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
         L = (- cp*div((theta)*w)*exner*dx
              + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - inner(w, cross(2*Omega, u))*dx) # coriolis
+             - inner(w, cross(2*Omega, u))*dx )# coriolis
             # + dot(k, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
-           #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
-           #  - inner(w, cross(2*Omega, u))*dx)*k )
+            # + cp*jump((theta)*w, n)*avg(exner)*dS_v 
+            # - inner(w, cross(2*Omega, u))*dx)*k )
             
 
         bcs = self.equations.bcs['u']
@@ -1437,12 +1438,13 @@ class SolidBodyImbalance(DiagnosticField):
         R = sqrt(x**2 + y**2)  # distance from z axis
         r = sqrt(x**2 + y**2 + z**2)  # distance from origin
         lambda_hat = (x * y_hat - y * x_hat) / R
+        lat_dot = dot(u, lambda_hat)
         phi_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
-        r_hat = (x * x_hat + y * y_hat + z * z_hat) / r      
+        lon_dot = dot(u,phi_hat)
+        r_hat = (x * x_hat + y * y_hat + z * z_hat) / r 
+        r_dot = dot(u, r_hat)     
         mesh = domain.mesh
 
-        # Get latlon co-ords and spherical velocities
-        lat_dot, lon_dot, r_dot = MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u')
         lat, lon = latlon_coords(mesh)
         # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
@@ -1454,14 +1456,14 @@ class SolidBodyImbalance(DiagnosticField):
         # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
         L = (- cp*div((theta)*w)*exner*dx
              + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - inner(w, cross(2*Omega, u))*dx # coriolis
-             + dot(r_hat, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
-             + cp*jump((theta)*w, n)*avg(exner)*dS_v 
-             - inner(w, cross(2*Omega, u))*dx) * r_hat 
-             +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat #nonlinear terms
-             + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat
-             )
-            
+             - inner(w, cross(2*Omega, u))*dx) # coriolis
+           #  +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat #nonlinear terms
+           #  + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat
+            # )
+            # + dot(r_hat, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
+           #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
+            # - inner(w, cross(2*Omega, u))*dx) * r_hat            
+           
 
         bcs = self.equations.bcs['u']
 

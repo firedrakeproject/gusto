@@ -4,7 +4,7 @@ from firedrake import (ExtrudedMesh,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, min_value, max_value)
 from gusto import *
-from gusto.diagnostics import GeostrophicImbalance                                              # 
+from gusto.diagnostics import GeostrophicImbalance, SolidBodyImbalance                                             # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -46,7 +46,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn), GeostrophicImbalance(eqn) ]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn), GeostrophicImbalance(eqn),
+                     SolidBodyImbalance(eqn) ]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
