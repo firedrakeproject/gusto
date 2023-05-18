@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
-    Function, assemble, dx, FunctionSpace,pi
+    Function, assemble, dx, FunctionSpace, pi, CellNormal
 
 import numpy as np
 
@@ -16,15 +16,14 @@ parameters = ShallowWaterParameters(H=H)
 
 # Domain
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=1)
+                             refinement_level=3, degree=2)
 x = SpatialCoordinate(mesh)
-mesh.init_cell_orientations(x)
 domain = Domain(mesh, dt, 'BDM', 1)
 
 # Equation
 Omega = parameters.Omega
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option="circulation_form")
 
 # I/O
 perturb = True
@@ -53,6 +52,7 @@ def update_pv():
 
 def reinterpolate_coriolis():
     eqns.prescribed_fields("coriolis").interpolate(fexpr)
+    domain.outward_normals.interpolate(CellNormal(domain.mesh))
 
 monitor = MonitorFunction("PotentialVorticity", adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(mesh,
@@ -63,6 +63,7 @@ mesh_generator = OptimalTransportMeshGenerator(mesh,
 # Time stepper
 stepper = MeshMovement(eqns, io, transported_fields,
                        mesh_generator=mesh_generator)
+#stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 # initial conditions
 u0 = stepper.fields("u")
@@ -176,6 +177,7 @@ pv.setup(domain, stepper.fields)
 mesh_generator.get_first_mesh(initialise_fn)
 
 eqns.prescribed_fields("coriolis").interpolate(fexpr)
+domain.outward_normals.interpolate(CellNormal(domain.mesh))
 pv()
 
 Dbar = Function(D0.function_space()).assign(H)
