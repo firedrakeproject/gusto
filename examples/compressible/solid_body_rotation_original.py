@@ -35,9 +35,9 @@ Omega = as_vector((0, 0, f0))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_invariant_solve_newcoriolis_rho'
+dirname = 'SBR_invariant_solve_newcoriolis_rho_freq'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=2000,
+                          dumpfreq=2,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
