@@ -779,7 +779,8 @@ class ReversibleAdjustment(Physics):
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
-                 gamma=None, tau=None, parameters=None):
+                 gamma=None, thermal_feedback=False, beta2=None, tau=None,
+                 parameters=None):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
@@ -802,6 +803,11 @@ class ReversibleAdjustment(Physics):
                 used if convection causes a response in the height equation.
                 Defaults to None, but must be specified if convective_feedback
                 is True.
+            thermal_feedback (bool, optional): True if moist conversions
+                affect the buoyancy equation. Defaults to False.
+            beta2 (float, optional): Condensation proportionality constant
+                for thermal feedback. Defaults to None, but must be specified
+                if thermal_feedback is True.
             tau (float, optional): Timescale for condensation and evaporation.
                 Defaults to None, in which case the timestep dt is used.
             parameters (:class:`Configuration`, optional): parameters containing
@@ -811,8 +817,9 @@ class ReversibleAdjustment(Physics):
 
         super().__init__(equation, parameters=None)
 
-        self.convective_feedback = convective_feedback
         self.time_varying_saturation = time_varying_saturation
+        self.convective_feedback = convective_feedback
+        self.thermal_feedback = thermal_feedback
 
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -823,6 +830,10 @@ class ReversibleAdjustment(Physics):
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
             assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
+
+        if self.thermal_feedback:
+            assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
+            assert beta2 is not None, "If thermal feedback is used, beta2 parameter must be specified"
 
         # Obtain function spaces and functions
         W = equation.function_space
@@ -840,6 +851,13 @@ class ReversibleAdjustment(Physics):
             VD = W.sub(self.VD_idx)
             test_D = equation.tests[self.VD_idx]
             self.D = Function(VD)
+
+        # buoyancy needed if thermal feedback
+        if self.thermal_feedback:
+            self.Vb_idx = equation.field_names.index("b")
+            Vb = W.sub(self.Vb_idx)
+            test_b = equation.tests[self.Vb_idx]
+            self.b = Function(Vb)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
         if tau is not None:
@@ -890,6 +908,16 @@ class ReversibleAdjustment(Physics):
             source_D = self.source[0]
             equation.residual += physics(subject
                                          (test_D * gamma * source_D * dx,
+                                          equation.X),
+                                         self.evaluate)
+
+        # If thermal feedback then adjust the buoyancy equation
+        if thermal_feedback:
+            # same source that is subtracted from vapour is added to buoyancy
+            # (scaled by beta2)
+            source_b = self.source[0]
+            equation.residual -= physics(subject
+                                         (test_b * beta2 * source_b * dx,
                                           equation.X),
                                          self.evaluate)
 
