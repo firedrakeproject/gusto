@@ -122,10 +122,10 @@ u.project(as_vector([u_x_expr, u_y_expr, u_z_expr]))
 print('interpolate theta')
 theta0.interpolate(theta_expr)
 print('find pi')
-breakpoint()
+
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
-breakpoint()
+
 rho0.interpolate(rho_expr)
 compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=False)
 
@@ -136,9 +136,9 @@ print('Normalised rho error is:', errornorm(rho_analytic, rho0) / norm(rho_analy
 # make mean fields
 print('make mean fields')
 rho_b = Function(Vr).assign(rho0)
-breakpoint()
+
 theta_b = Function(Vt).assign(theta0)
-breakpoint()
+
 # assign reference profiles
 stepper.set_reference_profiles([('rho', rho_b),
                                 ('theta', theta_b)])
