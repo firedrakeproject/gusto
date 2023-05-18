@@ -1868,7 +1868,7 @@ class BE_SDC(SDC):
 
         residual = equation.residual
 
-        self.base = BackwardEuler(self.domain)
+        self.base = BackwardEuler(self.state)
 
         #uadv = self.state.fields("u")
 
@@ -1975,6 +1975,118 @@ class BE_SDC(SDC):
 
 
 class IMEX_SDC(SDC):
+
+    def setup(self, equation, uadv=None):
+
+        self.IMEX = IMEX_Euler(self.domain)
+        self.IMEX.setup(equation)
+        self.residual = self.IMEX.residual
+
+        # set up SDC form and solver
+        W = equation.function_space
+        dt = self.dt
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.U01 = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: dt*t)
+
+        F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
+                            replace_subject(self.U_SDC),
+                            drop)
+
+        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, explicit)),
+                            replace_subject(self.Un),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        F01 = F.label_map(lambda t: t.has_label(implicit),
+                          replace_subject(self.U01),
+                          drop)
+
+        F01 = F01.label_map(all_terms, lambda t: -1*t)
+
+        F0 = F.label_map(lambda t: t.has_label(explicit),
+                         replace_subject(self.U0),
+                         drop)
+        F0 = F0.label_map(all_terms, lambda t: -1*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_),
+                                    drop)
+
+        F_SDC = F_imp + F_exp + F01 + F0 + Q
+
+        bcs = equation.bcs['u']
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
+        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin.split()))
+        Frhs = a - L
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
+        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+
+    def apply(self, x_out, x_in):
+        self.Un.assign(x_in)
+
+        self.Unodes[0].assign(self.Un)
+        for m in range(self.M):
+            self.IMEX.dt.assign(self.dtau[m])
+            self.IMEX.apply(self.Unodes[m+1], self.Unodes[m])
+
+        k = 0
+        while k < self.maxk:
+            k += 1
+
+            for m in range(1, self.M+1):
+                self.Uin.assign(self.Unodes[m])
+                self.solver_rhs.solve()
+                self.fUnodes[m-1].assign(self.Urhs)
+
+            self.compute_quad()
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, self.M+1):
+                self.dt.assign(self.dtau[m-1])
+                self.U0.assign(self.Unodes[m-1])
+                self.U01.assign(self.Unodes[m])
+                self.Un.assign(self.Unodes1[m-1])
+                self.Q_.assign(self.quad[m-1])
+                self.solver_SDC.solve()
+                self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, self.M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
+            print('U0', k, self.U0.split()[1].dat.data.max())
+            print('U01',k, self.U01.split()[1].dat.data.max())
+            print('Un',k, self.Un.split()[1].dat.data.max())
+            print('dt', self.dt.dat.data)
+        if self.maxk > 0:
+            x_out.assign(self.Un)
+        else:
+            x_out.assign(self.Unodes[-1])
+
+
+class IMEX_SDC3(SDC):
 
     def setup(self, equation, uadv=None):
 
