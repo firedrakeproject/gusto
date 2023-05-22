@@ -3,8 +3,7 @@
 from firedrake import (Function, FacetNormal,
                        dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
                        ds_v, ds_t, ds_b,
-                       outer, sign, cross, CellNormal,
-                       curl)
+                       outer, sign, cross, curl)
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.labels import transport, transporting_velocity, ibp_label
 
@@ -322,7 +321,7 @@ def vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
 
         perp = domain.perp
         if domain.on_sphere:
-            outward_normals = CellNormal(domain.mesh)
+            outward_normals = domain.outward_normals
             perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
         else:
             perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))

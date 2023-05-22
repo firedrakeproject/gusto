@@ -57,26 +57,47 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """Defines the timestep. Must be implemented in child classes"""
         return NotImplementedError
 
-    def run(self, t, tmax, pickup=False):
+    def set_initial_timesteps(self, num_steps):
+        """Sets the number of initial time steps for a multi-level scheme."""
+        can_set = (hasattr(self, 'scheme')
+                   and hasattr(self.scheme, 'initial_timesteps')
+                   and num_steps is not None)
+        if can_set:
+            self.scheme.initial_timesteps = num_steps
+
+    def get_initial_timesteps(self):
+        """Gets the number of initial time steps from a multi-level scheme."""
+        can_get = (hasattr(self, 'scheme')
+                   and hasattr(self.scheme, 'initial_timesteps'))
+        # Return None if this is not applicable
+        return self.scheme.initial_timesteps if can_get else None
+
+    def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
 
         Args:
             t (float): the start time of the run
             tmax (float): the end time of the run
-            pickup: (bool): specify whether to pickup from a previous run
+            pick_up: (bool): specify whether to pick_up from a previous run
         """
 
-        if pickup:
-            t = self.io.pickup_from_checkpoint(self.fields)
-
+        # Set up diagnostics, which may set up some fields necessary to pick up
         self.io.setup_diagnostics(self.fields)
 
+        if pick_up:
+            # Pick up fields, and return other info to be picked up
+            t, reference_profiles, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
+            self.set_reference_profiles(reference_profiles)
+            self.set_initial_timesteps(initial_timesteps)
+
+        # Set up dump, which may also include an initial dump
         with timed_stage("Dump output"):
-            self.io.setup_dump(self.fields, t, tmax, pickup)
+            self.io.setup_dump(self.fields, t, pick_up)
 
         self.t.assign(t)
 
+        # Time loop
         while float(self.t) < tmax - 0.5*float(self.dt):
             logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
 
@@ -87,9 +108,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.t.assign(self.t + self.dt)
 
             with timed_stage("Dump output"):
-                self.io.dump(self.fields, float(self.t))
+                self.io.dump(self.fields, float(self.t), self.get_initial_timesteps())
 
-        if self.io.output.checkpoint:
+        if self.io.output.checkpoint and self.io.output.checkpoint_method == 'old':
             self.io.chkpt.close()
 
         logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')
@@ -111,7 +132,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             elif isinstance(profile, Function):
                 # Need to add reference profile to state so profile must be
                 # a Function
-                ref = self.fields(field_name+'_bar', space=profile.function_space(), dump=False)
+                ref = self.fields(field_name+'_bar', space=profile.function_space(),
+                                  pick_up=True, dump=False, field_type='reference')
             else:
                 raise ValueError(f'When initialising reference profile {field_name}'
                                  + ' the passed profile must be a Function')
@@ -150,7 +172,7 @@ class Timestepper(BaseTimestepper):
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
-        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
@@ -353,7 +375,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # Prescribed fields for auxiliary eqns should come from prognostics of
         # other equations, so only the prescribed fields of the main equation
         # need passing to StateFields
-        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
@@ -437,20 +459,21 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             for _, scheme in self.physics_schemes:
                 scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
-    def run(self, t, tmax, pickup=False):
+    def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax.
 
         Args:
             t (float): the start time of the run
             tmax (float): the end time of the run
-            pickup: (bool): specify whether to pickup from a previous run
+            pick_up: (bool): specify whether to pick_up from a previous run
         """
 
-        assert self.reference_profiles_initialised, \
-            'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
+        if not pick_up:
+            assert self.reference_profiles_initialised, \
+                'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
 
-        super().run(t, tmax, pickup=pickup)
+        super().run(t, tmax, pick_up=pick_up)
 
 
 class PrescribedTransport(Timestepper):
@@ -504,7 +527,7 @@ class PrescribedTransport(Timestepper):
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
-        self.fields = StateFields(self.x.np1, self.equation.prescribed_fields,
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):

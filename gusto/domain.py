@@ -7,7 +7,8 @@ model's time interval.
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       as_vector, inner, interpolate)
+                       as_vector, inner, interpolate, VectorFunctionSpace,
+                       Function)
 import numpy as np
 
 
@@ -93,8 +94,14 @@ class Domain(object):
             R = sqrt(inner(x, x))
             self.k = interpolate(x/R, mesh.coordinates.function_space())
             if dim == 2:
-                outward_normals = CellNormal(mesh)
-                self.perp = lambda u: cross(outward_normals, u)
+                if hasattr(mesh, "_bash_mesh"):
+                    sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
+                else:
+                    mesh.init_cell_orientations(x)
+                    sphere_degree = mesh.coordinates.function_space().ufl_element().degree()
+                V = VectorFunctionSpace(mesh, "DG", sphere_degree)
+                self.outward_normals = Function(V).interpolate(CellNormal(mesh))
+                self.perp = lambda u: cross(self.outward_normals, u)
         else:
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0

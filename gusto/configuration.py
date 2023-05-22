@@ -10,8 +10,7 @@ __all__ = ["WARNING", "INFO", "DEBUG",
            "Configuration", "IntegrateByParts",
            "TransportEquationType", "OutputParameters",
            "CompressibleParameters", "ShallowWaterParameters",
-           "ConvectiveMoistShallowWaterParameters", "logger",
-           "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+           "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
            "SpongeLayerParameters", "DiffusionParameters"]
 
 logger = logging.getLogger("gusto")
@@ -48,9 +47,9 @@ class TransportEquationType(Enum):
 
     For transporting velocity 'u' and transported quantity 'q', different types
     of transport equation include:
-
-    advective: ∂q/∂t + (u.∇)q = 0
-    conservative: ∂q/∂t + ∇.(u*q) = 0
+                                                                              \n
+    advective: ∂q/∂t + (u.∇)q = 0                                             \n
+    conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     """
 
@@ -112,6 +111,7 @@ class OutputParameters(Configuration):
     dumplist_latlon = []
     dump_diagnostics = True
     checkpoint = True
+    checkpoint_method = 'old'
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
@@ -152,17 +152,6 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
-
-
-class ConvectiveMoistShallowWaterParameters(ShallowWaterParameters):
-
-    """
-    Physical parameters for the Bouchut et al moist shallow water equations
-    """
-    gamma = None  # condensation proportionality constant
-    tau = None  # timescale of condensation
-    q_0 = None  # factor in the saturation humidity expr
-    alpha = None  # exponential factor in the saturation humidity expr
 
 
 class TransportOptions(Configuration, metaclass=ABCMeta):

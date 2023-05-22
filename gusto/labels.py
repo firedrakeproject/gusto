@@ -140,6 +140,10 @@ def replace_trial_function(new_trial, idx=None):
                             + f" replace_trial_function with {new_trial}"
             raise type(err)(error_message) from err
 
+        # When a term has the perp label, this indicates that replace
+        # cannot see that the perped object should also be
+        # replaced. In this case we also pass the perped object to
+        # replace.
         if t.has_label(perp):
             perp_op = t.get(perp)
             perp_old = perp_op(old_trial)
@@ -254,10 +258,11 @@ def replace_subject(new_subj, idx=None):
                             + f" replace_subject with {new_subj}"
             raise type(err)(error_message) from err
 
-        # this is necessary to defer applying the perp until after the
-        # subject is replaced because otherwise replace cannot find
-        # the subject
-        if t.has_label(perp) and idx in[0, None]:
+        # When a term has the perp label, this indicates that replace
+        # cannot see that the perped object should also be
+        # replaced. In this case we also pass the perped object to
+        # replace.
+        if t.has_label(perp):
             perp_op = t.get(perp)
             perp_old = perp_op(t.get(subject))
             if type(new_subj) == tuple:

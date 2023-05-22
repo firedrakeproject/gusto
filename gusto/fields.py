@@ -109,28 +109,40 @@ class StateFields(Fields):
         self.fields = []
         output_specified = len(fields_to_dump) > 0
         self.to_dump = set((fields_to_dump))
-        self.to_pickup = set(())
+        self.to_pick_up = set(())
         self._field_types = []
         self._field_names = []
 
         # Add pointers to prognostic fields
-        for field in prognostic_fields.fields:
+        for field in prognostic_fields.np1.fields:
             # Don't add the mixed field
             if type(field.ufl_element()) is not MixedElement:
                 # If fields_to_dump not specified, dump by default
                 to_dump = field.name() in fields_to_dump or not output_specified
                 self.__call__(field.name(), field=field, dump=to_dump,
-                              pickup=True, field_type="prognostic")
+                              pick_up=True, field_type="prognostic")
             else:
                 self.__call__(field.name(), field=field, dump=False,
-                              pickup=False, field_type="prognostic")
+                              pick_up=False, field_type="prognostic")
 
+        # For multi-level schemes, previous time levels need adding to the state
+        if len(prognostic_fields.levels) > 2:
+            for level in range(len(prognostic_fields.levels)-2):
+                level_name = 'n' if level == 0 else f'nm{level}'
+                field_suffix = f'nm{level+1}'
+                # Add pointers to prognostic fields, don't add the mixed field
+                for field in getattr(prognostic_fields, level_name).fields:
+                    if type(field.ufl_element()) is not MixedElement:
+                        self.__call__(f'{field.name()}_{field_suffix}', field=field,
+                                      dump=False, pick_up=True, field_type="prognostic")
+
+        # Add pointers to any prescribed fields
         for field in prescribed_fields.fields:
             to_dump = field.name() in fields_to_dump
             self.__call__(field.name(), field=field, dump=to_dump,
-                          pickup=True, field_type="prescribed")
+                          pick_up=True, field_type="prescribed")
 
-    def __call__(self, name, field=None, space=None, dump=True, pickup=False,
+    def __call__(self, name, field=None, space=None, dump=True, pick_up=False,
                  field_type=None):
         """
         Returns a field from or adds a field to the :class:`StateFields`.
@@ -151,7 +163,7 @@ class StateFields(Fields):
                 create the field in. Defaults to None.
             dump (bool, optional): whether the created field should be
                 outputted. Defaults to True.
-            pickup (bool, optional): whether the created field should be picked
+            pick_up (bool, optional): whether the created field should be picked
                 up when checkpointing. Defaults to False.
 
         Returns:
@@ -183,20 +195,21 @@ class StateFields(Fields):
 
             if dump:
                 self.to_dump.add(name)
-            if pickup:
-                self.to_pickup.add(name)
+            if pick_up:
+                self.to_pick_up.add(name)
 
             # Work out field type
             if field_type is None:
                 # Prognostics can only be specified through __init__
-                if pickup:
+                if pick_up:
                     field_type = "prescribed"
                 elif dump:
                     field_type = "diagnostic"
                 else:
                     field_type = "derived"
             else:
-                permitted_types = ["prognostic", "prescribed", "diagnostic", "derived"]
+                permitted_types = ["prognostic", "prescribed", "diagnostic",
+                                   "derived", "reference"]
                 assert field_type in permitted_types, \
                     f'field_type {field_type} not in permitted types {permitted_types}'
             self._field_types.append(field_type)
@@ -232,7 +245,7 @@ class TimeLevelFields(object):
         """
         default_levels = ("n", "np1")
         if nlevels is None or nlevels == 1:
-            previous_levels = ["nm1"]
+            previous_levels = []
         else:
             previous_levels = ["nm%i" % n for n in range(nlevels-1, 0, -1)]
         levels = tuple(previous_levels) + default_levels

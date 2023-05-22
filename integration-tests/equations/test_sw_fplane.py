@@ -1,11 +1,12 @@
 """
-This runs a shallow water simulation on the fplane with 3 waves that interact.
+This runs a shallow water simulation on the fplane with 3 waves
+that interact and checks the results agains a known checkpointed answer.
 """
 
-from gusto import *
-from firedrake import PeriodicSquareMesh, SpatialCoordinate, Function, cos, pi
 from os.path import join, abspath, dirname
-import pytest
+from gusto import *
+from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
+                       norm, cos, pi)
 
 
 def run_sw_fplane(tmpdir):
@@ -47,13 +48,12 @@ def run_sw_fplane(tmpdir):
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
     x, y = SpatialCoordinate(mesh)
-    Ly = Lx
     N0 = 0.1
     gamma = sqrt(g*H)
     ###############################
     #  Fast wave:
     k1 = 5*(2*pi/Lx)
-    
+
     K1sq = k1**2
     psi1 = sqrt(f0**2 + g*H*K1sq)
     xi1 = sqrt(2*K1sq)*psi1
@@ -95,24 +95,26 @@ def run_sw_fplane(tmpdir):
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=20*dt)
+    stepper.run(t=0, tmax=10*dt)
 
     # State for checking checkpoints
     checkpoint_name = 'sw_fplane_chkpt'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    check_eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
     check_output = OutputParameters(dirname=tmpdir+"/sw_fplane",
                                     checkpoint_pickup_filename=new_path)
-    check_io = IO(domain, check_output)
+    check_io = IO(domain, output=check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
-    check_stepper.run(t=0, tmax=0, pickup=True)
+    check_stepper.set_reference_profiles([])
+    check_stepper.run(t=0, tmax=0, pick_up=True)
 
     return stepper, check_stepper
 
 
 def test_sw_fplane(tmpdir):
 
-    stepper, check_stepper = run_sw_fplane(tmpdir)
+    dirname = str(tmpdir)
+    stepper, check_stepper = run_sw_fplane(dirname)
 
     for variable in ['u', 'D']:
         new_variable = stepper.fields(variable)
@@ -122,4 +124,3 @@ def test_sw_fplane(tmpdir):
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \
             'shallow water fplane test do not match KGO values'
-
