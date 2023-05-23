@@ -1365,10 +1365,8 @@ class GeostrophicImbalance(DiagnosticField):
         L = (background # exner pressure grad discretisation
              - inner(w, cross(2*Omega, u))*dx # coriolis
              + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
-             + cp*div((theta*k)*dot(k,w))*exner*dx + cp*jump((theta*k)*dot(k,w), n)*avg(exner)*ds_v)# removes vertical part of pressure 
-            # inner(w, cross(2*Omega, u))*dx, "u"), self.X)
-            # + cp*jump((theta)*w, n)*avg(exner)*dS_v 
-            # - inner(w, cross(2*Omega, u))*dx)*k )
+             + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
+             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v) # removes vertical part of pressure jump condition
             
 
         bcs = self.equations.bcs['u']
@@ -1460,11 +1458,14 @@ class SolidBodyImbalance(DiagnosticField):
         # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
         L = (background # exner pressure grad discretisation
              - inner(w, cross(2*Omega, u))*dx # coriolis
-            # + inner(k, background)*k # removes vertical part of geostrophic balance
-             + ((lat_dot*lon_dot*tan(lat) / r)*w - (lat_dot*r_dot / r) * w )*lambda_hat*dx
-             +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat*dx #nonlinear terms
-             + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat*dx
-             )
+             + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
+             + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
+             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v) # removes vertical part of pressure jump condition
+        
+            # + ((lat_dot*lon_dot*tan(lat) / r)*w - (lat_dot*r_dot / r) * w )*lambda_hat*dx
+            # +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat*dx #nonlinear terms
+            # + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat*dx
+            # )
             # + dot(r_hat, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
            #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
             # - inner(w, cross(2*Omega, u))*dx) * r_hat            
