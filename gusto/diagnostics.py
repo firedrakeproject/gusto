@@ -1443,7 +1443,7 @@ class SolidBodyImbalance(DiagnosticField):
         k=domain.k
 
         lat, lon = latlon_coords(mesh)
-        # TODO: Geostophic imbalance diagnostic
+        # TODO: solidbody  imbalance diagnostic
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
 
@@ -1468,6 +1468,7 @@ class SolidBodyImbalance(DiagnosticField):
         self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
         self.expr = dot(imbalance, domain.k)
         super().setup(domain, state_fields)
+        
 
     def compute(self):
         """Compute and return the diagnostic field from the current state.
