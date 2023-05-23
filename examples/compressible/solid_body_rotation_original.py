@@ -30,9 +30,7 @@ domain = Domain(mesh, dt, "RTCF", degree=1)
 # Equations
 params = CompressibleParameters()
 omega = Constant(7.292e-5)
-phi0 = Constant(pi/4)
-f0 =  omega * sin(phi0)
-Omega = as_vector((0., 0., f0))
+Omega = as_vector((0., 0., omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
@@ -46,8 +44,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn), GeostrophicImbalance(eqn),
-                     SolidBodyImbalance(eqn) ]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn), GeostrophicImbalance(eqn)]
+                     # SolidBodyImbalance(eqn)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes

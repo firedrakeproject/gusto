@@ -1359,12 +1359,14 @@ class GeostrophicImbalance(DiagnosticField):
 
         imbalance = Function(Vu)
         a = inner(w, F)*dx
+        background = - cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v
 
         # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
-        L = (- cp*div((theta)*w)*exner*dx
-             + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - inner(w, cross(2*Omega, u))*dx )# coriolis
-            # + dot(k, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
+        L = (background # exner pressure grad discretisation
+             - inner(w, cross(2*Omega, u))*dx # coriolis
+             + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
+             + cp*div((theta*k)*dot(k,w))*exner*dx + cp*jump((theta*k)*dot(k,w), n)*avg(exner)*ds_v)# removes vertical part of pressure 
+            # inner(w, cross(2*Omega, u))*dx, "u"), self.X)
             # + cp*jump((theta)*w, n)*avg(exner)*dS_v 
             # - inner(w, cross(2*Omega, u))*dx)*k )
             
@@ -1438,12 +1440,13 @@ class SolidBodyImbalance(DiagnosticField):
         R = sqrt(x**2 + y**2)  # distance from z axis
         r = sqrt(x**2 + y**2 + z**2)  # distance from origin
         lambda_hat = (x * y_hat - y * x_hat) / R
-        lat_dot = dot(u, lambda_hat)
+        lat_dot = inner(u, lambda_hat)
         phi_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
-        lon_dot = dot(u,phi_hat)
+        lon_dot = inner(u,phi_hat)
         r_hat = (x * x_hat + y * y_hat + z * z_hat) / r 
-        r_dot = dot(u, r_hat)     
+        r_dot = inner(u, r_hat)     
         mesh = domain.mesh
+        k=domain.k
 
         lat, lon = latlon_coords(mesh)
         # TODO: Geostophic imbalance diagnostic
@@ -1452,14 +1455,16 @@ class SolidBodyImbalance(DiagnosticField):
 
         imbalance = Function(Vu)
         a = inner(w, F)*dx
+        background = - cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v
 
         # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
-        L = (- cp*div((theta)*w)*exner*dx
-             + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
-             - inner(w, cross(2*Omega, u))*dx) # coriolis
-           #  +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat #nonlinear terms
-           #  + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat
-            # )
+        L = (background # exner pressure grad discretisation
+             - inner(w, cross(2*Omega, u))*dx # coriolis
+            # + inner(k, background)*k # removes vertical part of geostrophic balance
+             + ((lat_dot*lon_dot*tan(lat) / r)*w - (lat_dot*r_dot / r) * w )*lambda_hat*dx
+             +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat*dx #nonlinear terms
+             + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat*dx
+             )
             # + dot(r_hat, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
            #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
             # - inner(w, cross(2*Omega, u))*dx) * r_hat            
