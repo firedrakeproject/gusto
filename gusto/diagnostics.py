@@ -1348,9 +1348,7 @@ class GeostrophicImbalance(DiagnosticField):
         n = FacetNormal(domain.mesh)
         # TODO: Generilise this for cases that aren't solid body rotation case 
         omega = Constant(7.292e-5)
-        phi0 = Constant(pi/4)
-        f0 =  omega * sin(phi0)
-        Omega = as_vector((0., 0., f0))
+        Omega = as_vector((0., 0., omega))
         k = domain.k
 
         # TODO: Geostophic imbalance diagnostic
@@ -1426,11 +1424,9 @@ class SolidBodyImbalance(DiagnosticField):
         n = FacetNormal(domain.mesh)
         # TODO: Generilise this for cases that aren't solid body rotation case 
         omega = Constant(7.292e-5)
-        phi0 = Constant(pi/4)
-        f0 =  omega * sin(phi0)
-        Omega = as_vector((0., 0., f0))
+        Omega = as_vector((0., 0., omega))
 
-        # generating the spherical co-ords, im sure i can find this somewhere but we will see
+        # generating the spherical co-ords, and spherical components of velocity
         x, y, z = SpatialCoordinate(domain.mesh)
         x_hat = Constant(as_vector([1.0, 0.0, 0.0]))
         y_hat = Constant(as_vector([0.0, 1.0, 0.0]))
@@ -1438,9 +1434,9 @@ class SolidBodyImbalance(DiagnosticField):
         R = sqrt(x**2 + y**2)  # distance from z axis
         r = sqrt(x**2 + y**2 + z**2)  # distance from origin
         lambda_hat = (x * y_hat - y * x_hat) / R
-        lat_dot = inner(u, lambda_hat)
+        lon_dot = inner(u, lambda_hat)
         phi_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
-        lon_dot = inner(u,phi_hat)
+        lat_dot = inner(u, phi_hat)
         r_hat = (x * x_hat + y * y_hat + z * z_hat) / r 
         r_dot = inner(u, r_hat)     
         mesh = domain.mesh
@@ -1460,15 +1456,10 @@ class SolidBodyImbalance(DiagnosticField):
              - inner(w, cross(2*Omega, u))*dx # coriolis
              + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
              + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
-             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v) # removes vertical part of pressure jump condition
-        
-            # + ((lat_dot*lon_dot*tan(lat) / r)*w - (lat_dot*r_dot / r) * w )*lambda_hat*dx
-            # +(w / r)*(lat_dot*lon_dot*tan(lat) - lat_dot * r_dot)*lambda_hat*dx #nonlinear terms
-            # + (w / r)*(lat_dot**2 * tan(lat) + lon_dot * r_dot)*phi_hat*dx
-            # )
-            # + dot(r_hat, cp*div((theta)*w)*exner*dx # removing the vertical part of geostrophic balance
-           #  + cp*jump((theta)*w, n)*avg(exner)*dS_v 
-            # - inner(w, cross(2*Omega, u))*dx) * r_hat            
+             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v # removes vertical part of pressure jump condition
+             - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx + (lon_dot * r_dot / r)*inner(w, lambda_hat)*dx # lambda component of non linear term            
+             + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx # removing the phi component
+             )
            
 
         bcs = self.equations.bcs['u']
