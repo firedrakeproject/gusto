@@ -133,11 +133,8 @@ print('Normalised rho error is:', errornorm(rho_analytic, rho0) / norm(rho_analy
 
 # make mean fields
 print('make mean fields')
-breakpoint()
 rho_b = Function(Vr).assign(rho0)
-breakpoint()
 theta_b = Function(Vt).assign(theta0)
-breakpoint()
 # assign reference profiles
 stepper.set_reference_profiles([('rho', rho_b),
                                 ('theta', theta_b)])
