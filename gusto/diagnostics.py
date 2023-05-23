@@ -1458,6 +1458,7 @@ class SolidBodyImbalance(DiagnosticField):
              + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
              - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v # removes vertical part of pressure jump condition
              - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx + (lon_dot * r_dot / r)*inner(w, lambda_hat)*dx # lambda component of non linear term            
+             # TODO: The line below is what is causing the problem
              + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx # removing the phi component
              )
            
