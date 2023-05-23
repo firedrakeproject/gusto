@@ -29,15 +29,13 @@ domain = Domain(mesh, dt, "RTCF", degree=1)
 # Equations
 params = CompressibleParameters()
 omega = Constant(7.292e-5)
-phi0 = Constant(pi/4)
-f0 = omega * sin(phi0)
-Omega = as_vector((0, 0, f0))
+Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_invariant_solve_newcoriolis_rho_freq'
+dirname = 'SBR_Newcoriolis'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=2,
+                          dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
