@@ -34,7 +34,7 @@ Omega = as_vector((0., 0., omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'geoimbalance_test'
+dirname = 'solidbody_test'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=5,
                           dumplist=['u', 'rho', 'theta' ],
@@ -45,7 +45,7 @@ output = OutputParameters(dirname=dirname,
                                            'theta'],
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn),
-                     GeostrophicImbalance(eqn)]#SolidBodyImbalance('eqn')
+                     GeostrophicImbalance(eqn), SolidBodyImbalance(eqn)]
                       
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 

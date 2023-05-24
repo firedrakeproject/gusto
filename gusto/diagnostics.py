@@ -1438,7 +1438,8 @@ class SolidBodyImbalance(DiagnosticField):
         r_dot = inner(u, r_hat)     
         mesh = domain.mesh
         k=domain.k
-
+        #HACK loweing the quadrature manually
+        dx_low_quadrature = dx(degree=3)
         lat = latlon_coords(mesh)[0]
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
@@ -1454,10 +1455,10 @@ class SolidBodyImbalance(DiagnosticField):
              + cp*div((theta*k)*dot(k,w))*exner*dx  # vertical part of the pressure divergence
              - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v # vertical part of pressure jump condition
             # BUG it is these terms arising from the non-linear that are the problem
-            # - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx 
-            # + (lon_dot * r_dot / r)*dot(w, lambda_hat)*dx # lambda component of non linear term            
-            # + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx   # phi component 1
-            # + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx # phi component 1
+             - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx_low_quadrature 
+             + (lon_dot * r_dot / r)*dot(w, lambda_hat)*dx_low_quadrature # lambda component of non linear term            
+             + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx_low_quadrature   # phi component 1
+             + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx_low_quadrature # phi component 1
             )
            
 
