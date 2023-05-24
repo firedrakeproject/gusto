@@ -44,8 +44,9 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn), GeostrophicImbalance(eqn),
-                      SolidBodyImbalance(eqn)]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn),
+                     SolidBodyImbalance(eqn)] #GeostrophicImbalance(eqn)]#
+                      
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
@@ -73,6 +74,7 @@ unsafe_x = x / l
 unsafe_y = y / l
 safe_x = min_value(max_value(unsafe_x, -1), 1)
 safe_y = min_value(max_value(unsafe_y, -1), 1)
+   
 
 # set up parameters
 Rd = params.R_d

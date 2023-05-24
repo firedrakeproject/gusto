@@ -1351,16 +1351,13 @@ class GeostrophicImbalance(DiagnosticField):
         Omega = as_vector((0., 0., omega))
         k = domain.k
 
-        # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
 
         imbalance = Function(Vu)
         a = inner(w, F)*dx
-        background = - cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v
 
-        # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
-        L = (background # exner pressure grad discretisation
+        L = (- cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
              - inner(w, cross(2*Omega, u))*dx # coriolis
              + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
              + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
@@ -1442,25 +1439,26 @@ class SolidBodyImbalance(DiagnosticField):
         mesh = domain.mesh
         k=domain.k
 
-        lat, lon = latlon_coords(mesh)
-        # TODO: solidbody  imbalance diagnostic
+        lat = latlon_coords(mesh)[0]
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
 
         imbalance = Function(Vu)
         a = inner(w, F)*dx
-        background = - cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v
 
-        # TODO: most likely will need a non-linear term too but let us test this for now. essentially this is 3d balance - vertical component
-        L = (background # exner pressure grad discretisation
+        #TODO Segmentaion error somehwere here
+
+        L = (- cp*div((theta)*w)*exner*dx + cp*jump((theta)*w, n)*avg(exner)*dS_v # exner pressure grad discretisation
              - inner(w, cross(2*Omega, u))*dx # coriolis
-             + inner(w, dot(k, cross(2*Omega, u) )*k)*dx #vertical part of coriolis
-             + cp*div((theta*k)*dot(k,w))*exner*dx  # removes vertical part of the pressure divergence
-             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v # removes vertical part of pressure jump condition
-             - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx + (lon_dot * r_dot / r)*inner(w, lambda_hat)*dx # lambda component of non linear term            
-             # TODO: The line below is what is causing the problem
-             + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx # removing the phi component
-             )
+             + inner(w, dot(k, cross(2*Omega, u) )*k)*dx # vertical part of coriolis
+             + cp*div((theta*k)*dot(k,w))*exner*dx  # vertical part of the pressure divergence
+             - cp*jump((theta*k)*dot(k,w), n)*avg(exner)*dS_v # vertical part of pressure jump condition
+            # BUG it is these terms arising from the non-linear that are the problem
+            # - (lat_dot * lon_dot * tan(lat) / r)*inner(w, lambda_hat)*dx 
+            # + (lon_dot * r_dot / r)*dot(w, lambda_hat)*dx # lambda component of non linear term            
+            # + (lat_dot**2 * tan(lat) / r)*inner(w, phi_hat)*dx   # phi component 1
+            # + (lat_dot * r_dot / r)*inner(w, phi_hat)*dx # phi component 1
+            )
            
 
         bcs = self.equations.bcs['u']
