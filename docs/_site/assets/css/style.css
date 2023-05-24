@@ -310,3 +310,7 @@ body { background: #4d4d4d; }
 #access ul li.current_page_item > a, #access ul li.current-menu-ancestor > a, #access ul li.current-menu-item > a, #access ul li.current-menu-parent > a { color: #fff; }
 
 * html #access ul li.current_page_item a, * html #access ul li.current-menu-ancestor a, * html #access ul li.current-menu-item a, * html #access ul li.current-menu-parent a, * html #access ul li a:hover { color: #fff; }
+
+@media only screen and (max-width: 600px) { div .logo { display: none; }
+  #gusto-logo { display: block; float: left; }
+  #hamburger-icon { display: block; float: right; padding-top: 12px; padding-right: 20px; } }

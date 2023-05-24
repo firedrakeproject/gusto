@@ -9,7 +9,7 @@ Gusto is a dynamical core library using compatible finite element
 methods developed in the Gung Ho project, and built using the
 `Firedrake <http://firedrakeproject.org>`_ finite element code
 generation library. Gusto is a core Firedrake application package.
-For more info see the `main Gusto webpage <https://firedrakeproject.github.io/gusto>`
+For more info see the `main Gusto webpage <https://firedrakeproject.github.io/gusto>`_
 
 Documentation
 =============

@@ -46,9 +46,9 @@ class TransportEquationType(Enum):
 
     For transporting velocity 'u' and transported quantity 'q', different types
     of transport equation include:
-
-    advective: ∂q/∂t + (u.∇)q = 0
-    conservative: ∂q/∂t + ∇.(u*q) = 0
+                                                                              \n
+    advective: ∂q/∂t + (u.∇)q = 0                                             \n
+    conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     """
 
