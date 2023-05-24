@@ -779,7 +779,8 @@ class ReversibleAdjustment(Physics):
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
-                 beta1=None, thermal_feedback=False, beta2=None, tau=None,
+                 beta1=None, thermal_feedback=False, beta2=None,
+                 time_varying_thermal_feedback=False, tau=None,
                  parameters=None):
         """
         Args:
@@ -820,6 +821,7 @@ class ReversibleAdjustment(Physics):
         self.time_varying_saturation = time_varying_saturation
         self.convective_feedback = convective_feedback
         self.thermal_feedback = thermal_feedback
+        self.time_varying_thermal_feedback = time_varying_thermal_feedback
 
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -874,7 +876,7 @@ class ReversibleAdjustment(Physics):
                 self.saturation_curve = Function(Vv)
             else:
                 raise NotImplementedError(
-                    "If time_varying_saturation is True then saturation must be a Python function of a prognostic field.")
+                    "If time_varying_saturation is True then saturation must be a Python function of at least one prognostic field.")
         else:
             assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
             self.saturation_curve = saturation_curve
@@ -886,6 +888,18 @@ class ReversibleAdjustment(Physics):
                                              -self.cloud / self.tau),
                                    min_value(sat_adj_expr,
                                              self.water_v / self.tau))
+
+        # If the thermal feedback proportionality depends on variables
+        if self.time_varying_thermal_feedback:
+            if isinstance(beta2, FunctionType):
+                self.proportionality_computation = beta2
+                self.beta2 = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If time_varying_thermal_feedback is True then beta2 must be a Python function of at least one prognostic field.")
+        else:
+            assert not isinstance(beta2, FunctionType), "If time_varying_thermal_feedback is not True then beta2 cannot be a Python function."
+            self.beta2 = beta2
 
         # Factors for multiplying source for different variables
         factors = [Constant(1.0), Constant(-1.0)]
@@ -917,7 +931,7 @@ class ReversibleAdjustment(Physics):
             # (scaled by beta2)
             source_b = self.source[0]
             equation.residual -= physics(subject
-                                         (test_b * beta2 * source_b * dx,
+                                         (test_b * self.beta2 * source_b * dx,
                                           equation.X),
                                          self.evaluate)
 
@@ -942,5 +956,7 @@ class ReversibleAdjustment(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.cloud.assign(x_in.split()[self.Vc_idx])
+        if self.time_varying_thermal_feedback:
+            self.beta2.interpolate(self.proportionality_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
