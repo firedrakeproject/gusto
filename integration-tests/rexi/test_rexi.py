@@ -21,7 +21,7 @@ def run_rexi_sw(tmpdir):
     mesh = PeriodicUnitSquareMesh(n, n)
     domain = Domain(mesh, dt, 'BDM', 1)
 
-    # set up shallow water equations
+    # set up linear shallow water equations
     H = 1
     f = 1.
     g = 1
@@ -52,8 +52,14 @@ def run_rexi_sw(tmpdir):
 
     # Compute exponential solution and write out
     rexi_output = File(str(tmpdir)+"/waves_sw/rexi.pvd")
+    domain = Domain(mesh, dt, 'BDM', 1)
     parameters = ShallowWaterParameters(H=H, g=g)
-    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=Constant(f))
+    linearisation_map = lambda t: \
+        t.get(prognostic) in ["u", "D"] \
+        and (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+             or (t.get(prognostic) == "D" and t.has_label(transport)))
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=Constant(f),
+                                 linearisation_map=linearisation_map)
 
     U_in = Function(eqns.function_space)
     Uexpl = Function(eqns.function_space)
@@ -80,7 +86,7 @@ def test_rexi_sw(tmpdir):
     usoln, Dsoln, uexpl, Dexpl = run_rexi_sw(dirname)
 
     uerror = norm(usoln - uexpl) / norm(usoln)
-    assert uerror < 0.05
+    assert uerror < 0.04
 
     Derror = norm(Dsoln - Dexpl) / norm(Dsoln)
-    assert Derror < 0.05
+    assert Derror < 0.02

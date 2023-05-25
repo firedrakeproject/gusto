@@ -36,6 +36,7 @@ class Rexi(object):
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
                  manager=None):
 
+        equation.linearise_equation_set()
         residual = equation.residual
 
         # Get the Rexi Coefficients, given the values of h and M in
@@ -100,9 +101,7 @@ class Rexi(object):
                     split_form(t.form)[i].form,
                     t.labels),
                 drop)
-            #ith_res = ith_res.label_map(
-            #    all_terms,
-            #    replace_test_function(tests_r[i]))
+
             mass_form = ith_res.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_false=drop)
