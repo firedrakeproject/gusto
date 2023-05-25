@@ -1,5 +1,6 @@
-from rexi import *
-from firedrake import Function, TrialFunctions, Constant, DirichletBC, \
+from gusto.rexi.rexi_coefficients import *
+from firedrake import Function, TrialFunctions, TestFunctions, \
+    Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
 from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp, NullTerm
 from firedrake.formmanipulation import split_form
