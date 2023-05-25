@@ -636,7 +636,7 @@ class InstantRain(Physics):
 
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False,
-                 vapour_name="water_vapour", rain_name=None,
+                 vapour_name="water_vapour", rain_name=None, gamma_r=1,
                  convective_feedback=False, gamma=None, tau=None,
                  parameters=None):
         """
@@ -651,6 +651,9 @@ class InstantRain(Physics):
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
                 None.
+            gamma_r (float, optional): Fraction of vapour above the threshold
+                which is converted to rain. Defaults to one, in which case all
+                vapour above the threshold is converted.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
             gamma (float, optional): Condensation proportionality constant,
@@ -704,7 +707,7 @@ class InstantRain(Physics):
         else:
             self.set_tau_to_dt = True
             self.tau = Constant(0)
-            logger.info("Timescale for moisture conversion has been set to dt. If this is not the intention then set a tau parameter.")
+            logger.info("Timescale for rain conversion has been set to dt. If this is not the intention then provide a tau parameter as an argument to InstantRain.")
 
         if self.time_varying_saturation:
             if isinstance(saturation_curve, FunctionType):
@@ -717,7 +720,7 @@ class InstantRain(Physics):
             assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
             self.saturation_curve = saturation_curve
 
-        # lose vapour above the saturation curve
+        # lose proportion of vapour above the saturation curve
         equation.residual += physics(subject(test_v * self.source * dx,
                                              equation.X),
                                      self.evaluate)
@@ -741,7 +744,7 @@ class InstantRain(Physics):
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
             self.water_v > self.saturation_curve,
-            (1/self.tau)*(self.water_v - self.saturation_curve),
+            (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
             0), Vv)
 
     def evaluate(self, x_in, dt):
@@ -779,8 +782,8 @@ class ReversibleAdjustment(Physics):
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
-                 beta1=None, thermal_feedback=False, beta2=None,
-                 time_varying_thermal_feedback=False, tau=None,
+                 beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
+                 time_varying_gamma_v=False, tau=None,
                  parameters=None):
         """
         Args:
@@ -800,15 +803,25 @@ class ReversibleAdjustment(Physics):
                 'cloud_water'.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            beta1 (float, optional): Condensation proportionality constant,
-                used if convection causes a response in the height equation.
-                Defaults to None, but must be specified if convective_feedback
-                is True.
+            beta1 (float, optional): Condensation proportionality constant for
+                height feedback, used if convection causes a response in the
+                height equation. Defaults to None, but must be specified if
+                convective_feedback is True.
             thermal_feedback (bool, optional): True if moist conversions
                 affect the buoyancy equation. Defaults to False.
             beta2 (float, optional): Condensation proportionality constant
                 for thermal feedback. Defaults to None, but must be specified
                 if thermal_feedback is True.
+            gamma_v (ufl expression or :class: `function`): The proportion of
+                moist species that is converted when a conversion between
+                vapour and cloud is taking place. Defaults to one, in which
+                case the full amount of species to bring vapour to the
+                saturation curve will undergo a conversion. Converting only a
+                fraction avoids a two-timestep oscillation between vapour and
+                cloud when saturation is tempertature/height-dependent.
+            time_varying_gamma_v (bool, optional): set this to True
+                if the fraction of moist species converted changes in time
+                (if gamma_v is temperature/height-dependent).
             tau (float, optional): Timescale for condensation and evaporation.
                 Defaults to None, in which case the timestep dt is used.
             parameters (:class:`Configuration`, optional): parameters containing
@@ -821,7 +834,7 @@ class ReversibleAdjustment(Physics):
         self.time_varying_saturation = time_varying_saturation
         self.convective_feedback = convective_feedback
         self.thermal_feedback = thermal_feedback
-        self.time_varying_thermal_feedback = time_varying_thermal_feedback
+        self.time_varying_gamma_v = time_varying_gamma_v
 
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
@@ -868,7 +881,7 @@ class ReversibleAdjustment(Physics):
         else:
             self.set_tau_to_dt = True
             self.tau = Constant(0)
-            logger.info("Timescale for moisture conversion has been set to dt. If this is not the intention then set a tau parameter.")
+            logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to ReversibleAdjustment.")
 
         if self.time_varying_saturation:
             if isinstance(saturation_curve, FunctionType):
@@ -889,20 +902,20 @@ class ReversibleAdjustment(Physics):
                                    min_value(sat_adj_expr,
                                              self.water_v / self.tau))
 
-        # If the thermal feedback proportionality depends on variables
-        if self.time_varying_thermal_feedback:
-            if isinstance(beta2, FunctionType):
-                self.proportionality_computation = beta2
-                self.beta2 = Function(Vv)
+        # If gamma_v depends on variables
+        if self.time_varying_gamma_v:
+            if isinstance(gamma_v, FunctionType):
+                self.gamma_v_computation = gamma_v
+                self.gamma_v = Function(Vv)
             else:
                 raise NotImplementedError(
-                    "If time_varying_thermal_feedback is True then beta2 must be a Python function of at least one prognostic field.")
+                    "If time_varying_thermal_feedback is True then gamma_v must be a Python function of at least one prognostic field.")
         else:
-            assert not isinstance(beta2, FunctionType), "If time_varying_thermal_feedback is not True then beta2 cannot be a Python function."
-            self.beta2 = beta2
+            assert not isinstance(gamma_v, FunctionType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
+            self.gamma_v = gamma_v
 
         # Factors for multiplying source for different variables
-        factors = [Constant(1.0), Constant(-1.0)]
+        factors = [self.gamma_v, -self.gamma_v]
 
         # Add terms to equations and make interpolators
         self.source = [Function(Vc) for factor in factors]
@@ -918,7 +931,7 @@ class ReversibleAdjustment(Physics):
         # If feeding back on height adjust the height equation
         if convective_feedback:
             # same source that is subtracted from vapour is subtracted from
-            # height (scaled by gamma)
+            # height (scaled by beta1)
             source_D = self.source[0]
             equation.residual += physics(subject
                                          (test_D * beta1 * source_D * dx,
@@ -931,7 +944,7 @@ class ReversibleAdjustment(Physics):
             # (scaled by beta2)
             source_b = self.source[0]
             equation.residual -= physics(subject
-                                         (test_b * self.beta2 * source_b * dx,
+                                         (test_b * beta2 * source_b * dx,
                                           equation.X),
                                          self.evaluate)
 
@@ -956,7 +969,7 @@ class ReversibleAdjustment(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.cloud.assign(x_in.split()[self.Vc_idx])
-        if self.time_varying_thermal_feedback:
-            self.beta2.interpolate(self.proportionality_computation(x_in))
+        if self.time_varying_gamma_v:
+            self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
