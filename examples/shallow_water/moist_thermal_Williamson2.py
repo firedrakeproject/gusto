@@ -17,9 +17,8 @@ theta_0 = epsilon*phi_0**2
 g = 9.80616
 H = phi_0/g
 xi = 10e-3
-# q0 = 0.02
 q0 = 0.0492238  # from AMR paper
-L = 10
+beta2 = 10
 
 # ----------------------------------------------------------------- #
 # Set up model objects
@@ -43,10 +42,10 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                              thermal=True, active_tracers=tracers)
 
 # IO
-dirname = "moist_thermal_williamson2_x1_gammav"
+dirname = "moist_thermal_williamson2"
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
 
@@ -66,16 +65,18 @@ def sat_func(x_in):
     b = x_in.split()[2]
     return q0/(g*h) * exp(20*(1 - b/g))
 
+
 # Feedback proportionality is dependent on h and b
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return L * (1 + 10*(20*q0/g*h * exp(20*(1 - b/g))))**(-1)
+    return beta2 * (1 + 10*(20*q0/g*h * exp(20*(1 - b/g))))**(-1)
 
 
 ReversibleAdjustment(eqns, sat_func, time_varying_saturation=True,
                      parameters=parameters, thermal_feedback=True,
-                     time_varying_thermal_feedback=True, beta2=gamma_v)
+                     beta2=beta2, gamma_v=gamma_v,
+                     time_varying_gamma_v=True)
 
 # Time stepper
 stepper = Timestepper(eqns, RK4(domain), io)
@@ -113,10 +114,6 @@ u0.project(uexpr)
 D0.interpolate(Dexpr)
 b0.interpolate(bexpr)
 v0.interpolate(vexpr)
-
-VD = FunctionSpace(mesh, "DG", 1)
-sat_field = stepper.fields("sat_field", space=VD)
-sat_field.interpolate(initial_msat)
 
 # ----------------------------------------------------------------- #
 # Run
