@@ -3,7 +3,8 @@ from firedrake import (ExtrudedMesh,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
                        errornorm, norm, min_value, max_value)
-from gusto import *                                              # 
+from gusto import *
+from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -33,9 +34,9 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_Newcoriolis'
+dirname = 'SBR_LongRun'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
+                          dumpfreq=10,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -43,7 +44,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(), HydrostaticImbalance(eqn)]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(),
+                     HydrostaticImbalance(eqn), GeostrophicImbalance(eqn), SolidBodyImbalance(eqn)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
