@@ -1307,7 +1307,7 @@ class HydrostaticImbalance(DiagnosticField):
 
 class GeostrophicImbalance(DiagnosticField):
     """Geostrophic imbalance diagnostic field."""
-    name = "GeostrophicImbalance"
+    name = "geostrophicimbalance"
 
     def __init__(self, equations, space=None, method='interpolate'):
         """
@@ -1385,7 +1385,7 @@ class GeostrophicImbalance(DiagnosticField):
 
 class SolidBodyImbalance(DiagnosticField):
     """Solid Body imbalance diagnostic field."""
-    name = "SolidBodyImbalance"
+    name = "solidbodyimbalance"
 
     def __init__(self, equations, space=None, method='interpolate'):
         """
