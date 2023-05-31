@@ -34,7 +34,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_LongRun'
+dirname = 'Baroclinic_alpha'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=10,
                           dumplist=['u', 'rho', 'theta'],
@@ -44,8 +44,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(),
-                     HydrostaticImbalance(eqn), GeostrophicImbalance(eqn), SolidBodyImbalance(eqn)]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
+                     
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
