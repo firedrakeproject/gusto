@@ -1,8 +1,8 @@
 from firedrake import (ExtrudedMesh,
                        SpatialCoordinate, cos, sin, pi, sqrt,
-                       exp, Constant, Function, as_vector,
+                       exp, Constant, Function, as_vector, acos,
                        FunctionSpace, VectorFunctionSpace,
-                       errornorm, norm, min_value, max_value, grad)
+                       errornorm, norm, min_value, max_value, grad, le, ge)
 from gusto import *
 from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
 # -------------------------------------------------------------- #
@@ -34,9 +34,9 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'Baroclinic_alpha'
+dirname = 'Baroclinic_beta'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=10,
+                          dumpfreq=1,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -88,8 +88,9 @@ theta0 = stepper.fields("theta")
 
 # spaces
 Vu = u.function_space()
-Vt = theta0.function_space()
 Vr = rho0.function_space()
+Vt = theta0.function_space()
+
 
 #TODO We are just using an isotherm here, should we consider a more complex temperature scenario for baroclinic? 
 
@@ -107,20 +108,28 @@ rho_expr = p_expr / (Rd * T0)
 # Perturbation
 # -------------------------------------------------------------- #
 
-CG2 = FunctionSpace(mesh, 'CG', 2) #BUG Unsure whether this is the correct function space?
+CG2 = FunctionSpace(mesh, 'CG', 3) #BUG Unsure whether this is the correct function space?
 psi = Function(CG2)
 zt = 1.4e4     # top of perturbation
 d0 = a / 6     # horizontal radius of perturbation
 Vp = 1         # Perturbed wind amplitude  
 lat_c , lon_c = pi/9,  2*pi/9 # location of perturbation centre   
+err_tol = 10e-12
 
 
-
-d = a / (cos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c))) # peturbation vertical taper
+d = a* acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # peturbation vertical taper
 zeta = 1 - 3*(z / zt)**2 + 2*(z / zt)**3
-psiexpr = -(8*d0*Vp) / (3*sqrt(3*pi)) * zeta * cos((pi * d) / (2 * d0))**4
-psi.interpolate(psiexpr)
-[zonal_perp, meridional_perp] = domain.perp(grad(psi))
+perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos((pi * d) / (2 * d0)) ** 3
+
+
+zonal_pert = conditional(le(d,err_tol), 0, 
+                         conditional(ge(d,a*pi-err_tol), 0, -perturb_magnitude * (-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a)))
+meridional_pert = conditional(le(d,err_tol), 0, 
+                              conditional(ge(d,a*pi-err_tol), 0 ,perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
+
+#psiexpr = -(8*d0*Vp) / (3*sqrt(3*pi)) * zeta * cos((pi * d) / (2 * d0))**4
+#psi.interpolate(psiexpr)
+#[zonal_per, meridional_per, radial_per] = grad(psi) # TODO Ask what perp does as i didnt need it here
 
 
 
@@ -128,8 +137,8 @@ psi.interpolate(psiexpr)
 # Configuring fields
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
-zonal_u = u0 * r / a * cos(lat) + zonal_perp
-merid_u = Constant(0.0) + meridional_perp
+zonal_u = u0 * r / a * cos(lat) + zonal_pert
+merid_u = Constant(0.0) + meridional_pert
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
