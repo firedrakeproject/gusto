@@ -2,7 +2,7 @@ from firedrake import (ExtrudedMesh,
                        SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector,
                        FunctionSpace, VectorFunctionSpace,
-                       errornorm, norm, min_value, max_value)
+                       errornorm, norm, min_value, max_value, grad)
 from gusto import *
 from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
 # -------------------------------------------------------------- #
@@ -23,7 +23,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=24, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=16, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -90,8 +90,8 @@ theta0 = stepper.fields("theta")
 Vu = u.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
-Vpsi = FunctionSpace(mesh, "CG", 2)
-Vec_psi = VectorFunctionSpace(mesh, "CG", 2)
+
+#TODO We are just using an isotherm here, should we consider a more complex temperature scenario for baroclinic? 
 
 # expressions for variables from paper
 s = (r / a) * cos(lat)
@@ -99,13 +99,37 @@ Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
 # solving fields as per the staniforth paper
 q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
 p_expr = p0 * exp(q_expr)
-theta_expr = T0 * (p_expr / p0) ** (-params.kappa)
+theta_expr = T0 * (p_expr / p0) ** (-params.kappa) 
 pie_expr = T0 / theta_expr
 rho_expr = p_expr / (Rd * T0)
 
+# -------------------------------------------------------------- #
+# Perturbation
+# -------------------------------------------------------------- #
+
+CG2 = FunctionSpace(mesh, 'CG', 2) #BUG Unsure whether this is the correct function space?
+psi = Function(CG2)
+zt = 1.4e4     # top of perturbation
+d0 = a / 6     # horizontal radius of perturbation
+Vp = 1         # Perturbed wind amplitude  
+lat_c , lon_c = pi/9,  2*pi/9 # location of perturbation centre   
+
+
+
+d = a / (cos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c))) # peturbation vertical taper
+zeta = 1 - 3*(z / zt)**2 + 2*(z / zt)**3
+psiexpr = -(8*d0*Vp) / (3*sqrt(3*pi)) * zeta * cos((pi * d) / (2 * d0))**4
+psi.interpolate(psiexpr)
+[zonal_perp, meridional_perp] = domain.perp(grad(psi))
+
+
+
+# -------------------------------------------------------------- #
+# Configuring fields
+# -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
-zonal_u = u0 * r / a * cos(lat)
-merid_u = Constant(0.0)
+zonal_u = u0 * r / a * cos(lat) + zonal_perp
+merid_u = Constant(0.0) + meridional_perp
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
