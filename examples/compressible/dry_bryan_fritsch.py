@@ -17,7 +17,7 @@ import sys
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-dt = 1.0
+dt = 2.0
 L = 10000.
 H = 10000.
 
@@ -25,7 +25,7 @@ if '--running-tests' in sys.argv:
     deltax = 1000.
     tmax = 5.
 else:
-    deltax = 100.
+    deltax = 200.
     tmax = 1000.
 
 degree = 0
@@ -52,7 +52,9 @@ eqns = CompressibleEulerEquations(domain, params,
 # I/O
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (5*dt)),
-                          dumplist=['u'],
+                          dumplist=['rho'],
+                          dump_vtus = False,
+                          dump_nc = True,
                           log_level='INFO')
 diagnostic_fields = [Perturbation('theta')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
