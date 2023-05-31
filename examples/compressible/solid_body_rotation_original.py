@@ -42,7 +42,9 @@ output = OutputParameters(dirname=dirname,
                                            'u_zonal',
                                            'u_radial',
                                            'rho',
-                                           'theta'],
+                                           'theta',
+                                           'geostrophicimbalance',
+                                           'solidbodyimbalance'],
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(),
                      HydrostaticImbalance(eqn), GeostrophicImbalance(eqn), SolidBodyImbalance(eqn)]
