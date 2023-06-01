@@ -13,7 +13,7 @@ days = 10.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
 deltaz = 2.0e3
-
+dumpfreq = int(24. * 60. * 60. / (2 * dt)) # dumps twice a day of simulation time
 # -------------------------------------------------------------- #
 # Set up Model
 # -------------------------------------------------------------- #
@@ -36,7 +36,7 @@ eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option
 
 dirname = 'SBR_LongRun'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=10,
+                          dumpfreq=dumpfreq,
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
