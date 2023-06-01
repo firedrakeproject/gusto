@@ -30,7 +30,8 @@ def setup_sw(dirname, dt, u_transport_option):
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
+                                 refinement_level=refinements,
+                                 degree=2)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
 
@@ -105,7 +106,7 @@ def check_results(dirname):
     Derr = data.groups["D_error"]
     D = data.groups["D"]
     Dl2 = Derr["l2"][-1]/D["l2"][0]
-    assert Dl2 < 5.e-4
+    assert Dl2 < 6.e-4
 
     uerr = data.groups["u_error"]
     u = data.groups["u"]
