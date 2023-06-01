@@ -17,7 +17,7 @@ import sys
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-dt = 2.0
+dt = 1.0
 L = 10000.
 H = 10000.
 
@@ -25,7 +25,7 @@ if '--running-tests' in sys.argv:
     deltax = 1000.
     tmax = 5.
 else:
-    deltax = 200.
+    deltax = 100.
     tmax = 1000.
 
 degree = 0
