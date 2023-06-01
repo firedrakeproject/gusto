@@ -1,8 +1,7 @@
 from firedrake import (ExtrudedMesh,
-                       SpatialCoordinate, cos, sin, pi, sqrt,
+                       SpatialCoordinate, cos, sin, pi, sqrt, File,
                        exp, Constant, Function, as_vector, acos,
-                       FunctionSpace, VectorFunctionSpace,
-                       errornorm, norm, min_value, max_value, grad, le, ge)
+                       errornorm, norm, min_value, max_value, le, ge)
 from gusto import *
 from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
 # -------------------------------------------------------------- #
@@ -12,7 +11,7 @@ dt = 1000.
 days = 10.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
-deltaz = 2.0e3
+deltaz = 3.0e3
 
 # -------------------------------------------------------------- #
 # Set up Model
@@ -23,7 +22,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=16, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=12, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -34,9 +33,9 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'Baroclinic_beta'
+dirname = 'Baroclinic_delta3'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1,
+                          dumpfreq=1, 
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -108,16 +107,17 @@ rho_expr = p_expr / (Rd * T0)
 # Perturbation
 # -------------------------------------------------------------- #
 
-CG2 = FunctionSpace(mesh, 'CG', 3) #BUG Unsure whether this is the correct function space?
-psi = Function(CG2)
-zt = 1.4e4     # top of perturbation
+zt = 1.5e4     # top of perturbation
 d0 = a / 6     # horizontal radius of perturbation
 Vp = 1         # Perturbed wind amplitude  
-lat_c , lon_c = pi/9,  2*pi/9 # location of perturbation centre   
-err_tol = 10e-12
+lon_c , lat_c = pi/9,  2*pi/9 # location of perturbation centre   
+err_tol = 1e-12
 
+d = a * acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # peturbation vertical taper
+doutput = File('results/out.pvd')
+d_field = Function(Vr).interpolate(d)
+doutput.write(d_field)
 
-d = a* acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # peturbation vertical taper
 zeta = 1 - 3*(z / zt)**2 + 2*(z / zt)**3
 perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos((pi * d) / (2 * d0)) ** 3
 
@@ -125,11 +125,7 @@ perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos(
 zonal_pert = conditional(le(d,err_tol), 0, 
                          conditional(ge(d,a*pi-err_tol), 0, -perturb_magnitude * (-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a)))
 meridional_pert = conditional(le(d,err_tol), 0, 
-                              conditional(ge(d,a*pi-err_tol), 0 ,perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
-
-#psiexpr = -(8*d0*Vp) / (3*sqrt(3*pi)) * zeta * cos((pi * d) / (2 * d0))**4
-#psi.interpolate(psiexpr)
-#[zonal_per, meridional_per, radial_per] = grad(psi) # TODO Ask what perp does as i didnt need it here
+                              conditional(ge(d,a*pi-err_tol), 0, perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
 
 
 
@@ -142,14 +138,12 @@ merid_u = Constant(0.0) + meridional_pert
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
-u_x_expr = zonal_u * -safe_y
-u_y_expr = zonal_u * safe_x
-u_z_expr = Constant(0.0)
+(u_expr, v_expr, w_expr) = sphere_to_cartesian(mesh, zonal_u, merid_u)
 
 # obtain initial conditions
 print('Set up initial conditions')
 print('project u')
-u.project(as_vector([u_x_expr, u_y_expr, u_z_expr]))
+u.project(as_vector([u_expr, v_expr, w_expr]))
 print('interpolate theta')
 theta0.interpolate(theta_expr)
 print('find pi')
