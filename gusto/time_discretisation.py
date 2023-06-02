@@ -488,7 +488,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+        super().setup(equation, uadv=uadv, apply_bcs=apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -653,7 +653,7 @@ class RK4(ExplicitTimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, uadv=uadv, *active_labels)
 
         self.k1 = Function(self.fs)
         self.k2 = Function(self.fs)
@@ -869,7 +869,7 @@ class IMEX_Euler(TimeDiscretisation):
             lambda t: t.has_label(transport),
             map_if_true=lambda t: explicit(t))
 
-        super().setup(equation, uadv, residual=residual)
+        super().setup(equation, uadv=uadv, residual=residual)
 
     @property
     def lhs(self):
@@ -1197,7 +1197,7 @@ class TR_BDF2(TimeDiscretisation):
         self.gamma = gamma
 
     def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+        super().setup(equation, uadv=uadv, apply_bcs=apply_bcs, *active_labels)
         self.xnpg = Function(self.fs)
         self.xn = Function(self.fs)
 
@@ -1915,7 +1915,8 @@ class BE_SDC(SDC):
         F_SDC = F_imp + F_exp + F01 + Q
 
         try:
-            bcs = equation.bcs['u']
+            #bcs = equation.bcs['u']
+            bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
         except KeyError:
             bcs = None
         prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
@@ -1979,10 +1980,10 @@ class IMEX_SDC(SDC):
     def __init__(self, domain, M, maxk):
         super().__init__(domain, M, maxk)
 
-    def setup(self, equation, uadv=None):
+    def setup(self, equation, uadv):
 
         self.IMEX = IMEX_Euler(self.domain)
-        self.IMEX.setup(equation)
+        self.IMEX.setup(equation, uadv=uadv)
         self.residual = self.IMEX.residual
 
         # set up SDC form and solver
@@ -2030,7 +2031,10 @@ class IMEX_SDC(SDC):
 
         F_SDC = F_imp + F_exp + F01 + F0 + Q
 
-        bcs = equation.bcs['u']
+        try:
+            bcs = equation.bcs['u']
+        except KeyError:
+            bcs = None
         prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
         self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
 
@@ -2079,7 +2083,7 @@ class IMEX_SDC(SDC):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
-            print('Un',k, self.Un.split()[1].dat.data.max())
+            #print('Un',k, self.Un.split()[1].dat.data.max())
         if self.maxk > 0:
             x_out.assign(self.Un)
         else:
