@@ -181,7 +181,7 @@ class Rexi(object):
         #    solver_parameters = equation.solver_parameters
 
         self.solver = LinearVariationalSolver(
-            rexi_prob)#, solver_parameters=solver_parameters)
+            rexi_prob, solver_parameters=solver_parameters)
 
     def solve(self, U0, dt):
         """
