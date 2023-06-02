@@ -63,6 +63,7 @@ dirname = 'hydrostatic_mountain'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
+                          checkpoint_method='dumbcheckpoint',
                           log_level='INFO')
 diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance(eqns),
                      Perturbation('theta'), Perturbation('rho')]

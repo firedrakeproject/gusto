@@ -9,6 +9,7 @@ from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
                        cos, pi)
 import numpy as np
 
+
 def run_sw_fplane(tmpdir):
     # Domain
     mesh_name = 'sw_fplane_mesh'
