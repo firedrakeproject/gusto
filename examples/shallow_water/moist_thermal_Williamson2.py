@@ -99,11 +99,11 @@ sigma = w/10
 
 Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
 
-numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
+numerator = theta_0 + sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
 
 denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
 
-theta = abs(numerator/denominator)
+theta = numerator/denominator
 
 bexpr = parameters.g * (1 - theta)
 
