@@ -65,7 +65,7 @@ def run_rexi_sw(tmpdir):
     Uexpl = Function(eqns.function_space)
     u, D = U_in.split()
     u.project(uexpr)
-    D.project(Dexpr)
+    D.interpolate(Dexpr)
     rexi_output.write(u, D)
 
     rexi = Rexi(eqns, RexiParameters())
