@@ -74,7 +74,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 def sat_func(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return q0/(g*h + tpexpr) * exp(20*(1 - b/g))
+    return (q0/(g*h + tpexpr)) * exp(20*(1 - b/g))
 
 # Feedback proportionality is dependent on h and b
 def gamma_v(x_in):
@@ -120,11 +120,11 @@ vexpr = mu2 * initial_msat
 # initialise (cloud and rain initially zero)
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-b0.interpolate(bexpr)
+b0.interpolate(theta)
 v0.interpolate(vexpr)
 
 # ----------------------------------------------------------------- #
 # Run
 # ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax=5*dt)
+stepper.run(t=0, tmax=2*dt)
