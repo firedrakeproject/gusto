@@ -796,6 +796,201 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         self.linearise_equation_set()
 
 
+class CompressibleBoussinesqEquations(PrognosticEquationSet):
+    """
+    Class for the compressible Euler equations, which evolve the velocity 'u',
+    the pressure 'p' and the buoyancy 'b',
+    solving:                                                                  \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + bz = 0,                                      \n
+    ∂p/∂t + (u.∇)p + c_s∇.u = 0,                                              \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where z is the unit vertical vector, Ω is the planet's rotation vector
+    and c_s is the speed of sound.
+    """
+
+    def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 extra_terms=None, linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
+                rotation vector. Defaults to None.
+            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
+                layer. Defaults to None.
+            extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
+                included in the equation set. Defaults to None.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form',
+                'vector_manifold_advection_form' and 'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            diffusion_options (:class:`DiffusionOptions`, optional): any options
+                to specify for applying diffusion terms to variables. Defaults
+                to None.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations.. Defaults to None.
+
+        Raises:
+            NotImplementedError: only mixing ratio tracers are implemented.
+        """
+
+        field_names = ['u', 'p', 'b']
+
+        if active_tracers is None:
+            active_tracers = []
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
+            linearisation_map = lambda t: \
+                t.get(prognostic) in ['u', 'p', 'b'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
+        super().__init__(field_names, domain,
+                         linearisation_map=linearisation_map,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        self.parameters = parameters
+        g = parameters.g
+        cs = parameters.cs
+
+        w, phi, gamma = self.tests
+        u, p, b = split(self.X)
+        u_trial = split(self.trials)[0]
+        _, p_bar, b_bar = split(self.X_ref)
+        n = FacetNormal(domain.mesh)
+
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
+        mass_form = self.generate_mass_terms()
+
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term -- depends on formulation
+        if u_transport_option == "vector_invariant_form":
+            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
+        elif u_transport_option == "vector_advection_form":
+            u_adv = prognostic(advection_form(domain, w, u), "u")
+        elif u_transport_option == "vector_manifold_advection_form":
+            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
+        elif u_transport_option == "circulation_form":
+            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
+            ke_form = transport.remove(ke_form)
+            ke_form = ke_form.label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): u}), t.labels))
+            ke_form = transporting_velocity.remove(ke_form)
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
+        else:
+            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+
+        # Density transport (conservative form)
+        p_adv = prognostic(advection_form(domain, phi, p), "p")
+        # Transport term needs special linearisation
+        if self.linearisation_map(p_adv.terms[0]):
+            linear_p_adv = linear_advection_form(domain, phi, p_bar).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): u_trial}), t.labels))
+            p_adv = linearisation(p_adv, linear_p_adv)
+
+        # Potential temperature transport (advective form)
+        b_adv = prognostic(advection_form(domain, gamma, b), "b")
+        # Transport term needs special linearisation
+        if self.linearisation_map(b_adv.terms[0]):
+            linear_b_adv = linear_advection_form(domain, gamma, b_bar).label_map(
+                lambda t: t.has_label(transporting_velocity),
+                lambda t: Term(ufl.replace(
+                    t.form, {t.get(transporting_velocity): u_trial}), t.labels))
+            b_adv = linearisation(b_adv, linear_b_adv)
+
+        adv_form = subject(u_adv + p_adv + b_adv, self.X)
+
+        # Add transport of tracers
+        if len(active_tracers) > 0:
+            adv_form += self.generate_tracer_transport_terms(domain, active_tracers)
+
+        # -------------------------------------------------------------------- #
+        # Pressure Gradient Term
+        # -------------------------------------------------------------------- #
+        pressure_gradient_form = name(subject(prognostic(
+            (-div(w)*p*dx
+                + jump(w, n)*avg(p)*dS_v), "u"), self.X), "pressure_gradient")
+
+        # -------------------------------------------------------------------- #
+        # Gravitational Term
+        # -------------------------------------------------------------------- #
+        gravity_form = subject(prognostic(Term(-b*inner(domain.k, w)*dx), "u"), self.X)
+
+        residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
+
+        # -------------------------------------------------------------------- #
+        # Extra Terms (Coriolis, Sponge, Diffusion and others)
+        # -------------------------------------------------------------------- #
+        if Omega is not None:
+            # TODO: add linearisation and label for this
+            residual += subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), self.X)
+
+        if sponge is not None:
+            W_DG = FunctionSpace(domain.mesh, "DG", 2)
+            x = SpatialCoordinate(domain.mesh)
+            z = x[len(x)-1]
+            H = sponge.H
+            zc = sponge.z_level
+            assert float(zc) < float(H), "you have set the sponge level above the height of your domain"
+            mubar = sponge.mubar
+            muexpr = conditional(z <= zc,
+                                 0.0,
+                                 mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
+
+            residual += name(subject(prognostic(
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, "u"), self.X), "sponge")
+
+        if diffusion_options is not None:
+            for field, diffusion in diffusion_options:
+                idx = self.field_names.index(field)
+                test = self.tests[idx]
+                fn = split(self.X)[idx]
+                residual += subject(
+                    prognostic(interior_penalty_diffusion_form(
+                        domain, test, fn, diffusion), field), self.X)
+
+        if extra_terms is not None:
+            for field, term in extra_terms:
+                idx = self.field_names.index(field)
+                test = self.tests[idx]
+                residual += subject(prognostic(
+                    inner(test, term)*dx, field), self.X)
+
+        # -------------------------------------------------------------------- #
+        # Linearise equations
+        # -------------------------------------------------------------------- #
+        # Add linearisations to equations
+        self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+
 class CompressibleEulerEquations(PrognosticEquationSet):
     """
     Class for the compressible Euler equations, which evolve the velocity 'u',

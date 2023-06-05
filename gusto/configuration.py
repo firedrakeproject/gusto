@@ -9,7 +9,8 @@ from firedrake import sqrt, Constant
 __all__ = ["WARNING", "INFO", "DEBUG",
            "Configuration", "IntegrateByParts",
            "TransportEquationType", "OutputParameters",
-           "CompressibleParameters", "ShallowWaterParameters",
+           "CompressibleBoussinesqParameters",
+           "CompressibleEulerParameters", "ShallowWaterParameters",
            "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
            "SpongeLayerParameters", "DiffusionParameters"]
 
@@ -124,7 +125,15 @@ class OutputParameters(Configuration):
     tolerance = None
 
 
-class CompressibleParameters(Configuration):
+class CompressibleBoussinesqParameters(Configuration):
+    """Physical parameters for the Compressible Boussinesq equations."""
+
+    g = 9.810616
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    cs = 340  # speed of sound (m/s)
+
+
+class CompressibleEulerParameters(Configuration):
     """Physical parameters for the Compressible Euler equations."""
 
     g = 9.810616

@@ -17,16 +17,9 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 domain = Domain(mesh, dt, "CG", 1)
 
 # set up equations
-class CompressibleBoussinesqParameters(Configuration):
-    """
-    Physical parameters for the compressible Boussinesq equations
-    """
-    N = 1.e-2  # Brunt-Vaisala frequency
-    c = 300  # sound speed
+parameters = CompressibleBoussinesqParameters(cs=300)
 
-parameters = CompressibleBoussinesqParameters()
-
-class CompressibleBoussinesqEquations(PrognosticEquationSet):
+class MyCompressibleBoussinesqEquations(PrognosticEquationSet):
 
     def __init__(self, domain, parameters, f=None,
                  no_normal_flow_bc_ids=None):
@@ -67,9 +60,9 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
 eqns = CompressibleBoussinesqEquations(domain, parameters)
 
 # I/O
-output = OutputParameters(dirname='compressible_boussinesq_slice',
-                          dumpfreq=1)
-io = IO(domain, output)
+diagnostic_fields = [CourantNumber(), Perturbation('b'), Perturbation('p')]
+output = OutputParameters(dirname='boussinesq_slice', dumpfreq=1)
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # set up timestepper
 lines_parameters = {
@@ -92,7 +85,14 @@ lines_parameters = {
 }
 # rexi = Rexi(eqns, RexiParameters(), solver_parameters=lines_parameters)
 
-stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
+# stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
+
+transported_fields = [ImplicitMidpoint(domain, "u"),
+                      SSPRK3(domain, "p"),
+                      SSPRK3(domain, "b", options=SUPGOptions())]
+
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 # interpolate initial conditions
 b0 = stepper.fields("b")
@@ -101,23 +101,33 @@ x, z = SpatialCoordinate(mesh)
 b_0 = Constant(0.01)
 A = 5000
 xc = 0.5 * L
-bexpr = b_0 * sin(pi*z/H) / (1 + (x-xc)**2/A**2)
-b0.interpolate(bexpr)
+bref = Function(b0.function_space()).interpolate(-parameters.N**2 * z)
+bpert = b_0 * sin(pi*z/H) / (1 + (x-xc)**2/A**2)
+b0.interpolate(bref + bpert)
 
-# stepper.run(t=0, tmax=tmax)
-rexi_output = File("results/compressible_rexi.pvd")
+# initialise hydrostatic pressure
+p0 = stepper.fields("p")
+pref = Function(p0.function_space())
+incompressible_hydrostatic_balance(eqns, bref, pref)
+p0.assign(pref)
 
-U_in = Function(eqns.function_space)
-Uexpl = Function(eqns.function_space)
-u, p, b = U_in.split()
-b.interpolate(bexpr)
-rexi_output.write(u, p, b)
+stepper.set_reference_profiles([('p', pref),
+                                ('b', bref)])
+                                   
+stepper.run(t=0, tmax=tmax)
+# rexi_output = File("results/compressible_rexi.pvd")
 
-rexi = Rexi(eqns, RexiParameters(M=128), solver_parameters=lines_parameters)
-Uexpl.assign(rexi.solve(U_in, tmax))
+# U_in = Function(eqns.function_space)
+# Uexpl = Function(eqns.function_space)
+# u, p, b = U_in.split()
+# b.interpolate(bexpr)
+# rexi_output.write(u, p, b)
 
-uexpl, pexpl, bexpl = Uexpl.split()
-u.assign(uexpl)
-p.assign(pexpl)
-b.assign(bexpl)
-rexi_output.write(u, p, b)
+# rexi = Rexi(eqns, RexiParameters(M=128), solver_parameters=lines_parameters)
+# Uexpl.assign(rexi.solve(U_in, tmax))
+
+# uexpl, pexpl, bexpl = Uexpl.split()
+# u.assign(uexpl)
+# p.assign(pexpl)
+# b.assign(bexpl)
+# rexi_output.write(u, p, b)
