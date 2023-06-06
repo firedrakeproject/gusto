@@ -575,9 +575,14 @@ class MeshMovement(SemiImplicitQuasiNewton):
         self.mesh = mesh
         self.X0 = Function(mesh.coordinates)
         self.X1 = Function(mesh.coordinates)
-
-        xold = Function(mesh.coordinates)
-        self.mesh_old = Mesh(xold)
+        from firedrake import File, FunctionSpace
+        Vf = FunctionSpace(mesh, "DG", 1)
+        f = Function(Vf)
+        coords_out = File("out.pvd")
+        mesh.coordinates.assign(self.X0)
+        coords_out.write(f)
+        mesh.coordinates.assign(self.X1)
+        coords_out.write(f)
 
         self.on_sphere = self.equation.domain.on_sphere
 
@@ -617,6 +622,8 @@ class MeshMovement(SemiImplicitQuasiNewton):
         test_D = TestFunction(Dm.function_space())
         trial_D = TrialFunction(Dm.function_space())
 
+        X1.assign(self.mesh.coordinates)
+
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
@@ -629,6 +636,7 @@ class MeshMovement(SemiImplicitQuasiNewton):
             self.mesh_generator.pre_meshgen_callback()
             with timed_stage("Mesh generation"):
                 X1.assign(self.mesh_generator.get_new_mesh())
+                # X1.assign(X0)
 
             # Compute v (mesh velocity w.r.t. initial mesh) and
             # v1 (mesh velocity w.r.t. final mesh)

@@ -17,11 +17,11 @@ parameters = ShallowWaterParameters(H=H)
 # Domain
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=3, degree=2)
-x = SpatialCoordinate(mesh)
 domain = Domain(mesh, dt, 'BDM', 1)
 
 # Equation
 Omega = parameters.Omega
+x = SpatialCoordinate(domain.mesh)
 fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option="circulation_form")
 
@@ -51,11 +51,12 @@ def update_pv():
     pv()
 
 def reinterpolate_coriolis():
-    eqns.prescribed_fields("coriolis").interpolate(fexpr)
+    domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
     domain.outward_normals.interpolate(CellNormal(domain.mesh))
+    eqns.prescribed_fields("coriolis").interpolate(fexpr)
 
 monitor = MonitorFunction("PotentialVorticity", adapt_to="gradient")
-mesh_generator = OptimalTransportMeshGenerator(mesh,
+mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
                                                monitor,
                                                pre_meshgen_callback=update_pv,
                                                post_meshgen_callback=reinterpolate_coriolis)
@@ -161,23 +162,28 @@ def initialise_fn():
 
     u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
 
-    X = interpolate(mesh.coordinates, W)
+    X = interpolate(domain.mesh.coordinates, W)
     D0.dat.data[:] = Dval(X.dat.data_ro)
     area = assemble(C*dx)
     Dmean = assemble(D0*dx)/area
     D0 -= Dmean
     D0 += parameters.H
     if perturb:
+        theta, lamda = latlon_coords(domain.mesh)
         D_pert.interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
         D0 += D_pert
+    domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
+    domain.outward_normals.interpolate(CellNormal(domain.mesh))
     eqns.prescribed_fields("coriolis").interpolate(fexpr)
     pv()
 
+# stepper.prescribed_uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
 pv.setup(domain, stepper.fields)
 mesh_generator.get_first_mesh(initialise_fn)
 
-eqns.prescribed_fields("coriolis").interpolate(fexpr)
+domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
 domain.outward_normals.interpolate(CellNormal(domain.mesh))
+eqns.prescribed_fields("coriolis").interpolate(fexpr)
 pv()
 
 Dbar = Function(D0.function_space()).assign(H)
