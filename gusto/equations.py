@@ -798,8 +798,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
 class CompressibleBoussinesqEquations(PrognosticEquationSet):
     """
-    Class for the compressible Euler equations, which evolve the velocity 'u',
-    the pressure 'p' and the buoyancy 'b',
+    Class for the (rotating) compressible Euler equations, which evolve the
+    velocity 'u', the pressure 'p' and the buoyancy 'b',
     solving:                                                                  \n
     ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + bz = 0,                                      \n
     ∂p/∂t + (u.∇)p + c_s∇.u = 0,                                              \n
@@ -870,6 +870,7 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
         self.parameters = parameters
         g = parameters.g
         cs = parameters.cs
+        N = parameters.N
 
         w, phi, gamma = self.tests
         u, p, b = split(self.X)
@@ -914,7 +915,7 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
                     t.form, {t.get(transporting_velocity): u_trial}), t.labels))
             p_adv = linearisation(p_adv, linear_p_adv)
 
-        # Potential temperature transport (advective form)
+        # Buoyancy transport (advective form)
         b_adv = prognostic(advection_form(domain, gamma, b), "b")
         # Transport term needs special linearisation
         if self.linearisation_map(b_adv.terms[0]):
@@ -942,7 +943,17 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         gravity_form = subject(prognostic(Term(-b*inner(domain.k, w)*dx), "u"), self.X)
 
-        residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
+        # -------------------------------------------------------------------- #
+        # Sound Term
+        # -------------------------------------------------------------------- #
+        sound_form = subject(prognostic(Term(cs * phi * div(u) * dx), "p"), self.X)
+
+        # -------------------------------------------------------------------- #
+        # Buoyancy Term
+        # -------------------------------------------------------------------- #
+        buoyancy_form = subject(prognostic(Term(N*N*inner(inner(u, domain.k),  gamma) * dx), "b"), self.X)
+
+        residual = (mass_form + adv_form + pressure_gradient_form + gravity_form + sound_form + buoyancy_form)
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
@@ -989,6 +1000,52 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+
+class LinearCompressibleBoussinesqEquations(CompressibleBoussinesqEquations):
+    """
+    Class for the (rotating) compressible Euler equations, which evolve the
+    velocity 'u', the pressure 'p' and the buoyancy 'b',
+    solving:                                                                  \n
+    ∂u/∂t + 2Ω×u + ∇p + bz = 0,                                      \n
+    ∂p/∂t + c_s∇.u = 0,                                              \n
+    ∂b/∂t + Nsq w = 0,                                                       \n
+    where z is the unit vertical vector, Ω is the planet's rotation vector
+    and c_s is the speed of sound.
+
+    This is set up the from the underlying :class:`CompressibleBoussinesqEquations`,
+    which is then linearised.
+    """
+
+    def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 extra_terms=None, linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+        """
+        Args:
+
+        """
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+
+        super().__init__(domain, parameters,
+                         Omega=Omega, sponge=sponge,
+                         extra_terms=extra_terms,
+                         linearisation_map=linearisation_map,
+                         u_transport_option=u_transport_option,
+                         diffusion_options=diffusion_options,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        # Use the underlying routine to do a first linearisation of the equations
+        self.linearise_equation_set()
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
