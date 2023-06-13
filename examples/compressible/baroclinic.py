@@ -33,7 +33,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'Baroclinic_delta3'
+dirname = 'Baroclinic_pertubationtest'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1, 
                           dumplist=['u', 'rho', 'theta'],
@@ -113,21 +113,38 @@ Vp = 1         # Perturbed wind amplitude
 lon_c , lat_c = pi/9,  2*pi/9 # location of perturbation centre   
 err_tol = 1e-12
 
-d = a * acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # peturbation vertical taper
-doutput = File('results/out.pvd')
-d_field = Function(Vr).interpolate(d)
-doutput.write(d_field)
+d = a * acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # distance from centre of perturbation
 
-zeta = 1 - 3*(z / zt)**2 + 2*(z / zt)**3
+depth = r - a # The distance from origin subtracted from earth radius
+#zeta = conditional(ge(depth,zt-err_tol), 0, 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3) # peturbation vertical taper
+zeta = 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3
+
 perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos((pi * d) / (2 * d0)) ** 3
 
 
 zonal_pert = conditional(le(d,err_tol), 0, 
-                         conditional(ge(d,a*pi-err_tol), 0, -perturb_magnitude * (-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a)))
+                         conditional(ge(d,(d0-err_tol)), 0, -perturb_magnitude * (-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a)))
 meridional_pert = conditional(le(d,err_tol), 0, 
-                              conditional(ge(d,a*pi-err_tol), 0, perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
+                              conditional(ge(d,d0-err_tol), 0, perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
 
+conditional_test = conditional(le(d,err_tol), 0, 
+                         conditional(ge(d,(d0-err_tol)), 0, 10))
 
+testput = File('results/testout.pvd')
+d_field = Function(Vr).interpolate(d)
+z_field = Function(Vr).interpolate(zeta)
+zp_field = Function(Vr).interpolate(zonal_pert)
+mp_field = Function(Vr).interpolate(meridional_pert)
+condcheck = Function(Vr).interpolate(conditional_test)
+testput.write(d_field, z_field, zp_field, mp_field, condcheck)
+
+pertput = File('results/pertout.pvd')
+magnitude = Function(Vr).interpolate(perturb_magnitude)
+zonal_localistaion = Function(Vr).interpolate((-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a))
+meridional_localisation = Function(Vr).interpolate(cos(lat_c)*sin(lon - lon_c) / sin(d / a))
+pertput.write(magnitude, zonal_localistaion, meridional_localisation)
+#(u_pert, v_pert, w_pert) = sphere_to_cartesian(mesh, zonal_pert, meridional_pert)
+#perturbation = Function(Vu).project(as_vector([u_pert, v_pert, w_pert]))
 
 # -------------------------------------------------------------- #
 # Configuring fields
