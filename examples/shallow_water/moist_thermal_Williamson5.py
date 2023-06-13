@@ -5,7 +5,7 @@ thermal shallow water model and moist physics scheme.
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, exp, conditional, cos,
-                       acos, Constant)
+                       acos, Constant, Function, File)
 
 # ----------------------------------------------------------------- #
 # Test case parameters
@@ -74,13 +74,13 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 def sat_func(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return (q0/(g*h + tpexpr)) * exp(20*(1 - b/g))
+    return (q0/(g*h + g*tpexpr)) * exp(20*(1 - b/g))
 
 # Feedback proportionality is dependent on h and b
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return beta2 * (1 + 10*(20*q0/(g*h + tpexpr) * exp(20*(1 - b/g))))**(-1)
+    return beta2 * (1 + 10*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
 
 
 ReversibleAdjustment(eqns, sat_func, time_varying_saturation=True,
@@ -109,22 +109,29 @@ Rsq = R**2
 Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - tpexpr
 
 # expression for initial buoyancy
-F = (2/pi**2)*(phi*(phi-pi/2)*SP - 2*(phi+pi/2)*(phi-pi/2)*(1-mu1*EQ) + phi*(phi+pi/2)*NP)
+F = (2/(pi**2))*(phi*(phi-pi/2)*SP - 0.2*(phi+pi/2)*(phi-pi/2)*(1-(mu1*EQ)) + phi*(phi+pi/2)*NP)
 theta = F + mu1*EQ*cos(phi)*sin(lamda)
 bexpr = g * (1 - theta)
 
+# write out files to look at initial conditions
+ICs_file = File("outfile.pvd")
+theta_func = Function(b0.function_space()).interpolate(theta)
+F_func = Function(b0.function_space()).interpolate(F)
+diurnal_func = Function(b0.function_space()).interpolate(mu1*EQ*cos(phi)*sin(lamda))
+ICs_file.write(theta_func, f_func, diurnal_func)
+
 # expression for initial vapour depends on initial saturation
-initial_msat = q0/(g*D0 + tpexpr) * exp(20*theta)
+initial_msat = q0/(g*D0 + g*tpexpr) * exp(20*theta)
 vexpr = mu2 * initial_msat
 
 # initialise (cloud and rain initially zero)
 u0.project(uexpr)
 D0.interpolate(Dexpr)
-b0.interpolate(theta)
+b0.interpolate(bexpr)
 v0.interpolate(vexpr)
 
 # ----------------------------------------------------------------- #
 # Run
 # ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax=2*dt)
+stepper.run(t=0, tmax=tmax)
