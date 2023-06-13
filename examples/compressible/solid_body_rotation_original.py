@@ -9,7 +9,7 @@ from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance          
 # Test case Parameters
 # -------------------------------------------------------------- #
 dt = 1000.
-days = 10.
+days = 30.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
 deltaz = 2.0e3
@@ -34,7 +34,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_LongRun'
+dirname = 'SBR_LongRun_dt=1000'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u', 'rho', 'theta'],
