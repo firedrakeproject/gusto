@@ -36,8 +36,10 @@ class Rexi(object):
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
                  manager=None):
 
-        equation.linearise_equation_set()
-        residual = equation.residual
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
+            map_if_false=drop)
 
         # Get the Rexi Coefficients, given the values of h and M in
         # rexi_parameters
@@ -183,7 +185,7 @@ class Rexi(object):
         self.solver = LinearVariationalSolver(
             rexi_prob, solver_parameters=solver_parameters)
 
-    def solve(self, U0, dt):
+    def apply(self, U0, dt):
         """
         Solve method for approximating the matrix exponential by a
         rational sum. Solves
