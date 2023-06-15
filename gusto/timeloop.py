@@ -666,17 +666,14 @@ class MeshMovement(SemiImplicitQuasiNewton):
                     self.mesh.coordinates.assign(X0)
                     self.uadv.assign(0.5*(un - self.v_V1))
                     scheme.apply(xmid(name), xstar(name))
-                    print("before: ", name, xmid(name).dat.data.min(), xmid(name).dat.data.max())
 
                     if name == "u":
-                        print("projecting u")
                         um_.assign(xmid("u"))
                         rhs = inner(um_, test_u)*dx
                         with assemble(rhs).dat.vec as v:
                             Lvec = v
 
                     elif name == "D":
-                        print("projecting D")
                         Dm_.assign(xmid("D"))
                         rhs = inner(Dm_, test_D)*dx
                         with assemble(rhs).dat.vec as v:
@@ -708,7 +705,6 @@ class MeshMovement(SemiImplicitQuasiNewton):
                         with Dm.dat.vec as x_:
                             ksp.solve(Lvec, x_)
                         xmid(name).assign(Dm)
-                    print("after: ", name, xmid(name).dat.data.min(), xmid(name).dat.data.max())
 
                     # transport field from xmid to xp on new mesh
                     self.uadv.assign(0.5*(unp1 - self.v1_V1))
