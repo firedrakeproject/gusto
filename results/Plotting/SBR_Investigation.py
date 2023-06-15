@@ -91,6 +91,7 @@ def PlotRadial(fp):
             mes += 1
     plt.show()
     return fig
+
 def PlotGeostrophic(fp):
     data =nc.Dataset(fp)
     time = data.variables['time'][:]
@@ -121,7 +122,8 @@ def PlotGeostrophic(fp):
             mes += 1
     plt.show()
     return fig
-fp = '/home/d-witt/SBR_hailmary/geoimbalance_test/diagnostics.nc'
+
+fp = '/home/d-witt/SBR_hailmary/Solidbody/diagnostics.nc'
 PlotMeridonal(fp)
 PlotZonal(fp)
 PlotRadial(fp)
