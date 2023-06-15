@@ -594,6 +594,16 @@ class MeshMovement(SemiImplicitQuasiNewton):
         mesh_generator.monitor.setup(self.fields)
         mesh_generator.setup()
 
+        self.tests = {}
+        for name in self.equation.field_names:
+            self.tests[name] = TestFunction(self.x.n(name).function_space())
+        self.trials = {}
+        for name in self.equation.field_names:
+            self.trials[name] = TrialFunction(self.x.n(name).function_space())
+        self.ksp = {}
+        for name in self.equation.field_names:
+            self.ksp[name] = PETSc.KSP().create()
+        
     def setup_fields(self):
         super().setup_fields()
         self.x.add_fields(self.equation, levels=("mid",))
@@ -615,12 +625,6 @@ class MeshMovement(SemiImplicitQuasiNewton):
         unp1 = xnp1("u")
         X0 = self.X0
         X1 = self.X1
-        um, Dm = Function(self.equation.W).split()
-        um_, Dm_ = Function(self.equation.W).split()
-        test_u = TestFunction(um.function_space())
-        trial_u = TrialFunction(um.function_space())
-        test_D = TestFunction(Dm.function_space())
-        trial_D = TrialFunction(Dm.function_space())
 
         X1.assign(self.mesh.coordinates)
 
@@ -636,7 +640,6 @@ class MeshMovement(SemiImplicitQuasiNewton):
             self.mesh_generator.pre_meshgen_callback()
             with timed_stage("Mesh generation"):
                 X1.assign(self.mesh_generator.get_new_mesh())
-                # X1.assign(X0)
 
             # Compute v (mesh velocity w.r.t. initial mesh) and
             # v1 (mesh velocity w.r.t. final mesh)
@@ -667,44 +670,21 @@ class MeshMovement(SemiImplicitQuasiNewton):
                     self.uadv.assign(0.5*(un - self.v_V1))
                     scheme.apply(xmid(name), xstar(name))
 
-                    if name == "u":
-                        um_.assign(xmid("u"))
-                        rhs = inner(um_, test_u)*dx
-                        with assemble(rhs).dat.vec as v:
-                            Lvec = v
-
-                    elif name == "D":
-                        Dm_.assign(xmid("D"))
-                        rhs = inner(Dm_, test_D)*dx
-                        with assemble(rhs).dat.vec as v:
-                            Lvec = v
+                    rhs = inner(xmid(name), self.tests[name])*dx
+                    with assemble(rhs).dat.vec as v:
+                        Lvec = v
 
                     # put mesh_new into mesh
                     self.mesh.coordinates.assign(X1)
 
-                    if name == "u":
-                        lhs = inner(trial_u, test_u)*dx
-                        amat = assemble(lhs)
-                        a = amat.M.handle
-                        ksp = PETSc.KSP().create()
-                        ksp.setOperators(a)
-                        ksp.setFromOptions()
+                    lhs = inner(self.trials[name], self.tests[name])*dx
+                    amat = assemble(lhs)
+                    a = amat.M.handle
+                    self.ksp[name].setOperators(a)
+                    self.ksp[name].setFromOptions()
 
-                        with um.dat.vec as x_:
-                            ksp.solve(Lvec, x_)
-                        xmid(name).assign(um)
-
-                    elif name == "D":
-                        lhs = inner(trial_D, test_D)*dx
-                        amat = assemble(lhs)
-                        a = amat.M.handle
-                        ksp = PETSc.KSP().create()
-                        ksp.setOperators(a)
-                        ksp.setFromOptions()
-
-                        with Dm.dat.vec as x_:
-                            ksp.solve(Lvec, x_)
-                        xmid(name).assign(Dm)
+                    with xmid(name).dat.vec as x_:
+                        self.ksp[name].solve(Lvec, x_)
 
                     # transport field from xmid to xp on new mesh
                     self.uadv.assign(0.5*(unp1 - self.v1_V1))
