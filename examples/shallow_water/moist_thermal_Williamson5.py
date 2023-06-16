@@ -26,8 +26,10 @@ EQ = 30*epsilon
 NP =-20*epsilon
 mu1 = 0.05
 mu2 = 0.98
-q0 = 0.0492238  # from Ferguson and Jablonowski AMR paper
-beta2 = 10
+L = 10
+q0 = 0.0492238 # (from Ferguson and Jablonowski AMR paper)
+# q0 = 135
+beta2 = 1
 qprecip = 10e-4
 gamma_r = 10e-3
 # topography parameters
@@ -62,10 +64,10 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
                              active_tracers=tracers)
 
 # I/O
-dirname = "ZA_moist_thermal_williamson5"
+dirname = "ZA_moist_thermal_williamson5_temp"
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D'],
-                          dumpfreq=1,
+                          dumpfreq=dumpfreq,
                           log_level='INFO')
 diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -80,10 +82,10 @@ def sat_func(x_in):
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return beta2 * (1 + 10*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
+    return (1 + L*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
 
 
-ReversibleAdjustment(eqns, sat_func, time_varying_saturation=True,
+ReversibleAdjustment(eqns, sat_func, L, time_varying_saturation=True,
                      parameters=parameters, thermal_feedback=True,
                      beta2=beta2, gamma_v=gamma_v,
                      time_varying_gamma_v=True)
@@ -109,19 +111,21 @@ Rsq = R**2
 Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - tpexpr
 
 # expression for initial buoyancy
-F = (2/(pi**2))*(phi*(phi-pi/2)*SP - 0.2*(phi+pi/2)*(phi-pi/2)*(1-(mu1*EQ)) + phi*(phi+pi/2)*NP)
-theta = F + mu1*EQ*cos(phi)*sin(lamda)
-bexpr = g * (1 - theta)
+F = (2/(pi**2))*(phi*(phi-pi/2)*SP - 2*(phi+pi/2)*(phi-pi/2)*(1-mu1)*EQ + phi*(phi+pi/2)*NP)
+theta_expr = F + mu1*EQ*cos(phi)*sin(lamda)
+bexpr = g * (1 - theta_expr)
 
 # write out files to look at initial conditions
 ICs_file = File("outfile.pvd")
-theta_func = Function(b0.function_space()).interpolate(theta)
+theta_func = Function(b0.function_space()).interpolate(theta_expr)
 F_func = Function(b0.function_space()).interpolate(F)
 diurnal_func = Function(b0.function_space()).interpolate(mu1*EQ*cos(phi)*sin(lamda))
-ICs_file.write(theta_func, f_func, diurnal_func)
+ICs_file.write(theta_func, F_func, diurnal_func)
+theta_field = stepper.fields( "theta", space=b0.function_space(), dump=True)
+theta_field.interpolate(theta_expr)
 
 # expression for initial vapour depends on initial saturation
-initial_msat = q0/(g*D0 + g*tpexpr) * exp(20*theta)
+initial_msat = q0/(g*D0 + g*tpexpr) * exp(20*theta_expr)
 vexpr = mu2 * initial_msat
 
 # initialise (cloud and rain initially zero)
