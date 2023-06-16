@@ -310,10 +310,7 @@ class IO(object):
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
-            # FIXME: This is a hack, it shouldn't be necessary to sort this list,
-            # It shouldn't be possible to create the list in different orders on different ranks!!!
-            # Problem: `state_fields.to_dump` is a set()! No guaranteed order
-            self.to_dump = sorted([f for f in state_fields.fields if f.name() in state_fields.to_dump], key=lambda x: x.name())
+            self.to_dump = [f for f in state_fields.fields if f.name() in state_fields.to_dump]
 
         # make dump counter
         self.dumpcount = itertools.count()
@@ -405,10 +402,7 @@ class IO(object):
 
             # make list of fields to pick_up (this doesn't include
             # diagnostic fields)
-            # FIXME: This is a hack, it shouldn't be necessary to sort this list,
-            # It shouldn't be possible to create the list in different orders on different ranks!!!
-            # Problem: `state_fields.to_dump` is a set()! No guaranteed order
-            self.to_pick_up = sorted([fname for fname in state_fields.to_pick_up])
+            self.to_pick_up = [fname for fname in state_fields.to_pick_up]
 
             # make a checkpoint counter
             self.chkptcount = itertools.count()
