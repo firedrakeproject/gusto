@@ -2,12 +2,12 @@ from gusto.rexi import *
 from firedrake import exp, sqrt, pi
 import pytest
 
-params = REXIParameters()  # these are mu, L and a from rexi_coefficients.py
-mu = params.mu
-L = params.L
-a = params.a
+constants = REXIConstants()  # these are mu, L and a from rexi_coefficients.py
+mu = constants.mu
+L = constants.L
+a = constants.a
 
-otherparams = RexiParameters()  # these are h, M and reduce_to_half from rexi.py
+params = RexiParameters()  # these are h, M and reduce_to_half from rexi.py
 
 def approx_e_ix(x, h, M, use_Gaussian_approx):
     b = b_coefficients(h, M)
@@ -19,7 +19,7 @@ def approx_e_ix(x, h, M, use_Gaussian_approx):
             sum += b[m+M] * approxGaussian(x+m*h, h)
     else:
         # this is the full REXI (testing step 3)
-        alpha, beta, beta2 = RexiCoefficients(otherparams)
+        alpha, beta, beta2 = RexiCoefficients(params)
         for n in range(len(alpha)):
             denom = (1j*x + alpha[n]);
             sum += beta[n] / denom

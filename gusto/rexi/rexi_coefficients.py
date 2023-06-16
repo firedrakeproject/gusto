@@ -1,10 +1,10 @@
 import numpy
 
-original_coefficients = True
+original_constants = True
 
-class REXIParameters(object):
+class REXIConstants(object):   # REXIParameters(object)
 
-    if original_coefficients:
+    if original_constants:
         """
         mu and a coefficients from
         "A high-order time-parallel scheme for solving wave propagation problems
@@ -109,10 +109,10 @@ def RexiCoefficients(rexi_parameters):
     M = rexi_parameters.M
 
     # get L, mu and the a coefficients
-    params = REXIParameters()
-    L = params.L
-    mu = params.mu
-    a = params.a
+    constants = REXIConstants()
+    L = constants.L
+    mu = constants.mu
+    a = constants.a
 
     # calculate the b coefficients
     b = b_coefficients(h, M)
