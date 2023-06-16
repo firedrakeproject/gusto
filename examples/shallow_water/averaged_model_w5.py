@@ -16,8 +16,8 @@ from math import ceil
 
 day = 24.*60.*60.
 ref_level = 3
-dt = 60*60
-tmax = 15*day
+dt = 0.5*60*60
+tmax = dt
 
 # setup shallow water parameters
 R = 6371220.
@@ -68,7 +68,7 @@ L = eigs[ref_level-3]*dt*eta
 ppp = 3
 Mbar = ceil(ppp*eta*dt*eigs[ref_level-3]/2/pi)
 print(Mbar)
-Mbar = 4
+Mbar = 3
 print(Mbar)
 
 ncheb = 10000
@@ -77,7 +77,7 @@ filter_val = 0.75
 
 exp_method = Cheby(eqns, ncheb, tol, L, filter_val)
 exp_method2 = Cheby(eqns, ncheb, tol, L)
-scheme = Heun(domain)
+scheme = Heun(domain, subcycles=2)
 
 avg_model = AveragedModel(eta, Mbar, exp_method, exp_method2, scheme)
 

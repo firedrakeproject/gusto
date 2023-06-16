@@ -17,7 +17,7 @@ import ufl
 from gusto.configuration import (logger, DEBUG, TransportEquationType,
                                  EmbeddedDGOptions, RecoveryOptions)
 from gusto.labels import (time_derivative, transporting_velocity, prognostic,
-                          subject, physics, transport, ibp_label,
+                          subject, physics, transport, ibp_label, nonlinear,
                           replace_subject, replace_test_function)
 from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
@@ -151,6 +151,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
                 map_if_false=drop)
+
+        if nonlinear in active_labels:
+            self.residual = self.residual.label_map(
+                lambda t: t.has_label(nonlinear),
+                map_if_true=lambda t: Term(t.get(nonlinear).form, t.labels))
 
         self.evaluate_source = []
         for t in self.residual:
@@ -336,6 +341,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
+        for t in l:
+            print(t.form)
         return l.form
 
     @abstractproperty
@@ -349,6 +356,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: -self.dt*t)
 
+        for t in r:
+            print(t.form)
         return r.form
 
     def replace_transport_term(self):

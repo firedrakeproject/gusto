@@ -1,6 +1,6 @@
 from firedrake import Function
-from gusto.fml.form_manipulation_labelling import Term, keep
-from gusto.labels import linearisation
+from gusto.fml.form_manipulation_labelling import Term, keep, all_terms
+from gusto.labels import linearisation, nonlinear, time_derivative, replace_trial_function
 import numpy as np
 
 class AveragedModel(object):
@@ -24,14 +24,10 @@ class AveragedModel(object):
     def setup(self, equation, ubar):
 
         # set up nonlinear residual
-        nonlinear_residual = equation.residual.label_map(
-            lambda t: t.has_label(linearisation),
-            map_if_true=lambda t: Term(t.form-t.get(linearisation).form,
-                                       t.labels),
-            map_if_false=keep)
-
-        # replace equation residual with linearised residual
-        equation.linearise_equation_set()
+        equation.residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation) and not t.has_label(time_derivative),
+            map_if_true=lambda t: nonlinear(t, Term(t.form-t.get(linearisation).form, t.labels)),
+            map_if_false=lambda t: nonlinear(t, Term(t.form, t.labels)))
 
         # set up functions to store input and output to forward map
         W = equation.function_space
@@ -42,7 +38,7 @@ class AveragedModel(object):
         self.V_out = Function(W)
         self.x_out = Function(W)
 
-        self.stepper.setup(equation, ubar)
+        self.stepper.setup(equation, ubar, True, nonlinear)
 
     def apply(self, x_out, x_in):
 
