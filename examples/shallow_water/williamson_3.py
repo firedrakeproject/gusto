@@ -35,8 +35,6 @@ for i in range(len(ref_levels)):
     mesh = IcosahedralSphereMesh(radius=a,
                                 refinement_level=ref, degree=1)
     x = SpatialCoordinate(mesh)
-    global_normal = x
-    mesh.init_cell_orientations(x)
     domain = Domain(mesh, dt, "BDM", 1)
 
     # Equations
