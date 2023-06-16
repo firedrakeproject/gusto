@@ -3,23 +3,23 @@ An implementation of the Williams 3 Test case with convergence plotting
 """
 
 from gusto import *
+from gusto import NumericalIntegral
 from plotting import convergenceplots
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
 import numpy as np
-import time
 
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref_levels = [5]
-time_step = [70,80,90,100,110,120]
-elapsed_time = []
+ref_levels = [3,4,5,6,7]
+time_step = [4000, 2000, 1000, 500, 250]
 
-for dt in time_step:
-    ref = ref_levels[0]
-    st = time.time()
-    tmax = 1*day
-    ndumps = 1
+for i in range(len(ref_levels)):
+    
+    tmax = 5*day
+    ndumps = 5
+    ref = ref_levels[i]
+    dt = time_step[i]
 
     # Shallow Water Parameters
     a = 6371220.
@@ -46,7 +46,7 @@ for dt in time_step:
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
     # Output and IO
-    dirname = f'SIQN_scheme_dt={dt}'
+    dirname = f'Williamson3_ref={ref}'
     dumpfreq = int(tmax / (ndumps * dt))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
@@ -127,9 +127,6 @@ for dt in time_step:
     # Run!
     # ------------------------------------------------------------------------ #
     stepper.run(t=0, tmax=tmax)
-    et = time.time()
-    elapsed_time.append(et - st)
 
-convergenceplots(ref_levels, elapsed_time, "results/Williams3_ConvergencePlots")
 
 
