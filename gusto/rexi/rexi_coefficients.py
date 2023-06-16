@@ -1,8 +1,8 @@
 import numpy
 
-original_constants = True
+original_constants = False
 
-class REXIConstants(object):   # REXIParameters(object)
+class REXIConstants(object):
 
     if original_constants:
         """
