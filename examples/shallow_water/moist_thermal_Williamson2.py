@@ -16,9 +16,12 @@ epsilon = 1/300
 theta_0 = epsilon*phi_0**2
 g = 9.80616
 H = phi_0/g
-xi = 10e-3
-q0 = 0.0492238  # from AMR paper
-beta2 = 10
+# xi = 10e-3
+xi = 0
+# q0 = 0.0492238 # from AMR paper
+q0 = 135
+beta2 = 1
+L = 10
 
 # ----------------------------------------------------------------- #
 # Set up model objects
@@ -42,10 +45,10 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                              thermal=True, active_tracers=tracers)
 
 # IO
-dirname = "moist_thermal_williamson2"
+dirname = "moist_thermal_williamson2_xi=0"
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
+                          dumpfreq=1,
                           dumplist_latlon=['D', 'D_error'],
                           log_level='INFO')
 
@@ -70,10 +73,10 @@ def sat_func(x_in):
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return beta2 * (1 + 10*(20*q0/g*h * exp(20*(1 - b/g))))**(-1)
+    return (1 + 10*(20*q0/g*h * exp(20*(1 - b/g))))**(-1)
 
 
-ReversibleAdjustment(eqns, sat_func, time_varying_saturation=True,
+ReversibleAdjustment(eqns, sat_func, L, time_varying_saturation=True,
                      parameters=parameters, thermal_feedback=True,
                      beta2=beta2, gamma_v=gamma_v,
                      time_varying_gamma_v=True)
