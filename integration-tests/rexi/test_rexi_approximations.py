@@ -2,20 +2,24 @@ from gusto.rexi import *
 from firedrake import exp, sqrt, pi
 import pytest
 
-params = REXIParameters()
+params = REXIParameters()  # these are mu, L and a from rexi_coefficients.py
 mu = params.mu
 L = params.L
 a = params.a
+
+otherparams = RexiParameters()  # these are h, M and reduce_to_half from rexi.py
 
 def approx_e_ix(x, h, M, use_Gaussian_approx):
     b = b_coefficients(h, M)
 
     sum = 0
     if use_Gaussian_approx:
+        # this is REXI with Gaussians approximated as fractions
         for m in range(-M, M+1):
             sum += b[m+M] * approxGaussian(x+m*h, h)
     else:
-        alpha, beta = RexiCoefficients(h, M, False)
+        # this is the full REXI (testing step 3)
+        alpha, beta, beta2 = RexiCoefficients(otherparams)
         for n in range(len(alpha)):
             denom = (1j*x + alpha[n]);
             sum += beta[n] / denom
@@ -41,7 +45,8 @@ def approxGaussian(x, h):
     return sum
 
 
-# This checks the difference between e^(ix) and 
+# This checks the difference between e^(ix) and REXI where b is multiplied by
+# the Gaussians, approximated as fractions.
 def test_exponential_approx():
     h = 0.2
     M = 64
@@ -60,7 +65,8 @@ def test_rexi_gaussian_approx():
         assert abs(exact - approx) < 7.15344e-13
 
 
-# This checks the full REXI approximation  
+# This checks the full REXI approximation (combination of steps 1 and 2 in step
+# 3 to make beta).
 def test_rexi_exponential_approx():
     h = 0.2
     M = 64
