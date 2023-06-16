@@ -89,7 +89,7 @@ def initialise_fields(eqns, stepper):
 
 
 @pytest.mark.parametrize("stepper_type", ["multi_level", "semi_implicit"])
-@pytest.mark.parametrize("checkpoint_method", ["old", "new"])
+@pytest.mark.parametrize("checkpoint_method", ["dumbcheckpoint", "checkpointfile"])
 def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     mesh_name = 'checkpointing_mesh'
@@ -138,14 +138,14 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     # Pick up from checkpoint and run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
-    chkpt_filename = 'chkpt' if checkpoint_method == 'old' else 'chkpt.h5'
+    chkpt_filename = 'chkpt' if checkpoint_method == 'dumbcheckpoint' else 'chkpt.h5'
     chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
     output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
                                 chkptfreq=2, log_level='INFO',
                                 checkpoint_method=checkpoint_method,
                                 checkpoint_pickup_filename=chkpt_2_path)
 
-    if checkpoint_method == 'new':
+    if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
     stepper_3.io.pick_up_from_checkpoint(stepper_3.fields)
@@ -167,7 +167,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     # ------------------------------------------------------------------------ #
 
     # Wipe fields from second time stepper
-    if checkpoint_method == 'old':
+    if checkpoint_method == 'dumbcheckpoint':
         # Get an error when picking up fields with the same stepper with new method
         initialise_fields(eqns_2, stepper_2)
         stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
@@ -180,7 +180,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
                                 chkptfreq=2, log_level='INFO',
                                 checkpoint_method=checkpoint_method,
                                 checkpoint_pickup_filename=chkpt_2_path)
-    if checkpoint_method == 'new':
+    if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
     stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
@@ -194,7 +194,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     # steppers as being on different meshes
 
     for field_name in ['rho', 'theta', 'u', 'rho_error', 'theta_perturbation']:
-        if checkpoint_method == 'old':
+        if checkpoint_method == 'dumbcheckpoint':
             # Check final fields are the same when checkpointing with the same time
             # stepper -- very tight tolerance as there should be no error
             diff_array = stepper_1.fields(field_name).dat.data - stepper_2.fields(field_name).dat.data

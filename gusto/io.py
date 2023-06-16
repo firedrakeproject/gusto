@@ -390,11 +390,11 @@ class IO(object):
 
         # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if self.output.checkpoint_method == 'old':
+            if self.output.checkpoint_method == 'dumbcheckpoint':
                 # should have already picked up, so can create a new file
                 self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
                                             mode=FILE_CREATE)
-            elif self.output.checkpoint_method == 'new':
+            elif self.output.checkpoint_method == 'checkpointfile':
                 # should have already picked up, so can create a new file
                 self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
             else:
@@ -449,12 +449,12 @@ class IO(object):
             # Open the checkpointing file for writing
             if self.output.checkpoint_pickup_filename is not None:
                 chkfile = self.output.checkpoint_pickup_filename
-            elif self.output.checkpoint_method == 'old':
+            elif self.output.checkpoint_method == 'dumbcheckpoint':
                 chkfile = path.join(self.dumpdir, "chkpt")
-            elif self.output.checkpoint_method == 'new':
+            elif self.output.checkpoint_method == 'checkpointfile':
                 chkfile = path.join(self.dumpdir, "chkpt.h5")
 
-            if self.output.checkpoint_method == 'old':
+            if self.output.checkpoint_method == 'dumbcheckpoint':
                 with DumbCheckpoint(chkfile, mode=FILE_READ) as chk:
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
@@ -550,7 +550,7 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            if self.output.checkpoint_method == 'old':
+            if self.output.checkpoint_method == 'dumbcheckpoint':
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
                 self.chkpt.write_attribute("/", "time", t)
