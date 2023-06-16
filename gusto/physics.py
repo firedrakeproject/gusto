@@ -637,7 +637,7 @@ class InstantRain(Physics):
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False,
                  vapour_name="water_vapour", rain_name=None, gamma_r=1,
-                 convective_feedback=False, gamma=None, tau=None,
+                 convective_feedback=False, beta1=None, tau=None,
                  parameters=None):
         """
         Args:
@@ -656,7 +656,7 @@ class InstantRain(Physics):
                 vapour above the threshold is converted.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            gamma (float, optional): Condensation proportionality constant,
+            beta1 (float, optional): Condensation proportionality constant,
                 used if convection causes a response in the height equation.
                 Defaults to None, but must be specified if convective_feedback
                 is True.
@@ -681,7 +681,7 @@ class InstantRain(Physics):
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
-            assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
+            assert beta1 is not None, "If convective feedback is used, beta1 parameter must be specified"
 
         # obtain function space and functions; vapour needed for all cases
         W = equation.function_space
@@ -737,7 +737,7 @@ class InstantRain(Physics):
         # if feeding back on the height adjust the height equation
         if convective_feedback:
             equation.residual += physics(subject
-                                         (test_D * gamma * self.source * dx,
+                                         (test_D * beta1 * self.source * dx,
                                           equation.X),
                                          self.evaluate)
 
@@ -774,12 +774,11 @@ class ReversibleAdjustment(Physics):
     Represents the process of adjusting water vapour and cloud water according
     to a saturation function, via condensation and evaporation processes.
 
-    This physics scheme follows that of Zerroukat and Allen (2020), with the
-    choice of their gamma constants to be 1 in both cases.
+    This physics scheme follows that of Zerroukat and Allen (2020).
 
     """
 
-    def __init__(self, equation, saturation_curve,
+    def __init__(self, equation, saturation_curve, L,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
                  beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
@@ -797,6 +796,10 @@ class ReversibleAdjustment(Physics):
                 dependent on a prognostic field.
             time_varying_saturation (bool, optional): set this to True if the
                 saturation curve is changing in time. Defaults to False.
+            L (float): The air expansion factor multiplied by the latent heat
+                due to phase change divided by the specific heat capacity. For
+                the atmosphere we take L to be 10, following A.2 in
+                Zerroukat and Allen (2015).
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             cloud_name (str, optional): name of the cloud variable. Defaults to
@@ -866,6 +869,7 @@ class ReversibleAdjustment(Physics):
             VD = W.sub(self.VD_idx)
             test_D = equation.tests[self.VD_idx]
             self.D = Function(VD)
+            V_idxs.append(self.VD_idx)
 
         # buoyancy needed if thermal feedback
         if self.thermal_feedback:
@@ -873,6 +877,7 @@ class ReversibleAdjustment(Physics):
             Vb = W.sub(self.Vb_idx)
             test_b = equation.tests[self.Vb_idx]
             self.b = Function(Vb)
+            V_idxs.append(self.Vb_idx)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
         if tau is not None:
@@ -916,6 +921,10 @@ class ReversibleAdjustment(Physics):
 
         # Factors for multiplying source for different variables
         factors = [self.gamma_v, -self.gamma_v]
+        if convective_feedback:
+            factors.append(self.gamma_v*beta1)
+        if thermal_feedback:
+            factors.append(parameters.g*L*self.gamma_v*beta2)
 
         # Add terms to equations and make interpolators
         self.source = [Function(Vc) for factor in factors]
@@ -928,25 +937,6 @@ class ReversibleAdjustment(Physics):
             equation.residual += physics(subject(test * source * dx,
                                                  equation.X), self.evaluate)
 
-        # If feeding back on height adjust the height equation
-        if convective_feedback:
-            # same source that is subtracted from vapour is subtracted from
-            # height (scaled by beta1)
-            source_D = self.source[0]
-            equation.residual += physics(subject
-                                         (test_D * beta1 * source_D * dx,
-                                          equation.X),
-                                         self.evaluate)
-
-        # If thermal feedback then adjust the buoyancy equation
-        if thermal_feedback:
-            # same source that is subtracted from vapour is added to buoyancy
-            # (scaled by beta2)
-            source_b = self.source[0]
-            equation.residual -= physics(subject
-                                         (test_b * beta2 * source_b * dx,
-                                          equation.X),
-                                         self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -963,6 +953,8 @@ class ReversibleAdjustment(Physics):
 
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
+        if self.thermal_feedback:
+            self.b.assign(x_in.split()[self.Vb_idx])
         if self.time_varying_saturation:
             self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
