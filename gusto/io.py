@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (VectorElement, Function, functionspaceimpl, File,
+from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
 from gusto.configuration import logger, set_log_handler
@@ -324,7 +324,7 @@ class IO(object):
 
         if self.output.dump_nc:
             self.nc_filename = path.join(self.dumpdir, "field_output.nc")
-            space_names = set([field.function_space().name for field in self.to_dump])
+            space_names = sorted(set([field.function_space().name for field in self.to_dump]))
             for space_name in space_names:
                 self.domain.coords.register_space(self.domain, space_name)
 
@@ -602,21 +602,35 @@ class IO(object):
 
             # Add coordinates if they are not already in the file
             for space_name in space_names:
-                coord_fields = self.domain.coords.global_chi_coords[space_name]
-                num_points = len(self.domain.coords.global_chi_coords[space_name][0])
+                if space_name not in self.domain.coords.chi_coords.keys():
+                    # Space not registered
+                    # TODO: we should fail here, but currently there are some spaces
+                    # that we can't output for so instead just skip outputting
+                    pass
+                else:
+                    coord_fields = self.domain.coords.global_chi_coords[space_name]
+                    num_points = len(self.domain.coords.global_chi_coords[space_name][0])
 
-                nc_field_file.createDimension('coords_'+space_name, num_points)
+                    nc_field_file.createDimension('coords_'+space_name, num_points)
 
-                for (coord_name, coord_field) in zip(self.domain.coords.coords_name, coord_fields):
-                    nc_field_file.createVariable(coord_name+'_'+space_name, float, 'coords_'+space_name)
-                    nc_field_file.variables[coord_name+'_'+space_name][:] = coord_field[:]
+                    for (coord_name, coord_field) in zip(self.domain.coords.coords_name, coord_fields):
+                        nc_field_file.createVariable(coord_name+'_'+space_name, float, 'coords_'+space_name)
+                        nc_field_file.variables[coord_name+'_'+space_name][:] = coord_field[:]
 
             # Create variable for storing the field values
             for field in self.to_dump:
                 field_name = field.name()
                 space_name = field.function_space().name
-                nc_field_file.createGroup(field_name)
-                nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
+                if space_name not in self.domain.coords.chi_coords.keys():
+                    # Space not registered
+                    # TODO: we should fail here, but currently there are some spaces
+                    # that we can't output for so instead just skip outputting
+                    logger.warning(f'netCDF outputting for space {space_name} '
+                                   + 'not yet implemented, so unable to output'
+                                   + '{field_name} field')
+                else:
+                    nc_field_file.createGroup(field_name)
+                    nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
 
             nc_field_file.close()
 
@@ -637,8 +651,11 @@ class IO(object):
             field_name = field.name()
             space_name = field.function_space().name
 
-            if isinstance(field.ufl_element(), VectorElement):
-                raise NotImplementedError('Vector outputting not yet implemented')
+            if space_name not in self.domain.coords.chi_coords.keys():
+                # Space not registered
+                # TODO: we should fail here, but currently there are some spaces
+                # that we can't output for so instead just skip outputting
+                pass
 
             # -------------------------------------------------------- #
             # Scalar elements
