@@ -22,9 +22,10 @@ tmax = dt
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
+g = 9.8
 
 # setup input that doesn't change with ref level or dt
-parameters = ShallowWaterParameters(H=H)
+parameters = ShallowWaterParameters(g=g, H=H)
 
 # ------------------------------------------------------------------------ #
 # Set up model objects
@@ -94,12 +95,13 @@ u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
 uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
 g = parameters.g
 Rsq = R**2
-Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
+print(g, Omega, H, R)
+Dexpr = - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g
 
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 
-Dbar = Function(D0.function_space()).assign(H)
+Dbar = Function(D0.function_space()).assign(0)
 stepper.set_reference_profiles([('D', Dbar)])
 
 # ------------------------------------------------------------------------ #

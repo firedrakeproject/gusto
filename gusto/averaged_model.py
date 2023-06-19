@@ -1,6 +1,6 @@
 from firedrake import Function
 from gusto.fml.form_manipulation_labelling import Term, keep, all_terms
-from gusto.labels import linearisation, nonlinear, time_derivative, replace_trial_function
+from gusto.labels import linearisation, nonlinear, time_derivative, replace_trial_function, subject
 import numpy as np
 
 class AveragedModel(object):
@@ -23,10 +23,15 @@ class AveragedModel(object):
 
     def setup(self, equation, ubar):
 
+        def nonlinearise(t):
+            t_linear = Term(t.get(linearisation).form, t.labels)
+            t_linear = replace_trial_function(t.get(subject))(t_linear)
+            return nonlinear(t, Term(t.form-t_linear.form, t.labels))
+
         # set up nonlinear residual
         equation.residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation) and not t.has_label(time_derivative),
-            map_if_true=lambda t: nonlinear(t, Term(t.form-t.get(linearisation).form, t.labels)),
+            map_if_true=lambda t: nonlinearise(t),
             map_if_false=lambda t: nonlinear(t, Term(t.form, t.labels)))
 
         # set up functions to store input and output to forward map
@@ -50,17 +55,18 @@ class AveragedModel(object):
             expt = self.eta*self.dt*self.svals[k]
 
             # apply forward map
-            self.exp.apply(self.exp_out, self.exp_in, expt)
+            self.exp.apply(self.exp_out, self.exp_in, -expt)
             self.V.assign(self.exp_out)
 
             # timestep V
             self.stepper.apply(self.V_out, self.V)
 
             # compute difference from Un
+            self.V.assign(self.V_out)
             self.V -= self.exp_out
 
             # apply backwards map
-            self.exp.apply(self.exp_out, self.V, -expt)
+            self.exp.apply(self.exp_out, self.V, expt)
 
             # multiply by weight and add to total
             self.exp_out *= self.weights[k]
@@ -69,4 +75,4 @@ class AveragedModel(object):
 
         self.x_out.assign(x_in)
 
-        self.exp2.apply(x_out, self.x_out, self.dt)
+        self.exp2.apply(x_out, self.x_out, -self.dt)
