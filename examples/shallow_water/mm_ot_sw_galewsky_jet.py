@@ -6,8 +6,9 @@ from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
 import numpy as np
 
 day = 24.*60.*60.
-dt = 480.
+dt = 240.
 tmax = 6*day
+ref_level = 4
 
 # setup shallow water parameters
 R = 6371220.
@@ -16,7 +17,7 @@ parameters = ShallowWaterParameters(H=H)
 
 # Domain
 mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=3, degree=2)
+                             refinement_level=ref_level, degree=2)
 domain = Domain(mesh, dt, 'BDM', 1)
 
 # Equation
@@ -28,7 +29,7 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option
 # I/O
 perturb = True
 if perturb:
-    dirname = "mm_ot_sw_galewsky_jet_perturbed"
+    dirname = "mm_ot_sw_galewsky_jet_perturbed_ref%s_dt%s" % (ref_level, dt)
 else:
     dirname = "mm_ot_sw_galewsky_jet_unperturbed"
 
