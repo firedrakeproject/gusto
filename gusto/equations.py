@@ -5,7 +5,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunction, FacetNormal, jump, avg, dS_v, dS,
                        DirichletBC, conditional, SpatialCoordinate,
-                       split, Constant, action)
+                       split, Constant, action, dot, grad)
 from gusto.fields import PrescribedFields
 from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
@@ -712,9 +712,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                            + jump(b*w, n)*avg(topography)*dS,
                                            "u"), self.X)
             else:
-                topography_form = subject(prognostic
-                                          (-g*div(w)*topography*dx, "u"),
-                                          self.X)
+                n = FacetNormal(domain.mesh)
+                uup = 0.5 * (dot(u, n) + abs(dot(u, n)))
+                topography_form = subject(
+                    prognostic(
+                        inner(grad(phi), u*topography)*dx
+                        - jump(phi)*(uup('+')*topography('+')
+                                     - uup('-')*topography('-'))*dS,
+                        "D"),
+                    self.X)
             residual += topography_form
 
         # thermal source terms not involving topography
