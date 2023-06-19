@@ -32,25 +32,26 @@ else:
 # ---------------------------------------------------------------------------- #
 
 # Domain
+# Make an normal extruded mesh which will be distorted to describe the mountain
 nlayers = res*20  # horizontal layers
 columns = res*12  # number of columns
 m = PeriodicIntervalMesh(columns, L)
-
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
-coord = SpatialCoordinate(ext_mesh)
-x = Function(Vc).interpolate(as_vector([coord[0], coord[1]]))
+
+# Describe the mountain
 a = 10000.
 xc = L/2.
 x, z = SpatialCoordinate(ext_mesh)
 hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
-
 zh = 5000.
 xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
 
+# Make new mesh
 new_coords = Function(Vc).interpolate(xexpr)
 mesh = Mesh(new_coords)
+mesh._base_mesh = m  # Force new mesh to inherit original base mesh
 domain = Domain(mesh, dt, "CG", 1)
 
 # Equation
@@ -63,7 +64,6 @@ dirname = 'hydrostatic_mountain'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
-                          checkpoint_method='dumbcheckpoint',
                           log_level='INFO')
 diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance(eqns),
                      Perturbation('theta'), Perturbation('rho')]
