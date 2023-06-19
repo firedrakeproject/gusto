@@ -79,10 +79,10 @@ class MonitorFunction(object):
         if True:   # not uniform:
             if self.adapt_to == "gradient":
                 self.L_monitor = v_p1*sqrt(dot(self.gradq, self.gradq))*dx
-            else:
+            elif self.adapt_to == "hessian":
                 self.L_monitor = v_p1*sqrt(inner(self.hessq, self.hessq))*dx
-        else:
-            self.L_monitor = v_p1*dx
+            else:
+                self.L_monitor = v_p1*dx
 
         u_dg = TrialFunction(DP1)
         v_dg = TestFunction(DP1)
