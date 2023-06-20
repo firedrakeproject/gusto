@@ -488,7 +488,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv=uadv, apply_bcs=apply_bcs, *active_labels)
+        super().setup(equation, uadv, apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -653,7 +653,7 @@ class RK4(ExplicitTimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv=uadv, *active_labels)
+        super().setup(equation, uadv, *active_labels)
 
         self.k1 = Function(self.fs)
         self.k2 = Function(self.fs)
@@ -850,6 +850,7 @@ class BackwardEuler(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
+        print("base dt:", float(self.dt))
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
@@ -1829,7 +1830,7 @@ class FE_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            self.base.dt.assign(self.dtau[m])
+            self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
@@ -1845,7 +1846,7 @@ class FE_SDC(SDC):
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt.assign(self.dtau[m-1])
+                self.dt = self.dtau[m-1]
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
@@ -1866,18 +1867,15 @@ class BE_SDC(SDC):
 
     def setup(self, equation, uadv=None):
 
-        residual = equation.residual
-
-        self.base = BackwardEuler(self.state)
+        self.base = BackwardEuler(self.domain)
 
         #uadv = self.state.fields("u")
 
-        self.base.setup(equation, uadv=uadv, residual=residual)
+        self.base.setup(equation, uadv=uadv)
         self.residual = self.base.residual
 
         # set up SDC form and solver
         W = equation.function_space
-        dt = self.dt
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
@@ -1891,7 +1889,7 @@ class BE_SDC(SDC):
         self.Q_ = Function(W)
 
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: dt*t)
+                                    map_if_false=lambda t: self.dt*t)
 
         F_imp = F.label_map(all_terms,
                             replace_subject(self.U_SDC))
@@ -1940,14 +1938,16 @@ class BE_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            self.base.dt.assign(self.dtau[m])
+            print(m)
+            print(float(self.dtau[m]))
+            self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
+            print("doing interations..")
             k += 1
 
-            self.fUnodes = []
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
@@ -1957,7 +1957,7 @@ class BE_SDC(SDC):
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt.assign(self.dtau[m-1])
+                self.dt = float(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
@@ -2057,7 +2057,7 @@ class IMEX_SDC(SDC):
         self.Unodes[0].assign(self.Un)
 
         for m in range(self.M):
-            self.IMEX.dt.assign(float(self.dtau[m]))
+            self.IMEX.dt = float(self.dtau[m])
             self.IMEX.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
@@ -2072,7 +2072,7 @@ class IMEX_SDC(SDC):
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt.assign(float(self.dtau[m-1]))
+                self.dt = float(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
