@@ -11,8 +11,8 @@ import pickle
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref = [3, 4, 5, 6]
-dt = [4000, 2000, 1000, 500]
+ref = [3, 4, 5, 6, 7]
+dt = [4000, 2000, 1000, 500, 250]
 tmax = 5*day
 ndumps = 5
 
@@ -25,7 +25,7 @@ ref_level = []
 dt_step = []
 
 parameters = ShallowWaterParameters(H=H)
-timediscretisation = [SSPRK3, RK4,  ]
+timediscretisation = [SSPRK3]
 
 # Starts for loop for different reginement levels
 for i in range(len(ref)):
@@ -37,8 +37,6 @@ for i in range(len(ref)):
     mesh = IcosahedralSphereMesh(radius=a,
                                  refinement_level=ref[i], degree=1)
     x = SpatialCoordinate(mesh)
-    global_normal = x
-    mesh.init_cell_orientations(x)
     domain = Domain(mesh, dt[i], "BDM", 1)
 
     # Equations
@@ -135,6 +133,7 @@ for i in range(len(ref)):
     error.append(L2_error)
     dt_step.append(dt[i])
     ref_level.append(ref[i])
+    
 # Makes use of Pickle to save data
 plotdata = [error, ref_level, dt_step]
 with open('plotdata', 'wb') as f:

@@ -94,8 +94,8 @@ for i in range(len(ref_levels)):
                         )
 
 
-    def u_func(y):
-        x = xe*(y - lat_b) / lat_diff
+    def u_func(lat):
+        x = xe*(lat - lat_b) / lat_diff
         very_small = 1e-9
         return np.where(x <= 0, very_small,
                         np.where(x >= xe, very_small,

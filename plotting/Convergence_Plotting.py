@@ -7,14 +7,14 @@ Iterate through the Williams3 Test and generature figures showing convergence pl
 """
 import matplotlib.pyplot as plt
 import netCDF4 as nc
-from numpy import log
+from numpy import log, linspace
 
-def convergenceplots(ref_levels, elapsed_time, fp):
+def convergenceplots(ref_levels,  fp):
     u2_5day_error = []
     D2_5day_error = []
     for ref in ref_levels:
 
-        filep = 'results/Williams3convergence_ref%s/diagnostics.nc' % ref
+        filep = 'results/archiveplot/ConvergenceData/Williamson3_ref=%s/diagnostics.nc' % ref
         data = nc.Dataset(filep)
 
         normalised_U2_error = data.groups['u_error']['l2'][:] / data.groups['u']['l2'][0]
@@ -38,24 +38,53 @@ def convergenceplots(ref_levels, elapsed_time, fp):
     fig, ax = plt.subplots(2, 1, sharex=True)
     plt.xlabel('Reference Levels')
     fig.suptitle('Convergence plots of depth and velocity fields')
-    ax[0].plot(ref_levels, u2_5day_error)
-    ax[0].set_ylabel('U Convergence')
-    ax[1].plot(ref_levels, D2_5day_error)
-    ax[1].set_ylabel('D Convergence')
+    ax[0].scatter(ref_levels, u2_5day_error)
+    ax[0].set_ylabel('$l_2(v)$')
+    ax[0].set_xticks(linspace(2,6,5))
+    ax[0].set_xticklabels(['2', '3', '4' ,'5', '6' ])
+    ax[1].scatter(ref_levels, D2_5day_error)
+    ax[1].set_ylabel('$l_2(h)$')
+    ax[1].set_xticks(linspace(2,6,5))
+    ax[1].set_xticklabels(['2', '3', '4' ,'5', '6' ])
     fig.savefig("%s/Williams3-Convergence-plot" % fp)
 
     fig, ax = plt.subplots(2, 1, sharex=True)
     plt.xlabel('Reference Levels')
     fig.suptitle('Convergence log plots of depth and velocity fields')
     ax[0].plot(ref_levels, log(u2_5day_error))
-    ax[0].set_ylabel('log, U Convergence')
+    ax[0].set_ylabel('$\log(l_2(v))$')
     ax[1].plot(ref_levels, log(D2_5day_error))
-    ax[1].set_ylabel('log, D Convergence')
+    ax[1].set_ylabel('$\log(l_2(h))$')
     fig.savefig("%s/Williams3-log_Convergence-plot" % fp)
 
-    fig, ax = plt.subplots()
-    plt.xlabel('Reference Levels')
-    plt.ylabel('Wall Clock Time')
-    fig.suptitle('Convergence plots of depth and velocity fields')
-    plt.plot(ref_levels, elapsed_time)
-    fig.savefig("%s/Williams3-wallclocktime_Convergence-plot" % fp)
+# convergenceplots([2,3,4,5,6],'/home/d-witt/firedrake/src/gusto/results/archiveplot/Convergenceplots' )
+
+filep = '/home/d-witt/firedrake/src/gusto/results/archiveplot/ConvergenceData/Williamson3_ref=6/diagnostics.nc'
+data = nc.Dataset(filep)
+time = data.variables['time'][:]
+l2_velocity = data.groups['u_error']['l2'][:] / data.groups['u']['l2'][0]
+max_velocity = data.groups['u_error']['max'][:] / data.groups['u']['max'][0]
+l2_height = data.groups['D_error']['l2'][:] / data.groups['D']['l2'][0]
+max_height = data.groups['D_error']['max'][:] /  data.groups['D']['max'][0]
+
+fig, ax = plt.subplots(2, 1, sharex=True)
+fig.suptitle('normalised l2 and Max error for the velocity field')
+ax[0].plot(time, l2_velocity)
+ax[0].set_ylabel('l2 Error, velocity field')
+ax[1].plot(time, max_velocity)
+ax[1].set_ylabel('max Error, velocity field')
+ax[1].set_xticks(linspace(0, time[-1], 5))
+ax[1].set_xticklabels(['1', '2', '3' ,'4', '5' ])
+ax[1].set_xlabel('Time (days)')
+plt.show()
+
+fig, ax = plt.subplots(2, 1, sharex=True)
+fig.suptitle('normalised l2 and Max error for the height field')
+ax[0].plot(time, l2_height)
+ax[0].set_ylabel('l2 Error, height field')
+ax[1].plot(time, max_height)
+ax[1].set_ylabel('max Error, height field')
+ax[1].set_xticks(linspace(0, time[-1], 5))
+ax[1].set_xticklabels(['1', '2', '3' ,'4', '5' ])
+ax[1].set_xlabel('Time (days)')
+plt.show()
