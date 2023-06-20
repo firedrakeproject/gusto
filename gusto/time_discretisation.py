@@ -341,8 +341,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
-        for t in l:
-            print(t.form)
         return l.form
 
     @abstractproperty
@@ -356,8 +354,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: -self.dt*t)
 
-        for t in r:
-            print(t.form)
         return r.form
 
     def replace_transport_term(self):
