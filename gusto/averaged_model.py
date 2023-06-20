@@ -55,7 +55,7 @@ class AveragedModel(object):
             expt = self.eta*self.dt*self.svals[k]
 
             # apply forward map
-            self.exp.apply(self.exp_out, self.exp_in, -expt)
+            self.exp.apply(self.exp_out, self.exp_in, expt)
             self.V.assign(self.exp_out)
 
             # timestep V
@@ -66,7 +66,7 @@ class AveragedModel(object):
             self.V -= self.exp_out
 
             # apply backwards map
-            self.exp.apply(self.exp_out, self.V, expt)
+            self.exp.apply(self.exp_out, self.V, -expt)
 
             # multiply by weight and add to total
             self.exp_out *= self.weights[k]
@@ -75,4 +75,4 @@ class AveragedModel(object):
 
         self.x_out.assign(x_in)
 
-        self.exp2.apply(x_out, self.x_out, -self.dt)
+        self.exp2.apply(x_out, self.x_out, self.dt)

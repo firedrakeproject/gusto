@@ -45,7 +45,9 @@ class Cheby(object):
         a = residual.label_map(lambda t: t.has_label(time_derivative),
                                replace_subject(trials),
                                drop)
-        F = residual.label_map(lambda t: t.has_label(time_derivative), drop)
+        F = residual.label_map(lambda t: t.has_label(time_derivative),
+                               map_if_true=drop,
+                               map_if_false=lambda t: -1*t)
         F = F.label_map(lambda t: all_terms, replace_trial_function(self.x_in))
 
         params = {
