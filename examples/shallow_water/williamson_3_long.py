@@ -4,7 +4,6 @@ An implementation of the Williams 3 Test case with convergence plotting
 
 from gusto import *
 from gusto import NumericalIntegral
-from plotting import convergenceplots
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
 import numpy as np
 
