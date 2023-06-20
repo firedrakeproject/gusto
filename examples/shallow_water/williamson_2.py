@@ -55,7 +55,8 @@ for ref_level, dt in ref_dt.items():
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
                               dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO')
+                              log_level='INFO',
+                              dump_nc=True)
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),

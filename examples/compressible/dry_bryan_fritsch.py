@@ -52,7 +52,9 @@ eqns = CompressibleEulerEquations(domain, params,
 # I/O
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tmax / (5*dt)),
-                          dumplist=['u'],
+                          dumplist=['rho'],
+                          dump_vtus=False,
+                          dump_nc=True,
                           log_level='INFO')
 diagnostic_fields = [Perturbation('theta')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
