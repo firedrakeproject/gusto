@@ -12,7 +12,7 @@ import numpy as np
 day = 24. * 60. * 60.
 
 tmax = 30*day
-ndumps = 5
+ndumps = 30
 ref = 5
 dt = 1000
 
