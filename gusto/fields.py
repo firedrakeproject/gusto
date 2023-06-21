@@ -108,8 +108,8 @@ class StateFields(Fields):
         """
         self.fields = []
         output_specified = len(fields_to_dump) > 0
-        self.to_dump = set((fields_to_dump))
-        self.to_pick_up = set(())
+        self.to_dump = sorted(set((fields_to_dump)))
+        self.to_pick_up = []
         self._field_types = []
         self._field_names = []
 
@@ -194,9 +194,9 @@ class StateFields(Fields):
                 self.add_field(name, space)
 
             if dump:
-                self.to_dump.add(name)
+                self.to_dump.append(name)
             if pick_up:
-                self.to_pick_up.add(name)
+                self.to_pick_up.append(name)
 
             # Work out field type
             if field_type is None:
