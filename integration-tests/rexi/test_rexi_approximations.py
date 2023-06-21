@@ -34,8 +34,8 @@ def approxGaussian(x, h):
     evaluate approximation of Gaussian basis function
     with sum of complex rational functions
     """
+    x /= h
     if original_constants:
-        x /= h
 
         sum = 0
 
