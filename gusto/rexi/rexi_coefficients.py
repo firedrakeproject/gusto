@@ -1,6 +1,7 @@
+from firedrake import max_value, min_value
 import numpy
 
-original_constants = False
+original_constants = True
 
 class REXIConstants(object):
 
@@ -122,54 +123,58 @@ def RexiCoefficients(rexi_parameters):
     alpha = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     beta_re = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     beta_im = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+    beta = numpy.zeros((2*N+1,), dtype=numpy.complex128)
 
     # compute alpha, beta_re and beta_im
-    for l in range(-L, L+1):
-        for m in range(-M, M+1):
-            n = l+m
+    # for m in range(-M, M+1):
+    #     for l in range(-L, L+1):
+    #         n = l+m
+    #         alpha[n+N] = h*(mu + 1j*n)
+    #         L1 = max(-L, n-M)
+    #         L2 = min(L, n+M)
+    #         for k in range(L1, L2):
+    #             beta_re[n+N] += a[k-L1]*(b[m+M]).real*h
+    #             beta_im[n+N] += a[k-L1]*(b[m+M]).imag*h
+
+    # compute alpha, beta_re and beta_im as per [39]
+    # for m in range(-M, M+1):
+    #     for l in range(-L, L+1):
+    #         n = m+l
+    #         if m+l == n:
+    #             D = 1
+    #         else:
+    #             D = 0
+    #         alpha[n+N] = h*(mu + 1j*n)
+    #         beta_re[n+N] += h * b[m+M].real * a[l+L]*D
+    #         beta_im[n+N] += h * b[m+M].imag * a[l+L]*D
+
+    for m in range(-M, M+1):
+        print("m+M:")
+        print(m+M)
+        for l in range(-L, L+1):
+            print("l+L:")
+            print(l)
+            n = m+l
+            print("n+N:")
+            print(N+n)
             alpha[n+N] = h*(mu + 1j*n)
-            beta_re[n+N] += b[m+M].real*h*a[l+L]
-            beta_im[n+N] += b[m+M].imag*h*a[l+L]
+            L1 = max(-L, n-M)
+            L2 = min(L, n+M)
+            # beta[n+N] = h*a[L1+L]*b[n-L1+N-L1]
+            for k in range(L1, L2):
+                print("this time b index:")
+                print(n-k+N-L)
+                check = b[n-k+N-L]
+                beta[n+N] += h*a[k+L]*b[n-k+N-L-1]
+                
+            
+            
 
-    # calculate conj(beta_re) and conj(beta_im), used to define A_n and B_n
-    beta_conj_re = numpy.conjugate(beta_re)
-    beta_conj_im = numpy.conjugate(beta_im)
+    # alpha = numpy.concatenate((alpha, -alpha))
+    # beta_re = numpy.concatenate((beta_re, -beta_re))
+    # beta_im = numpy.concatenate((beta_im, -beta_im))
+    # # print(len(alpha))
+    # print(len(beta_re))
 
-    if rexi_parameters.reduce_to_half:
-        # If reducing the number of solvers to (nearly) half, as
-        # described in notes.pdf, we only need alpha_n for n \in [N,
-        # 2N]. We need to retain all the betas (due to the lack of
-        # symmetry coming from the numerical calculation of the a
-        # coefficients) but in order not to special case the Nth
-        # solver (where the solution is real hence equal to its
-        # conjugate) we must divide the Nth value of the betas by 2.
-        alpha = alpha[N:]
-        beta_re[N] /= 2.
-        beta_im[N] /= 2.
-        beta_conj_re[N] /= 2.
-        beta_conj_im[N] /= 2.
-        beta = numpy.concatenate(
-            (beta_re[N:] + 1j*beta_im[N:],
-             -beta_conj_re[N::-1] - 1j*beta_conj_im[N::-1])
-        )/2
-        # beta2 is the coefficient that multiplies the conjugate of
-        # the solution
-        beta2 = numpy.concatenate(
-            (beta_re[N::-1] + 1j*beta_im[N::-1],
-             -beta_conj_re[N:] - 1j*beta_conj_im[N:])
-        )/2
-    else:
-        beta = numpy.concatenate(
-            (beta_re + 1j*beta_im,
-             -beta_conj_re[::-1] - 1j*beta_conj_im[::-1])
-        )/2
-        # when not reducing the number of solvers we return zero here
-        # in order not to special case this option (i.e. we still
-        # calculate the conjugate of the solution but then multiply it
-        # by zero - you're doing (nearly) twice the amount of work necessary
-        # anyway!)
-        beta2 = numpy.zeros(len(beta))
-
-    alpha = numpy.concatenate((alpha, -alpha))
-
-    return alpha, beta, beta2
+    # return alpha, beta_re, beta_im
+    return alpha, beta
