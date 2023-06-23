@@ -18,3 +18,4 @@ from gusto.recovery import *                         # noqa
 from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_forms import *                  # noqa
+from gusto.wrappers import *                         # noqa

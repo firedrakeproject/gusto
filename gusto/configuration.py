@@ -153,7 +153,7 @@ class ShallowWaterParameters(Configuration):
     H = None  # mean depth
 
 
-class TransportOptions(Configuration, metaclass=ABCMeta):
+class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
     @abstractproperty
@@ -161,14 +161,15 @@ class TransportOptions(Configuration, metaclass=ABCMeta):
         pass
 
 
-class EmbeddedDGOptions(TransportOptions):
+class EmbeddedDGOptions(WrapperOptions):
     """Specifies options for an embedded DG method."""
 
     name = "embedded_dg"
+    project_back_method = 'project'
     embedding_space = None
 
 
-class RecoveryOptions(TransportOptions):
+class RecoveryOptions(WrapperOptions):
     """Specifies options for a recovery wrapper method."""
 
     name = "recovered"
@@ -181,7 +182,7 @@ class RecoveryOptions(TransportOptions):
     broken_method = 'interpolate'
 
 
-class SUPGOptions(TransportOptions):
+class SUPGOptions(WrapperOptions):
     """Specifies options for an SUPG scheme."""
 
     name = "supg"
