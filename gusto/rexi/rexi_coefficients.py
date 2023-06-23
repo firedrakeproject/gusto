@@ -1,7 +1,7 @@
 from firedrake import max_value, min_value
 import numpy
 
-original_constants = True
+original_constants = False
 
 class REXIConstants(object):
 
@@ -48,7 +48,7 @@ class REXIConstants(object):
         """
 
         mu = -5.133333333333333 + 1j*0
-        L = 12
+        L = 24
         a = [
             -6.520430828919864e1 + 1j*0,
             4.261818064131437e1 + 1j*2.761406741120911e1,
@@ -123,58 +123,18 @@ def RexiCoefficients(rexi_parameters):
     alpha = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     beta_re = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     beta_im = numpy.zeros((2*N+1,), dtype=numpy.complex128)
-    beta = numpy.zeros((2*N+1,), dtype=numpy.complex128)
 
     # compute alpha, beta_re and beta_im
-    # for m in range(-M, M+1):
-    #     for l in range(-L, L+1):
-    #         n = l+m
-    #         alpha[n+N] = h*(mu + 1j*n)
-    #         L1 = max(-L, n-M)
-    #         L2 = min(L, n+M)
-    #         for k in range(L1, L2):
-    #             beta_re[n+N] += a[k-L1]*(b[m+M]).real*h
-    #             beta_im[n+N] += a[k-L1]*(b[m+M]).imag*h
-
-    # compute alpha, beta_re and beta_im as per [39]
-    # for m in range(-M, M+1):
-    #     for l in range(-L, L+1):
-    #         n = m+l
-    #         if m+l == n:
-    #             D = 1
-    #         else:
-    #             D = 0
-    #         alpha[n+N] = h*(mu + 1j*n)
-    #         beta_re[n+N] += h * b[m+M].real * a[l+L]*D
-    #         beta_im[n+N] += h * b[m+M].imag * a[l+L]*D
-
+    # for the coefficients from Caliari et.al. we need to take the conjugates
+    # of a (excluding a0 which is real) and concatenate them with the given a's
+    a = numpy.concatenate((a[::-1], a[1::]))
+    for l in range(L):
+        a[l] = numpy.conjugate(a[l])
     for m in range(-M, M+1):
-        print("m+M:")
-        print(m+M)
         for l in range(-L, L+1):
-            print("l+L:")
-            print(l)
             n = m+l
-            print("n+N:")
-            print(N+n)
             alpha[n+N] = h*(mu + 1j*n)
-            L1 = max(-L, n-M)
-            L2 = min(L, n+M)
-            # beta[n+N] = h*a[L1+L]*b[n-L1+N-L1]
-            for k in range(L1, L2):
-                print("this time b index:")
-                print(n-k+N-L)
-                check = b[n-k+N-L]
-                beta[n+N] += h*a[k+L]*b[n-k+N-L-1]
-                
-            
-            
+            beta_re[n+N] += h * b[m+M].real * a[l+L]
+            beta_im[n+N] += h * b[m+M].imag * a[l+L]
 
-    # alpha = numpy.concatenate((alpha, -alpha))
-    # beta_re = numpy.concatenate((beta_re, -beta_re))
-    # beta_im = numpy.concatenate((beta_im, -beta_im))
-    # # print(len(alpha))
-    # print(len(beta_re))
-
-    # return alpha, beta_re, beta_im
-    return alpha, beta
+    return alpha, beta_re, beta_im
