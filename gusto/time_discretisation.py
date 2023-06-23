@@ -7,9 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, NonlinearVariationalProblem, split,
-                       NonlinearVariationalSolver, Projector, Interpolator,
-                       BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, Constant, dot, grad, as_ufl,
+                       NonlinearVariationalSolver, TestFunction, dot, grad,
                        DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
@@ -86,8 +84,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "supg":
                 self.wrapper = SUPGWrapper(self, options)
             else:
-                raise NotImplementedError(f'Time discretisation: wrapper '
-                    + '{self.wrapper_name} not implemented')
+                raise NotImplementedError(
+                    f'Time discretisation: wrapper {self.wrapper_name} not implemented')
         else:
             self.wrapper = None
             self.wrapper_name = None
@@ -101,7 +99,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.solver_parameters = solver_parameters
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
-
 
     def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
         """

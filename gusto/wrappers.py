@@ -12,6 +12,7 @@ from gusto.recovery import Recoverer, ReversibleRecoverer
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper"]
 
+
 class Wrapper(object, metaclass=ABCMeta):
     """Base class for time discretisation wrapper objects."""
 
@@ -93,8 +94,9 @@ class EmbeddedDGWrapper(Wrapper):
         elif self.options.project_back_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         else:
-            raise NotImplementedError(f'EmbeddedDG Wrapper: project_back_method'
-            + ' {self.options.project_back_method} is not implemented')
+            raise NotImplementedError(
+                'EmbeddedDG Wrapper: project_back_method'
+                + f' {self.options.project_back_method} is not implemented')
 
         self.parameters = {'ksp_type': 'cg',
                            'pc_type': 'bjacobi',
@@ -183,8 +185,9 @@ class RecoveryWrapper(Wrapper):
             self.x_out_projector = Recoverer(self.x_out, self.x_projected,
                                              method=self.options.broken_method)
         else:
-            raise NotImplementedError(f'Recovery Wrapper: project_back_method'
-            + ' {self.options.project_back_method} is not implemented')
+            raise NotImplementedError(
+                'Recovery Wrapper: project_back_method'
+                + f' {self.options.project_back_method} is not implemented')
 
     def pre_apply(self, x_in):
         """
@@ -284,7 +287,6 @@ class SUPGWrapper(Wrapper):
             self.solver_parameters = {'ksp_type': 'gmres',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
-
 
     def pre_apply(self, x_in):
         """
