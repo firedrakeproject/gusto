@@ -127,9 +127,10 @@ def RexiCoefficients(rexi_parameters):
     # compute alpha, beta_re and beta_im
     # for the coefficients from Caliari et.al. we need to take the conjugates
     # of a (excluding a0 which is real) and concatenate them with the given a's
-    a = numpy.concatenate((a[::-1], a[1::]))
-    for l in range(L):
-        a[l] = numpy.conjugate(a[l])
+    if not original_constants:
+        a = numpy.concatenate((a[::-1], a[1::]))
+        for l in range(L):
+            a[l] = numpy.conjugate(a[l])
     for m in range(-M, M+1):
         for l in range(-L, L+1):
             n = m+l
