@@ -1,7 +1,7 @@
-from firedrake import max_value, min_value
 import numpy
 
 original_constants = False
+
 
 class REXIConstants(object):
 
@@ -76,6 +76,7 @@ class REXIConstants(object):
             -2.867805871375946e-8 + 1j*1.239499740327838e-8,
             -1.143081277095316e-9 + 1j*-2.763239274253499e-9
         ]
+
 
 def b_coefficients(h, M):
     """
