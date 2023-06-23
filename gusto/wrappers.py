@@ -87,7 +87,7 @@ class EmbeddedDGWrapper(Wrapper):
         if self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
         else:
-            self.x_projected = Function(equation.spaces[self.idx])
+            self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
         if self.options.project_back_method == 'project':
             self.x_out_projector = Projector(self.x_out, self.x_projected)
@@ -170,7 +170,7 @@ class RecoveryWrapper(Wrapper):
         if self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
         else:
-            self.x_projected = Function(equation.spaces[self.idx])
+            self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
         # Operator to recover to higher discontinuous space
         self.x_recoverer = ReversibleRecoverer(self.x_in_tmp, self.x_in, self.options)
