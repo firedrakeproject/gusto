@@ -21,10 +21,10 @@ def approx_e_ix(x, h, M, use_Gaussian_approx):
             sum += b[m+M] * approxGaussian(x+m*h, h)
     else:
         # this is the full REXI (testing step 3)
-        alpha, beta_re, beta_im = RexiCoefficients(params)
+        alpha, beta, beta2 = RexiCoefficients(params)
         for n in range(len(alpha)):
             denom = (1j*x + alpha[n])
-            sum += (beta_re[n] / denom).real + 1j*(beta_im[n] / denom).real
+            sum += beta[n] / denom
 
     return sum
 

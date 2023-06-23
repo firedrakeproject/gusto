@@ -139,4 +139,45 @@ def RexiCoefficients(rexi_parameters):
             beta_re[n+N] += h * b[m+M].real * a[l+L]
             beta_im[n+N] += h * b[m+M].imag * a[l+L]
 
-    return alpha, beta_re, beta_im
+    # calculate conj(beta_re) and conj(beta_im), used to define A_n and B_n
+    beta_conj_re = numpy.conjugate(beta_re)
+    beta_conj_im = numpy.conjugate(beta_im)
+
+    if rexi_parameters.reduce_to_half:
+        # If reducing the number of solvers to (nearly) half, as
+        # described in notes.pdf, we only need alpha_n for n \in [N,
+        # 2N]. We need to retain all the betas (due to the lack of
+        # symmetry coming from the numerical calculation of the a
+        # coefficients) but in order not to special case the Nth
+        # solver (where the solution is real hence equal to its
+        # conjugate) we must divide the Nth value of the betas by 2.
+        alpha = alpha[N:]
+        beta_re[N] /= 2.
+        beta_im[N] /= 2.
+        beta_conj_re[N] /= 2.
+        beta_conj_im[N] /= 2.
+        beta = numpy.concatenate(
+            (beta_re[N:] + 1j*beta_im[N:],
+             -beta_conj_re[N::-1] - 1j*beta_conj_im[N::-1])
+        )/2
+        # beta2 is the coefficient that multiplies the conjugate of
+        # the solution
+        beta2 = numpy.concatenate(
+            (beta_re[N::-1] + 1j*beta_im[N::-1],
+             -beta_conj_re[N:] - 1j*beta_conj_im[N:])
+        )/2
+    else:
+        beta = numpy.concatenate(
+            (beta_re + 1j*beta_im,
+             -beta_conj_re[::-1] - 1j*beta_conj_im[::-1])
+        )/2
+        # when not reducing the number of solvers we return zero here
+        # in order not to special case this option (i.e. we still
+        # calculate the conjugate of the solution but then multiply it
+        # by zero - you're doing (nearly) twice the amount of work necessary
+        # anyway!)
+        beta2 = numpy.zeros(len(beta))
+
+    alpha = numpy.concatenate((alpha, -alpha))
+
+    return alpha, beta, beta2
