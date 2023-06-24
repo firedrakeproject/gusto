@@ -56,7 +56,9 @@ diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterKineticEnergy(),
                      ShallowWaterPotentialEnergy(parameters),
                      ShallowWaterPotentialEnstrophy(),
-                     SteadyStateError('u'), SteadyStateError('D')]
+                     SteadyStateError('u'), SteadyStateError('D'),
+                     SteadyStateError('b'), SteadyStateError('water_vapour'),
+                     SteadyStateError('cloud_water')]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
