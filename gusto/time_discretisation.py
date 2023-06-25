@@ -144,14 +144,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.evaluate_source.append(t.get(physics))
 
         # -------------------------------------------------------------------- #
-        # Routines relating to transport
-        # -------------------------------------------------------------------- #
-
-        if hasattr(self.options, 'ibp'):
-            self.replace_transport_term()
-        self.replace_transporting_velocity(uadv)
-
-        # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
 
@@ -215,75 +207,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             map_if_false=lambda t: -self.dt*t)
 
         return r.form
-
-    def replace_transport_term(self):
-        """
-        Replaces a transport term with some other transport term.
-
-        This routine allows the default transport term to be replaced with a
-        different one, specified through the transport options. This is
-        necessary because when the prognostic equations are declared,
-        the particular transport scheme is not known. The details of the new
-        transport term are stored in the time discretisation's options object.
-        """
-        # Extract transport term of equation
-        old_transport_term_list = self.residual.label_map(
-            lambda t: t.has_label(transport), map_if_false=drop)
-
-        # If there are more transport terms, extract only the one for this variable
-        if len(old_transport_term_list.terms) > 1:
-            raise NotImplementedError('Cannot replace transport terms when there are more than one')
-
-        # Then we should only have one transport term
-        old_transport_term = old_transport_term_list.terms[0]
-
-        # If the transport term has an ibp label, then it could be replaced
-        if old_transport_term.has_label(ibp_label) and hasattr(self.options, 'ibp'):
-            # Do the options specify a different ibp to the old transport term?
-            if old_transport_term.labels['ibp'] != self.options.ibp:
-                # Set up a new transport term
-                if self.idx is not None:
-                    field = self.equation.X.split()[self.idx]
-                else:
-                    field = self.equation.X
-                test = TestFunction(self.fs)
-
-                # Set up new transport term (depending on the type of transport equation)
-                if old_transport_term.labels['transport'] == TransportEquationType.advective:
-                    new_transport_term = advection_form(self.domain, test, field, ibp=self.options.ibp)
-                elif old_transport_term.labels['transport'] == TransportEquationType.conservative:
-                    new_transport_term = continuity_form(self.domain, test, field, ibp=self.options.ibp)
-                else:
-                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_term.labels["transport"]}')
-
-                # Finally, drop the old transport term and add the new one
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transport), map_if_true=drop)
-                self.residual += subject(new_transport_term, field)
-
-    def replace_transporting_velocity(self, uadv):
-        """
-        Replace the transport velocity.
-
-        Args:
-            uadv (:class:`ufl.Expr`): the new transporting velocity.
-        """
-        # replace the transporting velocity in any terms that contain it
-        if any([t.has_label(transporting_velocity) for t in self.residual]):
-            assert uadv is not None
-            if uadv == "prognostic":
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transporting_velocity),
-                    map_if_true=lambda t: Term(ufl.replace(
-                        t.form, {t.get(transporting_velocity): split(t.get(subject))[0]}), t.labels)
-                )
-            else:
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transporting_velocity),
-                    map_if_true=lambda t: Term(ufl.replace(
-                        t.form, {t.get(transporting_velocity): uadv}), t.labels)
-                )
-            self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     @cached_property
     def solver(self):

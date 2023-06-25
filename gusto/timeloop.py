@@ -6,12 +6,13 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
-from gusto.fml.form_manipulation_labelling import drop, Label
+from gusto.fml.form_manipulation_labelling import drop, Label, Term
 from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
+from gusto.transport_schemes import transport_discretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
@@ -71,6 +72,22 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                    and hasattr(self.scheme, 'initial_timesteps'))
         # Return None if this is not applicable
         return self.scheme.initial_timesteps if can_get else None
+
+    def transport_discretisation_setup(self, equation=None):
+        equation_to_setup = self.equation if equation is None else equation
+        # Call the setup method using the transporting velocity
+        for term in equation_to_setup.residual:
+            if term.has_label(transport_discretisation):
+                term.get(transport_discretisation).setup(self.transporting_velocity)
+            elif term.has_label(transport):
+                logger.warning('Transport term detected without transport discretisation')
+                raise ValueError('Transport term detected without transport discretisation')
+
+        # Replace standard transport term with the transport discretisation term
+        equation_to_setup.residual = equation_to_setup.residual.label_map(
+            lambda t: t.has_label(transport_discretisation),
+            map_if_true=lambda t: Term(t.get(transport_discretisation).labelled_form.form, t.labels)
+        )
 
     def run(self, t, tmax, pick_up=False):
         """
@@ -176,7 +193,8 @@ class Timestepper(BaseTimestepper):
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
-        self.scheme.setup(self.equation, self.transporting_velocity)
+        self.scheme.setup(self.equation)
+        self.transport_discretisation_setup()
 
     def timestep(self):
         """
@@ -221,18 +239,19 @@ class SplitPhysicsTimestepper(Timestepper):
             # check that the supplied schemes for physics are explicit
             assert isinstance(phys_scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
             apply_bcs = False
-            phys_scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
+            phys_scheme.setup(equation, apply_bcs, physics)
 
     @property
     def transporting_velocity(self):
         return "prognostic"
 
     def setup_scheme(self):
+        self.transport_discretisation_setup()
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
         apply_bcs = True
-        self.scheme.setup(self.equation, self.transporting_velocity, apply_bcs, dynamics)
+        self.scheme.setup(self.equation, apply_bcs, dynamics)
 
     def timestep(self):
 
@@ -326,7 +345,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         super().__init__(equation_set, io)
 
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
-            aux_scheme.setup(aux_eqn, self.transporting_velocity)
+            self.transport_discretisation_setup(aux_eqn)
+            aux_scheme.setup(aux_eqn)
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
@@ -383,14 +403,17 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
+        import pdb; pdb.set_trace()
+        self.transport_discretisation_setup()
+        import pdb; pdb.set_trace()
         for _, scheme in self.active_transport:
-            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, transport)
+            scheme.setup(self.equation, apply_bcs, transport)
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
-            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, diffusion)
+            scheme.setup(self.equation, apply_bcs, diffusion)
         for _, scheme in self.physics_schemes:
             apply_bcs = True
-            scheme.setup(self.equation, self.transporting_velocity, apply_bcs, physics)
+            scheme.setup(self.equation, apply_bcs, physics)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -512,7 +535,7 @@ class PrescribedTransport(Timestepper):
             # check that the supplied schemes for physics are explicit
             assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
             apply_bcs = False
-            scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
+            scheme.setup(equation, apply_bcs, physics)
 
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
@@ -529,9 +552,6 @@ class PrescribedTransport(Timestepper):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
-
-    def setup_scheme(self):
-        self.scheme.setup(self.equation, self.transporting_velocity)
 
     def timestep(self):
         if self.velocity_projection is not None:

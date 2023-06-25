@@ -42,6 +42,9 @@ def setup_balance(dirname):
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=EmbeddedDGOptions())]
+    DGUpwind(eqns, 'u')
+    DGUpwind(eqns, 'rho')
+    DGUpwind(eqns, 'theta')
 
     # Set up linear solver
     linear_solver = CompressibleSolver(eqns)
