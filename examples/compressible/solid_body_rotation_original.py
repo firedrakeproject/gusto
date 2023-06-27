@@ -34,7 +34,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'SBR_LongRun_dt=1000'
+dirname = 'SBR_meshdeg2_order2_dt1000_vectorInvar'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u', 'rho', 'theta'],
