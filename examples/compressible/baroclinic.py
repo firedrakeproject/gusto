@@ -1,4 +1,4 @@
-from firedrake import (ExtrudedMesh,
+from firedrake import (ExtrudedMesh, functionspaceimpl,
                        SpatialCoordinate, cos, sin, pi, sqrt, File,
                        exp, Constant, Function, as_vector, acos,
                        errornorm, norm, min_value, max_value, le, ge)
@@ -33,7 +33,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'Baroclinic_pertubationtest'
+dirname = 'Baroclinic_pertubationtest2'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1, 
                           dumplist=['u', 'rho', 'theta'],
@@ -116,8 +116,7 @@ err_tol = 1e-12
 d = a * acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # distance from centre of perturbation
 
 depth = r - a # The distance from origin subtracted from earth radius
-#zeta = conditional(ge(depth,zt-err_tol), 0, 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3) # peturbation vertical taper
-zeta = 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3
+zeta = conditional(ge(depth,zt-err_tol), 0, 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3) # peturbation vertical taper
 
 perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos((pi * d) / (2 * d0)) ** 3
 
@@ -131,12 +130,26 @@ conditional_test = conditional(le(d,err_tol), 0,
                          conditional(ge(d,(d0-err_tol)), 0, 10))
 
 testput = File('results/testout.pvd')
+mesh_ll = get_flat_latlon_mesh(mesh)
 d_field = Function(Vr).interpolate(d)
+d_field_ll = Function(functionspaceimpl.WithGeometry.create(d_field.function_space(), mesh_ll),
+                      val=d_field.topological, name='d')
 z_field = Function(Vr).interpolate(zeta)
+z_field_ll = Function(functionspaceimpl.WithGeometry.create(z_field.function_space(), mesh_ll),
+                      val=z_field.topological, name='zeta')
 zp_field = Function(Vr).interpolate(zonal_pert)
+zp_field_ll = Function(functionspaceimpl.WithGeometry.create(zp_field.function_space(), mesh_ll),
+                      val=zp_field.topological, name='zonal perturbation')
 mp_field = Function(Vr).interpolate(meridional_pert)
-condcheck = Function(Vr).interpolate(conditional_test)
-testput.write(d_field, z_field, zp_field, mp_field, condcheck)
+mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_space(), mesh_ll),
+                      val=mp_field.topological, name='meridonal perturbation')
+testput.write(d_field_ll, z_field_ll, zp_field_ll, mp_field_ll)
+
+#z_field = Function(Vr).interpolate(zeta)
+#zp_field = Function(Vr).interpolate(zonal_pert)
+#mp_field = Function(Vr).interpolate(meridional_pert)
+#condcheck = Function(Vr).interpolate(conditional_test)
+#testput.write(d_field, z_field, zp_field, mp_field, condcheck)
 
 pertput = File('results/pertout.pvd')
 magnitude = Function(Vr).interpolate(perturb_magnitude)
