@@ -109,6 +109,9 @@ def RexiCoefficients(rexi_parameters):
 
     h = rexi_parameters.h
     M = rexi_parameters.M
+    h = float(h.values()[0])
+    M = int(M.values()[0])
+
 
     # get L, mu and the a coefficients
     constants = REXIConstants()
