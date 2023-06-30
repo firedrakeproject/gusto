@@ -9,10 +9,9 @@ from gusto.labels import transporting_velocity, prognostic, transport, subject
 from gusto.transport_forms import *
 import ufl
 
-__all__ = ["transport_discretisation", "DGUpwind", "SUPGTransport"]
+__all__ = ["DGUpwind", "SUPGTransport"]
 
-transport_discretisation = Label("transport_discretisation",
-                                 validator=lambda value: isinstance(value, TransportScheme))
+# TODO: settle on name: discretisation vs scheme
 
 class TransportScheme(object):
     """
@@ -36,6 +35,7 @@ class TransportScheme(object):
         self.field = split(equation.X)[variable_idx]
 
         # Find the original transport term to be used
+        # TODO: do we need this?
         self.original_form = equation.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == variable,
             map_if_true=keep, map_if_false=drop)
@@ -44,22 +44,20 @@ class TransportScheme(object):
         assert num_terms == 1, \
             f'Unable to find transport term for {variable}. {num_terms} found'
 
-    def add_transport_form(self, labelled_form):
+    def replace_transport_form(self, equation):
         """
-        Adds the form for the transport discretisation to the appropriate term
-        in the equation.
+        Replaces the form for the transport term in the equation with the
+        form for the transport discretisation.
 
         Args:
-            form (:class:`LabelledForm`): the form used by this discretisation
+            equation (:class:`PrognosticEquation`): the form used by this discretisation
                 of the transport term.
         """
 
-        self.labelled_form = labelled_form
-
         # Add the form to the equation
-        self.equation.residual = self.equation.residual.label_map(
+        equation.residual = equation.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
-            map_if_true=lambda t: transport_discretisation(t, self))
+            map_if_true=lambda t: Term(self.form.form, t.labels))
 
 
     def setup(self, uadv):
@@ -72,22 +70,20 @@ class TransportScheme(object):
                 Defaults to None.
         """
 
-        assert self.labelled_form.terms[0].has_label(transporting_velocity), \
+        assert self.form.terms[0].has_label(transporting_velocity), \
             'Cannot set up transport scheme on a term that has no transporting velocity'
 
         if uadv == "prognostic":
             # Find prognostic wind field
             uadv = split(self.original_form.terms[0].get(subject))[0]
 
-        self.labelled_form = self.labelled_form.label_map(
+        self.form = self.form.label_map(
             lambda t: t.has_label(transporting_velocity),
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
             )
 
-        self.labelled_form = transporting_velocity.update_value(self.labelled_form, uadv)
-        # Add form to equation residual
-        self.add_transport_form(self.labelled_form)
+        self.form = transporting_velocity.update_value(self.form, uadv)
 
 
 class DGUpwind(TransportScheme):
@@ -128,7 +124,7 @@ class DGUpwind(TransportScheme):
                                                       outflow=outflow)
             else:
                 form = advection_form(self.domain, self.test, self.field,
-                                    ibp=ibp, outflow=outflow)
+                                     ibp=ibp, outflow=outflow)
 
         elif self.original_form.terms[0].get(transport) == TransportEquationType.conservative:
             if vector_manifold_correction:
@@ -148,7 +144,7 @@ class DGUpwind(TransportScheme):
             raise NotImplementedError('Upwind transport scheme has not been '
                                       + 'implemented for this transport equation type')
 
-        self.add_transport_form(form)
+        self.form = form
 
 
 class SUPGTransport(TransportScheme):

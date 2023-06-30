@@ -12,7 +12,6 @@ from gusto.labels import (transport, diffusion, time_derivative,
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
-from gusto.transport_schemes import transport_discretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
@@ -73,21 +72,27 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         # Return None if this is not applicable
         return self.scheme.initial_timesteps if can_get else None
 
-    def transport_discretisation_setup(self, equation=None):
-        equation_to_setup = self.equation if equation is None else equation
-        # Call the setup method using the transporting velocity
-        for term in equation_to_setup.residual:
-            if term.has_label(transport_discretisation):
-                term.get(transport_discretisation).setup(self.transporting_velocity)
-            elif term.has_label(transport):
-                logger.warning('Transport term detected without transport discretisation')
-                raise ValueError('Transport term detected without transport discretisation')
+    def transport_discretisation_setup(self, equation):
+        """
+        Sets up the transport discretisation, by the setting the transporting
+        velocity and setting the form used for transport in the equation.
 
-        # Replace standard transport term with the transport discretisation term
-        equation_to_setup.residual = equation_to_setup.residual.label_map(
-            lambda t: t.has_label(transport_discretisation),
-            map_if_true=lambda t: Term(t.get(transport_discretisation).labelled_form.form, t.labels)
-        )
+        Args:
+            equation (:class:`PrognosticEquation`): the equation that the
+                transport discretisation is to be applied to.
+        """
+        if self.transport_discretisations is not None:
+            for transport_discretisation in self.transport_discretisations:
+                transport_discretisation.setup(self.transporting_velocity)
+                logger.warning('')
+                transport_terms = equation.residual.label_map(
+                    lambda t: t.has_label(transport), map_if_false=drop
+                )
+                logger.warning(transport_terms.form.__str__())
+                transport_discretisation.replace_transport_form(equation)
+        # TODO: raise a warning here if transport discretisations aren't provided
+            logger.warning('')
+            logger.warning(transport_terms.form.__str__())
 
     def run(self, t, tmax, pick_up=False):
         """
@@ -172,15 +177,23 @@ class Timestepper(BaseTimestepper):
     Implements a timeloop by applying a scheme to a prognostic equation.
     """
 
-    def __init__(self, equation, scheme, io):
+    def __init__(self, equation, scheme, io, transport_discretisations=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
+            transport_discretisations (iter,optional): a list of objects
+                describing the discretisations of transport terms to be used.
+                Defaults to None.
         """
         self.scheme = scheme
+        if transport_discretisations is not None:
+            self.transport_discretisations = transport_discretisations
+        else:
+            self.transport_discretisations = []
+
         super().__init__(equation=equation, io=io)
 
     @property
@@ -193,8 +206,8 @@ class Timestepper(BaseTimestepper):
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
+        self.transport_discretisation_setup(self.equation)
         self.scheme.setup(self.equation)
-        self.transport_discretisation_setup()
 
     def timestep(self):
         """
@@ -214,13 +227,17 @@ class SplitPhysicsTimestepper(Timestepper):
     scheme to be applied to the physics terms than the prognostic equation.
     """
 
-    def __init__(self, equation, scheme, io, physics_schemes=None):
+    def __init__(self, equation, scheme, io, transport_discretisations=None,
+                 physics_schemes=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
+            transport_discretisations (iter,optional): a list of objects
+                describing the discretisations of transport terms to be used.
+                Defaults to None.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -228,7 +245,8 @@ class SplitPhysicsTimestepper(Timestepper):
                 None.
         """
 
-        super().__init__(equation, scheme, io)
+        super().__init__(equation, scheme, io,
+                         transport_discretisations=transport_discretisations)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -246,7 +264,7 @@ class SplitPhysicsTimestepper(Timestepper):
         return "prognostic"
 
     def setup_scheme(self):
-        self.transport_discretisation_setup()
+        self.transport_discretisation_setup(self.equation)
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
@@ -273,6 +291,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     """
 
     def __init__(self, equation_set, io, transport_schemes,
+                 transport_discretisations,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -286,6 +305,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             transport_schemes: iterable of ``(field_name, scheme)`` pairs
                 indicating the name of the field (str) to transport, and the
                 :class:`TimeDiscretisation` to use
+            transport_discretisations (iter): a list of objects describing the
+                spatial discretisations of transport terms to be used.
             auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
                 pairs indicating any additional equations to be solved and the
                 scheme to use to solve them. Defaults to None.
@@ -309,6 +330,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = kwargs.pop("alpha", 0.5)
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
+
+        self.transport_discretisations = transport_discretisations
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -403,9 +426,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
-        import pdb; pdb.set_trace()
-        self.transport_discretisation_setup()
-        import pdb; pdb.set_trace()
+        self.transport_discretisation_setup(self.equation)
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
         apply_bcs = True
@@ -449,6 +470,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
+                    # TODO: to remove
+                    import numpy as np
+                    logger.warning(f'{name}: {np.linalg.norm(xp(name).dat.data[:])} {np.linalg.norm(xstar(name).dat.data[:])}')
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
@@ -503,14 +527,17 @@ class PrescribedTransport(Timestepper):
     """
     Implements a timeloop with a prescibed transporting velocity
     """
-    def __init__(self, equation, scheme, io, physics_schemes=None,
-                 prescribed_transporting_velocity=None):
+    def __init__(self, equation, scheme, io, transport_discretisations=None,
+                 physics_schemes=None, prescribed_transporting_velocity=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
+            transport_discretisations (iter,optional): a list of objects
+                describing the discretisations of transport terms to be used.
+                Defaults to None.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -524,7 +551,8 @@ class PrescribedTransport(Timestepper):
                 updated. Defaults to None.
         """
 
-        super().__init__(equation, scheme, io)
+        super().__init__(equation, scheme, io,
+                         transport_discretisations=transport_discretisations)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
