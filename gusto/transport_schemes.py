@@ -81,14 +81,19 @@ class TransportScheme(object):
             # Find prognostic wind field
             uadv = split(self.original_form.terms[0].get(subject))[0]
 
+        import pdb; pdb.set_trace()
+
         equation.residual = equation.residual.label_map(
             lambda t: t.has_label(transporting_velocity),
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
         )
 
+        import pdb; pdb.set_trace()
+
         equation.residual = transporting_velocity.update_value(equation.residual, uadv)
 
+        import pdb; pdb.set_trace()
 
 class DGUpwind(TransportScheme):
     """

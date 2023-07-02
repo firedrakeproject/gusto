@@ -451,6 +451,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         apply_bcs = True
         self.transport_discretisation_setup_equation(self.equation)
         for _, scheme, transport_discretisation in self.active_transport:
+            print(f'Setting up transport for {scheme.field_name} {transport_discretisation.variable}')
             scheme.setup(self.equation, apply_bcs, transport)
             self.transport_discretisation_setup_scheme(transport_discretisation, scheme)
 
@@ -495,9 +496,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme, _ in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
-                    # TODO: to remove
-                    import numpy as np
-                    logger.warning(f'{name}: {np.linalg.norm(xp(name).dat.data[:])} {np.linalg.norm(xstar(name).dat.data[:])}')
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 

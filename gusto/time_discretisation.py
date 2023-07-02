@@ -100,14 +100,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
             apply_bcs (bool, optional): whether to apply the equation's boundary
                 conditions. Defaults to True.
             *active_labels (:class:`Label`): labels indicating which terms of
@@ -712,7 +710,6 @@ class ThetaMethod(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        import pdb; pdb.set_trace()
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
