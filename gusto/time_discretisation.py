@@ -712,6 +712,7 @@ class ThetaMethod(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
+        import pdb; pdb.set_trace()
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)

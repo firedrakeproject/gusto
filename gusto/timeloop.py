@@ -72,10 +72,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         # Return None if this is not applicable
         return self.scheme.initial_timesteps if can_get else None
 
-    def transport_discretisation_setup(self, equation):
+    def transport_discretisation_setup_equation(self, equation):
         """
-        Sets up the transport discretisation, by the setting the transporting
-        velocity and setting the form used for transport in the equation.
+        Sets up the transport discretisation for an equation, by the setting the
+        form used for transport in the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the equation that the
@@ -83,16 +83,21 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
         if self.transport_discretisations is not None:
             for transport_discretisation in self.transport_discretisations:
-                transport_discretisation.setup(self.transporting_velocity)
-                logger.warning('')
-                transport_terms = equation.residual.label_map(
-                    lambda t: t.has_label(transport), map_if_false=drop
-                )
-                logger.warning(transport_terms.form.__str__())
                 transport_discretisation.replace_transport_form(equation)
         # TODO: raise a warning here if transport discretisations aren't provided
-            logger.warning('')
-            logger.warning(transport_terms.form.__str__())
+
+    def transport_discretisation_setup_scheme(self, transport_discretisation, scheme):
+        """
+        Sets up the transport discretisation, by the setting the transporting
+        velocity used in the time discretisation.
+
+        Args:
+            transport_discretisation (:class:`TransportScheme`): the transport
+                discretisation to be set up.
+            scheme (:class:`TimeDiscretisation`): the time discretisation used
+                with this transport scheme.
+        """
+        transport_discretisation.setup(self.transporting_velocity, scheme)
 
     def run(self, t, tmax, pick_up=False):
         """
@@ -206,8 +211,10 @@ class Timestepper(BaseTimestepper):
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
-        self.transport_discretisation_setup(self.equation)
+        self.transport_discretisation_setup_equation(self.equation)
         self.scheme.setup(self.equation)
+        for transport_discretisation in self.transport_discretisations:
+            self.transport_discretisation_setup_scheme(transport_discretisation, self.scheme)
 
     def timestep(self):
         """
@@ -264,12 +271,14 @@ class SplitPhysicsTimestepper(Timestepper):
         return "prognostic"
 
     def setup_scheme(self):
-        self.transport_discretisation_setup(self.equation)
+        self.transport_discretisation_setup_equation(self.equation)
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
+        for transport_discretisation in self.transport_discretisations:
+            self.transport_discretisation_setup_scheme(transport_discretisation, self.scheme)
 
     def timestep(self):
 
@@ -331,7 +340,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        self.transport_discretisations = transport_discretisations
+        self.transport_discretisations = []
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -345,7 +354,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
-            self.active_transport.append((scheme.field_name, scheme))
+            # Active transport will be a tuple of (field_name, scheme, discretisation)
+            discretisation_found = False
+            for transport_discretisation in transport_discretisations:
+                if scheme.field_name == transport_discretisation.variable:
+                    discretisation_found = True
+                    self.transport_discretisations.append(transport_discretisation)
+                    self.active_transport.append((scheme.field_name, scheme, transport_discretisation))
+            assert discretisation_found, 'No transport discretisation found ' \
+                + f'for variable {scheme.field_name}'
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -370,6 +387,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
             self.transport_discretisation_setup(aux_eqn)
             aux_scheme.setup(aux_eqn)
+            # Auxiliary transport discretisations
+            for transport_discretisation in transport_discretisations:
+                if transport_discretisation.variable == aux_scheme.field_name:
+                    self.transport_discretisation_setup_scheme(transport_discretisation, aux_scheme)
+            # TODO: add a check to make sure that auxiliary eqns have transport
+            # discretisations, but only if they need them!
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
@@ -426,9 +449,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
-        self.transport_discretisation_setup(self.equation)
-        for _, scheme in self.active_transport:
+        self.transport_discretisation_setup_equation(self.equation)
+        for _, scheme, transport_discretisation in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
+            self.transport_discretisation_setup_scheme(transport_discretisation, scheme)
+
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
@@ -467,7 +492,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for k in range(self.maxk):
 
             with timed_stage("Transport"):
-                for name, scheme in self.active_transport:
+                for name, scheme, _ in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
                     # TODO: to remove

@@ -50,8 +50,9 @@ class TransportScheme(object):
         form for the transport discretisation.
 
         Args:
-            equation (:class:`PrognosticEquation`): the form used by this discretisation
-                of the transport term.
+            equation (:class:`PrognosticEquation`): the equation or scheme whose
+                transport term should be replaced with the transport term of
+                this discretisation.
         """
 
         # Add the form to the equation
@@ -60,7 +61,7 @@ class TransportScheme(object):
             map_if_true=lambda t: Term(self.form.form, t.labels))
 
 
-    def setup(self, uadv):
+    def setup(self, uadv, equation):
         """
         Set up the transport scheme by replacing the transporting velocity used
         in the form.
@@ -68,6 +69,9 @@ class TransportScheme(object):
         Args:
             uadv (:class:`ufl.Expr`, optional): the transporting velocity.
                 Defaults to None.
+            equation (:class:`PrognosticEquation`): the equation or scheme whose
+                transport term should be replaced with the transport term of
+                this discretisation.
         """
 
         assert self.form.terms[0].has_label(transporting_velocity), \
@@ -77,13 +81,13 @@ class TransportScheme(object):
             # Find prognostic wind field
             uadv = split(self.original_form.terms[0].get(subject))[0]
 
-        self.form = self.form.label_map(
+        equation.residual = equation.residual.label_map(
             lambda t: t.has_label(transporting_velocity),
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
-            )
+        )
 
-        self.form = transporting_velocity.update_value(self.form, uadv)
+        equation.residual = transporting_velocity.update_value(equation.residual, uadv)
 
 
 class DGUpwind(TransportScheme):
