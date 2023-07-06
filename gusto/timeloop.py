@@ -1,17 +1,18 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant
+from firedrake import Function, Projector, Constant, split
 from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
 from gusto.fml.form_manipulation_labelling import drop, Label, Term
-from gusto.labels import (transport, diffusion, time_derivative,
-                          linearisation, prognostic, physics)
+from gusto.labels import (transport, diffusion, time_derivative, linearisation,
+                          prognostic, physics, transporting_velocity)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
+import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
@@ -72,32 +73,57 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         # Return None if this is not applicable
         return self.scheme.initial_timesteps if can_get else None
 
-    def transport_discretisation_setup_equation(self, equation):
+    def setup_equation_transport(self, equation):
         """
-        Sets up the transport discretisation for an equation, by the setting the
-        form used for transport in the equation.
+        Sets up the transport methods for an equation, by the setting the
+        forms used for transport in the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the equation that the
-                transport discretisation is to be applied to.
+                transport method is to be applied to.
         """
-        if self.transport_discretisations is not None:
-            for transport_discretisation in self.transport_discretisations:
-                transport_discretisation.replace_transport_form(equation)
-        # TODO: raise a warning here if transport discretisations aren't provided
+        # Check that we have specified all transport terms
+        transport_residual = equation.residual.label_map(
+            lambda t: t.has_label(transport), map_if_false=drop
+        )
+        transported_variables = [t.get(prognostic) for t in transport_residual.terms]
+        transport_method_variables = [method.variable for method in self.transport_methods]
+        for variable in transported_variables:
+            if variable not in transport_method_variables:
+                logger.warning(f'Variable {variable} has a transport term but '
+                               + 'no transport method has been specified. '
+                               + 'Using default transport form.')
 
-    def transport_discretisation_setup_scheme(self, transport_discretisation, scheme):
+        # Replace transport forms in equation
+        if self.transport_methods is not None:
+            for transport_method in self.transport_methods:
+                transport_method.replace_transport_form(equation)
+
+    def setup_transporting_velocity(self, scheme):
         """
-        Sets up the transport discretisation, by the setting the transporting
-        velocity used in the time discretisation.
+        Set up the time discretisation by replacing the transporting velocity
+        used by the appropriate one for this time loop.
 
         Args:
-            transport_discretisation (:class:`TransportScheme`): the transport
-                discretisation to be set up.
-            scheme (:class:`TimeDiscretisation`): the time discretisation used
-                with this transport scheme.
+            scheme (:class:`TimeDiscretisation`): the time discretisation whose
+                transport term should be replaced with the transport term of
+                this discretisation.
         """
-        transport_discretisation.setup(self.transporting_velocity, scheme)
+
+        if self.transporting_velocity == "prognostic":
+            # Use the prognostic wind variable as the transporting velocity
+            u_idx = self.equation.field_names.index('u')
+            uadv = split(self.equation.X)[u_idx]
+        else:
+            uadv = self.transporting_velocity
+
+        scheme.residual = scheme.residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
+        )
+
+        scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
 
     def run(self, t, tmax, pick_up=False):
         """
@@ -182,22 +208,23 @@ class Timestepper(BaseTimestepper):
     Implements a timeloop by applying a scheme to a prognostic equation.
     """
 
-    def __init__(self, equation, scheme, io, transport_discretisations=None):
+    def __init__(self, equation, scheme, io, transport_methods=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
-            transport_discretisations (iter,optional): a list of objects
-                describing the discretisations of transport terms to be used.
-                Defaults to None.
+            transport_methods (iter,optional): a list of objects describing the
+                methods to use for discretising transport terms for each
+                transported variable. Defaults to None, in which case the
+                transport term follows the discretisation in the equation.
         """
         self.scheme = scheme
-        if transport_discretisations is not None:
-            self.transport_discretisations = transport_discretisations
+        if transport_methods is not None:
+            self.transport_methods = transport_methods
         else:
-            self.transport_discretisations = []
+            self.transport_methods = []
 
         super().__init__(equation=equation, io=io)
 
@@ -211,10 +238,9 @@ class Timestepper(BaseTimestepper):
                                   *self.io.output.dumplist)
 
     def setup_scheme(self):
-        self.transport_discretisation_setup_equation(self.equation)
+        self.setup_equation_transport(self.equation)
         self.scheme.setup(self.equation)
-        for transport_discretisation in self.transport_discretisations:
-            self.transport_discretisation_setup_scheme(transport_discretisation, self.scheme)
+        self.setup_transporting_velocity(self.scheme)
 
     def timestep(self):
         """
@@ -234,7 +260,7 @@ class SplitPhysicsTimestepper(Timestepper):
     scheme to be applied to the physics terms than the prognostic equation.
     """
 
-    def __init__(self, equation, scheme, io, transport_discretisations=None,
+    def __init__(self, equation, scheme, io, transport_methods=None,
                  physics_schemes=None):
         """
         Args:
@@ -242,9 +268,10 @@ class SplitPhysicsTimestepper(Timestepper):
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
-            transport_discretisations (iter,optional): a list of objects
-                describing the discretisations of transport terms to be used.
-                Defaults to None.
+            transport_methods (iter,optional): a list of objects describing the
+                methods to use for discretising transport terms for each
+                transported variable. Defaults to None, in which case the
+                transport term follows the discretisation in the equation.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -253,7 +280,7 @@ class SplitPhysicsTimestepper(Timestepper):
         """
 
         super().__init__(equation, scheme, io,
-                         transport_discretisations=transport_discretisations)
+                         transport_methods=transport_methods)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -271,14 +298,13 @@ class SplitPhysicsTimestepper(Timestepper):
         return "prognostic"
 
     def setup_scheme(self):
-        self.transport_discretisation_setup_equation(self.equation)
+        self.setup_equation_transport(self.equation)
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
-        for transport_discretisation in self.transport_discretisations:
-            self.transport_discretisation_setup_scheme(transport_discretisation, self.scheme)
+        self.setup_transporting_velocity(self.scheme)
 
     def timestep(self):
 
@@ -300,7 +326,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     """
 
     def __init__(self, equation_set, io, transport_schemes,
-                 transport_discretisations,
+                 transport_methods,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -314,8 +340,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             transport_schemes: iterable of ``(field_name, scheme)`` pairs
                 indicating the name of the field (str) to transport, and the
                 :class:`TimeDiscretisation` to use
-            transport_discretisations (iter): a list of objects describing the
-                spatial discretisations of transport terms to be used.
+            transport_methods (iter): a list of objects describing the spatial
+                discretisations of transport terms to be used.
             auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
                 pairs indicating any additional equations to be solved and the
                 scheme to use to solve them. Defaults to None.
@@ -340,7 +366,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        self.transport_discretisations = []
+        self.transport_methods = []
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -354,15 +380,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
-            # Active transport will be a tuple of (field_name, scheme, discretisation)
-            discretisation_found = False
-            for transport_discretisation in transport_discretisations:
-                if scheme.field_name == transport_discretisation.variable:
-                    discretisation_found = True
-                    self.transport_discretisations.append(transport_discretisation)
-                    self.active_transport.append((scheme.field_name, scheme, transport_discretisation))
-            assert discretisation_found, 'No transport discretisation found ' \
-                + f'for variable {scheme.field_name}'
+            # Check that there is a corresponding transport method
+            method_found = False
+            for transport_method in transport_methods:
+                if scheme.field_name == transport_method.variable:
+                    method_found = True
+                    self.transport_methods.append(transport_method)
+            assert method_found, f'No transport method found for variable {scheme.field_name}'
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -385,14 +409,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         super().__init__(equation_set, io)
 
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
-            self.transport_discretisation_setup(aux_eqn)
+            self.transport_method_setup(aux_eqn)
             aux_scheme.setup(aux_eqn)
-            # Auxiliary transport discretisations
-            for transport_discretisation in transport_discretisations:
-                if transport_discretisation.variable == aux_scheme.field_name:
-                    self.transport_discretisation_setup_scheme(transport_discretisation, aux_scheme)
-            # TODO: add a check to make sure that auxiliary eqns have transport
-            # discretisations, but only if they need them!
+            self.setup_transporting_velocity(aux_scheme)
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
@@ -449,11 +468,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
-        self.transport_discretisation_setup_equation(self.equation)
-        for _, scheme, transport_discretisation in self.active_transport:
-            print(f'Setting up transport for {scheme.field_name} {transport_discretisation.variable}')
+        self.setup_equation_transport(self.equation)
+        for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
-            self.transport_discretisation_setup_scheme(transport_discretisation, scheme)
+            self.setup_transporting_velocity(scheme)
 
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
@@ -550,7 +568,7 @@ class PrescribedTransport(Timestepper):
     """
     Implements a timeloop with a prescibed transporting velocity
     """
-    def __init__(self, equation, scheme, io, transport_discretisations=None,
+    def __init__(self, equation, scheme, io, transport_methods=None,
                  physics_schemes=None, prescribed_transporting_velocity=None):
         """
         Args:
@@ -558,9 +576,10 @@ class PrescribedTransport(Timestepper):
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation
             io (:class:`IO`): the model's object for controlling input/output.
-            transport_discretisations (iter,optional): a list of objects
-                describing the discretisations of transport terms to be used.
-                Defaults to None.
+            transport_methods (iter,optional): a list of objects describing the
+                methods to use for discretising transport terms for each
+                transported variable. Defaults to None, in which case the
+                transport term follows the discretisation in the equation.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -575,7 +594,7 @@ class PrescribedTransport(Timestepper):
         """
 
         super().__init__(equation, scheme, io,
-                         transport_discretisations=transport_discretisations)
+                         transport_methods=transport_methods)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes

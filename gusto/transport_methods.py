@@ -1,19 +1,18 @@
 """
-Defines TransportScheme objects, which are used to solve a transport problem.
+Defines TransportMethod objects, which are used to solve a transport problem.
 """
 
 from firedrake import split
 from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.fml import Term, keep, drop, Label, LabelledForm
-from gusto.labels import transporting_velocity, prognostic, transport, subject
+from gusto.fml import Term, keep, drop
+from gusto.labels import prognostic, transport
 from gusto.transport_forms import *
-import ufl
 
 __all__ = ["DGUpwind", "SUPGTransport"]
 
 # TODO: settle on name: discretisation vs scheme
 
-class TransportScheme(object):
+class TransportMethod(object):
     """
     The base object for describing a transport scheme.
     """
@@ -34,15 +33,17 @@ class TransportScheme(object):
         self.test = equation.tests[variable_idx]
         self.field = split(equation.X)[variable_idx]
 
-        # Find the original transport term to be used
-        # TODO: do we need this?
-        self.original_form = equation.residual.label_map(
+        # Find the original transport term to be used, which we use to extract
+        # information about the transport equation type
+        original_form = equation.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == variable,
             map_if_true=keep, map_if_false=drop)
 
-        num_terms = len(self.original_form.terms)
+        num_terms = len(original_form.terms)
         assert num_terms == 1, \
             f'Unable to find transport term for {variable}. {num_terms} found'
+
+        self.transport_equation_type = original_form.terms[0].get(transport)
 
     def replace_transport_form(self, equation):
         """
@@ -61,41 +62,7 @@ class TransportScheme(object):
             map_if_true=lambda t: Term(self.form.form, t.labels))
 
 
-    def setup(self, uadv, equation):
-        """
-        Set up the transport scheme by replacing the transporting velocity used
-        in the form.
-
-        Args:
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
-            equation (:class:`PrognosticEquation`): the equation or scheme whose
-                transport term should be replaced with the transport term of
-                this discretisation.
-        """
-
-        assert self.form.terms[0].has_label(transporting_velocity), \
-            'Cannot set up transport scheme on a term that has no transporting velocity'
-
-        if uadv == "prognostic":
-            # Find prognostic wind field
-            uadv = split(self.original_form.terms[0].get(subject))[0]
-
-        import pdb; pdb.set_trace()
-
-        equation.residual = equation.residual.label_map(
-            lambda t: t.has_label(transporting_velocity),
-            map_if_true=lambda t:
-            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
-        )
-
-        import pdb; pdb.set_trace()
-
-        equation.residual = transporting_velocity.update_value(equation.residual, uadv)
-
-        import pdb; pdb.set_trace()
-
-class DGUpwind(TransportScheme):
+class DGUpwind(TransportMethod):
     """
     The Discontinuous Galerkin Upwind transport scheme.
 
@@ -126,25 +93,25 @@ class DGUpwind(TransportScheme):
         # Determine appropriate form to use
         # -------------------------------------------------------------------- #
 
-        if self.original_form.terms[0].get(transport) == TransportEquationType.advective:
+        if self.transport_equation_type == TransportEquationType.advective:
             if vector_manifold_correction:
                 form = vector_manifold_advection_form(self.domain, self.test,
                                                       self.field, ibp=ibp,
                                                       outflow=outflow)
             else:
-                form = advection_form(self.domain, self.test, self.field,
-                                     ibp=ibp, outflow=outflow)
+                form = upwind_advection_form(self.domain, self.test, self.field,
+                                             ibp=ibp, outflow=outflow)
 
-        elif self.original_form.terms[0].get(transport) == TransportEquationType.conservative:
+        elif self.transport_equation_type == TransportEquationType.conservative:
             if vector_manifold_correction:
                 form = vector_manifold_continuity_form(self.domain, self.test,
                                                        self.field, ibp=ibp,
                                                        outflow=outflow)
             else:
-                form = continuity_form(self.domain, self.test, self.field,
-                                       ibp=ibp, outflow=outflow)
+                form = upwind_continuity_form(self.domain, self.test, self.field,
+                                              ibp=ibp, outflow=outflow)
 
-        elif self.original_form.terms[0].get(transport) == TransportEquationType.vector_invariant:
+        elif self.transport_equation_type == TransportEquationType.vector_invariant:
             if outflow:
                 raise NotImplementedError('Outflow not implemented for upwind vector invariant')
             form = vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
@@ -156,5 +123,5 @@ class DGUpwind(TransportScheme):
         self.form = form
 
 
-class SUPGTransport(TransportScheme):
+class SUPGTransport(TransportMethod):
     pass

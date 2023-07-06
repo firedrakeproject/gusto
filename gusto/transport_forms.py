@@ -10,7 +10,8 @@ from gusto.labels import transport, transporting_velocity, ibp_label
 
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "vector_manifold_advection_form", "kinetic_energy_form",
-           "advection_equation_circulation_form", "linear_continuity_form"]
+           "advection_equation_circulation_form", "linear_continuity_form",
+           "upwind_advection_form", "upwind_continuity_form"]
 
 
 def linear_advection_form(domain, test, qbar):
@@ -68,10 +69,49 @@ def linear_continuity_form(domain, test, qbar, facet_term=False):
 
     return transport(form, TransportEquationType.conservative)
 
-
-def advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def advection_form(test, q, ubar):
     u"""
     The form corresponding to the advective transport operator.
+
+    This describes (u.∇)q, for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = inner(test, inner(ubar, grad(q)))*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.advective)
+
+def continuity_form(test, q, ubar):
+    u"""
+    The form corresponding to the continuity transport operator.
+
+    This describes ∇.(u*q), for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = inner(test, div(outer(q, ubar)))*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.conservative)
+
+def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The form corresponding to the DG upwind advective transport operator.
 
     This discretises (u.∇)q, for transporting velocity u and transported
     variable q. An upwind discretisation is used for the facet terms when the
@@ -127,9 +167,9 @@ def advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     return ibp_label(transport(form, TransportEquationType.advective), ibp)
 
 
-def continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
-    The form corresponding to the continuity transport operator.
+    The form corresponding to the DG upwind continuity transport operator.
 
     This discretises ∇.(u*q), for transporting velocity u and transported
     variable q. An upwind discretisation is used for the facet terms when the
@@ -209,7 +249,7 @@ def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, o
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = advection_form(domain, test, q, ibp, outflow)
+    L = upwind_advection_form(domain, test, q, ibp, outflow)
 
     # TODO: there should maybe be a restriction on IBP here
     Vu = domain.spaces("HDiv")
@@ -247,7 +287,7 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = continuity_form(domain, test, q, ibp, outflow)
+    L = upwind_continuity_form(domain, test, q, ibp, outflow)
 
     Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS

@@ -15,7 +15,6 @@ from gusto.labels import (subject, time_derivative, transport, prognostic,
 from gusto.thermodynamics import exner_pressure
 from gusto.transport_forms import (advection_form, continuity_form,
                                    vector_invariant_form,
-                                   vector_manifold_advection_form,
                                    kinetic_energy_form,
                                    advection_equation_circulation_form,
                                    linear_continuity_form,
@@ -70,7 +69,7 @@ class PrognosticEquation(object, metaclass=ABCMeta):
 class AdvectionEquation(PrognosticEquation):
     u"""Discretises the advection equation, ∂q/∂t + (u.∇)q = 0"""
 
-    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -89,21 +88,20 @@ class AdvectionEquation(PrognosticEquation):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        self.prescribed_fields("u", V)
+        u = self.prescribed_fields("u", V)
 
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
+        transport_form = advection_form(test, q, u)
 
-        self.residual = subject(
-            mass_form + advection_form(domain, test, q, **kwargs), q
-        )
+        self.residual = subject(mass_form + transport_form, q)
 
 
 class ContinuityEquation(PrognosticEquation):
     u"""Discretises the continuity equation, ∂q/∂t + ∇.(u*q) = 0"""
 
-    def __init__(self, domain, function_space, field_name, Vu=None, **kwargs):
+    def __init__(self, domain, function_space, field_name, Vu=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -114,7 +112,6 @@ class ContinuityEquation(PrognosticEquation):
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is not specified, uses the HDiv spaces
                 set up by the domain. Defaults to None.
-            **kwargs: any keyword arguments to be passed to the advection form.
         """
         super().__init__(domain, function_space, field_name)
 
@@ -122,15 +119,14 @@ class ContinuityEquation(PrognosticEquation):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        self.prescribed_fields("u", V)
+        u = self.prescribed_fields("u", V)
 
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
+        transport_form = continuity_form(test, q, u)
 
-        self.residual = subject(
-            mass_form + continuity_form(domain, test, q, **kwargs), q
-        )
+        self.residual = subject(mass_form + transport_form, q)
 
 
 class DiffusionEquation(PrognosticEquation):
@@ -165,7 +161,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
     u"""The advection-diffusion equation, ∂q/∂t + (u.∇)q = ∇.(κ∇q)"""
 
     def __init__(self, domain, function_space, field_name, Vu=None,
-                 diffusion_parameters=None, **kwargs):
+                 diffusion_parameters=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -177,7 +173,6 @@ class AdvectionDiffusionEquation(PrognosticEquation):
                 velocity field. If this is  Defaults to None.
             diffusion_parameters (:class:`DiffusionParameters`, optional):
                 parameters describing the diffusion to be applied.
-            **kwargs: any keyword arguments to be passed to the advection form.
         """
 
         super().__init__(domain, function_space, field_name)
@@ -186,15 +181,16 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        self.prescribed_fields("u", V)
+        u = self.prescribed_fields("u", V)
 
         test = TestFunction(function_space)
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
+        transport_form = advection_form(test, q, u)
 
         self.residual = subject(
             mass_form
-            + advection_form(domain, test, q, **kwargs)
+            + transport_form
             + interior_penalty_diffusion_form(
                 domain, test, q, diffusion_parameters), q
         )
@@ -448,16 +444,22 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # By default return None if no tracers are to be transported
         adv_form = None
         no_tracer_transported = True
+        u_idx = self.field_names.index('u')
+        u = split(self.X)[u_idx]
 
-        for i, tracer in enumerate(active_tracers):
+        for _, tracer in enumerate(active_tracers):
             if tracer.transport_eqn != TransportEquationType.no_transport:
                 idx = self.field_names.index(tracer.name)
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
                 if tracer.transport_eqn == TransportEquationType.advective:
-                    tracer_adv = prognostic(advection_form(domain, tracer_test, tracer_prog), tracer.name)
+                    tracer_adv = prognostic(
+                        advection_form(tracer_test, tracer_prog, u),
+                        tracer.name)
                 elif tracer.transport_eqn == TransportEquationType.conservative:
-                    tracer_adv = prognostic(continuity_form(domain, tracer_test, tracer_prog), tracer.name)
+                    tracer_adv = prognostic(
+                        continuity_form(tracer_test, tracer_prog, u),
+                        tracer.name)
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -492,7 +494,6 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-            **kwargs: any keyword arguments to be passed to the advection form.
         """
 
         self.field_names = [field_name]
@@ -518,16 +519,15 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        self.prescribed_fields("u", V)
+        u = self.prescribed_fields("u", V)
 
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
         mass_form = self.generate_mass_terms()
+        transport_form = advection_form(self.tests[0], split(self.X)[0], u)
 
-        self.residual = subject(
-            mass_form + advection_form(domain, self.tests[0], split(self.X)[0], **kwargs), self.X
-        )
+        self.residual = subject(mass_form + transport_form, self.X)
 
         # Add transport of tracers
         if len(active_tracers) > 0:
@@ -569,8 +569,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 the 'D' transport term and the pressure gradient term.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
-                'vector_invariant_form', 'vector_advection_form',
-                'vector_manifold_advection_form' and 'circulation_form'.
+                'vector_invariant_form', 'vector_advection_form', and
+                'circulation_form'.
                 Defaults to 'vector_invariant_form'.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
@@ -625,12 +625,12 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
+            raise NotImplementedError
             u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(domain, w, u), "u")
-        elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
+            u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
+            raise NotImplementedError
             ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
@@ -643,7 +643,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Depth transport term
-        D_adv = prognostic(continuity_form(domain, phi, D), "D")
+        D_adv = prognostic(continuity_form(phi, D, u), "D")
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(domain, phi, H).label_map(
@@ -662,7 +662,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if self.thermal:
             gamma = self.tests[2]
             b = split(self.X)[2]
-            b_adv = prognostic(advection_form(domain, gamma, b), "b")
+            b_adv = prognostic(inner(gamma, inner(u, grad(b)))*dx, "b")
             # TODO: implement correct linearisation
             adv_form += subject(b_adv, self.X)
 
@@ -767,8 +767,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 the 'D' transport term, pressure gradient and Coriolis terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
-                'vector_invariant_form', 'vector_advection_form',
-                'vector_manifold_advection_form' and 'circulation_form'.
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
                 Defaults to 'vector_invariant_form'.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
@@ -834,8 +834,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
-                'vector_invariant_form', 'vector_advection_form',
-                'vector_manifold_advection_form' and 'circulation_form'.
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
                 Defaults to 'vector_invariant_form'.
             diffusion_options (:class:`DiffusionOptions`, optional): any options
                 to specify for applying diffusion terms to variables. Defaults
@@ -892,9 +892,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(domain, w, u), "u")
-        elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
+            u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
             ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
@@ -904,11 +902,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
             u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
+            raise NotImplementedError
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Density transport (conservative form)
-        rho_adv = prognostic(continuity_form(domain, phi, rho), "rho")
+        rho_adv = prognostic(continuity_form(phi, rho, u), "rho")
         # Transport term needs special linearisation
         if self.linearisation_map(rho_adv.terms[0]):
             linear_rho_adv = linear_continuity_form(domain, phi, rho_bar).label_map(
@@ -918,7 +917,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
-        theta_adv = prognostic(advection_form(domain, gamma, theta), "theta")
+        theta_adv = prognostic(advection_form(gamma, theta, u), "theta")
         # Transport term needs special linearisation
         if self.linearisation_map(theta_adv.terms[0]):
             linear_theta_adv = linear_advection_form(domain, gamma, theta_bar).label_map(
@@ -1081,8 +1080,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
-                'vector_invariant_form', 'vector_advection_form',
-                'vector_manifold_advection_form' and 'circulation_form'.
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
                 Defaults to 'vector_invariant_form'.
             diffusion_options (:class:`DiffusionOptions`, optional): any options
                 to specify for applying diffusion terms to variables. Defaults
@@ -1179,8 +1178,8 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                 scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
-                'vector_invariant_form', 'vector_advection_form',
-                'vector_manifold_advection_form' and 'circulation_form'.
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
                 Defaults to 'vector_invariant_form'.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
@@ -1232,10 +1231,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
+            raise NotImplementedError
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(domain, w, u), "u")
-        elif u_transport_option == "vector_manifold_advection_form":
-            u_adv = prognostic(vector_manifold_advection_form(domain, w, u), "u")
+            u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
             ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
             ke_form = transport.remove(ke_form)
@@ -1245,11 +1243,12 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
             u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
+            raise NotImplementedError
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Buoyancy transport
-        b_adv = prognostic(advection_form(domain, gamma, b), "b")
+        b_adv = prognostic(advection_form(gamma, b, u), "b")
         if self.linearisation_map(b_adv.terms[0]):
             linear_b_adv = linear_advection_form(domain, gamma, b_bar).label_map(
                 lambda t: t.has_label(transporting_velocity),
