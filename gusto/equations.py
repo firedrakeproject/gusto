@@ -49,6 +49,9 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             assert hasattr(self, "field_names")
             for fname in self.field_names:
                 self.bcs[fname] = []
+        else:
+            # To avoid confusion, only add "self.test" when not mixed FS
+            self.test = TestFunction(function_space)
 
         self.bcs[field_name] = []
 
@@ -90,12 +93,12 @@ class AdvectionEquation(PrognosticEquation):
             V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
-        test = TestFunction(function_space)
+        test = self.test
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = advection_form(test, q, u)
 
-        self.residual = subject(mass_form + transport_form, q)
+        self.residual = prognostic(subject(mass_form + transport_form, q), field_name)
 
 
 class ContinuityEquation(PrognosticEquation):
@@ -121,12 +124,12 @@ class ContinuityEquation(PrognosticEquation):
             V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
-        test = TestFunction(function_space)
+        test = self.test
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = continuity_form(test, q, u)
 
-        self.residual = subject(mass_form + transport_form, q)
+        self.residual = prognostic(subject(mass_form + transport_form, q), field_name)
 
 
 class DiffusionEquation(PrognosticEquation):
@@ -146,15 +149,13 @@ class DiffusionEquation(PrognosticEquation):
         """
         super().__init__(domain, function_space, field_name)
 
-        test = TestFunction(function_space)
+        test = self.test
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
+        diffusion_form = interior_penalty_diffusion_form(domain, test, q,
+                                                         diffusion_parameters)
 
-        self.residual = subject(
-            mass_form
-            + interior_penalty_diffusion_form(
-                domain, test, q, diffusion_parameters), q
-        )
+        self.residual = prognostic(subject(mass_form + diffusion_form, q), field_name)
 
 
 class AdvectionDiffusionEquation(PrognosticEquation):
@@ -183,17 +184,15 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
-        test = TestFunction(function_space)
+        test = self.test
         q = Function(function_space)
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = advection_form(test, q, u)
+        diffusion_form = interior_penalty_diffusion_form(domain, test, q,
+                                                         diffusion_parameters)
 
-        self.residual = subject(
-            mass_form
-            + transport_form
-            + interior_penalty_diffusion_form(
-                domain, test, q, diffusion_parameters), q
-        )
+        self.residual = prognostic(subject(
+            mass_form + transport_form + diffusion_form, q), field_name)
 
 
 class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
@@ -525,7 +524,7 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
         self.X = Function(W)
 
         mass_form = self.generate_mass_terms()
-        transport_form = advection_form(self.tests[0], split(self.X)[0], u)
+        transport_form = prognostic(advection_form(self.tests[0], split(self.X)[0], u), field_name)
 
         self.residual = subject(mass_form + transport_form, self.X)
 
@@ -625,8 +624,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            raise NotImplementedError
-            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u, u), "u")
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
@@ -890,7 +888,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u, u), "u")
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
@@ -1230,7 +1228,7 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(domain, w, u), "u")
+            u_adv = prognostic(vector_invariant_form(domain, w, u, u), "u")
             raise NotImplementedError
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")

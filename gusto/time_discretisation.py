@@ -254,18 +254,18 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         self.subcycles = subcycles
 
-    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
+            apply_bcs (bool, optional): whether boundary conditions are to be
+                applied. Defaults to True.
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -419,18 +419,16 @@ class RK4(ExplicitTimeDiscretisation):
     where superscripts indicate the time-level.
     """
 
-    def setup(self, equation, uadv, *active_labels):
+    def setup(self, equation, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, *active_labels)
 
         self.k1 = Function(self.fs)
         self.k2 = Function(self.fs)
@@ -775,9 +773,8 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
     def nlevels(self):
         pass
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
-                      *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
@@ -921,8 +918,8 @@ class TR_BDF2(TimeDiscretisation):
 
         self.gamma = gamma
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation, apply_bcs, *active_labels)
         self.xnpg = Function(self.fs)
         self.xn = Function(self.fs)
 
@@ -1118,8 +1115,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
         self.order = order
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs,
                       *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
@@ -1248,9 +1245,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
         self.order = order
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
-                      *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 

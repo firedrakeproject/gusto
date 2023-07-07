@@ -5,12 +5,10 @@ Defines TransportMethod objects, which are used to solve a transport problem.
 from firedrake import split
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml import Term, keep, drop
-from gusto.labels import prognostic, transport
+from gusto.labels import prognostic, transport, transporting_velocity
 from gusto.transport_forms import *
 
 __all__ = ["DGUpwind", "SUPGTransport"]
-
-# TODO: settle on name: discretisation vs scheme
 
 class TransportMethod(object):
     """
@@ -28,10 +26,14 @@ class TransportMethod(object):
         self.variable = variable
         self.domain = self.equation.domain
 
-        # TODO: how do we deal with plain transport equation?
-        variable_idx = equation.field_names.index(variable)
-        self.test = equation.tests[variable_idx]
-        self.field = split(equation.X)[variable_idx]
+        if hasattr(equation, "field_names"):
+            # Equation with multiple prognostic variables
+            variable_idx = equation.field_names.index(variable)
+            self.test = equation.tests[variable_idx]
+            self.field = split(equation.X)[variable_idx]
+        else:
+            self.field = equation.X
+            self.test = equation.test
 
         # Find the original transport term to be used, which we use to extract
         # information about the transport equation type
@@ -56,10 +58,26 @@ class TransportMethod(object):
                 this discretisation.
         """
 
-        # Add the form to the equation
+        # We need to take care to replace the term with all the same labels,
+        # except the label for the transporting velocity
+        # This is easiest to do by extracting the transport term itself
+        original_form = equation.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
+            map_if_true=keep, map_if_false=drop
+        )
+        original_term = original_form.terms[0]
+
+        # Update transporting velocity
+        new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
+        original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
+
+        # Create new term
+        new_term = Term(self.form.form, original_term.labels)
+
+        # Replace original term with new term
         equation.residual = equation.residual.label_map(
             lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
-            map_if_true=lambda t: Term(self.form.form, t.labels))
+            map_if_true=lambda t: new_term)
 
 
 class DGUpwind(TransportMethod):
@@ -114,7 +132,7 @@ class DGUpwind(TransportMethod):
         elif self.transport_equation_type == TransportEquationType.vector_invariant:
             if outflow:
                 raise NotImplementedError('Outflow not implemented for upwind vector invariant')
-            form = vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
+            form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
 
         else:
             raise NotImplementedError('Upwind transport scheme has not been '

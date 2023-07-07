@@ -11,7 +11,8 @@ from gusto.labels import transport, transporting_velocity, ibp_label
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "vector_manifold_advection_form", "kinetic_energy_form",
            "advection_equation_circulation_form", "linear_continuity_form",
-           "upwind_advection_form", "upwind_continuity_form"]
+           "upwind_advection_form", "upwind_continuity_form",
+           "upwind_vector_invariant_form"]
 
 
 def linear_advection_form(domain, test, qbar):
@@ -301,10 +302,48 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
 
     return transport(form)
 
-
-def vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+def vector_invariant_form(domain, test, q, ubar):
     u"""
     The form corresponding to the vector invariant transport operator.
+
+    The self-transporting transport operator for a vector-valued field u can be
+    written as circulation and kinetic energy terms:
+    (u.∇)u = (∇×u)×u + (1/2)∇u^2
+
+    When the transporting field u and transported field q are similar, we write
+    this as:
+    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Raises:
+        NotImplementedError: the specified integration by parts is not 'once'.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if domain.mesh.topological_dimension() == 3:
+        L = inner(test, cross(curl(q), ubar))*dx
+
+    else:
+        perp = domain.perp
+        L = inner(test, div(perp(q))*perp(ubar))*dx
+
+    # Add K.E. term
+    L -= 0.5*div(test)*inner(q, ubar)*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.vector_invariant)
+
+def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+    u"""
+    The form corresponding to the DG upwind vector invariant transport operator.
 
     The self-transporting transport operator for a vector-valued field u can be
     written as circulation and kinetic energy terms:

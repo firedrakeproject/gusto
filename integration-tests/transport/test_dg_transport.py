@@ -26,8 +26,9 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
         eqn = ContinuityEquation(domain, V, "f")
 
     transport_scheme = SSPRK3(domain)
+    transport_method = DGUpwind(eqn, "f")
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method, setup.io)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
@@ -52,8 +53,9 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
         eqn = ContinuityEquation(domain, V, "f")
 
     transport_scheme = SSPRK3(domain)
+    transport_method = DGUpwind(eqn, "f")
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method, setup.io)
 
     # Initial conditions
     timestepper.fields("f").interpolate(f_init)

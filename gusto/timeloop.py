@@ -251,6 +251,7 @@ class Timestepper(BaseTimestepper):
         x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
 
         self.scheme.apply(xnp1(name), *x_in)
+        import pdb; pdb.set_trace()
 
 
 class SplitPhysicsTimestepper(Timestepper):
@@ -566,20 +567,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
 class PrescribedTransport(Timestepper):
     """
-    Implements a timeloop with a prescibed transporting velocity
+    Implements a timeloop with a prescibed transporting velocity.
     """
-    def __init__(self, equation, scheme, io, transport_methods=None,
+    def __init__(self, equation, scheme, transport_method, io,
                  physics_schemes=None, prescribed_transporting_velocity=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
-                the prognostic equation
+                the prognostic equation.
+            transport_method (:class:`TransportMethod`): describes the method
+                used for discretising the transport term.
             io (:class:`IO`): the model's object for controlling input/output.
-            transport_methods (iter,optional): a list of objects describing the
-                methods to use for discretising transport terms for each
-                transported variable. Defaults to None, in which case the
-                transport term follows the discretisation in the equation.
             physics_schemes: (list, optional): a list of :class:`Physics` and
                 :class:`TimeDiscretisation` options describing physical
                 parametrisations and timestepping schemes to use for each.
@@ -594,7 +593,7 @@ class PrescribedTransport(Timestepper):
         """
 
         super().__init__(equation, scheme, io,
-                         transport_methods=transport_methods)
+                         transport_methods=[transport_method])
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
