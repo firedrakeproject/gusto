@@ -251,7 +251,6 @@ class Timestepper(BaseTimestepper):
         x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
 
         self.scheme.apply(xnp1(name), *x_in)
-        import pdb; pdb.set_trace()
 
 
 class SplitPhysicsTimestepper(Timestepper):

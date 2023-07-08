@@ -94,7 +94,7 @@ class AdvectionEquation(PrognosticEquation):
         u = self.prescribed_fields("u", V)
 
         test = self.test
-        q = Function(function_space)
+        q = self.X
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = advection_form(test, q, u)
 
@@ -125,7 +125,7 @@ class ContinuityEquation(PrognosticEquation):
         u = self.prescribed_fields("u", V)
 
         test = self.test
-        q = Function(function_space)
+        q = self.X
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = continuity_form(test, q, u)
 
@@ -150,7 +150,7 @@ class DiffusionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         test = self.test
-        q = Function(function_space)
+        q = self.X
         mass_form = time_derivative(inner(q, test)*dx)
         diffusion_form = interior_penalty_diffusion_form(domain, test, q,
                                                          diffusion_parameters)
@@ -185,7 +185,7 @@ class AdvectionDiffusionEquation(PrognosticEquation):
         u = self.prescribed_fields("u", V)
 
         test = self.test
-        q = Function(function_space)
+        q = self.X
         mass_form = time_derivative(inner(q, test)*dx)
         transport_form = advection_form(test, q, u)
         diffusion_form = interior_penalty_diffusion_form(domain, test, q,

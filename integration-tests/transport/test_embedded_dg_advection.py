@@ -28,12 +28,14 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
         opts = EmbeddedDGOptions(embedding_space=domain.spaces("DG"))
 
     if equation_form == "advective":
-        eqn = AdvectionEquation(domain, V, "f", ibp=ibp)
+        eqn = AdvectionEquation(domain, V, "f")
     else:
-        eqn = ContinuityEquation(domain, V, "f", ibp=ibp)
+        eqn = ContinuityEquation(domain, V, "f")
 
     transport_schemes = SSPRK3(domain, options=opts)
-    timestepper = PrescribedTransport(eqn, transport_schemes, setup.io)
+    transport_method = DGUpwind(eqn, "f", ibp=ibp)
+
+    timestepper = PrescribedTransport(eqn, transport_schemes, transport_method, setup.io)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

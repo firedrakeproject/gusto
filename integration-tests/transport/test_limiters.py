@@ -87,8 +87,10 @@ def setup_limiters(dirname, space):
     else:
         raise NotImplementedError
 
+    transport_method = DGUpwind(eqn, "tracer")
+
     # Build time stepper
-    stepper = PrescribedTransport(eqn, transport_schemes, io)
+    stepper = PrescribedTransport(eqn, transport_schemes, transport_method, io)
 
     # ------------------------------------------------------------------------ #
     # Initial condition
