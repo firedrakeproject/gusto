@@ -12,13 +12,10 @@ from firedrake import (Function, NonlinearVariationalProblem, split,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 import ufl
-from gusto.configuration import (logger, DEBUG, TransportEquationType,
-                                 EmbeddedDGOptions, RecoveryOptions)
-from gusto.labels import (time_derivative, transporting_velocity, prognostic,
-                          subject, physics, transport, ibp_label,
+from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
+from gusto.labels import (time_derivative, prognostic, physics,
                           replace_subject, replace_test_function)
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
-from gusto.transport_forms import advection_form, continuity_form
 from gusto.wrappers import *
 
 
@@ -151,14 +148,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if self.solver_parameters is None:
                 self.solver_parameters = self.wrapper.solver_parameters
             new_test = TestFunction(self.wrapper.test_space)
-            # TODO: this needs moving if SUPG becomes a transport scheme
+            # SUPG has a special wrapper
             if self.wrapper_name == "supg":
-                new_test = new_test + dot(dot(uadv, self.wrapper.tau), grad(new_test))
+                new_test = self.wrapper.test
 
             # Replace the original test function with the one from the wrapper
             self.residual = self.residual.label_map(
                 all_terms,
                 map_if_true=replace_test_function(new_test))
+
+            self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions

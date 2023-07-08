@@ -6,9 +6,13 @@ called.
 
 from abc import ABCMeta, abstractmethod
 from firedrake import (FunctionSpace, Function, BrokenElement, Projector,
-                       Interpolator, VectorElement, Constant, as_ufl)
+                       Interpolator, VectorElement, Constant, as_ufl, dot, grad,
+                       TestFunction)
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
+from gusto.fml import Term
 from gusto.recovery import Recoverer, ReversibleRecoverer
+from gusto.labels import transporting_velocity
+import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper"]
 
@@ -46,6 +50,21 @@ class Wrapper(object, metaclass=ABCMeta):
     def post_apply(self):
         """Generic steps to be done after time discretisation apply method."""
         pass
+
+    def label_terms(self, residual):
+        """
+        A base method to allow labels to be updated or extra labels added to
+        the form that will be used with the wrapper. This base method does
+        nothing but there may be implementations in child classes.
+
+        Args:
+            residual (:class:`LabelledForm`): the labelled form to update.
+
+        Returns:
+            :class:`LabelledForm`: the updated labelled form.
+        """
+
+        return residual
 
 
 class EmbeddedDGWrapper(Wrapper):
@@ -240,7 +259,7 @@ def is_cg(V):
 
 class SUPGWrapper(Wrapper):
     """
-    Wrapper for computing a time discretisation with SUPG, which adjust the
+    Wrapper for computing a time discretisation with SUPG, which adjusts the
     test function space that is used to solve the problem.
     """
 
@@ -288,6 +307,15 @@ class SUPGWrapper(Wrapper):
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
 
+        # -------------------------------------------------------------------- #
+        # Set up test function
+        # -------------------------------------------------------------------- #
+
+        test = TestFunction(self.test_space)
+        uadv = Function(domain.spaces('HDiv'))
+        self.test = test + dot(dot(uadv, self.tau), grad(test))
+        self.transporting_velocity = uadv
+
     def pre_apply(self, x_in):
         """
         Does nothing for SUPG, just sets the input field.
@@ -307,3 +335,26 @@ class SUPGWrapper(Wrapper):
         """
 
         x_out.assign(self.x_out)
+
+    def label_terms(self, residual):
+        """
+        A base method to allow labels to be updated or extra labels added to
+        the form that will be used with the wrapper.
+
+        Args:
+            residual (:class:`LabelledForm`): the labelled form to update.
+
+        Returns:
+            :class:`LabelledForm`: the updated labelled form.
+        """
+
+        new_residual = residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            # Update and replace transporting velocity in any terms
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): self.transporting_velocity}), t.labels),
+            # Add new label to other terms
+            map_if_false=lambda t: transporting_velocity(t, self.transporting_velocity)
+        )
+
+        return new_residual

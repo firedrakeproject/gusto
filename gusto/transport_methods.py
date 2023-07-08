@@ -8,7 +8,7 @@ from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity
 from gusto.transport_forms import *
 
-__all__ = ["DGUpwind", "SUPGTransport"]
+__all__ = ["DGUpwind"]
 
 class TransportMethod(object):
     """
@@ -139,7 +139,3 @@ class DGUpwind(TransportMethod):
                                       + 'implemented for this transport equation type')
 
         self.form = form
-
-
-class SUPGTransport(TransportMethod):
-    pass
