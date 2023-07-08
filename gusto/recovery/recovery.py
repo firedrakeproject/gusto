@@ -332,7 +332,7 @@ def find_eff_coords(V0):
     vec_DG1 = VectorFunctionSpace(mesh, DG1_element)
     x = SpatialCoordinate(mesh)
 
-    if V0.ufl_element().value_size() > 1:
+    if isinstance(V0.ufl_element(), VectorElement):
         eff_coords_list = []
         V0_coords_list = []
 
