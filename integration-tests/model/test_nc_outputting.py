@@ -71,6 +71,7 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     else:
         eqn = AdvectionEquation(domain, V, 'f')
     transport_scheme = ForwardEuler(domain)
+    transport_method = DGUpwind(eqn, 'f')
     output = OutputParameters(dirname=dirname, dumpfreq=1, dump_nc=True,
                               dumplist=['f'], log_level='INFO', checkpoint=False)
 
@@ -89,7 +90,7 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u'), RadialComponent('u')]
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-    stepper = PrescribedTransport(eqn, transport_scheme, io)
+    stepper = PrescribedTransport(eqn, transport_scheme, transport_method, io)
 
     # ------------------------------------------------------------------------ #
     # Initialise fields

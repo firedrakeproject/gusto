@@ -43,12 +43,16 @@ def run_moist_compressible(tmpdir):
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta")]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "rho"),
+                         DGUpwind(eqn, "theta")]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #

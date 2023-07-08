@@ -357,4 +357,6 @@ class SUPGWrapper(Wrapper):
             map_if_false=lambda t: transporting_velocity(t, self.transporting_velocity)
         )
 
+        new_residual = transporting_velocity.update_value(new_residual, self.transporting_velocity)
+
         return new_residual

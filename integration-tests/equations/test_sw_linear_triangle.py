@@ -42,9 +42,10 @@ def setup_sw(dirname):
 
     # Transport schemes
     transport_schemes = [ForwardEuler(domain, "D")]
+    transport_methods = []
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

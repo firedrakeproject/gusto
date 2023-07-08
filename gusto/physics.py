@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.transport_forms import advection_form
+from gusto.common_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
 from gusto.configuration import logger

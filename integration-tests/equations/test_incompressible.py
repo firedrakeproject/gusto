@@ -41,12 +41,15 @@ def run_incompressible(tmpdir):
     b_opts = SUPGOptions()
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "b", options=b_opts)]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "b", ibp=b_opts.ibp)]
 
     # Linear solver
     linear_solver = IncompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
