@@ -2,8 +2,7 @@ from firedrake import (ExtrudedMesh, functionspaceimpl,
                        SpatialCoordinate, cos, sin, pi, sqrt, File,
                        exp, Constant, Function, as_vector, acos,
                        errornorm, norm, min_value, max_value, le, ge)
-from gusto import *
-from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
+from gusto import *                                            # 
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
@@ -33,7 +32,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'Baroclinic_pertubationtest2'
+dirname = 'BaroclinicWave_'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=1, 
                           dumplist=['u', 'rho', 'theta'],
