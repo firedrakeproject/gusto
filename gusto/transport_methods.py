@@ -2,14 +2,16 @@
 Defines TransportMethod objects, which are used to solve a transport problem.
 """
 
-from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, dot, inner, outer, jump,
-                       grad, div, FacetNormal, Function, sign, avg, cross)
+from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer,
+                       jump, grad, div, FacetNormal, Function, sign, avg, cross,
+                       curl)
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
 from gusto.spatial_methods import SpatialMethod
 
 __all__ = ["DGUpwind"]
+
 
 class TransportMethod(SpatialMethod):
     """
@@ -215,6 +217,7 @@ def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, o
 
     return L
 
+
 def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     """
     Form for continuity transport operator including vector manifold correction.
@@ -252,6 +255,7 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
     form = transporting_velocity(L, ubar)
 
     return transport(form)
+
 
 def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     u"""

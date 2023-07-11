@@ -47,7 +47,7 @@ def setup_fallout(dirname):
 
     # build time stepper
     scheme = ForwardEuler(domain)
-    stepper = PrescribedTransport(eqn, scheme, io, transport_method,
+    stepper = PrescribedTransport(eqn, scheme, transport_method, io,
                                   physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

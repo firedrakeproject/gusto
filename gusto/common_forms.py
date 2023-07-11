@@ -2,13 +2,14 @@
 Provides some basic forms for discretising various common terms in equations for
 geophysical fluid dynamics."""
 
-from firedrake import Function, dx, dot, grad, div, inner, outer, cross, curl
-from gusto.configuration import IntegrateByParts, TransportEquationType
+from firedrake import dx, dot, grad, div, inner, outer, cross, curl
+from gusto.configuration import TransportEquationType
 from gusto.labels import transport, transporting_velocity, diffusion
 
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
            "diffusion_form"]
+
 
 def advection_form(test, q, ubar):
     u"""
@@ -30,6 +31,7 @@ def advection_form(test, q, ubar):
 
     return transport(form, TransportEquationType.advective)
 
+
 def continuity_form(test, q, ubar):
     u"""
     The form corresponding to the continuity transport operator.
@@ -49,6 +51,7 @@ def continuity_form(test, q, ubar):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.conservative)
+
 
 def vector_invariant_form(domain, test, q, ubar):
     u"""
@@ -89,6 +92,7 @@ def vector_invariant_form(domain, test, q, ubar):
 
     return transport(form, TransportEquationType.vector_invariant)
 
+
 def kinetic_energy_form(test, q, ubar):
     u"""
     The form corresponding to the kinetic energy term.
@@ -111,6 +115,7 @@ def kinetic_energy_form(test, q, ubar):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.vector_invariant)
+
 
 def advection_equation_circulation_form(domain, test, q, ubar):
     u"""
@@ -145,6 +150,7 @@ def advection_equation_circulation_form(domain, test, q, ubar):
     )
 
     return form
+
 
 def diffusion_form(test, q, kappa):
     u"""

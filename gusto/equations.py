@@ -438,6 +438,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # By default return None if no tracers are to be transported
         adv_form = None
         no_tracer_transported = True
+
         if 'u' in self.field_names:
             u_idx = self.field_names.index('u')
             u = split(self.X)[u_idx]
@@ -445,8 +446,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             u = self.prescribed_fields('u')
         else:
             raise ValueError('Cannot generate tracer transport terms '
-                             +'as there is no velocity field')
-
+                             + 'as there is no velocity field')
 
         for _, tracer in enumerate(active_tracers):
             if tracer.transport_eqn != TransportEquationType.no_transport:

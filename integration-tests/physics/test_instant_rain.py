@@ -46,6 +46,7 @@ def run_instant_rain(dirname):
                               dumplist=['vapour', "rain"])
     diagnostic_fields = [CourantNumber()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+    transport_method = DGUpwind(eqns, "water_vapour")
 
     # Physics schemes
     # define saturation function
@@ -54,7 +55,7 @@ def run_instant_rain(dirname):
                         ForwardEuler(domain))]
 
     # Time stepper
-    stepper = PrescribedTransport(eqns, RK4(domain), io,
+    stepper = PrescribedTransport(eqns, RK4(domain), transport_method, io,
                                   physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

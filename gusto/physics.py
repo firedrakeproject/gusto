@@ -11,7 +11,6 @@ from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.common_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
 from gusto.configuration import logger
@@ -293,7 +292,7 @@ class Fallout(Physics):
 
         assert transport_method.outflow, \
             'Fallout requires a transport method with outflow=True'
-        adv_term = transport_method.form.terms[0]
+        adv_term = transport_method.form
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(

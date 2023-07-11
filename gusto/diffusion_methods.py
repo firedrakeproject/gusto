@@ -75,6 +75,7 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
 
     return diffusion(form)
 
+
 class InteriorPenaltyDiffusion(DiffusionMethod):
     """The interior penalty method for discretising the diffusion term."""
 

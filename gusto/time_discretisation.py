@@ -6,12 +6,10 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, NonlinearVariationalProblem, split,
-                       NonlinearVariationalSolver, TestFunction, dot, grad,
-                       DirichletBC)
+from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
-import ufl
 from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
 from gusto.labels import (time_derivative, prognostic, physics,
                           replace_subject, replace_test_function)

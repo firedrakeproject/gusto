@@ -9,7 +9,8 @@ from firedrake import (IntervalMesh, RectangleMesh, CubedSphereMesh,
                        as_vector, exp)
 from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ForwardEuler, OutputParameters, VelocityX, VelocityY,
-                   VelocityZ, MeridionalComponent, ZonalComponent, RadialComponent)
+                   VelocityZ, MeridionalComponent, ZonalComponent,
+                   RadialComponent, DGUpwind)
 from netCDF4 import Dataset
 import pytest
 

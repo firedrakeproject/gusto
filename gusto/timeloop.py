@@ -91,7 +91,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             # Extract all terms corresponding to this type of term
             residual = equation.residual.label_map(
                 lambda t: t.has_label(term_label), map_if_false=drop
-                )
+            )
             active_variables = [t.get(prognostic) for t in residual.terms]
             active_methods = list(filter(lambda t: t.term_label == term_label,
                                          self.spatial_methods))
@@ -390,6 +390,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
+            self.active_transport.append((scheme.field_name, scheme))
             # Check that there is a corresponding transport method
             method_found = False
             for method in spatial_methods:
@@ -528,7 +529,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for k in range(self.maxk):
 
             with timed_stage("Transport"):
-                for name, scheme, _ in self.active_transport:
+                for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
 

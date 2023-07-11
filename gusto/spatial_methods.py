@@ -9,6 +9,7 @@ from gusto.labels import prognostic
 
 __all__ = ['SpatialMethod']
 
+
 class SpatialMethod(object):
     """
     The base object for describing a spatial discretisation of some term.

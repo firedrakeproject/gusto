@@ -58,6 +58,7 @@ class PrescribedFields(Fields):
     """Object to hold and create a specified set of prescribed fields."""
     def __init__(self):
         self.fields = []
+        self._field_names = []
 
     def __call__(self, name, space=None):
         """
@@ -80,6 +81,7 @@ class PrescribedFields(Fields):
         else:
             # Create field
             self.add_field(name, space)
+            self._field_names.append(name)
             return getattr(self, name)
 
     def __iter__(self):
