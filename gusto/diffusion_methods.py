@@ -22,7 +22,7 @@ class DiffusionMethod(SpatialMethod):
         """
 
         # Inherited init method extracts original term to be replaced
-        super.__init__(self, equation, variable, diffusion)
+        super().__init__(equation, variable, diffusion)
 
 
 def interior_penalty_diffusion_form(domain, test, q, parameters):
@@ -89,7 +89,7 @@ class InteriorPenaltyDiffusion(DiffusionMethod):
                 the kappa and mu constants.
         """
 
-        super.__init__(equation, variable)
+        super().__init__(equation, variable)
 
         self.form = interior_penalty_diffusion_form(equation.domain, self.test,
                                                     self.field, diffusion_parameters)

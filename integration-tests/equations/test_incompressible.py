@@ -92,7 +92,7 @@ def run_incompressible(tmpdir):
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = IncompressibleBoussinesqEquations(check_domain, parameters)
     check_io = IO(check_domain, check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper

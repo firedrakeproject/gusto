@@ -87,12 +87,13 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 transported_fields = [ImplicitMidpoint(domain, "u"),
                       SSPRK3(domain, "rho", subcycles=2),
                       SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
+transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
 
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #

@@ -15,7 +15,8 @@ from gusto.labels import (subject, time_derivative, transport, prognostic,
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
-                                advection_equation_circulation_form)
+                                advection_equation_circulation_form,
+                                diffusion_form)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
@@ -437,8 +438,15 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         # By default return None if no tracers are to be transported
         adv_form = None
         no_tracer_transported = True
-        u_idx = self.field_names.index('u')
-        u = split(self.X)[u_idx]
+        if 'u' in self.field_names:
+            u_idx = self.field_names.index('u')
+            u = split(self.X)[u_idx]
+        elif 'u' in self.prescribed_fields._field_names:
+            u = self.prescribed_fields('u')
+        else:
+            raise ValueError('Cannot generate tracer transport terms '
+                             +'as there is no velocity field')
+
 
         for _, tracer in enumerate(active_tracers):
             if tracer.transport_eqn != TransportEquationType.no_transport:
@@ -620,15 +628,14 @@ class ShallowWaterEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
-            raise NotImplementedError
-            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
@@ -644,7 +651,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if self.thermal:
             gamma = self.tests[2]
             b = split(self.X)[2]
-            b_adv = prognostic(inner(gamma, inner(u, grad(b)))*dx, "b")
+            b_adv = prognostic(advection_form(gamma, b, u), "b")
             adv_form += subject(b_adv, self.X)
 
         # -------------------------------------------------------------------- #
@@ -872,15 +879,14 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
-            raise NotImplementedError
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
@@ -1193,19 +1199,17 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(domain, w, u, u), "u")
-            raise NotImplementedError
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
+            ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
             ke_form = transport.remove(ke_form)
             ke_form = ke_form.label_map(
                 lambda t: t.has_label(transporting_velocity),
                 lambda t: Term(ufl.replace(
                     t.form, {t.get(transporting_velocity): u}), t.labels))
             ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") + ke_form
-            raise NotImplementedError
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 

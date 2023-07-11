@@ -89,7 +89,7 @@ def vector_invariant_form(domain, test, q, ubar):
 
     return transport(form, TransportEquationType.vector_invariant)
 
-def kinetic_energy_form(domain, test, q):
+def kinetic_energy_form(test, q, ubar):
     u"""
     The form corresponding to the kinetic energy term.
 
@@ -98,24 +98,21 @@ def kinetic_energy_form(domain, test, q):
     (1/2)∇(u.q).
 
     Args:
-        domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
 
     Returns:
         class:`LabelledForm`: a labelled transport form.
     """
 
-    ubar = Function(domain.spaces("HDiv"))
     L = 0.5*div(test)*inner(q, ubar)*dx
 
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.vector_invariant)
 
-def advection_equation_circulation_form(domain, test, q,
-                                        ibp=IntegrateByParts.ONCE):
+def advection_equation_circulation_form(domain, test, q, ubar):
     u"""
     The circulation term in the transport of a vector-valued field.
 
@@ -131,13 +128,9 @@ def advection_equation_circulation_form(domain, test, q,
     term. An an upwind discretisation is used when integrating by parts.
 
     Args:
-        domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
-        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
-            the number of times to integrate by parts. Defaults to
-            `IntegrateByParts.ONCE`.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
 
     Raises:
         NotImplementedError: the specified integration by parts is not 'once'.
@@ -147,8 +140,8 @@ def advection_equation_circulation_form(domain, test, q,
     """
 
     form = (
-        vector_invariant_form(domain, test, q, ibp=ibp)
-        - kinetic_energy_form(domain, test, q)
+        vector_invariant_form(domain, test, q, ubar)
+        - kinetic_energy_form(test, q, ubar)
     )
 
     return form

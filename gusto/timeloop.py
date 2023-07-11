@@ -98,7 +98,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             method_variables = [method.variable for method in active_methods]
             for variable in active_variables:
                 if variable not in method_variables:
-                    message = f'Variable {variable} has a {term_label.name} ' \
+                    message = f'Variable {variable} has a {term_label.label} ' \
                         + 'but no method for this has been specified. Using ' \
                         + 'default form for this term'
                     logger.warning(message)
@@ -122,7 +122,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 this discretisation.
         """
 
-        if self.transporting_velocity == "prognostic":
+        if self.transporting_velocity == "prognostic" and "u" in self.fields._field_names:
             # Use the prognostic wind variable as the transporting velocity
             u_idx = self.equation.field_names.index('u')
             uadv = split(self.equation.X)[u_idx]

@@ -65,6 +65,9 @@ for delta, dt in res_dt.items():
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=theta_opts)]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "rho"),
+                         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
@@ -72,9 +75,12 @@ for delta, dt in res_dt.items():
     # Diffusion schemes
     diffusion_schemes = [BackwardEuler(domain, "u"),
                          BackwardEuler(domain, "theta")]
+    diffusion_methods = [InteriorPenaltyDiffusion(eqns, "u", diffusion_options[0]),
+                         InteriorPenaltyDiffusion(eqns, "theta", diffusion_options[1])]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      spatial_methods=transport_methods+diffusion_methods,
                                       linear_solver=linear_solver,
                                       diffusion_schemes=diffusion_schemes)
 

@@ -44,7 +44,7 @@ class SpatialMethod(object):
             map_if_true=keep, map_if_false=drop)
 
         num_terms = len(self.original_form.terms)
-        assert num_terms == 1, f'Unable to find {term_label.name} term ' \
+        assert num_terms == 1, f'Unable to find {term_label.label} term ' \
             + f'for {variable}. {num_terms} found'
 
     def replace_form(self, equation):

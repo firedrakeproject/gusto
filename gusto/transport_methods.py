@@ -3,7 +3,7 @@ Defines TransportMethod objects, which are used to solve a transport problem.
 """
 
 from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, dot, inner, outer, jump,
-                       grad, div, FacetNormal, Function)
+                       grad, div, FacetNormal, Function, sign, avg, cross)
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
@@ -252,6 +252,91 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
     form = transporting_velocity(L, ubar)
 
     return transport(form)
+
+def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+    u"""
+    The form corresponding to the DG upwind vector invariant transport operator.
+
+    The self-transporting transport operator for a vector-valued field u can be
+    written as circulation and kinetic energy terms:
+    (u.∇)u = (∇×u)×u + (1/2)∇u^2
+
+    When the transporting field u and transported field q are similar, we write
+    this as:
+    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
+
+    This form discretises this final equation, using an upwind discretisation
+    when integrating by parts.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+
+    Raises:
+        NotImplementedError: the specified integration by parts is not 'once'.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    Vu = domain.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
+    n = FacetNormal(domain.mesh)
+    Upwind = 0.5*(sign(dot(ubar, n))+1)
+
+    if domain.mesh.topological_dimension() == 3:
+
+        if ibp != IntegrateByParts.ONCE:
+            raise NotImplementedError
+
+        # <w,curl(u) cross ubar + grad( u.ubar)>
+        # =<curl(u),ubar cross w> - <div(w), u.ubar>
+        # =<u,curl(ubar cross w)> -
+        #      <<u_upwind, [[n cross(ubar cross w)cross]]>>
+
+        both = lambda u: 2*avg(u)
+
+        L = (
+            inner(q, curl(cross(ubar, test)))*dx
+            - inner(both(Upwind*q),
+                    both(cross(n, cross(ubar, test))))*dS_
+        )
+
+    else:
+
+        perp = domain.perp
+        if domain.on_sphere:
+            outward_normals = domain.outward_normals
+            perp_u_upwind = lambda q: Upwind('+')*cross(outward_normals('+'), q('+')) + Upwind('-')*cross(outward_normals('-'), q('-'))
+        else:
+            perp_u_upwind = lambda q: Upwind('+')*perp(q('+')) + Upwind('-')*perp(q('-'))
+
+        if ibp == IntegrateByParts.ONCE:
+            L = (
+                -inner(perp(grad(inner(test, perp(ubar)))), q)*dx
+                - inner(jump(inner(test, perp(ubar)), n),
+                        perp_u_upwind(q))*dS_
+            )
+        else:
+            L = (
+                (-inner(test, div(perp(q))*perp(ubar)))*dx
+                - inner(jump(inner(test, perp(ubar)), n),
+                        perp_u_upwind(q))*dS_
+                + jump(inner(test,
+                             perp(ubar))*perp(q), n)*dS_
+            )
+
+    L -= 0.5*div(test)*inner(q, ubar)*dx
+
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.vector_invariant)
 
 
 class DGUpwind(TransportMethod):
