@@ -33,8 +33,9 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     transport_scheme = SSPRK3(domain)
     transport_method = DGUpwind(eqn, 'f')
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method,
-                                      setup.io, prescribed_transporting_velocity=u_evaluation)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io,
+                                      transport_method,
+                                      prescribed_transporting_velocity=u_evaluation)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

@@ -10,9 +10,12 @@ from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
 from gusto.spatial_methods import SpatialMethod
 
-__all__ = ["DGUpwind"]
+__all__ = ["DefaultTransport", "DGUpwind"]
 
 
+# ---------------------------------------------------------------------------- #
+# Base TransportMethod class
+# ---------------------------------------------------------------------------- #
 class TransportMethod(SpatialMethod):
     """
     The base object for describing a transport scheme.
@@ -64,6 +67,104 @@ class TransportMethod(SpatialMethod):
             map_if_true=lambda t: new_term)
 
 
+# ---------------------------------------------------------------------------- #
+# TransportMethod for using underlying default transport form
+# ---------------------------------------------------------------------------- #
+class DefaultTransport(TransportMethod):
+    """
+    Performs no manipulation of the transport form, so the scheme is simply
+    based on the transport terms that are declared when the equation is set up.
+    """
+    def __init__(self, equation, variable):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+        """
+
+        super().__init__(equation, variable)
+
+    def replace_form(self, equation):
+        """
+        In theory replaces the transport form in the equation, but in this case
+        does nothing.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the equation or scheme whose
+                transport term should (not!) be replaced with the transport term
+                of this discretisation.
+        """
+        pass
+
+
+# ---------------------------------------------------------------------------- #
+# Class for DG Upwind transport methods
+# ---------------------------------------------------------------------------- #
+class DGUpwind(TransportMethod):
+    """
+    The Discontinuous Galerkin Upwind transport scheme.
+
+    Discretises the gradient of a field weakly, taking the upwind value of the
+    transported variable at facets.
+    """
+    def __init__(self, equation, variable, ibp=IntegrateByParts.ONCE,
+                 vector_manifold_correction=False, outflow=False):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+            ibp (:class:`IntegrateByParts`, optional): an enumerator for how
+                many times to integrate by parts. Defaults to `ONCE`.
+            vector_manifold_correction (bool, optional): whether to include a
+                vector manifold correction term. Defaults to False.
+            outflow (bool, optional): whether to include outflow at the domain
+                boundaries, through exterior facet terms. Defaults to False.
+        """
+
+        super().__init__(equation, variable)
+        self.ibp = ibp
+        self.vector_manifold_correction = vector_manifold_correction
+        self.outflow = outflow
+
+        # -------------------------------------------------------------------- #
+        # Determine appropriate form to use
+        # -------------------------------------------------------------------- #
+
+        if self.transport_equation_type == TransportEquationType.advective:
+            if vector_manifold_correction:
+                form = vector_manifold_advection_form(self.domain, self.test,
+                                                      self.field, ibp=ibp,
+                                                      outflow=outflow)
+            else:
+                form = upwind_advection_form(self.domain, self.test, self.field,
+                                             ibp=ibp, outflow=outflow)
+
+        elif self.transport_equation_type == TransportEquationType.conservative:
+            if vector_manifold_correction:
+                form = vector_manifold_continuity_form(self.domain, self.test,
+                                                       self.field, ibp=ibp,
+                                                       outflow=outflow)
+            else:
+                form = upwind_continuity_form(self.domain, self.test, self.field,
+                                              ibp=ibp, outflow=outflow)
+
+        elif self.transport_equation_type == TransportEquationType.vector_invariant:
+            if outflow:
+                raise NotImplementedError('Outflow not implemented for upwind vector invariant')
+            form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
+
+        else:
+            raise NotImplementedError('Upwind transport scheme has not been '
+                                      + 'implemented for this transport equation type')
+
+        self.form = form
+
+
+# ---------------------------------------------------------------------------- #
+# Forms for DG Upwind transport
+# ---------------------------------------------------------------------------- #
 def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the DG upwind advective transport operator.
@@ -341,64 +442,3 @@ def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.vector_invariant)
-
-
-class DGUpwind(TransportMethod):
-    """
-    The Discontinuous Galerkin Upwind transport scheme.
-
-    Discretises the gradient of a field weakly, taking the upwind value of the
-    transported variable at facets.
-    """
-    def __init__(self, equation, variable, ibp=IntegrateByParts.ONCE,
-                 vector_manifold_correction=False, outflow=False):
-        """
-        Args:
-            equation (:class:`PrognosticEquation`): the equation, which includes
-                a transport term.
-            variable (str): name of the variable to set the transport scheme for
-            ibp (:class:`IntegrateByParts`, optional): an enumerator for how
-                many times to integrate by parts. Defaults to `ONCE`.
-            vector_manifold_correction (bool, optional): whether to include a
-                vector manifold correction term. Defaults to False.
-            outflow (bool, optional): whether to include outflow at the domain
-                boundaries, through exterior facet terms. Defaults to False.
-        """
-
-        super().__init__(equation, variable)
-        self.ibp = ibp
-        self.vector_manifold_correction = vector_manifold_correction
-        self.outflow = outflow
-
-        # -------------------------------------------------------------------- #
-        # Determine appropriate form to use
-        # -------------------------------------------------------------------- #
-
-        if self.transport_equation_type == TransportEquationType.advective:
-            if vector_manifold_correction:
-                form = vector_manifold_advection_form(self.domain, self.test,
-                                                      self.field, ibp=ibp,
-                                                      outflow=outflow)
-            else:
-                form = upwind_advection_form(self.domain, self.test, self.field,
-                                             ibp=ibp, outflow=outflow)
-
-        elif self.transport_equation_type == TransportEquationType.conservative:
-            if vector_manifold_correction:
-                form = vector_manifold_continuity_form(self.domain, self.test,
-                                                       self.field, ibp=ibp,
-                                                       outflow=outflow)
-            else:
-                form = upwind_continuity_form(self.domain, self.test, self.field,
-                                              ibp=ibp, outflow=outflow)
-
-        elif self.transport_equation_type == TransportEquationType.vector_invariant:
-            if outflow:
-                raise NotImplementedError('Outflow not implemented for upwind vector invariant')
-            form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
-
-        else:
-            raise NotImplementedError('Upwind transport scheme has not been '
-                                      + 'implemented for this transport equation type')
-
-        self.form = form

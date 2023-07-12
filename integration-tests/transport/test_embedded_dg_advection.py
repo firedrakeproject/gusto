@@ -35,7 +35,7 @@ def test_embedded_dg_advection_scalar(tmpdir, ibp, equation_form, space,
     transport_schemes = SSPRK3(domain, options=opts)
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
 
-    timestepper = PrescribedTransport(eqn, transport_schemes, transport_method, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_schemes, setup.io, transport_method)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

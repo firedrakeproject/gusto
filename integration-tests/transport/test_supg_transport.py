@@ -42,7 +42,7 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
         transport_scheme = ImplicitMidpoint(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
-    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
@@ -84,7 +84,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
         transport_scheme = ImplicitMidpoint(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
-    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
 
     # Initial conditions
     f = timestepper.fields("f")

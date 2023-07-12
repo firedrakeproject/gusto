@@ -90,7 +90,7 @@ def setup_limiters(dirname, space):
     transport_method = DGUpwind(eqn, "tracer")
 
     # Build time stepper
-    stepper = PrescribedTransport(eqn, transport_schemes, transport_method, io)
+    stepper = PrescribedTransport(eqn, transport_schemes, io, transport_method)
 
     # ------------------------------------------------------------------------ #
     # Initial condition

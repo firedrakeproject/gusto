@@ -55,7 +55,7 @@ def run_instant_rain(dirname):
                         ForwardEuler(domain))]
 
     # Time stepper
-    stepper = PrescribedTransport(eqns, RK4(domain), transport_method, io,
+    stepper = PrescribedTransport(eqns, RK4(domain), io, transport_method,
                                   physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

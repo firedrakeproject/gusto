@@ -12,6 +12,7 @@ from gusto.labels import (transport, diffusion, time_derivative, linearisation,
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
+from gusto.transport_methods import TransportMethod
 import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
@@ -586,7 +587,7 @@ class PrescribedTransport(Timestepper):
     """
     Implements a timeloop with a prescibed transporting velocity.
     """
-    def __init__(self, equation, scheme, transport_method, io,
+    def __init__(self, equation, scheme, io, transport_method,
                  physics_schemes=None, prescribed_transporting_velocity=None):
         """
         Args:
@@ -609,8 +610,13 @@ class PrescribedTransport(Timestepper):
                 updated. Defaults to None.
         """
 
-        super().__init__(equation, scheme, io,
-                         spatial_methods=[transport_method])
+        if isinstance(transport_method, TransportMethod):
+            transport_methods = [transport_method]
+        else:
+            # Assume an iterable has been provided
+            transport_methods = transport_method
+
+        super().__init__(equation, scheme, io, spatial_methods=transport_methods)
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes

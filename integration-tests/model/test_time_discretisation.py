@@ -49,7 +49,7 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
 
     transport_method = DGUpwind(eqn, 'f')
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, transport_method, setup.io)
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
