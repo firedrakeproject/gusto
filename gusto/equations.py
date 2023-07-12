@@ -16,7 +16,7 @@ from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
                                 advection_equation_circulation_form,
-                                diffusion_form)
+                                diffusion_form, linear_continuity_form)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
@@ -601,7 +601,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
                 t.get(prognostic) in ["u", "D"] \
-                and (any(t.has_label(time_derivative, pressure_gradient, transport)))
+                and (any(t.has_label(time_derivative, pressure_gradient))
+                     or (t.get(prognostic) == "D" and t.has_label(transport)))
         super().__init__(field_names, domain,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -609,6 +610,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.parameters = parameters
         g = parameters.g
+        H = parameters.H
 
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
@@ -641,6 +643,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Depth transport term
         D_adv = prognostic(continuity_form(phi, D, u), "D")
+        # Transport term needs special linearisation
+        if self.linearisation_map(D_adv.terms[0]):
+            linear_D_adv = linear_continuity_form(phi, H, u_trial)
+            # Add linearisation to D_adv
+            D_adv = linearisation(D_adv, linear_D_adv)
 
         adv_form = subject(u_adv + D_adv, self.X)
 
@@ -770,7 +777,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
             # Default linearisation is time derivatives, pressure gradient,
             # Coriolis and transport term from depth equation
             linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis, transport)))
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == "D" and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, bexpr=bexpr,
@@ -861,6 +869,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, rho, theta = split(self.X)[0:3]
+        u_trial = split(self.trials)[0]
+        _, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
@@ -892,9 +902,17 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         # Density transport (conservative form)
         rho_adv = prognostic(continuity_form(phi, rho, u), "rho")
+        # Transport term needs special linearisation
+        if self.linearisation_map(rho_adv.terms[0]):
+            linear_rho_adv = linear_continuity_form(phi, rho_bar, u_trial)
+            rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
         theta_adv = prognostic(advection_form(gamma, theta, u), "theta")
+        # Transport term needs special linearisation
+        if self.linearisation_map(theta_adv.terms[0]):
+            linear_theta_adv = linear_advection_form(gamma, theta_bar, u_trial)
+            theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, self.X)
 
@@ -1187,6 +1205,8 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
+        u_trial = split(self.trials)[0]
+        b_bar = split(self.X_ref)[2]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -1215,6 +1235,9 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
         # Buoyancy transport
         b_adv = prognostic(advection_form(gamma, b, u), "b")
+        if self.linearisation_map(b_adv.terms[0]):
+            linear_b_adv = linear_advection_form(gamma, b_bar, u_trial)
+            b_adv = linearisation(b_adv, linear_b_adv)
 
         adv_form = subject(u_adv + b_adv, self.X)
 
