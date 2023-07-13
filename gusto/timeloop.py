@@ -33,6 +33,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.equation = equation
         self.io = io
         self.dt = self.equation.domain.dt
+        self.move_mesh = self.equation.domain.move_mesh
         self.t = Constant(0.0)
         self.reference_profiles_initialised = False
 
@@ -426,10 +427,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         for k in range(self.maxk):
 
+            if self.move_mesh:
+                self.X0.assign(self.X1)
+
+                self.mesh_generator.pre_meshgen_callback()
+                with timed_stage("Mesh generation"):
+                    self.X1.assign(self.mesh_generator.get_new_mesh())
+
             with timed_stage("Transport"):
-                for name, scheme in self.active_transport:
-                    # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+                # transports fields from xstar and puts result in xp
+                self.transport.apply(xp, xstar)
+
+            if self.move_mesh:
+                self.mesh_generator.post_meshgen_callback()
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
@@ -548,7 +558,15 @@ class PrescribedTransport(Timestepper):
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
 
 
-class MeshMovement(SemiImplicitQuasiNewton):
+class TransportStep(object):
+
+    def apply(self, x_out, x_in):
+
+        for name, scheme in self.active_transport:
+            scheme.apply(x_out(name), x_in(name))
+        
+
+class MovingMeshTransportStep(TransportStep):
 
     def __init__(self, equation_set, io, transport_schemes,
                  auxiliary_equations_and_schemes=None,
@@ -603,33 +621,11 @@ class MeshMovement(SemiImplicitQuasiNewton):
         self.ksp = {}
         for name in self.equation.field_names:
             self.ksp[name] = PETSc.KSP().create()
-        
-    def setup_fields(self):
-        super().setup_fields()
         self.x.add_fields(self.equation, levels=("mid",))
 
-    @property
-    def transporting_velocity(self):
-        return self.uadv
-
-    def timestep(self):
-        """Defines the timestep"""
-        xn = self.x.n
-        xnp1 = self.x.np1
-        xstar = self.x.star
-        xmid = self.x.mid
-        xp = self.x.p
-        xrhs = self.xrhs
-        dy = self.dy
-        un = xn("u")
-        unp1 = xnp1("u")
-        X0 = self.X0
-        X1 = self.X1
+    def apply(self):
 
         X1.assign(self.mesh.coordinates)
-
-        with timed_stage("Apply forcing terms"):
-            self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
         xp(self.field_name).assign(xstar(self.field_name))
 
@@ -663,63 +659,32 @@ class MeshMovement(SemiImplicitQuasiNewton):
                 self.mesh.coordinates.assign(X1)
                 self.v1_V1.project(-(X0 - X1)/self.dt)
 
-            with timed_stage("Transport"):
-                for name, scheme in self.active_transport:
-                    # transport field from xstar to xmid on old mesh
-                    self.mesh.coordinates.assign(X0)
-                    self.uadv.assign(0.5*(un - self.v_V1))
-                    scheme.apply(xmid(name), xstar(name))
+            for name, scheme in self.active_transport:
+                # transport field from xstar to xmid on old mesh
+                self.mesh.coordinates.assign(X0)
+                self.uadv.assign(0.5*(un - self.v_V1))
+                scheme.apply(xmid(name), xstar(name))
 
-                    rhs = inner(xmid(name), self.tests[name])*dx
-                    with assemble(rhs).dat.vec as v:
-                        Lvec = v
+                rhs = inner(xmid(name), self.tests[name])*dx
+                with assemble(rhs).dat.vec as v:
+                    Lvec = v
 
-                    # put mesh_new into mesh
-                    self.mesh.coordinates.assign(X1)
+                # put mesh_new into mesh
+                self.mesh.coordinates.assign(X1)
 
-                    lhs = inner(self.trials[name], self.tests[name])*dx
-                    amat = assemble(lhs)
-                    a = amat.M.handle
-                    self.ksp[name].setOperators(a)
-                    self.ksp[name].setFromOptions()
+                lhs = inner(self.trials[name], self.tests[name])*dx
+                amat = assemble(lhs)
+                a = amat.M.handle
+                self.ksp[name].setOperators(a)
+                self.ksp[name].setFromOptions()
 
-                    with xmid(name).dat.vec as x_:
-                        self.ksp[name].solve(Lvec, x_)
+                with xmid(name).dat.vec as x_:
+                    self.ksp[name].solve(Lvec, x_)
 
-                    # transport field from xmid to xp on new mesh
-                    self.uadv.assign(0.5*(unp1 - self.v1_V1))
-                    scheme.apply(xp(name), xmid(name))
+                # transport field from xmid to xp on new mesh
+                self.uadv.assign(0.5*(unp1 - self.v1_V1))
+                scheme.apply(xp(name), xmid(name))
 
             self.mesh_generator.post_meshgen_callback()
 
-            xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
 
-            for i in range(self.maxi):
-
-                with timed_stage("Apply forcing terms"):
-                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
-
-                xrhs -= xnp1(self.field_name)
-
-                with timed_stage("Implicit solve"):
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
-
-                xnp1X = xnp1(self.field_name)
-                xnp1X += dy
-
-            # Update xnp1 values for active tracers not included in the linear solve
-            self.copy_active_tracers(xp, xnp1)
-
-            self._apply_bcs()
-
-        for name, scheme in self.auxiliary_schemes:
-            # transports a field from xn and puts result in xnp1
-            scheme.apply(xnp1(name), xn(name))
-
-        with timed_stage("Diffusion"):
-            for name, scheme in self.diffusion_schemes:
-                scheme.apply(xnp1(name), xnp1(name))
-
-        with timed_stage("Physics"):
-            for _, scheme in self.physics_schemes:
-                scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
