@@ -9,14 +9,15 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
 from gusto.fields import PrescribedFields
 from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
 from gusto.labels import (subject, time_derivative, transport, prognostic,
-                          transporting_velocity, replace_subject, linearisation,
+                          replace_subject, linearisation,
                           name, pressure_gradient, coriolis, perp,
                           replace_trial_function, hydrostatic)
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
                                 advection_equation_circulation_form,
-                                diffusion_form, linear_continuity_form)
+                                diffusion_form, linear_continuity_form,
+                                linear_advection_form)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
@@ -631,12 +632,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
             ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
-            ke_form = transport.remove(ke_form)
-            ke_form = ke_form.label_map(
-                lambda t: t.has_label(transporting_velocity),
-                lambda t: Term(ufl.replace(
-                    t.form, {t.get(transporting_velocity): u}), t.labels))
-            ke_form = transporting_velocity.remove(ke_form)
             u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
@@ -890,12 +885,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
             ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
-            ke_form = transport.remove(ke_form)
-            ke_form = ke_form.label_map(
-                lambda t: t.has_label(transporting_velocity),
-                lambda t: Term(ufl.replace(
-                    t.form, {t.get(transporting_velocity): u}), t.labels))
-            ke_form = transporting_velocity.remove(ke_form)
             u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
@@ -1223,12 +1212,6 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
             u_adv = prognostic(advection_form(w, u, u), "u")
         elif u_transport_option == "circulation_form":
             ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
-            ke_form = transport.remove(ke_form)
-            ke_form = ke_form.label_map(
-                lambda t: t.has_label(transporting_velocity),
-                lambda t: Term(ufl.replace(
-                    t.form, {t.get(transporting_velocity): u}), t.labels))
-            ke_form = transporting_velocity.remove(ke_form)
             u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)

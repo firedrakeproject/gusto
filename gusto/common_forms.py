@@ -117,12 +117,7 @@ def vector_invariant_form(domain, test, q, ubar):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    if domain.mesh.topological_dimension() == 3:
-        L = inner(test, cross(curl(q), ubar))*dx
-
-    else:
-        perp = domain.perp
-        L = inner(test, div(perp(q))*perp(ubar))*dx
+    L = advection_equation_circulation_form(domain, test, q, ubar).terms[0].form
 
     # Add K.E. term
     L -= 0.5*div(test)*inner(q, ubar)*dx
@@ -145,14 +140,12 @@ def kinetic_energy_form(test, q, ubar):
         ubar (:class:`ufl.Expr`): the transporting velocity.
 
     Returns:
-        class:`LabelledForm`: a labelled transport form.
+        class:`ufl.Form`: the kinetic energy form.
     """
 
-    L = 0.5*div(test)*inner(q, ubar)*dx
+    L = -0.5*div(test)*inner(q, ubar)*dx
 
-    form = transporting_velocity(L, ubar)
-
-    return transport(form, TransportEquationType.vector_invariant)
+    return L
 
 
 def advection_equation_circulation_form(domain, test, q, ubar):
@@ -182,12 +175,16 @@ def advection_equation_circulation_form(domain, test, q, ubar):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    form = (
-        vector_invariant_form(domain, test, q, ubar)
-        - kinetic_energy_form(test, q, ubar)
-    )
+    if domain.mesh.topological_dimension() == 3:
+        L = inner(test, cross(curl(q), ubar))*dx
 
-    return form
+    else:
+        perp = domain.perp
+        L = inner(test, div(perp(q))*perp(ubar))*dx
+
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.circulation)
 
 
 def diffusion_form(test, q, kappa):

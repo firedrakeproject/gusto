@@ -377,7 +377,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
-        self.spatial_methods = []
+        self.spatial_methods = spatial_methods
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -397,7 +397,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             for method in spatial_methods:
                 if scheme.field_name == method.variable and method.term_label == transport:
                     method_found = True
-                    self.spatial_methods.append(method)
             assert method_found, f'No transport method found for variable {scheme.field_name}'
 
         self.diffusion_schemes = []
@@ -411,7 +410,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for method in spatial_methods:
                     if scheme.field_name == method.variable and method.term_label == diffusion:
                         method_found = True
-                        self.diffusion_methods.append(method)
                 assert method_found, f'No diffusion method found for variable {scheme.field_name}'
 
         if auxiliary_equations_and_schemes is not None:
@@ -420,6 +418,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
                 for eqn, scheme in auxiliary_equations_and_schemes]
+
         else:
             auxiliary_equations_and_schemes = []
             self.auxiliary_schemes = []

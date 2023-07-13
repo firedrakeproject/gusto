@@ -52,19 +52,30 @@ class TransportMethod(SpatialMethod):
             lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
             map_if_true=keep, map_if_false=drop
         )
-        original_term = original_form.terms[0]
 
-        # Update transporting velocity
-        new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
-        original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
+        if len(original_form.terms) == 0:
+            # This is likely not the appropriate equation so skip
+            pass
 
-        # Create new term
-        new_term = Term(self.form.form, original_term.labels)
+        elif len(original_form.terms) == 1:
+            # Replace form
+            original_term = original_form.terms[0]
 
-        # Replace original term with new term
-        equation.residual = equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
-            map_if_true=lambda t: new_term)
+            # Update transporting velocity
+            new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
+            original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
+
+            # Create new term
+            new_term = Term(self.form.form, original_term.labels)
+
+            # Replace original term with new term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
+                map_if_true=lambda t: new_term)
+
+        else:
+            raise RuntimeError('Unable to find single transport term for '
+                               + f'{self.variable}. {len(original_form.terms)} found')
 
 
 # ---------------------------------------------------------------------------- #
@@ -149,6 +160,11 @@ class DGUpwind(TransportMethod):
             else:
                 form = upwind_continuity_form(self.domain, self.test, self.field,
                                               ibp=ibp, outflow=outflow)
+
+        elif self.transport_equation_type == TransportEquationType.circulation:
+            if outflow:
+                raise NotImplementedError('Outflow not implemented for upwind circulation')
+            form = upwind_circulation_form(self.domain, self.test, self.field, ibp=ibp)
 
         elif self.transport_equation_type == TransportEquationType.vector_invariant:
             if outflow:
@@ -358,20 +374,16 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
     return transport(form)
 
 
-def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+def upwind_circulation_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     u"""
-    The form corresponding to the DG upwind vector invariant transport operator.
+    The form corresponding to the DG upwind vector circulation operator.
 
     The self-transporting transport operator for a vector-valued field u can be
     written as circulation and kinetic energy terms:
     (u.∇)u = (∇×u)×u + (1/2)∇u^2
 
-    When the transporting field u and transported field q are similar, we write
-    this as:
-    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
-
-    This form discretises this final equation, using an upwind discretisation
-    when integrating by parts.
+    This form discretises the first term in this equation, (∇×u)×u, using an
+    upwind discretisation when integrating by parts.
 
     Args:
         domain (:class:`Domain`): the model's domain object, containing the
@@ -437,8 +449,46 @@ def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
                              perp(ubar))*perp(q), n)*dS_
             )
 
-    L -= 0.5*div(test)*inner(q, ubar)*dx
+    form = transporting_velocity(L, ubar)
 
+    return transport(form, TransportEquationType.circulation)
+
+
+def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+    u"""
+    The form corresponding to the DG upwind vector invariant transport operator.
+
+    The self-transporting transport operator for a vector-valued field u can be
+    written as circulation and kinetic energy terms:
+    (u.∇)u = (∇×u)×u + (1/2)∇u^2
+
+    When the transporting field u and transported field q are similar, we write
+    this as:
+    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
+
+    This form discretises this final equation, using an upwind discretisation
+    when integrating by parts.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+
+    Raises:
+        NotImplementedError: the specified integration by parts is not 'once'.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    circulation_form = upwind_circulation_form(domain, test, q, ibp=ibp)
+    ubar = circulation_form.terms[0].get(transporting_velocity)
+
+    L = circulation_form.terms[0].form - 0.5*div(test)*inner(q, ubar)*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.vector_invariant)

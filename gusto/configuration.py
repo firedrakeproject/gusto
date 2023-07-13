@@ -50,12 +50,14 @@ class TransportEquationType(Enum):
     advective: ∂q/∂t + (u.∇)q = 0                                             \n
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
+    circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
     """
 
     no_transport = 702
     advective = 19
     conservative = 291
     vector_invariant = 9081
+    circulation = 512
 
 
 class Configuration(object):
