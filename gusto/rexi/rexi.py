@@ -10,8 +10,8 @@ class RexiParameters(Configuration):
     """
     Parameters for the REXI coefficients
     """
-    h = None
-    M = None
+    h = 0.2
+    M = 64
     reduce_to_half = False
 
 
