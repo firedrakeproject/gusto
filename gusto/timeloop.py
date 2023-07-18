@@ -115,7 +115,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             with timed_stage("Dump output"):
                 self.io.dump(self.fields, float(self.t), self.get_initial_timesteps())
 
-        if self.io.output.checkpoint and self.io.output.checkpoint_method == 'old':
+        if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
 
         logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')

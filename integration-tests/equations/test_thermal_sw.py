@@ -32,7 +32,8 @@ def setup_sw(dirname, dt, u_transport_option):
     refinements = 3
 
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
+                                 refinement_level=refinements,
+                                 degree=2)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
 

@@ -171,7 +171,7 @@ class Domain(object):
                 else:
                     metadata_value = None
                 for procid in range(1, comm_size):
-                    my_tag = comm_size*j + my_rank
+                    my_tag = comm_size*j + procid
                     comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
         else:
             # Need to receive information and store in metadata

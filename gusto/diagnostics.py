@@ -67,7 +67,7 @@ class Diagnostics(object):
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=f._comm)
         op2.par_loop(op2.Kernel("""
 static void minify(double *a, double *b) {
     a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
@@ -85,7 +85,7 @@ static void minify(double *a, double *b) {
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=f._comm)
         op2.par_loop(op2.Kernel("""
 static void maxify(double *a, double *b) {
     a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
