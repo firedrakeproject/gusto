@@ -25,7 +25,8 @@ class Domain(object):
     the same then this can be specified through the "degree" argument.
     """
     def __init__(self, mesh, dt, family, degree=None,
-                 horizontal_degree=None, vertical_degree=None):
+                 horizontal_degree=None, vertical_degree=None,
+                 move_mesh=False):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -58,6 +59,11 @@ class Domain(object):
             self.dt = Constant(dt)
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
+
+        # -------------------------------------------------------------------- #
+        # Are we moving the mesh?
+        self.move_mesh = move_mesh
+        # -------------------------------------------------------------------- #
 
         # -------------------------------------------------------------------- #
         # Build compatible function spaces

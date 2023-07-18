@@ -17,7 +17,7 @@ from gusto.fields import TimeLevelFields, StateFields
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
-           "PrescribedTransport", "MeshMovement"]
+           "PrescribedTransport"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -262,7 +262,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
-                 physics_schemes=None, **kwargs):
+                 physics_schemes=None,
+                 mesh_generator=None,
+                 **kwargs):
 
         """
         Args:
@@ -328,6 +330,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.auxiliary_schemes = []
         self.auxiliary_equations_and_schemes = auxiliary_equations_and_schemes
 
+        if not equation_set.domain.move_mesh:
+            self.transport_step = TransportStep(self.active_transport)
+        else:
+            mesh_generator.monitor.setup(self.fields)
+            mesh_generator.setup()
+            self.transport_step = MovingMeshTransportStep(equation_set,
+                                                          self.active_transport,
+                                                          X0, X1)
+            
         super().__init__(equation_set, io)
 
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
@@ -436,7 +447,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             with timed_stage("Transport"):
                 # transports fields from xstar and puts result in xp
-                self.transport.apply(xp, xstar)
+                self.transport_step.apply(xp, xstar)
 
             if self.move_mesh:
                 self.mesh_generator.post_meshgen_callback()
@@ -560,6 +571,9 @@ class PrescribedTransport(Timestepper):
 
 class TransportStep(object):
 
+    def __init__(self, active_transport):
+        self.active_transport = active_transport
+
     def apply(self, x_out, x_in):
 
         for name, scheme in self.active_transport:
@@ -568,39 +582,15 @@ class TransportStep(object):
 
 class MovingMeshTransportStep(TransportStep):
 
-    def __init__(self, equation_set, io, transport_schemes,
-                 auxiliary_equations_and_schemes=None,
-                 linear_solver=None,
-                 diffusion_schemes=None,
-                 physics_schemes=None,
-                 mesh_generator=None,
-                 **kwargs):
+    def __init__(self, equation, active_transport, X0, X1):
 
-        Vu = equation_set.domain.spaces("HDiv")
-        self.uadv = Function(Vu)
-
-        super().__init__(equation_set=equation_set,
-                         io=io,
-                         transport_schemes=transport_schemes,
-                         auxiliary_equations_and_schemes=auxiliary_equations_and_schemes,
-                         linear_solver=linear_solver,
-                         diffusion_schemes=diffusion_schemes,
-                         physics_schemes=physics_schemes,
-                         **kwargs)
+        super().__init__(active_transport)
 
         self.mesh_generator = mesh_generator
         mesh = self.equation.domain.mesh
         self.mesh = mesh
         self.X0 = Function(mesh.coordinates)
         self.X1 = Function(mesh.coordinates)
-        from firedrake import File, FunctionSpace
-        Vf = FunctionSpace(mesh, "DG", 1)
-        f = Function(Vf)
-        coords_out = File("out.pvd")
-        mesh.coordinates.assign(self.X0)
-        coords_out.write(f)
-        mesh.coordinates.assign(self.X1)
-        coords_out.write(f)
 
         self.on_sphere = self.equation.domain.on_sphere
 
@@ -608,9 +598,6 @@ class MovingMeshTransportStep(TransportStep):
         self.v_V1 = Function(Vu)
         self.v1 = Function(mesh.coordinates.function_space())
         self.v1_V1 = Function(Vu)
-
-        mesh_generator.monitor.setup(self.fields)
-        mesh_generator.setup()
 
         self.tests = {}
         for name in self.equation.field_names:
@@ -623,68 +610,55 @@ class MovingMeshTransportStep(TransportStep):
             self.ksp[name] = PETSc.KSP().create()
         self.x.add_fields(self.equation, levels=("mid",))
 
-    def apply(self):
+    def apply(self, x_out, x_in):
 
-        X1.assign(self.mesh.coordinates)
+        # Compute v (mesh velocity w.r.t. initial mesh) and
+        # v1 (mesh velocity w.r.t. final mesh)
+        # TODO: use Projectors below!
+        if self.on_sphere:
+            spherical_logarithm(X0, X1, self.v, self.mesh._radius)
+            self.v /= self.dt
+            spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
+            self.v1 /= -self.dt
 
-        xp(self.field_name).assign(xstar(self.field_name))
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project(self.v)
 
-        for k in range(self.maxk):
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(self.v1)
 
-            X0.assign(X1)
+        else:
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project((X1 - X0)/self.dt)
 
-            self.mesh_generator.pre_meshgen_callback()
-            with timed_stage("Mesh generation"):
-                X1.assign(self.mesh_generator.get_new_mesh())
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(-(X0 - X1)/self.dt)
 
-            # Compute v (mesh velocity w.r.t. initial mesh) and
-            # v1 (mesh velocity w.r.t. final mesh)
-            # TODO: use Projectors below!
-            if self.on_sphere:
-                spherical_logarithm(X0, X1, self.v, self.mesh._radius)
-                self.v /= self.dt
-                spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
-                self.v1 /= -self.dt
+        x_out(self.field_name).assign(x_in(self.field_name))
 
-                self.mesh.coordinates.assign(X0)
-                self.v_V1.project(self.v)
+        for name, scheme in self.active_transport:
+            # transport field from xstar to xmid on old mesh
+            self.mesh.coordinates.assign(X0)
+            self.uadv.assign(0.5*(un - self.v_V1))
+            scheme.apply(xmid(name), xstar(name))
 
-                self.mesh.coordinates.assign(X1)
-                self.v1_V1.project(self.v1)
+            rhs = inner(xmid(name), self.tests[name])*dx
+            with assemble(rhs).dat.vec as v:
+                Lvec = v
 
-            else:
-                self.mesh.coordinates.assign(X0)
-                self.v_V1.project((X1 - X0)/self.dt)
+            # put mesh_new into mesh
+            self.mesh.coordinates.assign(X1)
 
-                self.mesh.coordinates.assign(X1)
-                self.v1_V1.project(-(X0 - X1)/self.dt)
+            lhs = inner(self.trials[name], self.tests[name])*dx
+            amat = assemble(lhs)
+            a = amat.M.handle
+            self.ksp[name].setOperators(a)
+            self.ksp[name].setFromOptions()
 
-            for name, scheme in self.active_transport:
-                # transport field from xstar to xmid on old mesh
-                self.mesh.coordinates.assign(X0)
-                self.uadv.assign(0.5*(un - self.v_V1))
-                scheme.apply(xmid(name), xstar(name))
+            with xmid(name).dat.vec as x_:
+                self.ksp[name].solve(Lvec, x_)
 
-                rhs = inner(xmid(name), self.tests[name])*dx
-                with assemble(rhs).dat.vec as v:
-                    Lvec = v
-
-                # put mesh_new into mesh
-                self.mesh.coordinates.assign(X1)
-
-                lhs = inner(self.trials[name], self.tests[name])*dx
-                amat = assemble(lhs)
-                a = amat.M.handle
-                self.ksp[name].setOperators(a)
-                self.ksp[name].setFromOptions()
-
-                with xmid(name).dat.vec as x_:
-                    self.ksp[name].solve(Lvec, x_)
-
-                # transport field from xmid to xp on new mesh
-                self.uadv.assign(0.5*(unp1 - self.v1_V1))
-                scheme.apply(xp(name), xmid(name))
-
-            self.mesh_generator.post_meshgen_callback()
-
+            # transport field from xmid to xp on new mesh
+            self.uadv.assign(0.5*(unp1 - self.v1_V1))
+            scheme.apply(xp(name), xmid(name))
 

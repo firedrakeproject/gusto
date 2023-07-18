@@ -18,7 +18,7 @@ parameters = ShallowWaterParameters(H=H)
 # Domain
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=ref_level, degree=2)
-domain = Domain(mesh, dt, 'BDM', 1)
+domain = Domain(mesh, dt, 'BDM', 1, move_mesh=True)
 
 # Equation
 Omega = parameters.Omega
@@ -63,8 +63,8 @@ mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
                                                post_meshgen_callback=reinterpolate_coriolis)
 
 # Time stepper
-stepper = MeshMovement(eqns, io, transported_fields,
-                       mesh_generator=mesh_generator)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  mesh_generator=mesh_generator)
 #stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 # initial conditions
