@@ -591,7 +591,7 @@ class LinearTimesteppingSolver(object):
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
                                            self.dy, bcs=bcs,
-                                           constant_jacobian=False)
+                                           constant_jacobian=not equation.domain.move_mesh)
 
         self.solver = LinearVariationalSolver(problem,
                                               solver_parameters=self.solver_parameters,

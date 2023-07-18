@@ -88,12 +88,12 @@ class Forcing(object):
         # now we can set up the explicit and implicit problems
         explicit_forcing_problem = LinearVariationalProblem(
             a.form, L_explicit.form, self.xF, bcs=bcs,
-            constant_jacobian=False
+            constant_jacobian=not equation.domain.move_mesh
         )
 
         implicit_forcing_problem = LinearVariationalProblem(
             a.form, L_implicit.form, self.xF, bcs=bcs,
-            constant_jacobian=False
+            constant_jacobian=not equation.domain.move_mesh
         )
 
         solver_parameters = {}
