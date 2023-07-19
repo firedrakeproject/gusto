@@ -89,19 +89,30 @@ Vu = u.function_space()
 Vr = rho0.function_space()
 Vt = theta0.function_space()
 
-
-#TODO We are just using an isotherm here, should we consider a more complex temperature scenario for baroclinic? 
+# -------------------------------------------------------------- #
+# Base State
+# -------------------------------------------------------------- #
 
 # expressions for variables from paper
 s = (r / a) * cos(lat)
-Q_expr = s**2 * (0.5 * u0**2 + omega * a * u0) / (Rd * T0)
-# solving fields as per the staniforth paper
-q_expr = Q_expr + (a - r) * g * a / (Rd * T0 * r)
-p_expr = p0 * exp(q_expr)
-theta_expr = T0 * (p_expr / p0) ** (-params.kappa) 
-pie_expr = T0 / theta_expr
-rho_expr = p_expr / (Rd * T0)
+A = 1 / lapse
+B = (T0e - T0p) / ((T0e + T0p)*T0p)
+C = ((k + 2) / 2)*((T0e - T0p) / (T0e * T0p))
 
+tao1 = A * lapse / T0 * exp((r - a)*lapse / T0) + B * (1 - 2*((r-a)/(b*H))**2)*exp(-((r-a) / (b*H))**2)
+tao2 = C * (1 - 2*((r-a)/(b*H))**2)*exp(-((r - a) / (b*H))**2)
+
+tao1_int = A * (exp(lapse * (r - a) / T0) - 1) + B * (r - a) * exp(-((r-a) / (b*H))**2)
+tao2_int = C * (r - a)  * exp(-((r-a) / (b*H))**2)
+
+# Variable fields
+Temp = (a / r)**2 * (tao1 - tao2 * ( s**k - (k / (k+2)) *s**(k+2)))**(-1)
+P_expr = p0 * exp(-g / Rd * tao1_int + g / Rd * tao2_int * (s**k - (k / (k+2)) *s**(k+2)))
+wind = ((g*k) / (2 * omega * a)) * (cos(lat)**(k-1) - cos(lat)**(k+1))*tao2_int*Temp
+
+theta_expr = Temp * (P_expr / p0) ** (-params.kappa) 
+pie_expr = Temp / theta_expr
+rho_expr = P_expr / (Rd * Temp)
 # -------------------------------------------------------------- #
 # Perturbation
 # -------------------------------------------------------------- #
@@ -144,19 +155,12 @@ mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_s
                       val=mp_field.topological, name='meridonal perturbation')
 testput.write(d_field_ll, z_field_ll, zp_field_ll, mp_field_ll)
 
-#z_field = Function(Vr).interpolate(zeta)
-#zp_field = Function(Vr).interpolate(zonal_pert)
-#mp_field = Function(Vr).interpolate(meridional_pert)
-#condcheck = Function(Vr).interpolate(conditional_test)
-#testput.write(d_field, z_field, zp_field, mp_field, condcheck)
 
 pertput = File('results/pertout.pvd')
 magnitude = Function(Vr).interpolate(perturb_magnitude)
 zonal_localistaion = Function(Vr).interpolate((-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a))
 meridional_localisation = Function(Vr).interpolate(cos(lat_c)*sin(lon - lon_c) / sin(d / a))
 pertput.write(magnitude, zonal_localistaion, meridional_localisation)
-#(u_pert, v_pert, w_pert) = sphere_to_cartesian(mesh, zonal_pert, meridional_pert)
-#perturbation = Function(Vu).project(as_vector([u_pert, v_pert, w_pert]))
 
 # -------------------------------------------------------------- #
 # Configuring fields
