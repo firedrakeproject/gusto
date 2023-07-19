@@ -121,31 +121,6 @@ theta_expr = Temp * (P_expr / p0) ** (-params.kappa)
 pie_expr = Temp / theta_expr
 rho_expr = P_expr / (Rd * Temp)
 
-# -------------------------------------------------------------- #
-# Perturbation
-# -------------------------------------------------------------- #
-
-zt = 1.5e4     # top of perturbation
-d0 = a / 6     # horizontal radius of perturbation
-Vp = 1         # Perturbed wind amplitude  
-lon_c , lat_c = pi/9,  2*pi/9 # location of perturbation centre   
-err_tol = 1e-12
-
-d = a * acos(sin(lat_c)*sin(lat) + cos(lat_c)*cos(lat)*cos(lon - lon_c)) # distance from centre of perturbation
-
-depth = r - a # The distance from origin subtracted from earth radius
-zeta = conditional(ge(depth,zt-err_tol), 0, 1 - 3*(depth / zt)**2 + 2*(depth / zt)**3) # peturbation vertical taper
-
-perturb_magnitude = (16*Vp/(3*sqrt(3))) * zeta * sin((pi * d) / (2 * d0)) * cos((pi * d) / (2 * d0)) ** 3
-
-
-zonal_pert = conditional(le(d,err_tol), 0, 
-                         conditional(ge(d,(d0-err_tol)), 0, -perturb_magnitude * (-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a)))
-meridional_pert = conditional(le(d,err_tol), 0, 
-                              conditional(ge(d,d0-err_tol), 0, perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
-
-conditional_test = conditional(le(d,err_tol), 0, 
-                         conditional(ge(d,(d0-err_tol)), 0, 10))
 
 # -------------------------------------------------------------- #
 # Debug Plotting
@@ -158,22 +133,13 @@ mesh_ll = get_flat_latlon_mesh(mesh)
 d_field = Function(Vr, name='d').interpolate(d)
 d_field_ll = Function(functionspaceimpl.WithGeometry.create(d_field.function_space(), mesh_ll),
                       val=d_field.topological, name='d')
-z_field = Function(Vr, name='taper').interpolate(zeta)
-z_field_ll = Function(functionspaceimpl.WithGeometry.create(z_field.function_space(), mesh_ll),
-                      val=z_field.topological, name='zeta')
-zp_field = Function(Vr, name='zonal perturbation').interpolate(zonal_pert)
-zp_field_ll = Function(functionspaceimpl.WithGeometry.create(zp_field.function_space(), mesh_ll),
-                      val=zp_field.topological, name='zonal perturbation')
-mp_field = Function(Vr, name='meridional perturbation').interpolate(meridional_pert)
-mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_space(), mesh_ll),
-                      val=mp_field.topological, name='meridonal perturbation')
 temp_field = Function(Vr, name='temperature').interpolate(Temp)
 temp_field_ll = Function(functionspaceimpl.WithGeometry.create(temp_field.function_space(), mesh_ll),
                          val=temp_field.topological, name='temp')
 wind_field = Function(Vr, name='wind').interpolate(wind)
 wind_field_ll = Function(functionspaceimpl.WithGeometry.create(wind_field.function_space(), mesh_ll),
                          val=wind_field.topological, name='wind')
-latlon_out.write(d_field_ll, z_field_ll, zp_field_ll, mp_field_ll, temp_field_ll, wind_field_ll)
+latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll)
 
 # sphere grid plotting
 
@@ -181,16 +147,15 @@ sphereout = File('results/sphereout.pvd')
 temperature_out = Function(Vr, name='temp').interpolate(Temp)
 theta_out = Function(Vt, name='theta').interpolate(theta_expr)
 wind_field = Function(Vr, name='wind').interpolate(wind)
-zp_field = Function(Vr, name='zonal pert').interpolate(zonal_pert)
-mp_field = Function(Vr, name='meridional pert').interpolate(meridional_pert)
-sphereout.write(temperature_out, theta_out, wind_field, zp_field, mp_field)
+
+sphereout.write(temperature_out, theta_out, wind_field)
 
 # -------------------------------------------------------------- #
 # Configuring fields
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
-zonal_u = wind  + zonal_pert
-merid_u = Constant(0.0)  + meridional_pert
+zonal_u = wind
+merid_u = Constant(0.0)
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
