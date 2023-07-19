@@ -6,9 +6,8 @@ from gusto import *                                            #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 1000.
+dt = 500.
 days = 10.
-ndumps = 60
 tmax = days * 24. * 60. * 60.
 deltaz = 3.0e3
 
@@ -21,7 +20,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=12, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=24, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -32,9 +31,9 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'BaroclinicWave_'
+dirname = 'baroclinicPerturbation_nonisotherm_dt=500_cellperedge=24_vector_invar'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=1, 
+                          dumpfreq=22, #roughly every 3 hours 
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -77,8 +76,14 @@ Rd = params.R_d
 cp = params.cp
 g = params.g
 p0 = Constant(100000)
-T0 = 280.  # in K
-u0 = 40.
+
+lapse = 0.005
+T0e = 310 # Equatorial temp
+T0p = 240 # Polar surface temp
+T0 = 0.5 * (T0e + T0p)
+H = Rd * T0 / g # scale height of atmosphere
+k = 3 # power of temp field
+b = 2 # half width parameter
 
 u = stepper.fields("u")
 rho0 = stepper.fields("rho")
@@ -138,23 +143,34 @@ meridional_pert = conditional(le(d,err_tol), 0,
 
 conditional_test = conditional(le(d,err_tol), 0, 
                          conditional(ge(d,(d0-err_tol)), 0, 10))
+rho_expr = P_expr / (Rd * Temp)
+# -------------------------------------------------------------- #
+# Debug Plotting
+# -------------------------------------------------------------- #
 
-testput = File('results/testout.pvd')
+latlon_out = File('results/latlon.pvd')
+sphere_out = File('results/sphereout.pvd')
+
+
 mesh_ll = get_flat_latlon_mesh(mesh)
-d_field = Function(Vr).interpolate(d)
+d_field = Function(Vr, name='d').interpolate(d)
 d_field_ll = Function(functionspaceimpl.WithGeometry.create(d_field.function_space(), mesh_ll),
                       val=d_field.topological, name='d')
-z_field = Function(Vr).interpolate(zeta)
-z_field_ll = Function(functionspaceimpl.WithGeometry.create(z_field.function_space(), mesh_ll),
-                      val=z_field.topological, name='zeta')
+temp_field = Function(Vr, name='temperature').interpolate(Temp)
+temp_field_ll = Function(functionspaceimpl.WithGeometry.create(temp_field.function_space(), mesh_ll),
+                         val=temp_field.topological, name='temp')
+wind_field = Function(Vr, name='wind').interpolate(wind)
+wind_field_ll = Function(functionspaceimpl.WithGeometry.create(wind_field.function_space(), mesh_ll),
+                         val=wind_field.topological, name='wind')
 zp_field = Function(Vr).interpolate(zonal_pert)
 zp_field_ll = Function(functionspaceimpl.WithGeometry.create(zp_field.function_space(), mesh_ll),
                       val=zp_field.topological, name='zonal perturbation')
 mp_field = Function(Vr).interpolate(meridional_pert)
 mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_space(), mesh_ll),
                       val=mp_field.topological, name='meridonal perturbation')
-testput.write(d_field_ll, z_field_ll, zp_field_ll, mp_field_ll)
 
+latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll, zp_field_ll, mp_field_ll)
+sphere_out.write(d_field, temp_field, wind_field, zp_field, mp_field)
 
 pertput = File('results/pertout.pvd')
 magnitude = Function(Vr).interpolate(perturb_magnitude)
@@ -166,8 +182,8 @@ pertput.write(magnitude, zonal_localistaion, meridional_localisation)
 # Configuring fields
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
-zonal_u = u0 * r / a * cos(lat) + zonal_pert
-merid_u = Constant(0.0) + meridional_pert
+zonal_u = wind
+merid_u = Constant(0.0)
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
@@ -197,4 +213,6 @@ theta_b = Function(Vt).assign(theta0)
 # assign reference profiles
 stepper.set_reference_profiles([('rho', rho_b),
                                 ('theta', theta_b)])
+print('Intialise Windy Boi')
 stepper.run(t=0, tmax=tmax)
+
