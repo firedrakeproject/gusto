@@ -91,6 +91,7 @@ def PlotRadial(fp):
             mes += 1
     plt.show()
     return fig
+
 def PlotGeostrophic(fp):
     data =nc.Dataset(fp)
     time = data.variables['time'][:]
@@ -118,13 +119,12 @@ def PlotGeostrophic(fp):
             ax[row,col].scatter(time, reshape(u_measure[mes], (length,1)))
             ax[row,col].set(title=f"Graph of Geostrophic Imbalance, {measures[mes]} measure",
                             ylabel = measures[mes])
+            ax[row,col].ylim(10)
             mes += 1
     plt.show()
     return fig
-fp = '/home/d-witt/SBR_hailmary/geoimbalance_test/diagnostics.nc'
+
+fp = '/home/d-witt/firedrake/src/gusto/results/Plotting/SBR_longDiagnostics/diagnostics.nc'
 PlotMeridonal(fp)
 PlotZonal(fp)
 PlotRadial(fp)
-PlotGeostrophic(fp)
-
-
