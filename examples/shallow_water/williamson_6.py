@@ -8,9 +8,9 @@ from firedrake import IcosahedralSphereMesh, SpatialCoordinate, cos, grad, curl,
 # Set up timestepping variables
 day = 24. * 60. * 60.
 ref = 5
-dt_val = [1000, 500, 250]
-tmax = 5*day
-ndumps = 10
+dt_val = 1000
+tmax = 15*day
+ndumps = 30
 
 # Shallow Water Parameters
 a = 6371220.
@@ -25,7 +25,7 @@ parameters = ShallowWaterParameters(H=H)
 dt = 250
 # Mesh and domain
 mesh = IcosahedralSphereMesh(radius=a,
-                            refinement_level=ref, degree=1)
+                            refinement_level=ref, degree=2)
 x = SpatialCoordinate(mesh)
 global_normal = x
 mesh.init_cell_orientations(x)
@@ -34,11 +34,11 @@ domain = Domain(mesh, dt, "BDM", 1)
 # Equations
 lat, lon = latlon_coords(mesh)
 Omega = parameters.Omega
-fexpr = 2*Omega * x[2] / a
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
+fexpr =  2*Omega * x[2] / a
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_invariant_form')
 
 # Output and IO
-dirname = 'W6_SIQN_Ref=5_dt=500_diagnostics'
+dirname = 'W6_Red=6_dt=500_long'
 dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                         dumpfreq=dumpfreq,
