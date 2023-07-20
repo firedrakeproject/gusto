@@ -1,6 +1,6 @@
 from gusto import *
 from gusto import NumericalIntegral
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, CubedSphereMesh
 import numpy as np
 
 day = 24. * 60. * 60.
@@ -20,7 +20,7 @@ parameters = ShallowWaterParameters(H=H)
 # ------------------------------------------------------------------------ #
 
 # Mesh and domain
-mesh = IcosahedralSphereMesh(radius=a,
+mesh = CubedSphereMesh(radius=a,
                             refinement_level=ref, degree=2)
 x = SpatialCoordinate(mesh)
 domain = Domain(mesh, dt, "BDM", 0)
