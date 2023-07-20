@@ -130,16 +130,13 @@ rho_expr = P_expr / (Rd * Temp)
 
 latlon_out = File('results/latlon.pvd')
 mesh_ll = get_flat_latlon_mesh(mesh)
-d_field = Function(Vr, name='d').interpolate(d)
-d_field_ll = Function(functionspaceimpl.WithGeometry.create(d_field.function_space(), mesh_ll),
-                      val=d_field.topological, name='d')
 temp_field = Function(Vr, name='temperature').interpolate(Temp)
 temp_field_ll = Function(functionspaceimpl.WithGeometry.create(temp_field.function_space(), mesh_ll),
                          val=temp_field.topological, name='temp')
 wind_field = Function(Vr, name='wind').interpolate(wind)
 wind_field_ll = Function(functionspaceimpl.WithGeometry.create(wind_field.function_space(), mesh_ll),
                          val=wind_field.topological, name='wind')
-latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll)
+latlon_out.write(temp_field_ll, wind_field_ll)
 
 # sphere grid plotting
 
