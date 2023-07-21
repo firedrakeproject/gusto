@@ -28,10 +28,10 @@ import scipy
 from scipy.special import legendre
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler",
+__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "IMEX_Midpoint",
            "SSPRK3", "RK4", "Heun",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog",
-           "AdamsMoulton", "AdamsBashforth", "FE_SDC", "BE_SDC", "IMEX_SDC"]
+           "AdamsMoulton", "AdamsBashforth", "FE_SDC", "BE_SDC", "IMEX_SDC", "IM_SDC"]
 
 
 def is_cg(V):
@@ -815,11 +815,15 @@ class BackwardEuler(TimeDiscretisation):
             NotImplementedError: if options is an instance of
             EmbeddedDGOptions or RecoveryOptions
         """
+        solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
+        
 
     @property
     def lhs(self):
@@ -855,6 +859,59 @@ class BackwardEuler(TimeDiscretisation):
         self.solver.solve()
         x_out.assign(self.x_out)
 
+
+class IMEX_Midpoint(TimeDiscretisation):
+
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        residual = residual.label_map(
+            lambda t: any(t.has_label(time_derivative, transport)),
+            map_if_false=lambda t: implicit(t))
+
+        residual = residual.label_map(
+            lambda t: t.has_label(transport),
+            map_if_true=lambda t: explicit(t))
+
+        super().setup(equation, uadv=uadv, residual=residual)
+
+    @property
+    def lhs(self):
+        l = self.residual.label_map(
+            lambda t: any(t.has_label(implicit, time_derivative)),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+        l = l.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: 0.5*self.dt*t)
+        return l.form
+
+    @property
+    def rhs(self):
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(explicit),
+            map_if_true=lambda t: -self.dt*t)
+        r = r.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=lambda t: -0.5*self.dt*t)
+        return r.form
+
+    @cached_property
+    def solver(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
+
+    def apply(self, x_out, x_in):
+        self.x1.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.x_out)
 
 class IMEX_Euler(TimeDiscretisation):
 
@@ -906,8 +963,6 @@ class IMEX_Euler(TimeDiscretisation):
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
-
-
 class ThetaMethod(TimeDiscretisation):
     """
     Implements the theta implicit-explicit timestepping method.
@@ -1911,6 +1966,124 @@ class BE_SDC(SDC):
                                     drop)
 
         F_SDC = F_imp + F_exp + F01 + Q
+
+        try:
+            #bcs = equation.bcs['u']
+            bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        except KeyError:
+            bcs = None
+        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
+        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin))
+        Frhs = a - L
+        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
+        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+
+    def apply(self, x_out, x_in):
+        self.Un.assign(x_in)
+
+        self.Unodes[0].assign(self.Un)
+        for m in range(self.M):
+            #print(m)
+            #print(float(self.dtau[m]))
+            self.base.dt = float(self.dtau[m])
+            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+
+        k = 0
+        while k < self.maxk:
+            #print("doing interations..")
+            k += 1
+
+            for m in range(1, self.M+1):
+                self.Uin.assign(self.Unodes[m])
+                self.solver_rhs.solve()
+                self.fUnodes[m-1].assign(self.Urhs)
+
+            self.compute_quad()
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, self.M+1):
+                self.dt = float(self.dtau[m-1])
+                self.U0.assign(self.Unodes[m-1])
+                self.U01.assign(self.Unodes[m])
+                self.Un.assign(self.Unodes1[m-1])
+                self.Q_.assign(self.quad[m-1])
+                self.solver_SDC.solve()
+                self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, self.M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
+            #print(k, self.Un.split()[1].dat.data.max())
+        if self.maxk > 0:
+            x_out.assign(self.Un)
+        else:
+            x_out.assign(self.Unodes[-1])
+
+
+class IM_SDC(SDC):
+
+    def setup(self, equation, uadv=None):
+
+        self.base = ImplicitMidpoint(self.domain)
+
+        #uadv = self.state.fields("u")
+
+        self.base.setup(equation, uadv=uadv)
+        self.residual = self.base.residual
+
+        # set up SDC form and solver
+        W = equation.function_space
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
+
+        self.U_SDC = Function(W)
+        self.U0 = Function(W)
+        self.U01 = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: 0.5*self.dt*t)
+
+        F_imp = F.label_map(all_terms,
+                            replace_subject(self.U_SDC))
+
+        F_exp = F.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un),
+                            drop)
+        F_exp = F_exp.label_map(all_terms,
+                                lambda t: -1*t)
+
+        F01 = F.label_map(lambda t: t.has_label(time_derivative),
+                          drop,
+                          replace_subject(self.U01))
+
+        F01 = F01.label_map(all_terms, lambda t: -0.5*t)
+
+        F0 = F.label_map(lambda t: t.has_label(time_derivative),
+                         drop,
+                         replace_subject(self.U0))
+        F0 = F0.label_map(all_terms,
+                          lambda t: -0.5*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_),
+                                    drop)
+
+        F_SDC = F_imp + F_exp + F01 + F0 + Q
 
         try:
             #bcs = equation.bcs['u']
