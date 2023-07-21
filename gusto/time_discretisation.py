@@ -850,7 +850,7 @@ class BackwardEuler(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        print("base dt:", float(self.dt))
+        #print("base dt:", float(self.dt))
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
@@ -1620,7 +1620,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """
         if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
-            print(self.initial_timesteps)
+            #print(self.initial_timesteps)
             solver = self.solver0
         else:
             solver = self.solver
@@ -1938,14 +1938,14 @@ class BE_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            print(m)
-            print(float(self.dtau[m]))
+            #print(m)
+            #print(float(self.dtau[m]))
             self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
-            print("doing interations..")
+            #print("doing interations..")
             k += 1
 
             for m in range(1, self.M+1):
