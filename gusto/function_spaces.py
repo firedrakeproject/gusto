@@ -107,10 +107,10 @@ class Spaces(object):
         """
         Builds the sequence of compatible finite element spaces for the mesh.
 
-        If the mesh is not extruded, this builds and returns the spaces:
-            (HDiv, DG).
-        If the mesh is extruded, this builds and returns the following spaces:
-            (HDiv, DG, theta).
+        If the mesh is not extruded, this builds and returns the spaces:      \n
+        (HDiv, DG).                                                           \n
+        If the mesh is extruded, this builds and returns the spaces:          \n
+        (HDiv, DG, theta).                                                    \n
         The 'theta' space corresponds to the vertical component of the velocity.
 
         Args:

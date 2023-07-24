@@ -47,7 +47,9 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     elif scheme == "AdamsMoulton":
         transport_scheme = AdamsMoulton(domain, order=2)
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+    transport_method = DGUpwind(eqn, 'f')
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

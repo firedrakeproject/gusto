@@ -46,16 +46,18 @@ class TransportEquationType(Enum):
 
     For transporting velocity 'u' and transported quantity 'q', different types
     of transport equation include:
-
-    advective: ∂q/∂t + (u.∇)q = 0
-    conservative: ∂q/∂t + ∇.(u*q) = 0
+                                                                              \n
+    advective: ∂q/∂t + (u.∇)q = 0                                             \n
+    conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
+    circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
     """
 
     no_transport = 702
     advective = 19
     conservative = 291
     vector_invariant = 9081
+    circulation = 512
 
 
 class Configuration(object):
@@ -110,7 +112,7 @@ class OutputParameters(Configuration):
     dumplist_latlon = []
     dump_diagnostics = True
     checkpoint = True
-    checkpoint_method = 'old'
+    checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
@@ -153,7 +155,7 @@ class ShallowWaterParameters(Configuration):
     H = None  # mean depth
 
 
-class TransportOptions(Configuration, metaclass=ABCMeta):
+class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
     @abstractproperty
@@ -161,14 +163,15 @@ class TransportOptions(Configuration, metaclass=ABCMeta):
         pass
 
 
-class EmbeddedDGOptions(TransportOptions):
+class EmbeddedDGOptions(WrapperOptions):
     """Specifies options for an embedded DG method."""
 
     name = "embedded_dg"
+    project_back_method = 'project'
     embedding_space = None
 
 
-class RecoveryOptions(TransportOptions):
+class RecoveryOptions(WrapperOptions):
     """Specifies options for a recovery wrapper method."""
 
     name = "recovered"
@@ -181,7 +184,7 @@ class RecoveryOptions(TransportOptions):
     broken_method = 'interpolate'
 
 
-class SUPGOptions(TransportOptions):
+class SUPGOptions(WrapperOptions):
     """Specifies options for an SUPG scheme."""
 
     name = "supg"

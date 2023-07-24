@@ -49,6 +49,7 @@ def run_forced_advection(tmpdir):
                 transport_eqn=TransportEquationType.no_transport)
     meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
+    transport_method = DGUpwind(meqn, "water_vapour")
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
                                     parameters=None), ForwardEuler(domain))]
 
@@ -58,7 +59,7 @@ def run_forced_advection(tmpdir):
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Time Stepper
-    stepper = PrescribedTransport(meqn, RK4(domain), io,
+    stepper = PrescribedTransport(meqn, RK4(domain), io, transport_method,
                                   physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

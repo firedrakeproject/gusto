@@ -84,6 +84,12 @@ def setup_saturated(dirname, recovered):
     else:
         transported_fields.append(ImplicitMidpoint(domain, 'u'))
 
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'rho'),
+                         DGUpwind(eqns, 'theta'),
+                         DGUpwind(eqns, 'water_vapour'),
+                         DGUpwind(eqns, 'cloud_water')]
+
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
@@ -92,6 +98,7 @@ def setup_saturated(dirname, recovered):
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
 

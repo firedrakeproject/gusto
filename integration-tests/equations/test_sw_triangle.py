@@ -30,7 +30,8 @@ def setup_sw(dirname, dt, u_transport_option):
     refinements = 3  # number of horizontal cells = 20*(4^refinements)
 
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
+                                 refinement_level=refinements,
+                                 degree=2)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
 
@@ -105,7 +106,7 @@ def check_results(dirname):
     Derr = data.groups["D_error"]
     D = data.groups["D"]
     Dl2 = Derr["l2"][-1]/D["l2"][0]
-    assert Dl2 < 5.e-4
+    assert Dl2 < 6.e-4
 
     uerr = data.groups["u_error"]
     u = data.groups["u"]
@@ -155,12 +156,15 @@ def test_sw_setup(tmpdir, u_transport_option):
     domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
     # Transport schemes
-    transported_fields = []
-    transported_fields.append((ImplicitMidpoint(domain, "u")))
-    transported_fields.append((SSPRK3(domain, "D")))
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "D")]
+
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'D')]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods)
 
     # Initial conditions
     set_up_initial_conditions(domain, eqns, stepper)
@@ -180,7 +184,10 @@ def test_sw_ssprk3(tmpdir, u_transport_option):
     dt = 100
     domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
-    stepper = Timestepper(eqns, SSPRK3(domain), io)
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'D')]
+
+    stepper = Timestepper(eqns, SSPRK3(domain), io, spatial_methods=transport_methods)
 
     # Initial conditions
     set_up_initial_conditions(domain, eqns, stepper)

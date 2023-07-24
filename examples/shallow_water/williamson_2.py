@@ -55,7 +55,8 @@ for ref_level, dt in ref_dt.items():
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
                               dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO')
+                              log_level='INFO',
+                              dump_nc=True)
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
@@ -67,9 +68,10 @@ for ref_level, dt in ref_dt.items():
     # Transport schemes
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "D", subcycles=2)]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
