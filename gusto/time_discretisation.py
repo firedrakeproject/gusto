@@ -24,7 +24,7 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitRKMethod", "SSPRK3", "RK4", "Heun",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
@@ -551,6 +551,113 @@ class ForwardEuler(ExplicitTimeDiscretisation):
         self.solver.solve()
         x_out.assign(self.x_out)
 
+        
+class ExplicitRKMethod(ExplicitTimeDiscretisation):   
+    """
+    Implements a general explicit RK Method based on the Butcher Tableau
+    
+    Define vectors for coefficients a,b,c.
+    
+    """
+    
+    def __init__(self, domain, field_name=None, a_vals=None,
+                 b_vals=None, c_vals=None, options=None):
+        
+                
+            
+    @property
+    def nStages(self):
+        if ((self.a_vals.len() != self.b_vals.len()) or (self.a_vals.len() != self.c_vals.len())):
+            raise ValueError("Inconsistent butcher arrays defined")
+        
+        return self.a_vals.len()
+            
+
+    
+       @cached_property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+
+        return l.form
+
+    @cached_property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=lambda t: -1*t)
+
+        return r.form
+    
+    def setup(self, equation, uadv, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, uadv, *active_labels)
+        
+        for i in np.arange(stages):
+            self.k[i+1] = Function(self.fs)
+            
+    def solve_stage(self, x_in, stage):
+        self.solver.solve()
+        self.k[stage].assign(self.x_out)
+        
+        for i in np.arange(1,stage+1):
+            
+        
+        
+        self.x[stage].assign(x_in + 0.5 * self.dt * self.k1)
+        
+    def solve_final_stage(self, x_in, stage):
+    
+    
+                
+class RK4_butcher(ExplicitRKMethod):
+    """
+    To do .
+    
+    """
+    
+    def __init__(self, domain, field_name=None, solver_parameters=None,
+                 options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        
+        a = np.array([0, (1/2), (1/2), 1])
+        b = np.array([(1/6), (1/3), (1/3), (1/6)])
+        c = np.array([0, (1/2), (1/2), 1])
+        
+        super().__init__(domain, field_name, a_vals=a, b_vals=b, c_vals=c,
+                         solver_parameters=solver_parameters,
+                         options=options)
+    
 
 class SSPRK3(ExplicitTimeDiscretisation):
     u"""
