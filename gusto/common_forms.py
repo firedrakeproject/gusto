@@ -110,9 +110,6 @@ def vector_invariant_form(domain, test, q, ubar):
         q (:class:`ufl.Expr`): the variable to be transported.
         ubar (:class:`ufl.Expr`): the transporting velocity.
 
-    Raises:
-        NotImplementedError: the specified integration by parts is not 'once'.
-
     Returns:
         class:`LabelledForm`: a labelled transport form.
     """
@@ -161,15 +158,12 @@ def advection_equation_circulation_form(domain, test, q, ubar):
     (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
 
     The form returned by this function corresponds to the (∇×q)×u circulation
-    term. An an upwind discretisation is used when integrating by parts.
+    term.
 
     Args:
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ubar (:class:`ufl.Expr`): the transporting velocity.
-
-    Raises:
-        NotImplementedError: the specified integration by parts is not 'once'.
 
     Returns:
         class:`LabelledForm`: a labelled transport form.

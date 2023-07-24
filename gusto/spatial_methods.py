@@ -20,7 +20,7 @@ class SpatialMethod(object):
         Args:
             equation (:class:`PrognosticEquation`): the equation, which includes
                 the original type of this term.
-            variable (str): name of the variable to set the transport scheme for
+            variable (str): name of the variable to set the method for
             term_label (:class:`Label`): the label specifying which type of term
                 to be discretised.
         """
@@ -38,8 +38,7 @@ class SpatialMethod(object):
             self.field = equation.X
             self.test = equation.test
 
-        # Find the original transport term to be used, which we use to extract
-        # information about the transport equation type
+        # Find the original term to be used
         self.original_form = equation.residual.label_map(
             lambda t: t.has_label(term_label) and t.get(prognostic) == variable,
             map_if_true=keep, map_if_false=drop)
@@ -50,13 +49,13 @@ class SpatialMethod(object):
 
     def replace_form(self, equation):
         """
-        Replaces the form for the transport term in the equation with the
-        form for the transport discretisation.
+        Replaces the form for the term in the equation with the form for the
+        specific discretisation.
 
         Args:
             equation (:class:`PrognosticEquation`): the equation or scheme whose
-                transport term should be replaced with the transport term of
-                this discretisation.
+                term should be replaced with the specific term of this
+                discretisation.
         """
 
         # Replace original term with new term

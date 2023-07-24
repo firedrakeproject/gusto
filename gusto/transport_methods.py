@@ -5,7 +5,7 @@ Defines TransportMethod objects, which are used to solve a transport problem.
 from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer,
                        jump, grad, div, FacetNormal, Function, sign, avg, cross,
                        curl)
-from gusto.configuration import IntegrateByParts, TransportEquationType
+from gusto.configuration import IntegrateByParts, TransportEquationType, logger
 from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
 from gusto.spatial_methods import SpatialMethod
@@ -55,7 +55,8 @@ class TransportMethod(SpatialMethod):
 
         if len(original_form.terms) == 0:
             # This is likely not the appropriate equation so skip
-            pass
+            logger.warning(f'No transport term found for {self.variable} in '
+                           + 'this equation. Skipping.')
 
         elif len(original_form.terms) == 1:
             # Replace form
@@ -74,7 +75,7 @@ class TransportMethod(SpatialMethod):
                 map_if_true=lambda t: new_term)
 
         else:
-            raise RuntimeError('Unable to find single transport term for '
+            raise RuntimeError('Found multiple transport terms for '
                                + f'{self.variable}. {len(original_form.terms)} found')
 
 

@@ -93,11 +93,11 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             residual = equation.residual.label_map(
                 lambda t: t.has_label(term_label), map_if_false=drop
             )
-            active_variables = [t.get(prognostic) for t in residual.terms]
-            active_methods = list(filter(lambda t: t.term_label == term_label,
+            variables = [t.get(prognostic) for t in residual.terms]
+            methods = list(filter(lambda t: t.term_label == term_label,
                                          self.spatial_methods))
-            method_variables = [method.variable for method in active_methods]
-            for variable in active_variables:
+            method_variables = [method.variable for method in methods]
+            for variable in variables:
                 if variable not in method_variables:
                     message = f'Variable {variable} has a {term_label.label} ' \
                         + 'but no method for this has been specified. Using ' \
