@@ -182,8 +182,8 @@ pertput.write(magnitude, zonal_localistaion, meridional_localisation)
 # Configuring fields
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
-zonal_u = wind
-merid_u = Constant(0.0)
+zonal_u = wind + zonal_pert
+merid_u = Constant(0.0) + meridional_pert
 radial_u = Constant(0.0)
 
 # now convert to global Cartesian coordinates
