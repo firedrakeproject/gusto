@@ -561,15 +561,32 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
     """
     
     def __init__(self, domain, field_name=None, butcher_matrix=None, options=None):
-        
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         options=options)
+        self.butcher_matrix = butcher_matrix
                 
-            
+    def setup(self, equation, uadv, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, uadv, *active_labels)
+        
+        self.k = [Function(self.fs) for i in range(self.nStages)]
+        self.x_int = Function(self.fs)
     @property
     def nStages(self):
         return np.shape(self.butcher_matrix)[0]
             
 
-       @cached_property
+    @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
@@ -593,21 +610,7 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
 
         return r.form
     
-    def setup(self, equation, uadv, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-        super().setup(equation, uadv, *active_labels)
-        
-        self.k = [Function(self.fs) for i in range(self.nStages)]
-        self.x_int = Function(self.fs)
+    
 
             
     def solve_stage(self, x0, butcher_matrix, stage):
@@ -616,7 +619,7 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         for i in np.arange(0,stage):
             if i = 0:
                 print('oh no')
-            x_int += butcher_matrix[stage,i]*self.dt*self.k[i]
+            self.x_int.assign(self.x_int + butcher_matrix[stage-1,i]*self.dt*self.k[i])
         
         #if stage > 0:
         #    x_int += self.dt*a_vals[stage-1]*self.k[stage-1]
@@ -624,13 +627,13 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         self.x1.assign(self.x_int)
         
         self.solver.solve()
-        self.k[stage].assign(self.x_out)
+        self.k[stage-1].assign(self.x_out)
             
-        if stage = nStages:
-            self.x_int = x0
+        if (stage == nStages):
+            self.x_int.assign( x0)
         
-            for i in np.arange(0,stage):
-                self.x_int += butcher_matrix[stage,i]*self.k[i]
+            for i in np.arange(0,stage+1):
+                self.x_int.assign(self.x_int + butcher_matrix[stage,i]*self.k[i])
             
         
     def apply_cycle(self, x_out, x_in):
