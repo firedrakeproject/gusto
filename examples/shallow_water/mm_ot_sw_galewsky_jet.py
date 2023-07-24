@@ -56,9 +56,28 @@ def reinterpolate_coriolis():
     domain.outward_normals.interpolate(CellNormal(domain.mesh))
     eqns.prescribed_fields("coriolis").interpolate(fexpr)
 
+def initialisation_fn(eqn, fields):
+
+    u0 = fields("u")
+    D0 = fields("D")
+
+    u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
+
+    X = interpolate(eqn.domain.mesh.coordinates, W)
+    D0.dat.data[:] = Dval(X.dat.data_ro)
+    area = assemble(C*dx)
+    Dmean = assemble(D0*dx)/area
+    D0 -= Dmean
+    D0 += eqn.parameters.H
+    theta, lamda = latlon_coords(eqn.domain.mesh)
+    D_pert.interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
+    D0 += D_pert
+    update_pv()
+
 monitor = MonitorFunction("PotentialVorticity", adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
                                                monitor,
+                                               initialisation_fn=initialisation_fn,
                                                pre_meshgen_callback=update_pv,
                                                post_meshgen_callback=reinterpolate_coriolis)
 
@@ -158,9 +177,6 @@ if perturb:
     D0 += D_pert
 
 def initialise_fn():
-    u0 = stepper.fields("u")
-    D0 = stepper.fields("D")
-
     u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
 
     X = interpolate(domain.mesh.coordinates, W)
@@ -179,13 +195,13 @@ def initialise_fn():
     pv()
 
 # stepper.prescribed_uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
-pv.setup(domain, stepper.fields)
-mesh_generator.get_first_mesh(initialise_fn)
+# pv.setup(domain, stepper.fields)
+# mesh_generator.get_first_mesh(initialise_fn)
 
-domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
-domain.outward_normals.interpolate(CellNormal(domain.mesh))
-eqns.prescribed_fields("coriolis").interpolate(fexpr)
-pv()
+#domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
+#domain.outward_normals.interpolate(CellNormal(domain.mesh))
+#eqns.prescribed_fields("coriolis").interpolate(fexpr)
+#pv()
 
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])

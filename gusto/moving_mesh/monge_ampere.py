@@ -3,12 +3,15 @@ import numpy as np
 
 class OptimalTransportMeshGenerator(object):
 
-    def __init__(self, mesh_in, monitor, initial_tol=1.e-4, tol=1.e-2, pre_meshgen_callback=None, post_meshgen_callback=None):
+    def __init__(self, mesh_in, monitor, initial_tol=1.e-4, tol=1.e-2,
+                 initialisation_fn=None,
+                 pre_meshgen_callback=None, post_meshgen_callback=None):
 
         self.mesh_in = mesh_in
         self.monitor = monitor
         self.initial_tol = initial_tol
         self.tol = tol
+        self.initialisation_fn = initialisation_fn
         self.pre_meshgen_fn = pre_meshgen_callback
         self.post_meshgen_fn = post_meshgen_callback
 
@@ -198,7 +201,7 @@ class OptimalTransportMeshGenerator(object):
             self.output_coords.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.mesh_in.coordinates.assign(self.output_coords)
             #self.mesh_in.coordinates.assign(self.x)
-            self.initialise_fn()
+            self.initialisation_fn(self.equation, self.fields)
             #self.monitor.mesh.coordinates.dat.data[:] = self.mesh.coordinates.dat.data_ro[:]
             self.monitor.mesh.coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.monitor.update_monitor()
@@ -218,7 +221,7 @@ class OptimalTransportMeshGenerator(object):
         cursol = snes.getSolution()
         self.update_mxtheta(cursol)  # updates m, x, and theta
 
-    def get_first_mesh(self, initialise_fn):
+    def get_first_mesh(self, eqn, fields):
 
         """
         This function is used to generate a mesh adapted to the initial state.
@@ -226,7 +229,9 @@ class OptimalTransportMeshGenerator(object):
         initial condition
         """
         self.initial_mesh = True
-        self.initialise_fn = initialise_fn
+        self.initialisation_fn(eqn, fields)
+        self.equation = eqn
+        self.fields = fields
         self.mesh_solv.solve()
 
         # remake mesh solver with new tolerance

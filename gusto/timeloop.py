@@ -89,6 +89,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         # Set up diagnostics, which may set up some fields necessary to pick up
         self.io.setup_diagnostics(self.fields)
 
+        if self.move_mesh:
+            self.mesh_generator.monitor.setup(self.fields)
+            self.mesh_generator.setup()
+            self.mesh_generator.pre_meshgen_callback()
+            self.mesh_generator.get_first_mesh(self.equation, self.fields)
+            self.mesh_generator.post_meshgen_callback()
+            self.io.setup_diagnostics(self.fields)
+
         if pick_up:
             # Pick up fields, and return other info to be picked up
             t, reference_profiles, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
@@ -296,6 +304,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = kwargs.pop("alpha", 0.5)
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
+        self.mesh_generator = mesh_generator
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -329,15 +338,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.auxiliary_schemes = []
         self.auxiliary_equations_and_schemes = auxiliary_equations_and_schemes
 
-        if not equation_set.domain.move_mesh:
-            self.transport_step = TransportStep(self.active_transport)
-        else:
-            mesh_generator.monitor.setup(self.fields)
-            mesh_generator.setup()
-            self.transport_step = MovingMeshTransportStep(equation_set,
-                                                          self.active_transport,
-                                                          X0, X1)
-            
         super().__init__(equation_set, io)
 
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
@@ -376,10 +376,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     @property
     def transporting_velocity(self):
         """Computes ubar=(1-alpha)*un + alpha*unp1"""
-        xn = self.x.n
-        xnp1 = self.x.np1
-        # computes ubar from un and unp1
-        return xn('u') + self.alpha*(xnp1('u')-xn('u'))
+        if not self.move_mesh:
+            xn = self.x.n
+            xnp1 = self.x.np1
+            # computes ubar from un and unp1
+            return xn('u') + self.alpha*(xnp1('u')-xn('u'))
+        else:
+            un = self.x.n("u")
+            uadv = Function(un.function_space())
+            return uadv
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
@@ -397,6 +402,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         """Sets up transport, diffusion and physics schemes"""
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
+        if not self.equation.domain.move_mesh:
+            self.transport_step = TransportStep(self.active_transport)
+        else:
+            self.mesh = self.equation.domain.mesh
+            self.X0 = Function(self.equation.domain.mesh.coordinates)
+            self.X1 = Function(self.equation.domain.mesh.coordinates)
+            self.transport_step = MovingMeshTransportStep(self.equation,
+                                                          self.active_transport,
+                                                          self.transporting_velocity,
+                                                          self.x,
+                                                          self.X0, self.X1)
+
         apply_bcs = True
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, self.transporting_velocity, apply_bcs, transport)
@@ -429,6 +446,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xp = self.x.p
         xrhs = self.xrhs
         dy = self.dy
+
+        if self.move_mesh:
+            self.X1.assign(self.mesh.coordinates)
 
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
@@ -505,7 +525,8 @@ class PrescribedTransport(Timestepper):
     Implements a timeloop with a prescibed transporting velocity
     """
     def __init__(self, equation, scheme, io, physics_schemes=None,
-                 prescribed_transporting_velocity=None):
+                 prescribed_transporting_velocity=None,
+                 mesh_generator=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -525,6 +546,7 @@ class PrescribedTransport(Timestepper):
                 updated. Defaults to None.
         """
 
+        self.mesh_generator = mesh_generator
         super().__init__(equation, scheme, io)
 
         if physics_schemes is not None:
@@ -538,6 +560,7 @@ class PrescribedTransport(Timestepper):
             apply_bcs = False
             scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 
+        
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
                 prescribed_transporting_velocity(self.t),
@@ -556,12 +579,25 @@ class PrescribedTransport(Timestepper):
 
     def setup_scheme(self):
         self.scheme.setup(self.equation, self.transporting_velocity)
+        self.active_transport = ((self.scheme.field_name, self.scheme),)
+        if not self.equation.domain.move_mesh:
+            self.transport_step = TransportStep(self.active_transport)
+        else:
+            self.mesh = self.equation.domain.mesh
+            self.X0 = Function(self.equation.domain.mesh.coordinates)
+            self.X1 = Function(self.equation.domain.mesh.coordinates)
+            self.transport_step = MovingMeshTransportStep(self.equation,
+                                                          self.active_transport,
+                                                          self.transporting_velocity,
+                                                          self.x,
+                                                          self.X0, self.X1)
+
 
     def timestep(self):
         if self.velocity_projection is not None:
             self.velocity_projection.project()
 
-        super().timestep()
+        self.transport_step.apply(self.x.np1, self.x.n)
 
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
@@ -581,35 +617,39 @@ class TransportStep(object):
 
 class MovingMeshTransportStep(TransportStep):
 
-    def __init__(self, equation, active_transport, X0, X1):
+    def __init__(self, equation, active_transport, uadv, x, X0, X1):
 
         super().__init__(active_transport)
 
-        self.mesh_generator = mesh_generator
-        mesh = self.equation.domain.mesh
+        mesh = equation.domain.mesh
         self.mesh = mesh
-        self.X0 = Function(mesh.coordinates)
-        self.X1 = Function(mesh.coordinates)
+        self.field_name = equation.field_name
+        self.dt = equation.domain.dt
+        self.uadv = uadv
+        self.un = x.n("u")
+        self.unp1 = x.np1("u")
+        self.X0 = X0
+        self.X1 = X1
 
-        self.on_sphere = self.equation.domain.on_sphere
+        self.on_sphere = equation.domain.on_sphere
 
+        Vu = equation.domain.spaces("HDiv")
         self.v = Function(mesh.coordinates.function_space())
         self.v_V1 = Function(Vu)
         self.v1 = Function(mesh.coordinates.function_space())
         self.v1_V1 = Function(Vu)
 
-        self.tests = {}
-        for name in self.equation.field_names:
-            self.tests[name] = TestFunction(self.x.n(name).function_space())
-        self.trials = {}
-        for name in self.equation.field_names:
-            self.trials[name] = TrialFunction(self.x.n(name).function_space())
+        x.add_fields(equation, levels=("mid",))
+        self.xmid = x.mid
+
         self.ksp = {}
-        for name in self.equation.field_names:
+        for name in equation.field_names:
             self.ksp[name] = PETSc.KSP().create()
-        self.x.add_fields(self.equation, levels=("mid",))
 
     def apply(self, x_out, x_in):
+
+        X0 = self.X0
+        X1 = self.X1
 
         # Compute v (mesh velocity w.r.t. initial mesh) and
         # v1 (mesh velocity w.r.t. final mesh)
@@ -636,28 +676,31 @@ class MovingMeshTransportStep(TransportStep):
         x_out(self.field_name).assign(x_in(self.field_name))
 
         for name, scheme in self.active_transport:
-            # transport field from xstar to xmid on old mesh
-            self.mesh.coordinates.assign(X0)
-            self.uadv.assign(0.5*(un - self.v_V1))
-            scheme.apply(xmid(name), xstar(name))
+            test = TestFunction(x_out(name).function_space())
+            trial = TrialFunction(x_out(name).function_space())
 
-            rhs = inner(xmid(name), self.tests[name])*dx
+            # transport field from x_in to xmid on old mesh
+            self.mesh.coordinates.assign(X0)
+            self.uadv.assign(0.5*(self.un - self.v_V1))
+            scheme.apply(self.xmid(name), x_in(name))
+
+            rhs = inner(self.xmid(name), test)*dx
             with assemble(rhs).dat.vec as v:
                 Lvec = v
 
             # put mesh_new into mesh
             self.mesh.coordinates.assign(X1)
 
-            lhs = inner(self.trials[name], self.tests[name])*dx
+            lhs = inner(trial, test)*dx
             amat = assemble(lhs)
             a = amat.M.handle
             self.ksp[name].setOperators(a)
             self.ksp[name].setFromOptions()
 
-            with xmid(name).dat.vec as x_:
+            with self.xmid(name).dat.vec as x_:
                 self.ksp[name].solve(Lvec, x_)
 
-            # transport field from xmid to xp on new mesh
-            self.uadv.assign(0.5*(unp1 - self.v1_V1))
-            scheme.apply(xp(name), xmid(name))
+            # transport field from xmid to x_out on new mesh
+            self.uadv.assign(0.5*(self.unp1 - self.v1_V1))
+            scheme.apply(x_out(name), self.xmid(name))
 
