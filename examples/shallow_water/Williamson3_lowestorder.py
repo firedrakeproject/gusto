@@ -28,7 +28,7 @@ domain = Domain(mesh, dt, "BDM", 0)
 # Equations
 lat, lon = latlon_coords(mesh)
 Omega = parameters.Omega
-fexpr = 2*Omega * x[2] / a
+fexpr = 2 * Omega * x[2] / a
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
 # Output and IO
