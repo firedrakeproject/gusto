@@ -5,18 +5,18 @@ from firedrake import (ExtrudedMesh,
                        errornorm, norm, min_value, max_value)
 from gusto import *
 from gusto.diagnostics import SolidBodyImbalance, GeostrophicImbalance                                              # 
-# -------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 # Test case Parameters
-# -------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 dt = 1000.
 days = 30.
 ndumps = 60
 tmax = days * 24. * 60. * 60.
 deltaz = 2.0e3
-dumpfreq = int(24. * 60. * 60. / (2 * dt)) # dumps twice a day of simulation time
-# -------------------------------------------------------------- #
+dumpfreq = int(24. * 60. * 60. / (2 * dt)) # dumps twice a day 
+# -----------------------------------------------------------------------------#
 # Set up Model
-# -------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 
 # Domain
 a = 6.371229e6  # radius of earth
@@ -24,7 +24,9 @@ Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
 m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=24, degree=2)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
+mesh = ExtrudedMesh(m, layers=nlayers, 
+                    layer_height=Height/nlayers, 
+                    extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
 # Equations
@@ -32,7 +34,8 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, 
+                                 u_transport_option='vector_invariant_form')
 
 dirname = 'SBR_meshdeg2_order2_dt1000_vectorInvar'
 output = OutputParameters(dirname=dirname,
@@ -40,7 +43,8 @@ output = OutputParameters(dirname=dirname,
                           dump_nc=True,
                           dump_vtus=False,
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(),
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+                     RadialComponent('u'), CourantNumber(), 
                      HydrostaticImbalance(eqn)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -60,9 +64,9 @@ stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                   transport_methods,
                                   linear_solver=linear_solver)
 
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # Initial Conditions
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 
 x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
@@ -122,8 +126,9 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
-
+compressible_hydrostatic_balance(eqn, theta0, rho0, 
+                                 exner_boundary=pie, 
+                                 solve_for_rho=True)
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
 print('Normalised rho error is:', errornorm(rho_analytic, rho0) / norm(rho_analytic))
@@ -136,4 +141,5 @@ theta_b = Function(Vt).assign(theta0)
 # assign reference profiles
 stepper.set_reference_profiles([('rho', rho_b),
                                 ('theta', theta_b)])
+print('Initilise Windy Boi')
 stepper.run(t=0, tmax=tmax)
