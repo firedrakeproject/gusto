@@ -28,7 +28,7 @@ import scipy
 from scipy.special import legendre
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "IMEX_Midpoint",
+__all__ = ["ForwardEuler", "BackwardEuler", "IMEX_Euler", "IMEX_Midpoint", "IMEX_RK",
            "SSPRK3", "RK4", "Heun",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog",
            "AdamsMoulton", "AdamsBashforth", "FE_SDC", "BE_SDC", "IMEX_SDC", "IM_SDC"]
@@ -729,6 +729,134 @@ class RK4(ExplicitTimeDiscretisation):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
 
+class IMEX_RK(TimeDiscretisation):
+
+    def setup(self, equation, uadv=None):
+
+        residual = equation.residual
+
+        residual = residual.label_map(
+            lambda t: any(t.has_label(time_derivative, transport)),
+            map_if_false=lambda t: implicit(t))
+
+        residual = residual.label_map(
+            lambda t: t.has_label(transport),
+            map_if_true=lambda t: explicit(t))
+        
+        solver_parameters = {'ksp_type': 'gmres',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
+        super().setup(equation, uadv=uadv, solver_parameters = solver_parameters, residual=residual)
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
+        self.x_exp = Function(self.fs)
+        self.x1_exp = Function(self.fs)           
+
+    @property
+    def lhs(self):
+        l = self.residual.label_map(
+            lambda t: any(t.has_label(implicit, time_derivative)),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+        l = l.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt*t)
+        return l.form
+
+    @property
+    def rhs(self):
+        r = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_false=drop)
+        # r = r.label_map(
+        #     lambda t: t.has_label(time_derivative),
+        #     map_if_false=lambda t: -0.3*self.dt*t)
+        r_exp = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x1_exp, self.idx),
+            map_if_false=drop)
+        r = r - r_exp
+        return r.form
+
+    @cached_property
+    def solver(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
+    
+    @cached_property
+    def lhs_e(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_exp, self.idx),
+            map_if_false=drop)
+
+        return l.form
+
+    @cached_property
+    def rhs_e(self):
+        """Set up the time discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1_exp, self.idx))
+
+        r = r.label_map(
+            lambda t: any(t.has_label(time_derivative, implicit)),
+            map_if_true=drop,
+            map_if_false=lambda t: -1*t)
+
+        return r.form
+    
+    @cached_property
+    def solver_e(self):
+        # setup solver using lhs and rhs defined in derived class
+        problem = NonlinearVariationalProblem(self.lhs_e - self.rhs_e, self.x_exp, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
+
+    def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
+
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
+        if stage == 0:
+            self.solver_e.solve()
+            self.k1.assign(self.x_exp)
+            self.x1_exp.assign(x_in + 0.5 * self.dt * self.k1)
+
+        elif stage == 1:
+            self.solver_e.solve()
+            self.k2.assign(self.x_exp)
+            self.x1_exp.assign(x_in + 0.5 * self.dt * self.k2)
+
+        elif stage == 2:
+            self.solver_e.solve()
+            self.k3.assign(self.x_exp)
+            self.x1_exp.assign(x_in + self.dt * self.k3)
+
+        elif stage == 3:
+            self.solver_e.solve()
+            self.k4.assign(self.x_exp)
+            self.x1_exp.assign(1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+
+    def apply(self, x_out, x_in):
+        self.x1.assign(x_in)
+        self.x1_exp.assign(x_in)
+
+        for i in range(4):
+            self.solve_stage(x_in, i)
+
+        self.solver.solve()
+
+        x_out.assign(self.x_out)
 
 class Heun(ExplicitTimeDiscretisation):
     u"""
@@ -873,8 +1001,12 @@ class IMEX_Midpoint(TimeDiscretisation):
         residual = residual.label_map(
             lambda t: t.has_label(transport),
             map_if_true=lambda t: explicit(t))
+        
+        solver_parameters = {'ksp_type': 'gmres',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
 
-        super().setup(equation, uadv=uadv, residual=residual)
+        super().setup(equation, uadv=uadv, solver_parameters = solver_parameters, residual=residual)
 
     @property
     def lhs(self):
