@@ -560,20 +560,15 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
     
     """
     
-    def __init__(self, domain, field_name=None, a_vals=None,
-                 b_vals=None, c_vals=None, options=None):
+    def __init__(self, domain, field_name=None, butcher_matrix=None, options=None):
         
                 
             
     @property
     def nStages(self):
-        if ((self.a_vals.len() != self.b_vals.len()) or (self.a_vals.len() != self.c_vals.len())):
-            raise ValueError("Inconsistent butcher arrays defined")
-        
-        return self.a_vals.len()
+        return np.shape(self.butcher_matrix)[0]
             
 
-    
        @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -611,20 +606,49 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         """
         super().setup(equation, uadv, *active_labels)
         
-        for i in np.arange(stages):
-            self.k[i+1] = Function(self.fs)
+        self.k = [Function(self.fs) for i in range(self.nStages)]
+        self.x_int = Function(self.fs)
+
             
-    def solve_stage(self, x_in, stage):
+    def solve_stage(self, x0, butcher_matrix, stage):
+        self.x_int.assign(x0)
+        
+        for i in np.arange(0,stage):
+            if i = 0:
+                print('oh no')
+            x_int += butcher_matrix[stage,i]*self.dt*self.k[i]
+        
+        #if stage > 0:
+        #    x_int += self.dt*a_vals[stage-1]*self.k[stage-1]
+        
+        self.x1.assign(self.x_int)
+        
         self.solver.solve()
         self.k[stage].assign(self.x_out)
+            
+        if stage = nStages:
+            self.x_int = x0
         
-        for i in np.arange(1,stage+1):
+            for i in np.arange(0,stage):
+                self.x_int += butcher_matrix[stage,i]*self.k[i]
             
         
-        
-        self.x[stage].assign(x_in + 0.5 * self.dt * self.k1)
-        
-    def solve_final_stage(self, x_in, stage):
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.x1.assign(x_in)
+
+        for i in range(self.nStages):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.x1)
     
     
                 
@@ -652,7 +676,8 @@ class RK4_butcher(ExplicitRKMethod):
         
         a = np.array([0, (1/2), (1/2), 1])
         b = np.array([(1/6), (1/3), (1/3), (1/6)])
-        c = np.array([0, (1/2), (1/2), 1])
+        
+        
         
         super().__init__(domain, field_name, a_vals=a, b_vals=b, c_vals=c,
                          solver_parameters=solver_parameters,
