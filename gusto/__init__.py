@@ -19,11 +19,5 @@ from gusto.recovery import *                         # noqa
 from gusto.spatial_methods import *                  # noqa
 from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
-<<<<<<< HEAD
-from gusto.transport_forms import *                  # noqa
-from gusto.thermodynamics import *                   # noqa
-from gusto.numerical_integrator import *             # noqa
-=======
 from gusto.transport_methods import *                # noqa
 from gusto.wrappers import *                         # noqa
->>>>>>> cb0c056015f3fe665695f8c238f73351da34fa54
