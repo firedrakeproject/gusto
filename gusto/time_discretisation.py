@@ -11,9 +11,9 @@ from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
-from gusto.labels import (time_derivative, prognostic, physics,
-                          replace_subject, replace_test_function)
-from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
+from gusto.labels import time_derivative, prognostic, physics
+from gusto.fml import (replace_subject, replace_test_function, Term,
+                       all_terms, drop)
 from gusto.wrappers import *
 
 

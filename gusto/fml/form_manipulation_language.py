@@ -3,18 +3,25 @@
 import ufl
 import functools
 import operator
-from firedrake import Constant
+from firedrake import Constant, Function
+from types import LambdaType
+
+
+__all__ = ["Label", "Term", "LabelledForm", "identity", "drop", "all_terms",
+           "keep", "subject", "name", "perp"]
 
 # ---------------------------------------------------------------------------- #
 # Core routines for filtering terms
 # ---------------------------------------------------------------------------- #
-
 identity = lambda t: t
 drop = lambda t: None
 all_terms = lambda t: True
 keep = identity
 
 
+# ---------------------------------------------------------------------------- #
+# Term class
+# ---------------------------------------------------------------------------- #
 class Term(object):
     """A Term object contains a form and its labels."""
 
@@ -140,9 +147,13 @@ class Term(object):
             return NotImplemented
 
 
+# This is necessary to be the initialiser for functools.reduce
 NullTerm = Term(None)
 
 
+# ---------------------------------------------------------------------------- #
+# Labelled form class
+# ---------------------------------------------------------------------------- #
 class LabelledForm(object):
     """
     A form, broken down into terms that pair individual forms with labels.
@@ -429,3 +440,13 @@ class Label(object):
                 return target
         else:
             raise ValueError("Unable to relabel %s" % target)
+
+
+# ---------------------------------------------------------------------------- #
+# Some common labels
+# ---------------------------------------------------------------------------- #
+
+subject = Label("subject", validator=lambda value: type(value) == Function)
+name = Label("name", validator=lambda value: type(value) == str)
+# Defining the perp label is necessary to allow us to replace a perp correctly
+perp = Label("perp", validator=lambda value: isinstance(value, LambdaType))
