@@ -2,7 +2,7 @@ from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, TrialFunctions, TestFunctions, \
     Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
-from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp, NullTerm, linearisation
+from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp, NullTerm, linearisation, subject, replace_trial_function
 from firedrake.formmanipulation import split_form
 
 
@@ -40,6 +40,9 @@ class Rexi(object):
             lambda t: t.has_label(linearisation),
             map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
             map_if_false=drop)
+        residual = residual.label_map(
+            all_terms,
+            lambda t: replace_trial_function(t.get(subject))(t))
 
         # Get the Rexi Coefficients, given the values of h and M in
         # rexi_parameters
@@ -185,7 +188,7 @@ class Rexi(object):
         self.solver = LinearVariationalSolver(
             rexi_prob, solver_parameters=solver_parameters)
 
-    def apply(self, U0, dt):
+    def apply(self, x_out, x_in, dt):
         """
         Solve method for approximating the matrix exponential by a
         rational sum. Solves
@@ -201,7 +204,7 @@ class Rexi(object):
 
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        Uin = U0.split()
+        Uin = x_in.split()
         U0 = self.U0.split()
         for i in range(len(Uin)):
             U0[2*i].assign(Uin[i])
@@ -230,4 +233,4 @@ class Rexi(object):
         for i in range(len(w_out)):
             w_out[i].assign(w_sum[2*i])
 
-        return self.w_out
+        x_out.assign(self.w_out)
