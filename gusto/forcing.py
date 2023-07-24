@@ -3,9 +3,8 @@
 from firedrake import (Function, TrialFunctions, DirichletBC,
                        LinearVariationalProblem, LinearVariationalSolver)
 from gusto.configuration import logger, DEBUG
-from gusto.labels import (transport, diffusion, name, time_derivative,
-                          hydrostatic)
-from gusto.fml import drop, replace_subject
+from gusto.labels import transport, diffusion, time_derivative, hydrostatic
+from gusto.fml import drop, replace_subject, name
 
 
 __all__ = ["Forcing"]

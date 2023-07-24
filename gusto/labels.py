@@ -3,7 +3,7 @@
 import ufl
 from firedrake import Function
 from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.fml.form_manipulation_labelling import Term, Label, LabelledForm
+from gusto.fml.form_manipulation_language import Term, Label, LabelledForm
 from types import MethodType
 
 # ---------------------------------------------------------------------------- #

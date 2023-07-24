@@ -6,7 +6,7 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
-from gusto.fml.form_manipulation_labelling import drop, Label, Term
+from gusto.fml.form_manipulation_language import drop, Label, Term
 from gusto.labels import (transport, diffusion, time_derivative, linearisation,
                           prognostic, physics, transporting_velocity)
 from gusto.linear_solvers import LinearTimesteppingSolver

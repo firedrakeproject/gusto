@@ -5,8 +5,8 @@ Tests the replace_subject routine from labels.py
 from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
                        VectorFunctionSpace, MixedFunctionSpace, dx, inner,
                        TrialFunctions, TrialFunction, split)
-from gusto.fml import Label
-from gusto import subject, replace_subject, replace_test_function, replace_trial_function
+from gusto.fml import (Label subject, replace_subject, replace_test_function,
+                       replace_trial_function)
 import pytest
 
 replace_funcs = [
