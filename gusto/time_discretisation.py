@@ -560,10 +560,10 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
     
     """
     
-    def __init__(self, domain, field_name=None, butcher_matrix=None, options=None):
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None,butcher_matrix=None):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
                 
     def setup(self, equation, uadv, *active_labels):
@@ -583,7 +583,7 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         self.x_int = Function(self.fs)
     @property
     def nStages(self):
-        return np.shape(self.butcher_matrix)[0]
+        return len(self.butcher_matrix[0])
             
 
     @cached_property
@@ -613,13 +613,12 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
     
 
             
-    def solve_stage(self, x0, butcher_matrix, stage):
+    def solve_stage(self, x0, stage):
         self.x_int.assign(x0)
-        
-        for i in np.arange(0,stage):
-            if i = 0:
+        for i in range(stage):
+            if stage == 0:
                 print('oh no')
-            self.x_int.assign(self.x_int + butcher_matrix[stage-1,i]*self.dt*self.k[i])
+            self.x_int.assign(self.x_int + self.butcher_matrix[stage-1,i]*self.dt*self.k[i])
         
         #if stage > 0:
         #    x_int += self.dt*a_vals[stage-1]*self.k[stage-1]
@@ -629,11 +628,11 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         self.solver.solve()
         self.k[stage-1].assign(self.x_out)
             
-        if (stage == nStages):
+        if (stage == self.nStages):
             self.x_int.assign( x0)
         
-            for i in np.arange(0,stage+1):
-                self.x_int.assign(self.x_int + butcher_matrix[stage,i]*self.k[i])
+            for i in range(0,stage+1):
+                self.x_int.assign(self.x_int + self.butcher_matrix[stage,i]*self.k[i])
             
         
     def apply_cycle(self, x_out, x_in):
@@ -677,8 +676,8 @@ class RK4_butcher(ExplicitRKMethod):
                 recovery method. Defaults to None.
         """
         
-        a = np.array([0, (1/2), (1/2), 1])
-        b = np.array([(1/6), (1/3), (1/3), (1/6)])
+        #a = np.array([0, (1/2), (1/2), 1])
+        #b = np.array([(1/6), (1/3), (1/3), (1/6)])
         
         
         
