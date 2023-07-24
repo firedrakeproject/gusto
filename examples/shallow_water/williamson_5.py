@@ -72,9 +72,10 @@ for ref_level, dt in ref_dt.items():
     # Transport schemes
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "D")]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

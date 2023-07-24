@@ -24,23 +24,27 @@ def set_up_model_objects(mesh, dt, output, stepper_type):
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'rho'),
+                         DGUpwind(eqns, 'theta')]
+
     if stepper_type == 'semi_implicit':
         # Set up transport schemes
-        transported_fields = []
-        transported_fields.append(SSPRK3(domain, "u"))
-        transported_fields.append(SSPRK3(domain, "rho"))
-        transported_fields.append(SSPRK3(domain, "theta"))
+        transported_fields = [SSPRK3(domain, "u"),
+                              SSPRK3(domain, "rho"),
+                              SSPRK3(domain, "theta")]
 
         # Set up linear solver
         linear_solver = CompressibleSolver(eqns)
 
         # build time stepper
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                          transport_methods,
                                           linear_solver=linear_solver)
 
     elif stepper_type == 'multi_level':
         scheme = AdamsBashforth(domain, order=2)
-        stepper = Timestepper(eqns, scheme, io)
+        stepper = Timestepper(eqns, scheme, io, spatial_methods=transport_methods)
 
     else:
         raise ValueError(f'stepper_type {stepper_type} not recognised')

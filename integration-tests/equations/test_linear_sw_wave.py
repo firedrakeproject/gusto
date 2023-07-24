@@ -37,9 +37,10 @@ def run_linear_sw_wave(tmpdir):
                               dumpfreq=1,
                               log_level='INFO')
     io = IO(domain, output)
+    transport_methods = [DefaultTransport(eqns, "D")]
 
     # Timestepper
-    stepper = Timestepper(eqns, RK4(domain), io)
+    stepper = Timestepper(eqns, RK4(domain), io, transport_methods)
 
     # ---------------------------------------------------------------------- #
     # Initial conditions
