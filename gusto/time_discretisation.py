@@ -565,6 +565,11 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
+        print(len(self.butcher_matrix))
+    
+    @property
+    def nStages(self):
+        return int(len(self.butcher_matrix[0]))
                 
     def setup(self, equation, uadv, *active_labels):
         """
@@ -581,9 +586,7 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         
         self.k = [Function(self.fs) for i in range(self.nStages)]
         self.x_int = Function(self.fs)
-    @property
-    def nStages(self):
-        return len(self.butcher_matrix[0])
+    
             
 
     @cached_property
@@ -614,25 +617,26 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
 
             
     def solve_stage(self, x0, stage):
+        self.x1.assign(x0)
         self.x_int.assign(x0)
         for i in range(stage):
-            if stage == 0:
-                print('oh no')
-            self.x_int.assign(self.x_int + self.butcher_matrix[stage-1,i]*self.dt*self.k[i])
+            print("stage, i:",stage, i)
+            self.x1.assign(self.x1 + self.butcher_matrix[stage-1,i]*self.dt*self.k[i])
         
         #if stage > 0:
         #    x_int += self.dt*a_vals[stage-1]*self.k[stage-1]
         
-        self.x1.assign(self.x_int)
+        #self.x1.assign(self.x_int)
         
         self.solver.solve()
-        self.k[stage-1].assign(self.x_out)
+        self.k[stage].assign(self.x_out)
             
-        if (stage == self.nStages):
-            self.x_int.assign( x0)
+        if (stage == self.nStages -1):
         
-            for i in range(0,stage+1):
-                self.x_int.assign(self.x_int + self.butcher_matrix[stage,i]*self.k[i])
+            for i in range(self.nStages):
+                print("end stage, i:", stage, i)
+                self.x_int.assign(self.x_int + self.dt*self.butcher_matrix[stage,i]*self.k[i])
+            self.x1.assign(self.x_int)
             
         
     def apply_cycle(self, x_out, x_in):
