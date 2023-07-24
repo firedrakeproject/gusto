@@ -37,17 +37,11 @@ eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option
 dirname = 'SBR_meshdeg2_order2_dt1000_vectorInvar'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
-                          dumplist=['u', 'rho', 'theta'],
-                          dumplist_latlon=['u_meridional',
-                                           'u_zonal',
-                                           'u_radial',
-                                           'rho',
-                                           'theta',
-                                           'geostrophicimbalance',
-                                           'solidbodyimbalance'],
+                          dump_nc=True,
+                          dump_vtus=False,
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber(),
-                     HydrostaticImbalance(eqn), GeostrophicImbalance(eqn), SolidBodyImbalance(eqn)]
+                     HydrostaticImbalance(eqn)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
