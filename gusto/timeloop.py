@@ -95,7 +95,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             )
             variables = [t.get(prognostic) for t in residual.terms]
             methods = list(filter(lambda t: t.term_label == term_label,
-                                         self.spatial_methods))
+                                  self.spatial_methods))
             method_variables = [method.variable for method in methods]
             for variable in variables:
                 if variable not in method_variables:
