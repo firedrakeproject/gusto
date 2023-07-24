@@ -78,7 +78,7 @@ def gamma_v(x_in):
     return (1 + 10*(20*q0/g*h * exp(20*(1 - b/g))))**(-1)
 
 
-ReversibleAdjustment(eqns, sat_func, L, time_varying_saturation=True,
+SW_SaturationAdjustment(eqns, sat_func, L, time_varying_saturation=True,
                      parameters=parameters, thermal_feedback=True,
                      beta2=beta2, gamma_v=gamma_v,
                      time_varying_gamma_v=True)

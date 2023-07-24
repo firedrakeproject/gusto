@@ -25,7 +25,7 @@ from types import FunctionType
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
-           "AdvectedMoments", "InstantRain", "ReversibleAdjustment"]
+           "AdvectedMoments", "InstantRain", "SW_SaturationAdjustment"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -769,7 +769,7 @@ class InstantRain(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class ReversibleAdjustment(Physics):
+class SW_SaturationAdjustment(Physics):
     """
     Represents the process of adjusting water vapour and cloud water according
     to a saturation function, via condensation and evaporation processes.
@@ -886,7 +886,7 @@ class ReversibleAdjustment(Physics):
         else:
             self.set_tau_to_dt = True
             self.tau = Constant(0)
-            logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to ReversibleAdjustment.")
+            logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to SW_SaturationAdjustment.")
 
         if self.time_varying_saturation:
             if isinstance(saturation_curve, FunctionType):
