@@ -3,8 +3,7 @@ An implementation of the Williams 3 Test case with convergence plotting
 """
 
 from gusto import *
-from gusto import NumericalIntegral
-from plotting import convergenceplots
+from gusto.numerical_integrator import NumericalIntegral
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
 import numpy as np
 
@@ -56,8 +55,9 @@ for i in range(len(ref_levels)):
     # Transport Fields and time stepper
     transported_fields = [SSPRK3(domain, "u"),
                         SSPRK3(domain, "D")]
+    transport_methods = [DGUpwind(eqns, field) for field in ["u", "D"]]
 
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial Conditions

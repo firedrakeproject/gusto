@@ -4,9 +4,10 @@ and meshes.
 """
 
 from gusto import *
+from gusto.numerical_integrator import NumericalIntegral
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, errornorm
 import numpy as np
-import pickle
+
 
 
 # Set up timestepping variables
@@ -59,7 +60,9 @@ for i in range(len(ref)):
     transported_fields = [SSPRK3(domain, "u"),
                           SSPRK3(domain, "D")]
 
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    transport_methods = [DGUpwind(eqns, field) for field in ["u", "D"]]
+
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial Conditions
@@ -133,8 +136,3 @@ for i in range(len(ref)):
     error.append(L2_error)
     dt_step.append(dt[i])
     ref_level.append(ref[i])
-    
-# Makes use of Pickle to save data
-plotdata = [error, ref_level, dt_step]
-with open('plotdata', 'wb') as f:
-    pickle.dump(plotdata, f)

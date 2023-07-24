@@ -50,8 +50,9 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 # Transport Fields and time stepper
 transported_fields = [SSPRK3(domain, "u"),
                     SSPRK3(domain, "D")]
+transport_methods = [DGUpwind(eqns, field) for field in ["u", "D"]]
 
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
 # ------------------------------------------------------------------------ #
 # Initial Conditions
