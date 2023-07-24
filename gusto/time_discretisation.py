@@ -589,6 +589,11 @@ class BackwardEuler(TimeDiscretisation):
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
+        if not solver_parameters:
+            # default solver parameters
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
         super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
