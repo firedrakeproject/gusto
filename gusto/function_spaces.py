@@ -3,16 +3,21 @@ This module contains routines to generate the compatible function spaces to be
 used by the model.
 """
 
-from firedrake import (HDiv, FunctionSpace, FiniteElement, TensorProductElement,
-                       interval)
+from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement,
+                       TensorProductElement, interval)
 
-# TODO: there is danger here for confusion about degree, particularly for the CG
-# spaces -- does a "CG" space with degree = 1 mean the "CG" space in the de Rham
-# complex of degree 1 ("CG3"), or "CG1"?
-# TODO: would it be better to separate creation of specific named spaces from
-# the creation of the de Rham complex spaces?
-# TODO: how do we create HCurl spaces if we want them?
+__all__ = ["Spaces", "check_degree_args"]
 
+# HDiv spaces are keys, HCurl spaces are values
+hdiv_hcurl_dict = {'RT': 'RTE',
+                   'RTF': 'RTE'
+                   'BDM': 'BDME',
+                   'BDMF': 'BDME',
+                   'RTCF': 'RTCE',
+                   'CG': 'CG'}
+
+# Can't just reverse the other dictionary as values are not necessarily unique
+hcurl_hdiv_dict = {'BDME': 'RT'}
 
 class Spaces(object):
     """Object to create and hold the model's finite element spaces."""
@@ -63,6 +68,12 @@ class Spaces(object):
             :class:`FunctionSpace`: the desired function space.
         """
 
+        implemented_families = ["DG", "CG", "RT", "RTF", "RTE", "RTCF", "RTCE",
+                                "BDM", "BDMF", "BDME"]
+        if family not in [None]+implemented_families:
+            raise NotImplementedError(f'family {family} either not recognised '
+                                      + 'or implemented in Gusto')
+
         if hasattr(self, name) and (V is None or not overwrite_space):
             # We have requested a space that should already have been created
             if V is not None:
@@ -89,8 +100,10 @@ class Spaces(object):
                 vertical_degree = degree if vertical_degree is None else vertical_degree
 
                 # Loop through name and family combinations
-                if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
+                if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF", "RTF", "BDMF"]:
                     value = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
+                elif name == "HCurl" and family in ["BDM", "RT", "CG", "RTCE", "RTE", "BDME"]:
+                    value = self.build_hcurl_space(family, horizontal_degree, vertical_degree)
                 elif name == "theta":
                     value = self.build_theta_space(horizontal_degree, vertical_degree)
                 elif family == "DG":
@@ -108,9 +121,9 @@ class Spaces(object):
         Builds the sequence of compatible finite element spaces for the mesh.
 
         If the mesh is not extruded, this builds and returns the spaces:      \n
-        (HDiv, DG).                                                           \n
+        (H1, HCurl, HDiv, DG).                                                \n
         If the mesh is extruded, this builds and returns the spaces:          \n
-        (HDiv, DG, theta).                                                    \n
+        (H1, HCurl, HDiv, DG, theta).                                         \n
         The 'theta' space corresponds to the vertical component of the velocity.
 
         Args:
@@ -125,19 +138,26 @@ class Spaces(object):
             tuple: the created compatible :class:`FunctionSpace` objects.
         """
         if self.extruded_mesh and not self._initialised_base_spaces:
+            # Base spaces need building, while horizontal and vertical degrees
+            # need specifying separately
             self.build_base_spaces(family, horizontal_degree, vertical_degree)
+            Vcg = self.build_h1_space(cg_degree(family, horizontal_degree),
+                                      cg_degree(family, vertical_degree), name='H1')
+            setattr(self, "H1", Vcg)
+            Vcurl = self.build_hcurl_space(family, horizontal_degree, vertical_degree)
+            setattr(self, "HCurl", Vcurl)
             Vu = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
-            setattr(self, "DG", Vdg)
+            Vdg = self.build_l2_space(horizontal_degree, vertical_degree, name='L2')
+            setattr(self, "L2", Vdg)
             Vth = self.build_theta_space(horizontal_degree, vertical_degree)
             setattr(self, "theta", Vth)
             return Vu, Vdg, Vth
         else:
             Vu = self.build_hdiv_space(family, horizontal_degree+1)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
-            setattr(self, "DG", Vdg)
+            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='L2')
+            setattr(self, "L2", Vdg)
             return Vu, Vdg
 
     def build_base_spaces(self, family, horizontal_degree, vertical_degree):
@@ -192,30 +212,30 @@ class Spaces(object):
             V_elt = FiniteElement(family, cell, horizontal_degree)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None, name='DG'):
+    def build_l2_space(self, horizontal_degree, vertical_degree=None, variant=None, name='L2'):
         """
-        Builds and returns the DG :class:`FunctionSpace`.
+        Builds and returns the discontinuous L2 :class:`FunctionSpace`.
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space.
+                part of the L2 space.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the DG space. Defaults to None. Must be
+                vertical part of the L2 space. Defaults to None. Must be
                 specified if the mesh is extruded.
             variant (str, optional): the variant of the underlying
                 :class:`FiniteElement` to use. Defaults to None, which will call
                 the default variant.
             name (str, optional): name to assign to the function space. Default
-                is "DG".
+                is "L2".
 
         Returns:
-            :class:`FunctionSpace`: the DG space.
+            :class:`FunctionSpace`: the L2 space.
         """
         assert not hasattr(self, name), f'There already exists a function space with name {name}'
 
         if self.extruded_mesh:
             if vertical_degree is None:
-                raise ValueError('vertical_degree must be specified to create DG space on an extruded mesh')
+                raise ValueError('vertical_degree must be specified to create L2 space on an extruded mesh')
             if not self._initialised_base_spaces or self.T1.degree() != vertical_degree or self.T1.variant() != variant:
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
                 S2 = FiniteElement("DG", cell, horizontal_degree, variant=variant)
@@ -240,9 +260,9 @@ class Spaces(object):
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space from the de Rham complex.
+                part of the L2 space from the de Rham complex.
             vertical_degree (int): the polynomial degree of the vertical part of
-                the DG space from the de Rham complex.
+                the L2 space from the de Rham complex.
 
         Raises:
             AssertionError: the mesh is not extruded.
@@ -258,7 +278,7 @@ class Spaces(object):
         V_elt = TensorProductElement(self.S2, self.T0)
         return FunctionSpace(self.mesh, V_elt, name='theta')
 
-    def build_cg_space(self, horizontal_degree, vertical_degree=None, name='CG'):
+    def build_h1_space(self, horizontal_degree, vertical_degree=None, name='H1'):
         """
         Builds the continuous scalar space at the top of the de Rham complex.
 
@@ -269,7 +289,7 @@ class Spaces(object):
                 vertical part of the the CG space. Defaults to None. Must be
                 specified if the mesh is extruded.
             name (str, optional): name to assign to the function space. Default
-                is "CG".
+                is "H1".
 
         Returns:
             :class:`FunctionSpace`: the continuous space.
