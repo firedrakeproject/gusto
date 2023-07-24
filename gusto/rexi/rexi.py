@@ -188,7 +188,7 @@ class Rexi(object):
         self.solver = LinearVariationalSolver(
             rexi_prob, solver_parameters=solver_parameters)
 
-    def apply(self, x_out, x_in, dt):
+    def solve(self, x_out, x_in, dt):
         """
         Solve method for approximating the matrix exponential by a
         rational sum. Solves

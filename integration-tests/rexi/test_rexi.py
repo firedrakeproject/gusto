@@ -69,7 +69,7 @@ def run_rexi_sw(tmpdir):
     rexi_output.write(u, D)
 
     rexi = Rexi(eqns, RexiParameters())
-    Uexpl.assign(rexi.solve(U_in, tmax))
+    rexi.solve(Uexpl, U_in, tmax)
 
     uexpl, Dexpl = Uexpl.split()
     u.assign(uexpl)
