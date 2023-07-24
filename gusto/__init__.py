@@ -21,3 +21,4 @@ from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_methods import *                # noqa
 from gusto.wrappers import *                         # noqa
+from gusto.numerical_integrator import *             # noqa 
