@@ -32,7 +32,8 @@ def setup_sw(dirname, dt, u_transport_option):
     refinements = 3
 
     mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=refinements)
+                                 refinement_level=refinements,
+                                 degree=2)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     x = SpatialCoordinate(mesh)
 
@@ -115,7 +116,11 @@ def test_sw_ssprk3(tmpdir):
     dt = 100
     domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
-    stepper = Timestepper(eqns, SSPRK3(domain), io)
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'D'),
+                         DGUpwind(eqns, 'b')]
+
+    stepper = Timestepper(eqns, SSPRK3(domain), io, transport_methods)
 
     # Initial conditions
     set_up_initial_conditions(domain, eqns, stepper)

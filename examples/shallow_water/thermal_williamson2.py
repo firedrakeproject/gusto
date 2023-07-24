@@ -47,9 +47,12 @@ diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterPotentialEnstrophy(),
                      SteadyStateError('u'), SteadyStateError('D')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "D"),
+                     DGUpwind(eqns, "b")]
 
 # Time stepper
-stepper = Timestepper(eqns, RK4(domain), io)
+stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions

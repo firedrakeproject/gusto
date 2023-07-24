@@ -6,7 +6,8 @@ checks the result against a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Constant, sin,
-                       cos, pi, norm)
+                       cos, pi)
+import numpy as np
 
 
 def run_linear_sw_wave(tmpdir):
@@ -19,9 +20,10 @@ def run_linear_sw_wave(tmpdir):
     g = 1
 
     # Domain
+    mesh_name = 'linear_sw_mesh'
     L = 1
     nx = ny = 20
-    mesh = PeriodicSquareMesh(nx, ny, L, direction='both')
+    mesh = PeriodicSquareMesh(nx, ny, L, direction='both', name=mesh_name)
     x, y = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
@@ -35,9 +37,10 @@ def run_linear_sw_wave(tmpdir):
                               dumpfreq=1,
                               log_level='INFO')
     io = IO(domain, output)
+    transport_methods = [DefaultTransport(eqns, "D")]
 
     # Timestepper
-    stepper = Timestepper(eqns, RK4(domain), io)
+    stepper = Timestepper(eqns, RK4(domain), io, transport_methods)
 
     # ---------------------------------------------------------------------- #
     # Initial conditions
@@ -63,14 +66,16 @@ def run_linear_sw_wave(tmpdir):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    checkpoint_name = 'linear_sw_wave_chkpt'
+    checkpoint_name = 'linear_sw_wave_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
     check_output = OutputParameters(dirname=tmpdir+"/linear_sw_wave",
                                     checkpoint_pickup_filename=new_path)
-    check_io = IO(domain, output=check_output)
-    check_stepper = Timestepper(check_eqn, RK4(domain), check_io)
-    check_stepper.run(t=0, tmax=0, pick_up=True)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, 'BDM', 1)
+    check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper
 
@@ -83,7 +88,8 @@ def test_linear_sw_wave(tmpdir):
     for variable in ['u', 'D']:
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
-        error = norm(new_variable - check_variable) / norm(check_variable)
+        diff_array = new_variable.dat.data - check_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
 
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \

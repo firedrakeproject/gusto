@@ -34,6 +34,7 @@ def setup_fallout(dirname):
     Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
     eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
+    transport_method = DGUpwind(eqn, "rho")
 
     # I/O
     output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
@@ -41,11 +42,12 @@ def setup_fallout(dirname):
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Physics schemes
-    physics_schemes = [(Fallout(eqn, 'rain', domain), SSPRK3(domain, 'rain'))]
+    rainfall_method = DGUpwind(eqn, 'rain', outflow=True)
+    physics_schemes = [(Fallout(eqn, 'rain', domain, rainfall_method), SSPRK3(domain, 'rain'))]
 
     # build time stepper
     scheme = ForwardEuler(domain)
-    stepper = PrescribedTransport(eqn, scheme, io,
+    stepper = PrescribedTransport(eqn, scheme, io, transport_method,
                                   physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

@@ -97,7 +97,8 @@ class Domain(object):
                 if hasattr(mesh, "_bash_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
-                    mesh.init_cell_orientations(x)
+                    if not hasattr(mesh, "_cell_orientations"):
+                        mesh.init_cell_orientations(x)
                     sphere_degree = mesh.coordinates.function_space().ufl_element().degree()
                 V = VectorFunctionSpace(mesh, "DG", sphere_degree)
                 self.outward_normals = Function(V).interpolate(CellNormal(mesh))
@@ -165,7 +166,7 @@ class Domain(object):
                 else:
                     metadata_value = None
                 for procid in range(1, comm_size):
-                    my_tag = comm_size*j + my_rank
+                    my_tag = comm_size*j + procid
                     comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
         else:
             # Need to receive information and store in metadata
