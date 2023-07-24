@@ -64,6 +64,8 @@ transported_fields = [SSPRK3(domain, "rho"),
                       SSPRK3(domain, "cloud_water", options=EmbeddedDGOptions()),
                       ImplicitMidpoint(domain, "u")]
 
+transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta", "water_vapour", "cloud_water"]]
+
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
@@ -72,6 +74,7 @@ physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver,
                                   physics_schemes=physics_schemes)
 

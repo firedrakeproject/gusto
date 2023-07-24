@@ -11,7 +11,6 @@ from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.transport_forms import advection_form
 from gusto.fml import identity, Term
 from gusto.labels import subject, physics, transporting_velocity
 from gusto.configuration import logger
@@ -257,7 +256,8 @@ class Fallout(Physics):
     for Cartesian geometry.
     """
 
-    def __init__(self, equation, rain_name, domain, moments=AdvectedMoments.M3):
+    def __init__(self, equation, rain_name, domain, transport_method,
+                 moments=AdvectedMoments.M3):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -265,6 +265,8 @@ class Fallout(Physics):
                 'rain'.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
+            transport_method (:class:`TransportMethod`): the spatial method
+                used for transporting the rain.
             moments (int, optional): an :class:`AdvectedMoments` enumerator,
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
@@ -279,7 +281,6 @@ class Fallout(Physics):
 
         rain_idx = equation.field_names.index(rain_name)
         rain = self.X.split()[rain_idx]
-        test = equation.tests[rain_idx]
 
         Vu = domain.spaces("HDiv")
         # TODO: there must be a better way than forcing this into the equation
@@ -289,7 +290,9 @@ class Fallout(Physics):
         # Create physics term -- which is actually a transport term
         # -------------------------------------------------------------------- #
 
-        adv_term = advection_form(domain, test, rain, outflow=True)
+        assert transport_method.outflow, \
+            'Fallout requires a transport method with outflow=True'
+        adv_term = transport_method.form
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(

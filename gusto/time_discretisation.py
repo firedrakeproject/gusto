@@ -6,60 +6,32 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, NonlinearVariationalProblem, split,
-                       NonlinearVariationalSolver, Projector, Interpolator,
-                       BrokenElement, VectorElement, FunctionSpace,
-                       TestFunction, Constant, dot, grad, as_ufl,
-                       DirichletBC)
+from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
-import ufl
-from gusto.configuration import (logger, DEBUG, TransportEquationType,
-                                 EmbeddedDGOptions, RecoveryOptions)
-from gusto.labels import (time_derivative, transporting_velocity, prognostic,
-                          subject, physics, transport, ibp_label,
+from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
+from gusto.labels import (time_derivative, prognostic, physics,
                           replace_subject, replace_test_function)
-from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
-from gusto.transport_forms import advection_form, continuity_form
+from gusto.wrappers import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
-def is_cg(V):
-    """
-    Checks if a :class:`FunctionSpace` is continuous.
-
-    Function to check if a given space, V, is CG. Broken elements are always
-    discontinuous; for vector elements we check the names of the Sobolev spaces
-    of the subelements and for all other elements we just check the Sobolev
-    space name.
-
-    Args:
-        V (:class:`FunctionSpace`): the space to check.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return False
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space().name == "H1"
-
-
-def embedded_dg(original_apply):
-    """Decorator to add steps for embedded DG method."""
+def wrapper_apply(original_apply):
+    """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
 
-        if self.discretisation_option in ["embedded_dg", "recovered"]:
+        if self.wrapper is not None:
 
             def new_apply(self, x_out, x_in):
 
-                self.pre_apply(x_in, self.discretisation_option)
-                original_apply(self, self.xdg_out, self.xdg_in)
-                self.post_apply(x_out, self.discretisation_option)
+                self.wrapper.pre_apply(x_in)
+                original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                self.wrapper.post_apply(x_out)
 
             return new_apply(self, x_out, x_in)
 
@@ -95,14 +67,23 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.equation = None
 
         self.dt = domain.dt
-
+        self.options = options
         self.limiter = limiter
 
-        self.options = options
         if options is not None:
-            self.discretisation_option = options.name
+            self.wrapper_name = options.name
+            if self.wrapper_name == "embedded_dg":
+                self.wrapper = EmbeddedDGWrapper(self, options)
+            elif self.wrapper_name == "recovered":
+                self.wrapper = RecoveryWrapper(self, options)
+            elif self.wrapper_name == "supg":
+                self.wrapper = SUPGWrapper(self, options)
+            else:
+                raise NotImplementedError(
+                    f'Time discretisation: wrapper {self.wrapper_name} not implemented')
         else:
-            self.discretisation_option = None
+            self.wrapper = None
+            self.wrapper_name = None
 
         # get default solver options if none passed in
         if solver_parameters is None:
@@ -114,14 +95,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if logger.isEnabledFor(DEBUG):
                 self.solver_parameters["ksp_monitor_true_residual"] = None
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
             apply_bcs (bool, optional): whether to apply the equation's boundary
                 conditions. Defaults to True.
             *active_labels (:class:`Label`): labels indicating which terms of
@@ -157,37 +136,26 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if t.has_label(physics):
                 self.evaluate_source.append(t.get(physics))
 
-        options = self.options
-
         # -------------------------------------------------------------------- #
-        # Routines relating to transport
+        # Set up Wrappers
         # -------------------------------------------------------------------- #
 
-        if hasattr(self.options, 'ibp'):
-            self.replace_transport_term()
-        self.replace_transporting_velocity(uadv)
+        if self.wrapper is not None:
+            self.wrapper.setup()
+            self.fs = self.wrapper.function_space
+            if self.solver_parameters is None:
+                self.solver_parameters = self.wrapper.solver_parameters
+            new_test = TestFunction(self.wrapper.test_space)
+            # SUPG has a special wrapper
+            if self.wrapper_name == "supg":
+                new_test = self.wrapper.test
 
-        # -------------------------------------------------------------------- #
-        # Wrappers for embedded / recovery methods
-        # -------------------------------------------------------------------- #
+            # Replace the original test function with the one from the wrapper
+            self.residual = self.residual.label_map(
+                all_terms,
+                map_if_true=replace_test_function(new_test))
 
-        if self.discretisation_option in ["embedded_dg", "recovered"]:
-            # construct the embedding space if not specified
-            if options.embedding_space is None:
-                V_elt = BrokenElement(self.fs.ufl_element())
-                self.fs = FunctionSpace(self.domain.mesh, V_elt)
-            else:
-                self.fs = options.embedding_space
-            self.xdg_in = Function(self.fs)
-            self.xdg_out = Function(self.fs)
-            if self.idx is None:
-                self.x_projected = Function(equation.function_space)
-            else:
-                self.x_projected = Function(equation.spaces[self.idx])
-            new_test = TestFunction(self.fs)
-            parameters = {'ksp_type': 'cg',
-                          'pc_type': 'bjacobi',
-                          'sub_pc_type': 'ilu'}
+            self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
@@ -195,134 +163,18 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if not apply_bcs:
             self.bcs = None
-        elif self.discretisation_option in ["embedded_dg", "recovered"]:
+        elif self.wrapper is not None:
             # Transfer boundary conditions onto test function space
             self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain) for bc in bcs]
         else:
             self.bcs = bcs
 
         # -------------------------------------------------------------------- #
-        # Modify test function for SUPG methods
+        # Make the required functions
         # -------------------------------------------------------------------- #
 
-        if self.discretisation_option == "supg":
-            # construct tau, if it is not specified
-            dim = self.domain.mesh.topological_dimension()
-            if options.tau is not None:
-                # if tau is provided, check that is has the right size
-                tau = options.tau
-                assert as_ufl(tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
-            else:
-                # create tuple of default values of size dim
-                default_vals = [options.default*self.dt]*dim
-                # check for directions is which the space is discontinuous
-                # so that we don't apply supg in that direction
-                if is_cg(self.fs):
-                    vals = default_vals
-                else:
-                    space = self.fs.ufl_element().sobolev_space()
-                    if space.name in ["HDiv", "DirectionalH"]:
-                        vals = [default_vals[i] if space[i].name == "H1"
-                                else 0. for i in range(dim)]
-                    else:
-                        raise ValueError("I don't know what to do with space %s" % space)
-                tau = Constant(tuple([
-                    tuple(
-                        [vals[j] if i == j else 0. for i, v in enumerate(vals)]
-                    ) for j in range(dim)])
-                )
-                self.solver_parameters = {'ksp_type': 'gmres',
-                                          'pc_type': 'bjacobi',
-                                          'sub_pc_type': 'ilu'}
-
-            test = TestFunction(self.fs)
-            new_test = test + dot(dot(uadv, tau), grad(test))
-
-        if self.discretisation_option is not None:
-            # replace the original test function with one defined on
-            # the embedding space, as this is the space where the
-            # the problem will be solved
-            self.residual = self.residual.label_map(
-                all_terms,
-                map_if_true=replace_test_function(new_test))
-
-        if self.discretisation_option == "embedded_dg":
-            self.interp_back = False
-            if self.limiter is None:
-                self.x_out_projector = Projector(self.xdg_out, self.x_projected,
-                                                 solver_parameters=parameters)
-            else:
-                self.x_out_projector = Recoverer(self.xdg_out, self.x_projected)
-
-        if self.discretisation_option == "recovered":
-            # set up the necessary functions
-            if self.idx is not None:
-                self.x_in = Function(equation.spaces[self.idx])
-            else:
-                self.x_in = Function(equation.function_space)
-
-            # Operator to recover to higher discontinuous space
-            self.x_recoverer = ReversibleRecoverer(self.x_in, self.xdg_in, options)
-
-            self.interp_back = (options.project_low_method == 'interpolate')
-            if options.project_low_method == 'interpolate':
-                self.x_out_projector = Interpolator(self.xdg_out, self.x_projected)
-            elif options.project_low_method == 'project':
-                self.x_out_projector = Projector(self.xdg_out, self.x_projected)
-            elif options.project_low_method == 'recover':
-                self.x_out_projector = Recoverer(self.xdg_out, self.x_projected, method=options.broken_method)
-
-            if self.limiter is not None and options.project_low_method != 'recover':
-                logger.warning('A limiter has been requested for a recovered transport scheme, but the method for projecting back is not recovery')
-
-        # setup required functions
         self.x_out = Function(self.fs)
         self.x1 = Function(self.fs)
-
-    def pre_apply(self, x_in, discretisation_option):
-        """
-        Extra steps to the discretisation if using a "wrapper" method.
-
-        Performs extra steps before the generic apply method if the whole method
-        is a "wrapper" around some existing discretisation. For instance, if
-        using an embedded or recovered method this routine performs the
-        transformation to the function space in which the discretisation is
-        computed.
-
-        Args:
-            x_in (:class:`Function`): the original field to be evolved.
-            discretisation_option (str): specifies the "wrapper" method.
-        """
-        if discretisation_option == "embedded_dg":
-            try:
-                self.xdg_in.interpolate(x_in)
-            except NotImplementedError:
-                self.xdg_in.project(x_in)
-
-        elif discretisation_option == "recovered":
-            self.x_in.assign(x_in)
-            self.x_recoverer.project()
-
-        else:
-            raise ValueError(
-                f'discretisation_option {discretisation_option} not recognised')
-
-    def post_apply(self, x_out, discretisation_option):
-        """
-        Extra steps to the discretisation if using a "wrapper" method.
-
-        Performs projection steps after the generic apply method if the whole
-        method is a "wrapper" around some existing discretisation. This
-        generally returns a field to its original space. For the case of the
-        recovered scheme, there are two options dependent on whether
-        the scheme is limited or not.
-
-        Args:
-            x_out (:class:`Function`): the outgoing field to be computed.
-            discretisation_option (str): specifies the "wrapper" method.
-        """
-        self.x_out_projector.interpolate() if self.interp_back else self.x_out_projector.project()
-        x_out.assign(self.x_projected)
 
     @property
     def nlevels(self):
@@ -350,75 +202,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             map_if_false=lambda t: -self.dt*t)
 
         return r.form
-
-    def replace_transport_term(self):
-        """
-        Replaces a transport term with some other transport term.
-
-        This routine allows the default transport term to be replaced with a
-        different one, specified through the transport options. This is
-        necessary because when the prognostic equations are declared,
-        the particular transport scheme is not known. The details of the new
-        transport term are stored in the time discretisation's options object.
-        """
-        # Extract transport term of equation
-        old_transport_term_list = self.residual.label_map(
-            lambda t: t.has_label(transport), map_if_false=drop)
-
-        # If there are more transport terms, extract only the one for this variable
-        if len(old_transport_term_list.terms) > 1:
-            raise NotImplementedError('Cannot replace transport terms when there are more than one')
-
-        # Then we should only have one transport term
-        old_transport_term = old_transport_term_list.terms[0]
-
-        # If the transport term has an ibp label, then it could be replaced
-        if old_transport_term.has_label(ibp_label) and hasattr(self.options, 'ibp'):
-            # Do the options specify a different ibp to the old transport term?
-            if old_transport_term.labels['ibp'] != self.options.ibp:
-                # Set up a new transport term
-                if self.idx is not None:
-                    field = self.equation.X.split()[self.idx]
-                else:
-                    field = self.equation.X
-                test = TestFunction(self.fs)
-
-                # Set up new transport term (depending on the type of transport equation)
-                if old_transport_term.labels['transport'] == TransportEquationType.advective:
-                    new_transport_term = advection_form(self.domain, test, field, ibp=self.options.ibp)
-                elif old_transport_term.labels['transport'] == TransportEquationType.conservative:
-                    new_transport_term = continuity_form(self.domain, test, field, ibp=self.options.ibp)
-                else:
-                    raise NotImplementedError(f'Replacement of transport term not implemented yet for {old_transport_term.labels["transport"]}')
-
-                # Finally, drop the old transport term and add the new one
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transport), map_if_true=drop)
-                self.residual += subject(new_transport_term, field)
-
-    def replace_transporting_velocity(self, uadv):
-        """
-        Replace the transport velocity.
-
-        Args:
-            uadv (:class:`ufl.Expr`): the new transporting velocity.
-        """
-        # replace the transporting velocity in any terms that contain it
-        if any([t.has_label(transporting_velocity) for t in self.residual]):
-            assert uadv is not None
-            if uadv == "prognostic":
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transporting_velocity),
-                    map_if_true=lambda t: Term(ufl.replace(
-                        t.form, {t.get(transporting_velocity): split(t.get(subject))[0]}), t.labels)
-                )
-            else:
-                self.residual = self.residual.label_map(
-                    lambda t: t.has_label(transporting_velocity),
-                    map_if_true=lambda t: Term(ufl.replace(
-                        t.form, {t.get(transporting_velocity): uadv}), t.labels)
-                )
-            self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     @cached_property
     def solver(self):
@@ -468,18 +251,18 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         self.subcycles = subcycles
 
-    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
+            apply_bcs (bool, optional): whether boundary conditions are to be
+                applied. Defaults to True.
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -503,7 +286,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         pass
 
-    @embedded_dg
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -633,18 +416,16 @@ class RK4(ExplicitTimeDiscretisation):
     where superscripts indicate the time-level.
     """
 
-    def setup(self, equation, uadv, *active_labels):
+    def setup(self, equation, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, uadv, *active_labels)
+        super().setup(equation, *active_labels)
 
         self.k1 = Function(self.fs)
         self.k2 = Function(self.fs)
@@ -994,9 +775,8 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
     def nlevels(self):
         pass
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
-                      *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
@@ -1140,8 +920,8 @@ class TR_BDF2(TimeDiscretisation):
 
         self.gamma = gamma
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation, apply_bcs, *active_labels)
         self.xnpg = Function(self.fs)
         self.xn = Function(self.fs)
 
@@ -1337,8 +1117,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
         self.order = order
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs,
                       *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
@@ -1467,9 +1247,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
         self.order = order
 
-    def setup(self, equation, uadv=None, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, uadv=uadv, apply_bcs=apply_bcs,
-                      *active_labels)
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 
