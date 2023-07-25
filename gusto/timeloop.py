@@ -15,7 +15,7 @@ from gusto.time_discretisation import ExplicitTimeDiscretisation
 from gusto.transport_methods import TransportMethod
 import ufl
 
-__all__ = ["Timestepper", "PhysicsTimestepper", "SemiImplicitQuasiNewton",
+__all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
 
 
