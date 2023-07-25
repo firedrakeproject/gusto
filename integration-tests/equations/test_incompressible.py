@@ -41,12 +41,15 @@ def run_incompressible(tmpdir):
     b_opts = SUPGOptions()
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "b", options=b_opts)]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "b", ibp=b_opts.ibp)]
 
     # Linear solver
     linear_solver = IncompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
@@ -89,7 +92,7 @@ def run_incompressible(tmpdir):
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = IncompressibleBoussinesqEquations(check_domain, parameters)
     check_io = IO(check_domain, check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper

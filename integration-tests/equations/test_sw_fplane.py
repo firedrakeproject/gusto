@@ -36,12 +36,13 @@ def run_sw_fplane(tmpdir):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    transported_fields = []
-    transported_fields.append((ImplicitMidpoint(domain, "u")))
-    transported_fields.append((SSPRK3(domain, "D")))
+    transported_fields = [ImplicitMidpoint(domain, "u"),
+                          SSPRK3(domain, "D")]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -108,7 +109,7 @@ def run_sw_fplane(tmpdir):
     check_domain = Domain(check_mesh, dt, 'RTCF', 1)
     check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
     check_io = IO(check_domain, output=check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper

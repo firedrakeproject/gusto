@@ -43,12 +43,16 @@ def run_moist_compressible(tmpdir):
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta")]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "rho"),
+                         DGUpwind(eqn, "theta")]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
@@ -100,7 +104,7 @@ def run_moist_compressible(tmpdir):
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = CompressibleEulerEquations(check_domain, parameters, active_tracers=tracers)
     check_io = IO(check_domain, output=check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper

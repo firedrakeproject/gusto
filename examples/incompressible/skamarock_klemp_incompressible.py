@@ -56,12 +56,14 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 b_opts = SUPGOptions()
 transported_fields = [ImplicitMidpoint(domain, "u"),
                       SSPRK3(domain, "b", options=b_opts)]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "b", ibp=b_opts.ibp)]
 
 # Linear solver
 linear_solver = IncompressibleSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #

@@ -42,12 +42,16 @@ def setup_balance(dirname):
     transported_fields = [ImplicitMidpoint(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=EmbeddedDGOptions())]
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'rho'),
+                         DGUpwind(eqns, 'theta')]
 
     # Set up linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
