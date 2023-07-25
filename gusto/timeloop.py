@@ -11,7 +11,7 @@ from gusto.labels import (transport, diffusion, time_derivative,
                           linearisation, prognostic, physics)
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.fields import TimeLevelFields, StateFields
-from gusto.time_discretisation import ExplicitTimeDiscretisation
+from gusto.time_discretisation import ExplicitMultistage
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
            "PrescribedTransport"]
@@ -219,7 +219,7 @@ class SplitPhysicsTimestepper(Timestepper):
 
         for _, phys_scheme in self.physics_schemes:
             # check that the supplied schemes for physics are explicit
-            assert isinstance(phys_scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
+            assert isinstance(phys_scheme, ExplicitMultistage), "Only explicit schemes can be used for physics"
             apply_bcs = False
             phys_scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 
@@ -297,7 +297,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.physics_schemes = []
         for _, scheme in self.physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
+            assert isinstance(scheme, ExplicitMultistage), "Only explicit schemes can be used for physics"
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -510,7 +510,7 @@ class PrescribedTransport(Timestepper):
 
         for _, scheme in self.physics_schemes:
             # check that the supplied schemes for physics are explicit
-            assert isinstance(scheme, ExplicitTimeDiscretisation), "Only explicit schemes can be used for physics"
+            assert isinstance(scheme, ExplicitMultistage), "Only explicit schemes can be used for physics"
             apply_bcs = False
             scheme.setup(equation, self.transporting_velocity, apply_bcs, physics)
 

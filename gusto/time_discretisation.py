@@ -22,6 +22,7 @@ from gusto.labels import (time_derivative, transporting_velocity, prognostic,
 from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
+import numpy as np
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "Heun",
@@ -468,14 +469,17 @@ class ExplicitMultistage(TimeDiscretisation):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = butcher_matrix
-        self.subcycles = subcycles
+        if butcher_matrix is not None:
+            self.butcher_matrix = butcher_matrix
+            print(np.shape(self.butcher_matrix))
+            self.nbutcher = int(np.shape(self.butcher_matrix)[1])
+        self.subcycles = subcycles   
     
     @property
     def nStages(self):
-        return int(len(self.butcher_matrix[0]))
+        return self.nbutcher
                 
-    def setup(self, equation, uadv, apply_bcs, *active_labels):
+    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -487,7 +491,7 @@ class ExplicitMultistage(TimeDiscretisation):
                 the equation to include.
         """
 
-        super().setup(equation, uadv, apply_bcs, *active_labels)
+        super().setup(equation, uadv, apply_bcs=apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
@@ -585,29 +589,11 @@ class ForwardEuler(ExplicitMultistage):
     y^(n+1) = y^n + dt*F[y^n].
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            field_name (str, optional): name of the field to be evolved.
-                Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
-                Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
-            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
-                for the general explicit multistage method
-        """
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = 
+        self.butcher_matrix = np.array([[1.],[0.]])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
 
 
 class SSPRK3(ExplicitMultistage):
@@ -625,31 +611,11 @@ class SSPRK3(ExplicitMultistage):
     number. See e.g. Shu and Osher (1988).
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            field_name (str, optional): name of the field to be evolved.
-                Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
-                Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
-            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
-                for the general explicit multistage method
-        """
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = 
-
-
+        self.butcher_matrix = np.array([[1., 0., 0.],[1./4., 1./4., 0.],[1./6., 1./6., 2./3.]])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
 
 class RK4(ExplicitMultistage):
     u"""
@@ -667,31 +633,11 @@ class RK4(ExplicitMultistage):
     where superscripts indicate the time-level.
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            field_name (str, optional): name of the field to be evolved.
-                Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
-                Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
-            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
-                for the general explicit multistage method
-        """
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = 
-    
-
+        self.butcher_matrix = np.array([[0.5, 0., 0., 0.],[0., 0.5, 0., 0.],[0., 0., 1., 0.],[1./6., 1./3., 1./3., 1./6.]])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
 
 class Heun(ExplicitMultistage):
     u"""
@@ -707,29 +653,11 @@ class Heun(ExplicitMultistage):
     number.
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            field_name (str, optional): name of the field to be evolved.
-                Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
-                Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
-            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
-                for the general explicit multistage method
-        """
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = 
+        self.butcher_matrix = np.array([[1., 0.],[0.5, 0.5]])
+        self.nbutcher = np.shape(self.butcher_matrix)[1]
 
 class BackwardEuler(TimeDiscretisation):
     """
