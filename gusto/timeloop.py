@@ -210,7 +210,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 assert field_name in self.equation.field_names, \
                     f'Cannot set reference profile as field {field_name} not found'
                 idx = self.equation.field_names.index(field_name)
-                X_ref = self.equation.X_ref.subfunctions()[idx]
+                X_ref = self.equation.X_ref.subfunctions[idx]
                 X_ref.assign(ref)
 
         self.reference_profiles_initialised = True
