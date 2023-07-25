@@ -189,22 +189,6 @@ def replace_subject(new_subj, idx=None):
                             + f" replace_subject with {new_subj}"
             raise type(err)(error_message) from err
 
-        # When a term has the perp label, this indicates that replace
-        # cannot see that the perped object should also be
-        # replaced. In this case we also pass the perped object to
-        # replace.
-        if t.has_label(perp):
-            perp_op = t.get(perp)
-            perp_old = perp_op(t.get(subject))
-            perp_new = perp_op(new_subj)
-            try:
-                new_form = ufl.replace(t.form, {perp_old: perp_new})
-
-            except Exception as err:
-                error_message = f"{type(err)} raised by ufl.replace when trying to" \
-                    + f" replace_subject with {new_subj}"
-                raise type(err)(error_message) from err
-
         return Term(new_form, t.labels)
 
     return repl
