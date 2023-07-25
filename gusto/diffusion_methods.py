@@ -1,11 +1,28 @@
-"""Provides forms for describing diffusion terms."""
+"""Provides discretisations for diffusion terms."""
 
-from firedrake import (inner, outer, grad, avg, dx, dS_h, dS_v, dS,
-                       FacetNormal)
+from firedrake import inner, outer, grad, avg, dx, dS_h, dS_v, dS, FacetNormal
 from gusto.labels import diffusion
+from gusto.spatial_methods import SpatialMethod
 
 
-__all__ = ["interior_penalty_diffusion_form"]
+__all__ = ["InteriorPenaltyDiffusion"]
+
+
+class DiffusionMethod(SpatialMethod):
+    """
+    The base object for describing a spatial discretisation of diffusion terms.
+    """
+
+    def __init__(self, equation, variable):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a diffusion term.
+            variable (str): name of the variable to set the diffusion scheme for
+        """
+
+        # Inherited init method extracts original term to be replaced
+        super().__init__(equation, variable, diffusion)
 
 
 def interior_penalty_diffusion_form(domain, test, q, parameters):
@@ -57,3 +74,23 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
     form += get_flux_form(dS_, kappa)
 
     return diffusion(form)
+
+
+class InteriorPenaltyDiffusion(DiffusionMethod):
+    """The interior penalty method for discretising the diffusion term."""
+
+    def __init__(self, equation, variable, diffusion_parameters):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the diffusion method for
+            diffusion_parameters (:class:`DiffusionParameters`): object
+                containing metadata describing the diffusion term. Includes
+                the kappa and mu constants.
+        """
+
+        super().__init__(equation, variable)
+
+        self.form = interior_penalty_diffusion_form(equation.domain, self.test,
+                                                    self.field, diffusion_parameters)
