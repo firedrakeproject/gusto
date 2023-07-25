@@ -21,7 +21,8 @@ Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
 m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=24, degree=2)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, 
+                                       extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
 # Equations
@@ -29,11 +30,12 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, 
+                                 u_transport_option='vector_invariant_form')
 
 dirname = 'Solidbodycase_nonisotherm_dt=500_cellperedge=24_vector_invar'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=22, # dumps every 3 hours roughly of simulation time
+                          dumpfreq=22, # dumps every 3 hours 
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -41,7 +43,8 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+                     RadialComponent('u'), CourantNumber()]
                      
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -60,9 +63,9 @@ stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                   transport_methods,
                                   linear_solver=linear_solver)
 
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # Initial Conditions
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 
 x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
@@ -97,9 +100,9 @@ Vr = rho0.function_space()
 Vt = theta0.function_space()
 
 
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # Base State
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 
 
 # expressions for variables from paper
@@ -111,7 +114,7 @@ C = ((k + 2) / 2)*((T0e - T0p) / (T0e * T0p))
 tao1 = A * lapse / T0 * exp((r - a)*lapse / T0) + B * (1 - 2*((r-a)/(b*H))**2)*exp(-((r-a) / (b*H))**2)
 tao2 = C * (1 - 2*((r-a)/(b*H))**2)*exp(-((r - a) / (b*H))**2)
 
-tao1_int = A * (exp(lapse * (r - a) / T0) - 1) + B * (r - a) * exp(-((r-a) / (b*H))**2)
+tao1_int = A * (exp(lapse * (r - a) / T0) - 1) + B * (r - a) * exp(-((r-a)/(b*H))**2)
 tao2_int = C * (r - a)  * exp(-((r-a) / (b*H))**2)
 
 # Variable fields
@@ -124,9 +127,9 @@ pie_expr = Temp / theta_expr
 rho_expr = P_expr / (Rd * Temp)
 
 
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # Debug Plotting
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 
 # Lat - Lon grid plotting
 
@@ -149,9 +152,9 @@ wind_field = Function(Vr, name='wind').interpolate(wind)
 
 sphereout.write(temperature_out, theta_out, wind_field)
 
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # Configuring fields
-# -------------------------------------------------------------- #
+# -----------------------------------------------------------------------------#
 # get components of u in spherical polar coordinates
 zonal_u = wind
 merid_u = Constant(0.0)
@@ -170,7 +173,8 @@ print('find pi')
 pie = Function(Vr).interpolate(pie_expr)
 print('find rho')
 rho0.interpolate(rho_expr)
-compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_for_rho=True)
+compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, 
+                                                    solve_for_rho=True)
 
 print('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
