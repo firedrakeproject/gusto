@@ -641,16 +641,16 @@ class ThetaMethod(TimeDiscretisation):
     for off-centring parameter theta.
     """
 
-    def __init__(self, domain, field_name=None, theta=None,
+    def __init__(self, domain, theta, field_name=None,
                  solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
+            theta (float): the off-centring parameter. theta = 1
+                corresponds to a backward Euler method. Defaults to None.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            theta (float, optional): the off-centring parameter. theta = 1
-                corresponds to a backward Euler method. Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -661,9 +661,7 @@ class ThetaMethod(TimeDiscretisation):
         Raises:
             ValueError: if theta is not provided.
         """
-        # TODO: would this be better as a non-optional argument? Or should the
-        # check be on the provided value?
-        if theta is None:
+        if (theta < 0 or theta > 1):
             raise ValueError("please provide a value for theta between 0 and 1")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -739,7 +737,7 @@ class ImplicitMidpoint(ThetaMethod):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(domain, field_name, theta=0.5,
+        super().__init__(domain, 0.5, field_name,
                          solver_parameters=solver_parameters,
                          options=options)
 
