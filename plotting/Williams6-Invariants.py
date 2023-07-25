@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import netCDF4 as nc
 
 
-data = nc.Dataset("results/W6_SIQN_Ref=5_dt=500_diagnostics/diagnostics.nc")
+data = nc.Dataset("/home/d-witt/firedrake/src/gusto/results/archiveplot/Williams6_long/diagnostics.nc")
 time = data.variables['time'][:]
 Enstrophy = data.groups['SWPotentialEnstrophy_from_PotentialVorticity']['total'][:] / data.groups['SWPotentialEnstrophy_from_PotentialVorticity']['l2'][0]
 
