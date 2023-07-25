@@ -7,7 +7,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fields import PrescribedFields
-from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name, perp,
+from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
                        replace_subject, replace_trial_function)
 from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
                           linearisation, pressure_gradient, coriolis)
@@ -681,10 +681,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
             # Add linearisation
             if self.linearisation_map(coriolis_form.terms[0]):
-                linear_coriolis = perp(
-                    coriolis(
-                        subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X)
-                    ), domain.perp)
+                linear_coriolis =  coriolis(
+                    subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, "u"), self.X)
+                    )
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
