@@ -6,6 +6,7 @@ model's time interval.
 
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
+from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        as_vector, inner, interpolate, VectorFunctionSpace,
                        Function)
@@ -108,7 +109,7 @@ class Domain(object):
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
             if dim == 2:
-                self.perp = lambda u: as_vector([-u[1], u[0]])
+                self.perp = perp
 
         # -------------------------------------------------------------------- #
         # Set up coordinates

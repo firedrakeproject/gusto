@@ -26,7 +26,8 @@ def test_replace_perp():
     w, p = TestFunctions(W)
     U0 = Function(W)
     u0, _ = split(U0)
-    form = perp(subject(inner(domain.perp(u0), w)*dx, U0), domain.perp)
+    # form = perp(subject(inner(domain.perp(u0), w)*dx, U0), domain.perp)
+    form = subject(inner(domain.perp(u0), w)*dx, U0)
 
     # make a function to replace the subject with and give it some values
     U1 = Function(W)
