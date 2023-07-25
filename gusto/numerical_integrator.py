@@ -25,7 +25,7 @@ class NumericalIntegral(object):
         """
         Tabulate some integral expression using Simpson's rule.
         Args:
-            expression (func): a function representing the integrand to be 
+            expression (func): a function representing the integrand to be
                 evaluated. should take a numpy array as an argument.
         """
 
@@ -49,7 +49,7 @@ class NumericalIntegral(object):
         """
         Evaluates the integral at some point using linear interpolation.
         Args:
-            points (float or iter) the point value, or array of point values to 
+            points (float or iter) the point value, or array of point values to
                 evaluate the integral at.
         """
         # Do linear interpolation from tabulated values
