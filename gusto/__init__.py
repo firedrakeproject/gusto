@@ -4,10 +4,13 @@
 # from gusto import _monkey_patch_ufl()
 def _monkey_patch_ufl():
     from ufl.algorithms.apply_algebra_lowering import LowerCompoundAlgebra
+
     def perp(self, o, a):
         from firedrake import as_vector
         return as_vector([-a[1], a[0]])
     LowerCompoundAlgebra.perp = perp
+
+
 _monkey_patch_ufl()
 
 from gusto.active_tracers import *                   # noqa

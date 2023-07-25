@@ -4,7 +4,6 @@ import ufl
 import functools
 import operator
 from firedrake import Constant, Function
-from types import LambdaType
 
 
 __all__ = ["Label", "Term", "LabelledForm", "identity", "drop", "all_terms",

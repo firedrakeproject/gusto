@@ -8,8 +8,7 @@ from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       as_vector, inner, interpolate, VectorFunctionSpace,
-                       Function)
+                       inner, interpolate, VectorFunctionSpace, Function)
 import numpy as np
 
 
