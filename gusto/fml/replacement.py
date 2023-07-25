@@ -50,7 +50,7 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
 
     if indexable_old and indexable_new:
         # must be both True or both False
-        if old_idx ^ new_idx:
+        if (old_idx is None) ^ (new_idx is None):
             raise ValueError(f"both or neither old_idx and new_idx must be specified to"
                              + f" replace_{replace_type} when old {replace_type} of type"
                              + f" {old} is mixed and new {replace_type} of type {new} is"
@@ -71,7 +71,6 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
 
     replace_dict = {}
 
-    # flat
     if not indexable_old and not indexable_new:
         replace_dict[old] = new
 
@@ -82,11 +81,11 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
         replace_dict[split_old[old_idx]] = new
 
     elif indexable_old and indexable_new:
-        if old_idx is not None:
-            replace_dict[split_old[old_idx]] = split_new[new_idx]
-        else: # idxs are none
+        if old_idx is None: # replace everything
             for k, v in zip(split_old, split_new):
                 replace_dict[k] = v
+        else: # idxs are given
+            replace_dict[split_old[old_idx]] = split_new[new_idx]
 
     # if type(old.ufl_element()) is MixedElement:
 
