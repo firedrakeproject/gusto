@@ -778,7 +778,7 @@ class SW_SaturationAdjustment(Physics):
 
     """
 
-    def __init__(self, equation, saturation_curve, L,
+    def __init__(self, equation, saturation_curve, L=None,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
                  beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
@@ -796,10 +796,11 @@ class SW_SaturationAdjustment(Physics):
                 dependent on a prognostic field.
             time_varying_saturation (bool, optional): set this to True if the
                 saturation curve is changing in time. Defaults to False.
-            L (float): The air expansion factor multiplied by the latent heat
-                due to phase change divided by the specific heat capacity. For
-                the atmosphere we take L to be 10, following A.2 in
-                Zerroukat and Allen (2015).
+            L (float, optional): The air expansion factor multiplied by the
+                latent heat due to phase change divided by the specific heat
+                capacity. For the atmosphere we take L to be 10, following A.2
+                in Zerroukat and Allen (2015). Defaults to None but must be
+                specified if using thermal feedback.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             cloud_name (str, optional): name of the cloud variable. Defaults to
@@ -852,6 +853,7 @@ class SW_SaturationAdjustment(Physics):
         if self.thermal_feedback:
             assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
             assert beta2 is not None, "If thermal feedback is used, beta2 parameter must be specified"
+            assert L is not None, "If thermal feedback is used, L parameter must be specified"
 
         # Obtain function spaces and functions
         W = equation.function_space
