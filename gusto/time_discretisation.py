@@ -440,13 +440,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         pass
 
-class ExplicitMultistage(TimeDiscretisation):   
-    """
-    A class for implementing general explicit multistage methods based on the Butcher Tableau
-    
-    """
-    
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+class ExplicitTimeDiscretisation(TimeDiscretisation):
+    """Base class for explicit time discretisations."""
+
+    def __init__(self, domain, field_name=None, subcycles=None,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -463,17 +461,79 @@ class ExplicitMultistage(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
-            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
-                for the general explicit multistage method
         """
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+
+        self.subcycles = subcycles
+
+    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+                Defaults to None.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, uadv, apply_bcs, *active_labels)
+
+        # if user has specified a number of subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
+        if self.subcycles is not None:
+            self.dt = self.dt/self.subcycles
+            self.ncycles = self.subcycles
+        else:
+            self.dt = self.dt
+            self.ncycles = 1
+        self.x0 = Function(self.fs)
+        self.x1 = Function(self.fs)
+
+    @abstractmethod
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        pass
+
+    @embedded_dg
+    def apply(self, x_out, x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        self.x0.assign(x_in)
+        for i in range(self.ncycles):
+            for evaluate in self.evaluate_source:
+                evaluate(x_in, self.dt)
+            self.apply_cycle(self.x1, self.x0)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
+
+class ExplicitMultistage(ExplicitTimeDiscretisation):   
+    """
+    A class for implementing general explicit multistage methods based on the Butcher Tableau
+    
+    """
+    
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         if butcher_matrix is not None:
             self.butcher_matrix = butcher_matrix
             print(np.shape(self.butcher_matrix))
-            self.nbutcher = int(np.shape(self.butcher_matrix)[1])
-        self.subcycles = subcycles   
+            self.nbutcher = int(np.shape(self.butcher_matrix)[0])
     
     @property
     def nStages(self):
@@ -492,17 +552,6 @@ class ExplicitMultistage(TimeDiscretisation):
         """
 
         super().setup(equation, uadv, apply_bcs=apply_bcs, *active_labels)
-
-        # if user has specified a number of subcycles, then save this
-        # and rescale dt accordingly; else perform just one cycle using dt
-        if self.subcycles is not None:
-            self.dt = self.dt/self.subcycles
-            self.ncycles = self.subcycles
-        else:
-            self.dt = self.dt
-            self.ncycles = 1
-        self.x0 = Function(self.fs)
-        self.x1 = Function(self.fs)
         
         self.k = [Function(self.fs) for i in range(self.nStages)]
         self.x_int = Function(self.fs)
@@ -562,23 +611,8 @@ class ExplicitMultistage(TimeDiscretisation):
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
-        x_out.assign(self.x1)
-
-    @embedded_dg
-    def apply(self, x_out, x_in):
-        """
-        Apply the time discretisation to advance one whole time step.
-
-        Args:
-            x_out (:class:`Function`): the output field to be computed.
-            x_in (:class:`Function`): the input field.
-        """
-        self.x0.assign(x_in)
-        for i in range(self.ncycles):
-            for evaluate in self.evaluate_source:
-                evaluate(x_in, self.dt)
-            self.apply_cycle(self.x1, self.x0)
-            self.x0.assign(self.x1)
+            if self.limiter is not None:
+                self.limiter.apply(self.x1)
         x_out.assign(self.x1)
 
 class ForwardEuler(ExplicitMultistage):
@@ -592,8 +626,8 @@ class ForwardEuler(ExplicitMultistage):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[1.],[0.]])
-        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
+        self.butcher_matrix = np.array([1.]).reshape(1, 1)
+        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
 
 class SSPRK3(ExplicitMultistage):
@@ -615,7 +649,7 @@ class SSPRK3(ExplicitMultistage):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = np.array([[1., 0., 0.],[1./4., 1./4., 0.],[1./6., 1./6., 2./3.]])
-        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
 class RK4(ExplicitMultistage):
     u"""
@@ -637,7 +671,7 @@ class RK4(ExplicitMultistage):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = np.array([[0.5, 0., 0., 0.],[0., 0.5, 0., 0.],[0., 0., 1., 0.],[1./6., 1./3., 1./3., 1./6.]])
-        self.nbutcher = int(np.shape(self.butcher_matrix)[1])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
 class Heun(ExplicitMultistage):
     u"""
@@ -657,7 +691,7 @@ class Heun(ExplicitMultistage):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = np.array([[1., 0.],[0.5, 0.5]])
-        self.nbutcher = np.shape(self.butcher_matrix)[1]
+        self.nbutcher = np.shape(self.butcher_matrix)[0]
 
 class BackwardEuler(TimeDiscretisation):
     """
