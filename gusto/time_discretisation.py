@@ -24,7 +24,7 @@ from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
 from gusto.transport_forms import advection_form, continuity_form
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitRKMethod", "SSPRK3", "RK4", "Heun",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "Heun",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
@@ -439,12 +439,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         pass
 
-
-class ExplicitTimeDiscretisation(TimeDiscretisation):
-    """Base class for explicit time discretisations."""
-
-    def __init__(self, domain, field_name=None, subcycles=None,
-                 solver_parameters=None, limiter=None, options=None):
+class ExplicitMultistage(TimeDiscretisation):   
+    """
+    A class for implementing general explicit multistage methods based on the Butcher Tableau
+    
+    """
+    
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -461,14 +462,20 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
+                for the general explicit multistage method
         """
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-
+        self.butcher_matrix = butcher_matrix
         self.subcycles = subcycles
-
-    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
+    
+    @property
+    def nStages(self):
+        return int(len(self.butcher_matrix[0]))
+                
+    def setup(self, equation, uadv, apply_bcs, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -479,6 +486,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
+
         super().setup(equation, uadv, apply_bcs, *active_labels)
 
         # if user has specified a number of subcycles, then save this
@@ -491,104 +499,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
-
-    @abstractmethod
-    def apply_cycle(self, x_out, x_in):
-        """
-        Apply the time discretisation through a single sub-step.
-
-        Args:
-            x_out (:class:`Function`): the output field to be computed.
-            x_in (:class:`Function`): the input field.
-        """
-        pass
-
-    @embedded_dg
-    def apply(self, x_out, x_in):
-        """
-        Apply the time discretisation to advance one whole time step.
-
-        Args:
-            x_out (:class:`Function`): the output field to be computed.
-            x_in (:class:`Function`): the input field.
-        """
-        self.x0.assign(x_in)
-        for i in range(self.ncycles):
-            for evaluate in self.evaluate_source:
-                evaluate(x_in, self.dt)
-            self.apply_cycle(self.x1, self.x0)
-            self.x0.assign(self.x1)
-        x_out.assign(self.x1)
-
-
-class ForwardEuler(ExplicitTimeDiscretisation):
-    """
-    Implements the forward Euler timestepping scheme.
-
-    The forward Euler method for operator F is the most simple explicit scheme:
-    y^(n+1) = y^n + dt*F[y^n].
-    """
-
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(ForwardEuler, self).lhs
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
-        return super(ForwardEuler, self).rhs
-
-    def apply_cycle(self, x_out, x_in):
-        """
-        Apply the time discretisation through a single sub-step.
-
-        Args:
-            x_in (:class:`Function`): the input field.
-            x_out (:class:`Function`): the output field to be computed.
-        """
-        self.x1.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.x_out)
-
-        
-class ExplicitRKMethod(ExplicitTimeDiscretisation):   
-    """
-    Implements a general explicit RK Method based on the Butcher Tableau
-    
-    Define vectors for coefficients a,b,c.
-    
-    """
-    
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None,butcher_matrix=None):
-        super().__init__(domain, field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-        self.butcher_matrix = butcher_matrix
-        print(len(self.butcher_matrix))
-    
-    @property
-    def nStages(self):
-        return int(len(self.butcher_matrix[0]))
-                
-    def setup(self, equation, uadv, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
-                Defaults to None.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-        super().setup(equation, uadv, *active_labels)
         
         self.k = [Function(self.fs) for i in range(self.nStages)]
         self.x_int = Function(self.fs)
     
-            
-
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -612,21 +526,12 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
             map_if_false=lambda t: -1*t)
 
         return r.form
-    
-    
-
             
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         self.x_int.assign(x0)
         for i in range(stage):
-            print("stage, i:",stage, i)
             self.x1.assign(self.x1 + self.butcher_matrix[stage-1,i]*self.dt*self.k[i])
-        
-        #if stage > 0:
-        #    x_int += self.dt*a_vals[stage-1]*self.k[stage-1]
-        
-        #self.x1.assign(self.x_int)
         
         self.solver.solve()
         self.k[stage].assign(self.x_out)
@@ -634,7 +539,6 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         if (stage == self.nStages -1):
         
             for i in range(self.nStages):
-                print("end stage, i:", stage, i)
                 self.x_int.assign(self.x_int + self.dt*self.butcher_matrix[stage,i]*self.k[i])
             self.x1.assign(self.x_int)
             
@@ -655,42 +559,58 @@ class ExplicitRKMethod(ExplicitTimeDiscretisation):
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
-    
-    
-                
-class RK4_butcher(ExplicitRKMethod):
+
+    @embedded_dg
+    def apply(self, x_out, x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        self.x0.assign(x_in)
+        for i in range(self.ncycles):
+            for evaluate in self.evaluate_source:
+                evaluate(x_in, self.dt)
+            self.apply_cycle(self.x1, self.x0)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
+
+class ForwardEuler(ExplicitMultistage):
     """
-    To do .
-    
+    Implements the forward Euler timestepping scheme.
+
+    The forward Euler method for operator F is the most simple explicit scheme:
+    y^(n+1) = y^n + dt*F[y^n].
     """
-    
-    def __init__(self, domain, field_name=None, solver_parameters=None,
-                 options=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
+                for the general explicit multistage method
         """
-        
-        #a = np.array([0, (1/2), (1/2), 1])
-        #b = np.array([(1/6), (1/3), (1/3), (1/6)])
-        
-        
-        
-        super().__init__(domain, field_name, a_vals=a, b_vals=b, c_vals=c,
+        super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
-                         options=options)
-    
+                         limiter=limiter, options=options)
+        self.butcher_matrix = 
 
-class SSPRK3(ExplicitTimeDiscretisation):
+
+class SSPRK3(ExplicitMultistage):
     u"""
     Implements the 3-stage Strong-Stability-Prevering Runge-Kutta method.
 
@@ -704,58 +624,34 @@ class SSPRK3(ExplicitTimeDiscretisation):
     where superscripts indicate the time-level and subscripts indicate the stage
     number. See e.g. Shu and Osher (1988).
     """
-
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(SSPRK3, self).lhs
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
-        return super(SSPRK3, self).rhs
-
-    def solve_stage(self, x_in, stage):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         """
-        Perform a single stage of the Runge-Kutta scheme.
-
         Args:
-            x_in (:class:`Function`): field at the start of the stage.
-            stage (int): index of the stage.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
+                for the general explicit multistage method
         """
-        if stage == 0:
-            self.solver.solve()
-            self.x1.assign(self.x_out)
-
-        elif stage == 1:
-            self.solver.solve()
-            self.x1.assign(0.75*x_in + 0.25*self.x_out)
-
-        elif stage == 2:
-            self.solver.solve()
-            self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
-
-        if self.limiter is not None:
-            self.limiter.apply(self.x1)
-
-    def apply_cycle(self, x_out, x_in):
-        """
-        Apply the time discretisation through a single sub-step.
-
-        Args:
-            x_out (:class:`Function`): the output field to be computed.
-            x_in (:class:`Function`): the input field.
-        """
-        if self.limiter is not None:
-            self.limiter.apply(x_in)
-
-        self.x1.assign(x_in)
-        for i in range(3):
-            self.solve_stage(x_in, i)
-        x_out.assign(self.x1)
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_matrix = 
 
 
-class RK4(ExplicitTimeDiscretisation):
+
+class RK4(ExplicitMultistage):
     u"""
     Implements the classic 4-stage Runge-Kutta method.
 
@@ -770,96 +666,34 @@ class RK4(ExplicitTimeDiscretisation):
 
     where superscripts indicate the time-level.
     """
-
-    def setup(self, equation, uadv, *active_labels):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         """
-        Set up the time discretisation based on the equation.
-
         Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            uadv (:class:`ufl.Expr`, optional): the transporting velocity.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
+                for the general explicit multistage method
         """
-        super().setup(equation, uadv, *active_labels)
-
-        self.k1 = Function(self.fs)
-        self.k2 = Function(self.fs)
-        self.k3 = Function(self.fs)
-        self.k4 = Function(self.fs)
-
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
-
-        return l.form
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
-        r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
-
-        r = r.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=drop,
-            map_if_false=lambda t: -1*t)
-
-        return r.form
-
-    def solve_stage(self, x_in, stage):
-        """
-        Perform a single stage of the Runge-Kutta scheme.
-
-        Args:
-            x_in (:class:`Function`): field at the start of the stage.
-            stage (int): index of the stage.
-        """
-        if stage == 0:
-            self.solver.solve()
-            self.k1.assign(self.x_out)
-            self.x1.assign(x_in + 0.5 * self.dt * self.k1)
-
-        elif stage == 1:
-            self.solver.solve()
-            self.k2.assign(self.x_out)
-            self.x1.assign(x_in + 0.5 * self.dt * self.k2)
-
-        elif stage == 2:
-            self.solver.solve()
-            self.k3.assign(self.x_out)
-            self.x1.assign(x_in + self.dt * self.k3)
-
-        elif stage == 3:
-            self.solver.solve()
-            self.k4.assign(self.x_out)
-            self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
-
-    def apply_cycle(self, x_out, x_in):
-        """
-        Apply the time discretisation through a single sub-step.
-
-        Args:
-            x_in (:class:`Function`): the input field.
-            x_out (:class:`Function`): the output field to be computed.
-        """
-        if self.limiter is not None:
-            self.limiter.apply(x_in)
-
-        self.x1.assign(x_in)
-
-        for i in range(4):
-            self.solve_stage(x_in, i)
-        x_out.assign(self.x1)
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_matrix = 
+    
 
 
-class Heun(ExplicitTimeDiscretisation):
+class Heun(ExplicitMultistage):
     u"""
     Implements Heun's method.
 
@@ -872,48 +706,30 @@ class Heun(ExplicitTimeDiscretisation):
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
     """
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(Heun, self).lhs
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
-        return super(Heun, self).rhs
-
-    def solve_stage(self, x_in, stage):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         """
-        Perform a single stage of the Runge-Kutta scheme.
-
         Args:
-            x_in (:class:`Function`): field at the start of the stage.
-            stage (int): index of the stage.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            butcher_matrix (numpy array, optional): Butcher Tableau to define the coefficients 
+                for the general explicit multistage method
         """
-        if stage == 0:
-            self.solver.solve()
-            self.x1.assign(self.x_out)
-
-        elif stage == 1:
-            self.solver.solve()
-            self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
-
-    def apply_cycle(self, x_out, x_in):
-        """
-        Apply the time discretisation through a single sub-step.
-
-        Args:
-            x_in (:class:`Function`): the input field.
-            x_out (:class:`Function`): the output field to be computed.
-        """
-        if self.limiter is not None:
-            self.limiter.apply(x_in)
-
-        self.x1.assign(x_in)
-        for i in range(2):
-            self.solve_stage(x_in, i)
-        x_out.assign(self.x1)
-
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_matrix = 
 
 class BackwardEuler(TimeDiscretisation):
     """
