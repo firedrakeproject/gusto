@@ -5,7 +5,7 @@ Tests the replace_subject routine from labels.py
 from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
                        VectorFunctionSpace, MixedFunctionSpace, dx, inner,
                        TrialFunctions, TrialFunction, split)
-from gusto.fml import (Label subject, replace_subject, replace_test_function,
+from gusto.fml import (Label, subject, replace_subject, replace_test_function,
                        replace_trial_function)
 import pytest
 
@@ -28,7 +28,7 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
 
     # only makes sense to replace a vector with a vector
     if (subject_type == 'vector') ^ (replacement_type == 'vector'):
-        pytest.skip("invalid option combination")
+        pytest.skip("Invalid vector option combination")
 
     # ------------------------------------------------------------------------ #
     # Set up
@@ -39,7 +39,7 @@ def test_replace_subject(subject_type, replacement_type, function_or_indexed, re
     bar_label = Label("bar")
 
     # Create mesh, function space and forms
-    n = 3
+    n = 2
     mesh = UnitSquareMesh(n, n)
     V0 = FunctionSpace(mesh, "DG", 0)
     V1 = FunctionSpace(mesh, "CG", 1)
