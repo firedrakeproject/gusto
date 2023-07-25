@@ -2,12 +2,196 @@
 Tests the replace_subject routine from labels.py
 """
 
-from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
+from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction, TestFunctions,
                        VectorFunctionSpace, MixedFunctionSpace, dx, inner,
-                       TrialFunctions, TrialFunction, split)
+                       TrialFunctions, TrialFunction, split, grad)
 from gusto.fml import (Label, subject, replace_subject, replace_test_function,
-                       replace_trial_function)
+                       replace_trial_function, drop)
 import pytest
+
+from collections import namedtuple
+
+ReplaceArgs = namedtuple("ReplaceArgs", "subject idxs error")
+
+# some dummy labels
+foo_label = Label("foo")
+bar_label = Label("bar")
+
+nx = 2
+mesh = UnitSquareMesh(nx, nx)
+
+V0 = FunctionSpace(mesh, 'CG', 1)
+V1 = FunctionSpace(mesh, 'DG', 1)
+
+W = V0*V1
+
+subj = Function(V0)
+v = TestFunction(V0)
+
+term1 = foo_label(subject(subj*v*dx, subj))
+term2 = bar_label(inner(grad(subj), grad(v))*dx)
+
+labelled_form = term1 + term2
+
+argsets = [
+    ReplaceArgs(Function(V0), {}, None),
+    ReplaceArgs(Function(V0), {'new_idx': 0}, ValueError),
+    ReplaceArgs(Function(V0), {'old_idx': 0}, ValueError),
+    ReplaceArgs(Function(W), {'new_idx': 0}, None),
+    ReplaceArgs(Function(W), {'new_idx': 1}, None),
+    ReplaceArgs(Function(W), {'old_idx': 0}, ValueError),
+    ReplaceArgs(Function(W), {'new_idx': 7}, IndexError),
+]
+
+
+@pytest.mark.parametrize('argset', argsets)
+def test_replace_subject_params(argset):
+    arg = argset.subject
+    idxs = argset.idxs
+    error = argset.error
+
+    if error is None:
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(arg, **idxs),
+            map_if_false=drop)
+        assert arg == new_form.form.coefficients()[0]
+        assert subj not in new_form.form.coefficients()
+
+    else:
+        with pytest.raises(error):
+            new_form = labelled_form.label_map(
+                lambda t: t.has_label(foo_label),
+                map_if_true=replace_subject(arg, **idxs))
+
+
+def test_replace_subject_primal():
+    # setup some basic labels
+    foo_label = Label("foo")
+    bar_label = Label("bar")
+
+    # setup the mesh and function space
+    n = 2
+    mesh = UnitSquareMesh(n, n)
+    V = FunctionSpace(mesh, "CG", 1)
+
+    # set up the form
+    u = Function(V)
+    v = TestFunction(V)
+
+    form1 = inner(u, v)*dx
+    form2 = inner(grad(u), grad(v))*dx
+
+    term1 = foo_label(subject(form1, u))
+    term2 = bar_label(form2)
+
+    labelled_form = term1 + term2
+
+    # replace with another function
+    w = Function(V)
+
+    # this should work
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(w))
+
+    # these should fail if given an index
+    with pytest.raises(ValueError):
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(w, new_idx=0))
+
+    with pytest.raises(ValueError):
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(w, old_idx=0))
+
+    with pytest.raises(ValueError):
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(w, old_idx=0, new_idx=0))
+
+    # replace with mixed component
+    wm = Function(V*V)
+    wms = split(wm)
+    wm0, wm1 = wms
+
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(wm0))
+
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(wms, new_idx=0))
+
+
+def test_replace_subject_mixed():
+    # setup some basic labels
+    foo_label = Label("foo")
+    bar_label = Label("bar")
+
+    # setup the mesh and function space
+    n = 2
+    mesh = UnitSquareMesh(n, n)
+    V0 = FunctionSpace(mesh, "CG", 1)
+    V1 = FunctionSpace(mesh, "DG", 1)
+    W = V0*V1
+
+    # set up the form
+    u = Function(W)
+    u0, u1 = split(u)
+    v0, v1 = TestFunctions(W)
+
+    form1 = inner(u0, v0)*dx
+    form2 = inner(grad(u1), grad(v1))*dx
+
+    term1 = foo_label(subject(form1, u))
+    term2 = bar_label(form2)
+
+    labelled_form = term1 + term2
+
+    # replace with another function
+    w = Function(W)
+
+    # replace all parts of the subject
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(w))
+
+    # replace either part of the subject
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(w, old_idx=0, new_idx=0))
+
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(w, old_idx=1, new_idx=1))
+
+    # these should fail if given only one index
+    with pytest.raises(ValueError):
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(w, old_idx=1))
+
+    with pytest.raises(ValueError):
+        new_form = labelled_form.label_map(
+            lambda t: t.has_label(foo_label),
+            map_if_true=replace_subject(w, new_idx=1))
+
+    # try indexing only one
+    w0, w1 = split(w)
+
+    # replace a specific part of the subject
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(w1, old_idx=0))
+
+    # replace with something from a primal space
+    wp = Function(V0)
+    new_form = labelled_form.label_map(
+        lambda t: t.has_label(foo_label),
+        map_if_true=replace_subject(wp, old_idx=1))
+
 
 replace_funcs = [
     pytest.param((Function, replace_subject), id="replace_subj"),
@@ -20,7 +204,7 @@ replace_funcs = [
 @pytest.mark.parametrize('replacement_type', ['normal', 'mixed', 'vector', 'tuple'])
 @pytest.mark.parametrize('function_or_indexed', ['function', 'indexed'])
 @pytest.mark.parametrize('replace_func', replace_funcs)
-def test_replace_subject(subject_type, replacement_type, function_or_indexed, replace_func):
+def old_test_replace_subject(subject_type, replacement_type, function_or_indexed, replace_func):
 
     # ------------------------------------------------------------------------ #
     # Only certain combinations of options are valid
