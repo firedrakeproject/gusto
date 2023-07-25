@@ -20,28 +20,22 @@ def perp(v):
     return Perp(v)
 
 
-@ufl_type(num_ops=1)
+@ufl_type(is_index_free=True, num_ops=1)
 class Perp(CompoundTensorOperator):
-    # TODO: what goes in slots?
-    __slots__ = ("ufl_free_indices", "ufl_index_dimensions")
+    __slots__ = ()
 
     def __new__(cls, A):
         sh = A.ufl_shape
-        r = len(sh)
-        Afi = A.ufl_free_indices
 
         # Checks
         if not len(sh) == 1:
             raise ValueError(f"Perp requires arguments of rank 1, got {ufl_err_str(A)}")
         if not sh[0] == 2:
             raise ValueError(f"Perp can only work on 2D vectors, got {ufl_err_str(A)}")
-        # TODO: what do we do with free indices?
-        if Afi:
-            raise ValueError("Not expecting free indices in determinant.")
 
         # Simplification
         if isinstance(A, Zero):
-            return Zero((), Afi, A.ufl_index_dimensions)
+            return Zero((), A.ufl_free_indices, A.ufl_index_dimensions)
 
         return CompoundTensorOperator.__new__(cls)
 
