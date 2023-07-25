@@ -133,7 +133,7 @@ def incompressible_hydrostatic_balance(equation, b0, p0, top=False, params=None)
 
     solve(a == L, w1, bcs=bcs, solver_parameters=params)
 
-    v, pprime = w1.split()
+    v, pprime = w1.subfunctions()
     p0.project(pprime)
 
 
@@ -235,13 +235,13 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
                                            options_prefix="exner_solver")
 
     exner_solver.solve()
-    v, exner = w.split()
+    v, exner = w.subfunctions()
     if exner0 is not None:
         exner0.assign(exner)
 
     if solve_for_rho:
         w1 = Function(W)
-        v, rho = w1.split()
+        v, rho = w1.subfunctions()
         rho.interpolate(thermodynamics.rho(parameters, theta0, exner))
         v, rho = split(w1)
         dv, dexner = TestFunctions(W)
@@ -256,7 +256,7 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params,
                                                options_prefix="rhosolver")
         rhosolver.solve()
-        v, rho_ = w1.split()
+        v, rho_ = w1.subfunctions()
         rho0.assign(rho_)
     else:
         rho0.interpolate(thermodynamics.rho(parameters, theta0, exner))
