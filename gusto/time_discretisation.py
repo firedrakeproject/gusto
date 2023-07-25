@@ -310,7 +310,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     """
     
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
+        super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         if butcher_matrix is not None:
@@ -322,7 +322,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     def nStages(self):
         return self.nbutcher
                 
-    def setup(self, equation, uadv, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -332,7 +332,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 the equation to include.
         """
 
-        super().setup(equation, uadv, apply_bcs=apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels)
         
         self.k = [Function(self.fs) for i in range(self.nStages)]
         self.x_int = Function(self.fs)
@@ -404,9 +404,9 @@ class ForwardEuler(ExplicitMultistage):
     y^(n+1) = y^n + dt*F[y^n].
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
+        super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([1.]).reshape(1, 1)
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -426,9 +426,9 @@ class SSPRK3(ExplicitMultistage):
     number. See e.g. Shu and Osher (1988).
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
+        super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([[1., 0., 0.],[1./4., 1./4., 0.],[1./6., 1./6., 2./3.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -448,9 +448,9 @@ class RK4(ExplicitMultistage):
     where superscripts indicate the time-level.
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
+        super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([[0.5, 0., 0., 0.],[0., 0.5, 0., 0.],[0., 0., 1., 0.],[1./6., 1./3., 1./3., 1./6.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -692,7 +692,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         pass
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
@@ -1034,7 +1034,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         self.order = order
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, apply_bcs=apply_bcs,
+        super().setup(equation, apply_bcs,
                       *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
@@ -1164,7 +1164,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         self.order = order
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 
