@@ -1,5 +1,5 @@
 """
-Tests various Gusto ActiveTracer objects.
+Tests the numerical integrator.
 """
 from gusto import NumericalIntegral
 from numpy import sin, pi
