@@ -51,6 +51,9 @@ class NumericalIntegral(object):
         Args:
             points (float or iter) the point value, or array of point values to
                 evaluate the integral at.
+        Return:
+            returns the numerical approximation of the integral from lower 
+            bound to point(s)
         """
         # Do linear interpolation from tabulated values
         if not self.tabulated:
