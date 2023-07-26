@@ -33,18 +33,15 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, 
                                  u_transport_option='vector_invariant_form')
 
-dirname = 'Solidbodycase_Initialsetup24'
+dirname = 'SBR_Steady_24'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20, #roughly every 3 hours 
-                          dumplist=['u', 'rho', 'theta'],
-                          dumplist_latlon=['u_meridional',
-                                           'u_zonal',
-                                           'u_radial',
-                                           'rho',
-                                           'theta'],
+                          dumpfreq=20,
+                          dump_nc=True,
+                          dump_vtus=False,
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
-                     
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+                     RadialComponent('u'), CourantNumber()]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
