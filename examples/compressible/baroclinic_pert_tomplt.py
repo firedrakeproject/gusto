@@ -31,7 +31,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'baroclinicPerturbation_nonisotherm_dt=500_cellperedge=24_vector_invar'
+dirname = 'baroclinicPerturbation_tomplot'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=22, #roughly every 3 hours 
                           dumplist=['u', 'rho', 'theta'],
