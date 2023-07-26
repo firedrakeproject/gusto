@@ -6,7 +6,7 @@ from gusto import *                                            #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 500.
+dt = 540.
 days = 10.
 tmax = days * 24. * 60. * 60.
 deltaz = 3.0e3
@@ -30,19 +30,17 @@ omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
+print(eqn.X.function_space().dim())
 
 dirname = 'baroclinicPerturbation_tomplot'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=22, #roughly every 3 hours 
-                          dumplist=['u', 'rho', 'theta'],
-                          dumplist_latlon=['u_meridional',
-                                           'u_zonal',
-                                           'u_radial',
-                                           'rho',
-                                           'theta'],
+                          dumpfreq=20,
+                          dump_nc=True,
+                          dump_vtus=False,
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
-                     
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+                     RadialComponent('u'), CourantNumber()]
+          
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
