@@ -22,8 +22,8 @@ def test_numerical_integrator(integrand_name):
         answer = 9
     elif integrand_name == "sine":
         integrand = sine
-        upperbound = 2*pi
-        answer = 0
+        upperbound = pi
+        answer = 2
     else:
         raise ValueError(f'{integrand_name} integrand not recognised')
     numerical_integral = NumericalIntegral(0, upperbound)
