@@ -33,9 +33,9 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, 
                                  u_transport_option='vector_invariant_form')
 
-dirname = 'Solidbodycase_nonisotherm_dt=500_cellperedge=24_vector_invar'
+dirname = 'Solidbodycase_Initialsetup24'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20, # dumps every 3 hours 
+                          dumpfreq=20, #roughly every 3 hours 
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
@@ -43,8 +43,7 @@ output = OutputParameters(dirname=dirname,
                                            'rho',
                                            'theta'],
                           log_level=('INFO'))
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
-                     RadialComponent('u'), CourantNumber()]
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), RadialComponent('u'), CourantNumber()]
                      
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
