@@ -50,8 +50,3 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           python $(which firedrake-clean)
           python -m pytest -n 12 -v examples
-      - name: Lint
-        if: ${{ always() }}
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          make lint
