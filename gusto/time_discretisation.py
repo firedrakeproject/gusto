@@ -18,7 +18,7 @@ from gusto.wrappers import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
+           "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
 def wrapper_apply(original_apply):
@@ -634,7 +634,8 @@ class BackwardEuler(TimeDiscretisation):
 
 class ThetaMethod(TimeDiscretisation):
     """
-    Implements the theta implicit-explicit timestepping method.
+    Implements the theta implicit-explicit timestepping method, which can 
+    be thought as a generalised trapezium rule.
 
     The theta implicit-explicit timestepping method for operator F is written as
     y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]
@@ -713,11 +714,12 @@ class ThetaMethod(TimeDiscretisation):
         x_out.assign(self.x_out)
 
 
-class ImplicitMidpoint(ThetaMethod):
+class TrapeziumRule(ThetaMethod):
     """
-    Implements the implicit midpoint timestepping method.
+    Implements the trapezium rule timestepping method, also commonly known as
+    Crank Nicholson.
 
-    The implicit midpoint timestepping method for operator F is written as
+    The trapezium rule timestepping method for operator F is written as
     y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].
     It is equivalent to the "theta" method with theta = 1/2.
     """

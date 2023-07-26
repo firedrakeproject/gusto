@@ -28,7 +28,7 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain)
+        transport_scheme = TrapeziumRule(domain)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":
