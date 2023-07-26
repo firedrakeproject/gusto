@@ -36,7 +36,7 @@ def test_replace_perp():
 
     u, D = TrialFunctions(W)
     a = inner(u, w)*dx + D*p*dx
-    L = form.label_map(all_terms, replace_subject(U1, 0))
+    L = form.label_map(all_terms, replace_subject(U1, old_idx=0, new_idx=0))
     U2 = Function(W)
     solve(a == L.form, U2)
 

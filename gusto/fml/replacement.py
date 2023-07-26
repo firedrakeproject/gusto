@@ -27,6 +27,11 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
     indexable_old = mixed_old
     indexable_new = mixed_new or type(new) is tuple
 
+    if mixed_old:
+        split_old = split(old)
+    if indexable_new:
+        split_new = new if type(new) is tuple else split(new)
+
     # check indices arguments are valid
     if not indexable_old and old_idx is not None:
         raise ValueError(f"old_idx should not be specified to replace_{replace_type}"
@@ -56,18 +61,14 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
                              + f" {old} is mixed and new {replace_type} of type {new} is"
                              + " mixed or indexable.")
         if old_idx is None:  # both indexes are none
-            if len(old) != len(new):
+            if len(split_old) != len(split_new):
                 raise ValueError(f"if neither index is specified to replace_{replace_type}"
                                  + f" and both old {replace_type} of type {old} and new"
                                  + f" {replace_type} of type {new} are mixed or indexable"
-                                 + " then old and new must be the same length.")
+                                 + f" then old of length {len(split_old)} and new of length {len(split_new)}"
+                                 + " must be the same length.")
 
     # make the replace_dict
-
-    if mixed_old:
-        split_old = split(old)
-    if indexable_new:
-        split_new = new if type(new) is tuple else split(new)
 
     replace_dict = {}
 
