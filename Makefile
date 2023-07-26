@@ -10,18 +10,24 @@ lint:
 	@echo "    Linting gusto plotting scripts"
 	@python3 -m flake8 plotting
 
-test:
-	@echo "    Running all tests"
-	@python3 -m pytest unit-tests integration-tests examples $(PYTEST_ARGS)
+test: unit_test integration_test example notebook_test
 
-unit_test:
+clean_cache:
+	@echo "    Cleaning caches"
+	@firedrake-clean
+
+unit_test: clean_cache
 	@echo "    Running all unit-tests"
 	@python3 -m pytest unit-tests $(PYTEST_ARGS)
 
-integration_test:
+integration_test: clean_cache
 	@echo "    Running all integration-tests"
 	@python3 -m pytest integration-tests $(PYTEST_ARGS)
 
-example:
+example: clean_cache
 	@echo "    Running all examples"
 	@python3 -m pytest examples $(PYTEST_ARGS)
+
+notebook_test: clean_cache
+	@echo "    Running all Jupyter notebooks"
+	@python3 -m pytest --nbval-lax -n 4 --dist loadscope jupyter_notebooks $(PYTEST_ARGS)
