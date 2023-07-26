@@ -3,14 +3,15 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, Constant, split
 from pyop2.profiling import timed_stage
-from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
+from gusto.fml import drop, Label, Term
 from gusto.forcing import Forcing
-from gusto.fml.form_manipulation_language import drop, Label, Term
-from gusto.labels import (transport, diffusion, time_derivative, linearisation,
-                          prognostic, physics, transporting_velocity)
+from gusto.labels import (
+    transport, diffusion, time_derivative, linearisation, prognostic,
+    physics, transporting_velocity
+)
 from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.fields import TimeLevelFields, StateFields
+from gusto.logging import logger
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 from gusto.transport_methods import TransportMethod
 import ufl

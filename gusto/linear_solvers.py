@@ -15,7 +15,7 @@ from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.active_tracers import TracerVariableType
-from gusto.configuration import logger, DEBUG
+from gusto.logging import logger, DEBUG
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.fml.form_manipulation_language import Term, drop
@@ -152,13 +152,8 @@ class CompressibleSolver(TimesteppingSolver):
             self.quadrature_degree = (5, 5)
 
         if logger.isEnabledFor(DEBUG):
-            # Set outer solver to FGMRES and turn on KSP monitor for the outer system
-            self.solver_parameters["ksp_type"] = "fgmres"
-            self.solver_parameters["mat_type"] = "aij"
-            self.solver_parameters["pmat_type"] = "matfree"
             self.solver_parameters["ksp_monitor_true_residual"] = None
-
-            # Turn monitor on for the trace system
+            # Turn monitor on for the trace system too
             self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
         super().__init__(equations, alpha, solver_parameters,

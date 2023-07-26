@@ -27,6 +27,7 @@ from gusto.io import *                               # noqa
 from gusto.labels import *                           # noqa
 from gusto.limiters import *                         # noqa
 from gusto.linear_solvers import *                   # noqa
+from gusto.logging import *                          # noqa
 from gusto.meshes import *                           # noqa
 from gusto.numerical_integrator import *             # noqa
 from gusto.physics import *                          # noqa
@@ -37,3 +38,5 @@ from gusto.time_discretisation import *              # noqa
 from gusto.timeloop import *                         # noqa
 from gusto.transport_methods import *                # noqa
 from gusto.wrappers import *                         # noqa
+
+set_log_handler()

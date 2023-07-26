@@ -10,7 +10,7 @@ from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
-from gusto.configuration import logger, set_log_handler
+from gusto.logging import logger
 
 __all__ = ["pick_up_mesh", "IO"]
 
@@ -221,10 +221,6 @@ class IO(object):
         self.dumpdir = None
         self.dumpfile = None
         self.to_pick_up = None
-
-        # setup logger
-        logger.setLevel(output.log_level)
-        set_log_handler(self.mesh.comm)
 
     def log_parameters(self, equation):
         """

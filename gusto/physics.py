@@ -13,7 +13,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
 from gusto.labels import physics, transporting_velocity
-from gusto.configuration import logger
+from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics

@@ -1,10 +1,14 @@
 """Discretisation of dynamic forcing terms, such as the pressure gradient."""
 
-from firedrake import (Function, TrialFunctions, DirichletBC,
-                       LinearVariationalProblem, LinearVariationalSolver)
-from gusto.configuration import logger, DEBUG
-from gusto.labels import transport, diffusion, time_derivative, hydrostatic
+from firedrake import (
+    Function, TrialFunctions, DirichletBC, LinearVariationalProblem,
+    LinearVariationalSolver
+)
 from gusto.fml import drop, replace_subject, name
+from gusto.labels import (
+    transport, diffusion, time_derivative, hydrostatic
+)
+from gusto.logging import logger, DEBUG
 
 
 __all__ = ["Forcing"]
