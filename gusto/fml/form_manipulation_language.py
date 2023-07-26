@@ -4,11 +4,10 @@ import ufl
 import functools
 import operator
 from firedrake import Constant, Function
-from types import LambdaType
 
 
 __all__ = ["Label", "Term", "LabelledForm", "identity", "drop", "all_terms",
-           "keep", "subject", "name", "perp"]
+           "keep", "subject", "name"]
 
 # ---------------------------------------------------------------------------- #
 # Core routines for filtering terms
@@ -448,5 +447,3 @@ class Label(object):
 
 subject = Label("subject", validator=lambda value: type(value) == Function)
 name = Label("name", validator=lambda value: type(value) == str)
-# Defining the perp label is necessary to allow us to replace a perp correctly
-perp = Label("perp", validator=lambda value: isinstance(value, LambdaType))
