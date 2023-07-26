@@ -30,7 +30,6 @@ omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
-print(eqn.X.function_space().dim())
 
 dirname = 'baroclinicPerturbation_tomplot'
 output = OutputParameters(dirname=dirname,
@@ -169,14 +168,14 @@ mp_field = Function(Vr).interpolate(meridional_pert)
 mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_space(), mesh_ll),
                       val=mp_field.topological, name='meridonal perturbation')
 
-latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll, zp_field_ll, mp_field_ll)
-sphere_out.write(d_field, temp_field, wind_field, zp_field, mp_field)
+#latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll, zp_field_ll, mp_field_ll)
+#sphere_out.write(d_field, temp_field, wind_field, zp_field, mp_field)
 
 pertput = File('results/pertout.pvd')
 magnitude = Function(Vr).interpolate(perturb_magnitude)
 zonal_localistaion = Function(Vr).interpolate((-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a))
 meridional_localisation = Function(Vr).interpolate(cos(lat_c)*sin(lon - lon_c) / sin(d / a))
-pertput.write(magnitude, zonal_localistaion, meridional_localisation)
+# pertput.write(magnitude, zonal_localistaion, meridional_localisation)
 
 # -------------------------------------------------------------- #
 # Configuring fields
