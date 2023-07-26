@@ -16,11 +16,14 @@ from collections import namedtuple
 ReplaceSubjArgs = namedtuple("ReplaceSubjArgs", "new_subj idxs error")
 ReplaceArgsArgs = namedtuple("ReplaceArgsArgs", "new_arg idxs error replace_function arg_idx")
 
+
 def ReplaceTestArgs(*args):
     return ReplaceArgsArgs(*args, replace_test_function, 0)
 
+
 def ReplaceTrialArgs(*args):
     return ReplaceArgsArgs(*args, replace_trial_function, 1)
+
 
 # some dummy labels
 foo_label = Label("foo")
@@ -71,7 +74,7 @@ def primal_test_argsets():
     ]
     return argsets
 
-        
+
 def primal_trial_argsets():
     argsets = [
         ReplaceTrialArgs(TrialFunction(V0), {}, None),
@@ -124,7 +127,7 @@ def mixed_test_argsets():
         ReplaceTestArgs(TestFunction(W), {'old_idx': 0, 'new_idx': 0}, None),
         ReplaceTestArgs(TestFunctions(W), {'old_idx': 0}, ValueError),
         ReplaceTestArgs(TestFunction(W), {'new_idx': 0}, ValueError),
-        #ReplaceTestArgs(TestFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
+        # ReplaceTestArgs(TestFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTestArgs(TestFunction(V0), {'old_idx': 0}, None),
         ReplaceTestArgs(TestFunctions(V0), {'new_idx': 1}, ValueError),
         ReplaceTestArgs(TestFunction(W), {'old_idx': 7, 'new_idx': 7}, IndexError)
@@ -137,14 +140,14 @@ def mixed_trial_argsets():
         ReplaceTrialArgs(TrialFunction(W), {}, None),
         ReplaceTrialArgs(TrialFunctions(W), {}, None),
         ReplaceTrialArgs(TrialFunction(W), {'old_idx': 0, 'new_idx': 0}, None),
-        #ReplaceTrialArgs(TrialFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
+        # ReplaceTrialArgs(TrialFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTrialArgs(TrialFunction(V0), {'old_idx': 0}, None),
         ReplaceTrialArgs(TrialFunctions(V0), {'new_idx': 1}, ValueError),
         ReplaceTrialArgs(TrialFunction(W), {'old_idx': 7, 'new_idx': 7}, IndexError),
         ReplaceTrialArgs(Function(W), {}, None),
         ReplaceTrialArgs(split(Function(W)), {}, None),
         ReplaceTrialArgs(Function(W), {'old_idx': 0, 'new_idx': 0}, None),
-        #ReplaceTrialArgs(Function(W), {'old_idx': 1, 'new_idx': 1}, None),
+        # ReplaceTrialArgs(Function(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTrialArgs(Function(V0), {'old_idx': 0}, None),
         ReplaceTrialArgs(Function(V0), {'new_idx': 0}, ValueError),
         ReplaceTrialArgs(Function(W), {'old_idx': 7, 'new_idx': 7}, IndexError),
@@ -186,8 +189,8 @@ def vector_test_argsets():
         ReplaceTestArgs(TestFunction(Wv), {'new_idx': 0}, None),
         ReplaceTestArgs(TestFunction(Wv), {'new_idx': 1}, ValueError),
         ReplaceTestArgs(TestFunctions(Wv), {'new_idx': 0}, None),
-        #ReplaceTestArgs(TestFunction(W), {'new_idx': 0}, None),
-        #ReplaceTestArgs(TestFunction(W), {'new_idx': 7}, IndexError),
+        # ReplaceTestArgs(TestFunction(W), {'new_idx': 0}, None),
+        # ReplaceTestArgs(TestFunction(W), {'new_idx': 7}, IndexError),
     ]
     return argsets
 
