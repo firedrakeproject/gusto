@@ -20,7 +20,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=24, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -31,7 +31,7 @@ Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 
-dirname = 'baroclinicPerturbation_tomplot'
+dirname = 'baroclinicPerturbation_tomplot_ref25'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dump_nc=True,
