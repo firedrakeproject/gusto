@@ -144,40 +144,6 @@ conditional_test = conditional(le(d,err_tol), 0,
                          conditional(ge(d,(d0-err_tol)), 0, 10))
 rho_expr = P_expr / (Rd * Temp)
 # -------------------------------------------------------------- #
-# Debug Plotting
-# -------------------------------------------------------------- #
-
-latlon_out = File('results/latlon.pvd')
-sphere_out = File('results/sphereout.pvd')
-
-
-mesh_ll = get_flat_latlon_mesh(mesh)
-d_field = Function(Vr, name='d').interpolate(d)
-d_field_ll = Function(functionspaceimpl.WithGeometry.create(d_field.function_space(), mesh_ll),
-                      val=d_field.topological, name='d')
-temp_field = Function(Vr, name='temperature').interpolate(Temp)
-temp_field_ll = Function(functionspaceimpl.WithGeometry.create(temp_field.function_space(), mesh_ll),
-                         val=temp_field.topological, name='temp')
-wind_field = Function(Vr, name='wind').interpolate(wind)
-wind_field_ll = Function(functionspaceimpl.WithGeometry.create(wind_field.function_space(), mesh_ll),
-                         val=wind_field.topological, name='wind')
-zp_field = Function(Vr).interpolate(zonal_pert)
-zp_field_ll = Function(functionspaceimpl.WithGeometry.create(zp_field.function_space(), mesh_ll),
-                      val=zp_field.topological, name='zonal perturbation')
-mp_field = Function(Vr).interpolate(meridional_pert)
-mp_field_ll = Function(functionspaceimpl.WithGeometry.create(mp_field.function_space(), mesh_ll),
-                      val=mp_field.topological, name='meridonal perturbation')
-
-#latlon_out.write(d_field_ll,  temp_field_ll, wind_field_ll, zp_field_ll, mp_field_ll)
-#sphere_out.write(d_field, temp_field, wind_field, zp_field, mp_field)
-
-pertput = File('results/pertout.pvd')
-magnitude = Function(Vr).interpolate(perturb_magnitude)
-zonal_localistaion = Function(Vr).interpolate((-sin(lat_c)*cos(lat) + cos(lat_c)*sin(lat)*cos(lon - lon_c)) / sin(d / a))
-meridional_localisation = Function(Vr).interpolate(cos(lat_c)*sin(lon - lon_c) / sin(d / a))
-# pertput.write(magnitude, zonal_localistaion, meridional_localisation)
-
-# -------------------------------------------------------------- #
 # Configuring fields
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
