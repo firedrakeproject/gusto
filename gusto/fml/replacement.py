@@ -93,7 +93,7 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
 # ---------------------------------------------------------------------------- #
 # Replacement routines
 # ---------------------------------------------------------------------------- #
-def replace_test_function(new_test, new_idx=None):
+def replace_test_function(new_test, old_idx=None, new_idx=None):
     """
     A routine to replace the test function in a term with a new test function.
 
@@ -118,7 +118,7 @@ def replace_test_function(new_test, new_idx=None):
         """
         old_test = t.form.arguments()[0]
         replace_dict = _replace_dict(old_test, new_test,
-                                     old_idx=None, new_idx=new_idx,
+                                     old_idx=old_idx, new_idx=new_idx,
                                      replace_type='test')
 
         try:
@@ -133,7 +133,7 @@ def replace_test_function(new_test, new_idx=None):
     return repl
 
 
-def replace_trial_function(new_trial, new_idx=None):
+def replace_trial_function(new_trial, old_idx=None, new_idx=None):
     """
     A routine to replace the trial function in a term with a new expression.
 
@@ -163,7 +163,7 @@ def replace_trial_function(new_trial, new_idx=None):
             raise TypeError('Trying to replace trial function of a form that is not linear')
         old_trial = t.form.arguments()[1]
         replace_dict = _replace_dict(old_trial, new_trial,
-                                     old_idx=None, new_idx=new_idx,
+                                     old_idx=old_idx, new_idx=new_idx,
                                      replace_type='trial')
 
         try:
