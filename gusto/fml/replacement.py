@@ -51,16 +51,16 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
     if indexable_old and indexable_new:
         # must be both True or both False
         if (old_idx is None) ^ (new_idx is None):
-            raise ValueError(f"both or neither old_idx and new_idx must be specified to"
+            raise ValueError("both or neither old_idx and new_idx must be specified to"
                              + f" replace_{replace_type} when old {replace_type} of type"
                              + f" {old} is mixed and new {replace_type} of type {new} is"
-                             + f" mixed or indexable.")
-        if old_idx is None: # both indexes are none
+                             + " mixed or indexable.")
+        if old_idx is None:  # both indexes are none
             if len(old) != len(new):
                 raise ValueError(f"if neither index is specified to replace_{replace_type}"
                                  + f" and both old {replace_type} of type {old} and new"
                                  + f" {replace_type} of type {new} are mixed or indexable"
-                                 + f" then old and new must be the same length.")
+                                 + " then old and new must be the same length.")
 
     # make the replace_dict
 
@@ -81,55 +81,11 @@ def _replace_dict(old, new, old_idx, new_idx, replace_type):
         replace_dict[split_old[old_idx]] = new
 
     elif indexable_old and indexable_new:
-        if old_idx is None: # replace everything
+        if old_idx is None:  # replace everything
             for k, v in zip(split_old, split_new):
                 replace_dict[k] = v
-        else: # idxs are given
+        else:  # idxs are given
             replace_dict[split_old[old_idx]] = split_new[new_idx]
-
-    # if type(old.ufl_element()) is MixedElement:
-
-    #     mixed_new = hasattr(new, "ufl_element") and type(new.ufl_element()) is MixedElement
-    #     indexable_new = type(new) is tuple or mixed_new
-
-    #     if indexable_new:
-    #         split_new = new if type(new) is tuple else split(new)
-
-    #         if len(split_new) != len(old.function_space()):
-    #             raise ValueError(f"new {replace_type} of type {new} must be same length"
-    #                              + f"as replaced mixed {replace_type} of type {old}")
-
-    #         if idx is None:
-    #             for k, v in zip(split(old), split_new):
-    #                 replace_dict[k] = v
-    #         else:
-    #             replace_dict[split(old)[idx]] = split_new[idx]
-
-    #     else:  # new is not indexable
-    #         if idx is None:
-    #             raise ValueError(f"idx must be specified to replace_{replace_type} when"
-    #                              + f" replaced {replace_type} of type {old} is mixed and"
-    #                              + f" new {replace_type} of type {new} is a single component")
-
-    #         replace_dict[split(old)[idx]] = new
-
-    # else:  # old is not mixed
-
-    #     mixed_new = hasattr(new, "ufl_element") and type(new.ufl_element()) is MixedElement
-    #     indexable_new = type(new) is tuple or mixed_new
-
-    #     if indexable_new:
-    #         split_new = new if type(new) is tuple else split(new)
-
-    #         if idx is None:
-    #             raise ValueError(f"idx must be specified to replace_{replace_type} when"
-    #                              + f" replaced {replace_type} of type {old} is not mixed"
-    #                              + f" and new {replace_type} of type {new} is indexable")
-
-    #         replace_dict[old] = split_new[idx]
-
-    #     else:
-    #         replace_dict[old] = new
 
     return replace_dict
 
