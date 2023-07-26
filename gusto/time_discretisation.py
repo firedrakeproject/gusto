@@ -18,7 +18,7 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "Heun",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "old_RK4", "Heun", "old_SSPRK3",
            "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
@@ -299,6 +299,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         for i in range(self.ncycles):
             for evaluate in self.evaluate_source:
                 evaluate(x_in, self.dt)
+            print("I'm applying")
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
@@ -315,7 +316,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         if butcher_matrix is not None:
             self.butcher_matrix = butcher_matrix
-            print(np.shape(self.butcher_matrix))
+            #print(np.shape(self.butcher_matrix))
             self.nbutcher = int(np.shape(self.butcher_matrix)[0])
     
     @property
@@ -366,9 +367,10 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         self.x_int.assign(x0)
         for i in range(stage):
             self.x1.assign(self.x1 + self.butcher_matrix[stage-1,i]*self.dt*self.k[i])
-        
+        print("I'm in the stage!")
         self.solver.solve()
         self.k[stage].assign(self.x_out)
+        #import pdb; pdb.set_trace()
             
         if (stage == self.nStages -1):
         
@@ -389,6 +391,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
+        #import pdb; pdb.set_trace()
+        print("I'm applying the cycle!")
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
@@ -410,6 +414,72 @@ class ForwardEuler(ExplicitMultistage):
         self.butcher_matrix = np.array([1.]).reshape(1, 1)
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
+class old_SSPRK3(ExplicitTimeDiscretisation):
+    u"""
+    Implements the 3-stage Strong-Stability-Prevering Runge-Kutta method.
+
+    The 3-stage Strong-Stability-Preserving Runge-Kutta method (SSPRK), for
+    solving ∂y/∂t = F(y). It can be written as:
+
+    y_1 = y^n + F[y^n]
+    y_2 = (3/4)y^n + (1/4)(y_1 + F[y_1])
+    y^(n+1) = (1/3)y^n + (2/3)(y_2 + F[y_2])
+
+    where superscripts indicate the time-level and subscripts indicate the stage
+    number. See e.g. Shu and Osher (1988).
+    """
+
+    @cached_property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(old_SSPRK3, self).lhs
+
+    @cached_property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        return super(old_SSPRK3, self).rhs
+
+    def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
+
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
+        if stage == 0:
+            self.solver.solve()
+            self.x1.assign(self.x_out)
+            #print("min/max of",self.field_name,":", np.min(self.x1.dat.data[:]), np.max(self.x1.dat.data[:]))
+
+        elif stage == 1:
+            self.solver.solve()
+            self.x1.assign(0.75*x_in + 0.25*self.x_out)
+            #print("min/max of",self.field_name,":", np.min(self.x1.dat.data[:]), np.max(self.x1.dat.data[:]))
+
+        elif stage == 2:
+            self.solver.solve()
+            self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
+            #print("min/max of",self.field_name,":", np.min(self.x1.dat.data[:]), np.max(self.x1.dat.data[:]))
+
+        if self.limiter is not None:
+            self.limiter.apply(self.x1)
+
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.x1.assign(x_in)
+        for i in range(3):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.x1)
 
 class SSPRK3(ExplicitMultistage):
     u"""
@@ -431,6 +501,107 @@ class SSPRK3(ExplicitMultistage):
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([[1., 0., 0.],[1./4., 1./4., 0.],[1./6., 1./6., 2./3.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+
+class old_RK4(ExplicitTimeDiscretisation):
+    u"""
+    Implements the classic 4-stage Runge-Kutta method.
+
+    The classic 4-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
+    written as:
+
+    k1 = F[y^n]
+    k2 = F[y^n + 1/2*dt*k1]
+    k3 = F[y^n + 1/2*dt*k2]
+    k4 = F[y^n + dt*k3]
+    y^(n+1) = y^n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
+
+    where superscripts indicate the time-level.
+    """
+
+    def setup(self, equation, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, *active_labels)
+
+        self.k1 = Function(self.fs)
+        self.k2 = Function(self.fs)
+        self.k3 = Function(self.fs)
+        self.k4 = Function(self.fs)
+
+    @cached_property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+
+        return l.form
+
+    @cached_property
+    def rhs(self):
+        """Set up the time discretisation's right hand side."""
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=lambda t: -1*t)
+
+        return r.form
+
+    def solve_stage(self, x_in, stage):
+        """
+        Perform a single stage of the Runge-Kutta scheme.
+
+        Args:
+            x_in (:class:`Function`): field at the start of the stage.
+            stage (int): index of the stage.
+        """
+        if stage == 0:
+            self.solver.solve()
+            self.k1.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k1)
+
+        elif stage == 1:
+            self.solver.solve()
+            self.k2.assign(self.x_out)
+            self.x1.assign(x_in + 0.5 * self.dt * self.k2)
+
+        elif stage == 2:
+            self.solver.solve()
+            self.k3.assign(self.x_out)
+            self.x1.assign(x_in + self.dt * self.k3)
+
+        elif stage == 3:
+            self.solver.solve()
+            self.k4.assign(self.x_out)
+            self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
+
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_in (:class:`Function`): the input field.
+            x_out (:class:`Function`): the output field to be computed.
+        """
+        if self.limiter is not None:
+            self.limiter.apply(x_in)
+
+        self.x1.assign(x_in)
+
+        for i in range(4):
+            self.solve_stage(x_in, i)
+        x_out.assign(self.x1)
 
 class RK4(ExplicitMultistage):
     u"""
