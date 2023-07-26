@@ -38,15 +38,15 @@ jobs:
       - name: Gusto unit-tests
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
+          which firedrake-clean
           python -m pytest -n 12 -v unit-tests
       - name: Gusto integration-tests
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
+          firedrake-clean
           python -m pytest -n 12 -v integration-tests
       - name: Gusto examples
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
+          firedrake-clean
           python -m pytest -n 12 -v examples
