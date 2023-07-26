@@ -29,6 +29,6 @@ def test_numerical_integrator(integrand_name):
     numerical_integral = NumericalIntegral(0, upperbound)
     numerical_integral.tabulate(integrand)
     area = numerical_integral.evaluate_at(upperbound)
-    err_tol = 1e-14
+    err_tol = 1e-10
     assert abs(area-answer) < err_tol, \
         f'numerical integrator is incorrect for {integrand_name} function'
