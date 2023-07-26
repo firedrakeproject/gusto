@@ -1,3 +1,30 @@
+"""Gusto Logging Module
+
+All logging functionality for Gusto is controlled from
+``gusto.logging``. A logger object ``logging.getLogger("gusto")`` is
+created internally.
+
+The primary means of configuration is via environment variables, the
+same way that the standard Python root logger is. See the
+:mod:`logging` page for details.
+
+Set ``GUSTO_LOG_LEVEL`` to any of ``DEBUG``, ``INFO``, ``WARNING``,
+``ERROR`` or ``CRITICAL`` (from most verbose to least verbose).
+
+Additionally the level of console (`stderr`) logging and logfile based
+logging can be controlled separately. Console logging verbosity is set
+using ``GUSTO_CONSOLE_LOG_LEVEL``. Logfile logging verbosity is set using
+``GUSTO_LOGFILE_LOG_LEVEL``.
+
+By default a script that imports gusto will log only from rank 0 to the
+console and to a file. This can be changed by setting the environment
+variable ``GUSTO_PARALLEL_LOG`` to ``CONSOLE``, ``FILE`` or ``BOTH``.
+Setting these will log from all ranks, not just rank 0. Console output
+will be interleaved, but log files contain the rank number as part of
+the logfile name.
+
+"""
+
 import logging
 import sys
 import os
@@ -98,4 +125,3 @@ def set_log_handler(comm=COMM_WORLD):
             logger.addHandler(logging.NullHandler())
 
     logger.info("Running %s" % " ".join(sys.argv))
-
