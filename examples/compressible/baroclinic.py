@@ -6,7 +6,7 @@ from gusto import *                                            #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 500.
+dt = 540.
 days = 10.
 tmax = days * 24. * 60. * 60.
 deltaz = 3.0e3
@@ -33,7 +33,7 @@ eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option
 
 dirname = 'baroclinicPerturbation_nonisotherm_dt=500_cellperedge=24_vector_invar'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=22, #roughly every 3 hours 
+                          dumpfreq=20, #roughly every 3 hours 
                           dumplist=['u', 'rho', 'theta'],
                           dumplist_latlon=['u_meridional',
                                            'u_zonal',
