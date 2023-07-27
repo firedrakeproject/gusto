@@ -94,10 +94,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        if domain.move_mesh:
-            self.dt = 0.5*domain.dt
-        else:
-            self.dt = domain.dt
+        self.dt = domain.dt
 
         self.limiter = limiter
 
