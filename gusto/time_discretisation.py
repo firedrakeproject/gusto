@@ -89,6 +89,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # get default solver options if none passed in
         if solver_parameters is None:
             self.solver_parameters = {'ksp_type': 'cg',
+                                      'ksp_atol': 1.e-14,
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
@@ -316,7 +317,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         if butcher_matrix is not None:
             self.butcher_matrix = butcher_matrix
-            #print(np.shape(self.butcher_matrix))
             self.nbutcher = int(np.shape(self.butcher_matrix)[0])
     
     @property
@@ -347,7 +347,16 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     @cached_property
     def rhs(self):
         """Set up the time discretisation's right hand side."""
-        return super(ExplicitMultistage, self).rhs
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, self.idx))
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=lambda t: -1.*t)
+
+        return r.form
             
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
@@ -357,7 +366,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         if self.limiter is not None:
                 self.limiter.apply(self.x1)
         self.solver.solve()
-        self.k[stage].assign((self.x_out-self.x1)/self.dt)
+        self.k[stage].assign(self.x_out)
             
         if (stage == self.nStages -1):
         
@@ -381,6 +390,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
@@ -497,6 +507,7 @@ class BackwardEuler(TimeDiscretisation):
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',
+                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
         super().__init__(domain=domain, field_name=field_name,
@@ -576,6 +587,7 @@ class ThetaMethod(TimeDiscretisation):
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
+                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
@@ -816,6 +828,7 @@ class TR_BDF2(TimeDiscretisation):
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
+                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
@@ -1143,6 +1156,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             solver_parameters = {'ksp_type': 'gmres',
+                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
