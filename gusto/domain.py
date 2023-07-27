@@ -72,8 +72,8 @@ class Domain(object):
         self.mesh = mesh
         self.family = family
         self.spaces = Spaces(mesh)
-        # Build and store compatible spaces
-        self.compatible_spaces = [space for space in self.spaces.build_compatible_spaces(self.family, self.horizontal_degree, self.vertical_degree)]
+        self.spaces.build_compatible_spaces(self.family, self.horizontal_degree,
+                                            self.vertical_degree)
 
         # -------------------------------------------------------------------- #
         # Determine some useful aspects of domain
