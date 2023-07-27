@@ -373,10 +373,14 @@ class SSPRK3(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.75*x_in + 0.25*self.x_out)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
 
@@ -470,16 +474,22 @@ class RK4(ExplicitTimeDiscretisation):
             self.x1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k2.assign(self.x_out)
             self.x1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k3.assign(self.x_out)
             self.x1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k4.assign(self.x_out)
             self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
@@ -538,6 +548,8 @@ class Heun(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
