@@ -11,7 +11,9 @@
 
 from os import path
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm)
+from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm,
+                       max_value, min_value)
+from netCDF4 import Dataset
 import pytest
 
 
@@ -52,3 +54,102 @@ def run_sw_cond_evap(dirname, process):
                                  u_transport_option='vector_advection_form',
                                  thermal=True, active_tracers=tracers)
 
+    # I/O
+    output = OutputParameters(dirname=dirname+"/sw_cond_evap",
+                              dumpfreq=1)
+    io = IO(domain, output,
+            diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
+
+    # Physics schemes
+    physics_schemes = [(SWSaturationAdjustment(eqns, sat, L=L,
+                                               parameters=parameters,
+                                               thermal_feedback=True,
+                                               beta2=beta2),
+                        ForwardEuler(domain))]
+
+    # Timestepper
+    stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
+                                      physics_schemes=physics_schemes)
+
+    # Initial conditions
+    b0 = stepper.fields("b")
+    v0 = stepper.fields("water_vapour")
+    c0 = stepper.fields("cloud_water")
+
+    # perturbation
+    r = R * (
+        acos(sin(theta_c)*sin(theta) + cos(theta_c)*cos(theta)*cos(lamda-lamda_c)))
+    pert = conditional(r < rc, 1.0, 0.0)
+
+    if process == "evaporation":
+        # atmosphere is subsaturated and cloud is present
+        v0.interpolate(0.96*Constant(sat))
+        c0.interpolate(0.005*sat*pert)
+        # lose cloud and add this to vapour
+        v_true = Function(v0.function_space()).interpolate(sat*(0.96+0.005*pert))
+        c_true = Function(c0.function_space()).interpolate(Constant(0.0))
+        # gain buoyancy
+        factor = parameters.g*10
+        sat_adj_expr = (v0 - sat) / dt
+        sat_adj_expr = conditional(sat_adj_expr < 0,
+                                   max_value(sat_adj_expr, -c0 / dt),
+                                   min_value(sat_adj_expr, v0 / dt))
+        # include factor of -1 in true solution to compare term to LHS in Gusto
+        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
+
+    elif process == "condensation":
+        # vapour is above saturation
+        v0.interpolate(sat*(1.0 + 0.04*pert))
+        # lose vapour and add this to cloud
+        v_true = Function(v0.function_space()).interpolate(Constant(sat))
+        c_true = Function(c0.function_space()).interpolate(v0 - sat)
+        # lose buoyancy
+        sat_adj_expr = (v0 - sat) / dt
+        factor = parameters.g*L
+        sat_adj_expr = conditional(sat_adj_expr < 0,
+                                   max_value(sat_adj_expr, -c0 / dt),
+                                   min_value(sat_adj_expr, v0 / dt))
+        # include factor of -1 in true solution to compare term to LHS in Gusto
+        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
+
+    c_init = Function(c0.function_space()).interpolate(c0)
+
+    # Run
+    stepper.run(t=0, tmax=dt)
+
+    return eqns, stepper, v_true, c_true, b_true, c_init
+
+
+@pytest.mark.parametrize("process", ["evaporation", "condensation"])
+def test_cond_evap(tmpdir, process):
+
+    dirname = str(tmpdir)
+    eqns, stepper, v_true, c_true, b_true, c_init = run_sw_cond_evap(dirname, process)
+
+    vapour = stepper.fields("water_vapour")
+    cloud = stepper.fields("cloud_water")
+    buoyancy = stepper.fields("b")
+
+    # Check that the water vapour is correct
+    assert norm(vapour - v_true) / norm(v_true) < 0.001, \
+        f'Final vapour field is incorrect for {process}'
+
+    # Check that cloud has been created/removed
+    denom = norm(c_true) if process == "condensation" else norm(c_init)
+    assert norm(cloud - c_true) / denom < 0.001, \
+        f'Final cloud field is incorrect for {process}'
+
+    # Check that the buoyancy perturbation has the correct sign and size
+    assert norm(buoyancy - b_true) / norm(b_true) < 0.01, \
+        f'Latent heating is incorrect for {process}'
+
+    # Check that total moisture conserved
+    filename = path.join(dirname, "sw_cond_evap/diagnostics.nc")
+    data = Dataset(filename, "r")
+    water = data.groups["water_vapour_plus_cloud_water"]
+    total = water.variables["total"]
+    water_t_0 = total[0]
+    water_t_T = total[-1]
+
+    assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12, \
+        f'Total amount of water should be conserved by {process}'
