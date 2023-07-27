@@ -39,7 +39,7 @@ def run_incompressible(tmpdir):
 
     # Transport Schemes
     b_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "b", options=b_opts)]
     transport_methods = [DGUpwind(eqn, "u"),
                          DGUpwind(eqn, "b", ibp=b_opts.ibp)]

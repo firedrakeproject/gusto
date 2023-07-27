@@ -82,7 +82,7 @@ def setup_saturated(dirname, recovered):
     if recovered:
         transported_fields.append(SSPRK3(domain, 'u', options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(domain, 'u'))
+        transported_fields.append(TrapeziumRule(domain, 'u'))
 
     transport_methods = [DGUpwind(eqns, 'u'),
                          DGUpwind(eqns, 'rho'),
