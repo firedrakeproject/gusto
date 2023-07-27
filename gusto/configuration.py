@@ -69,7 +69,7 @@ class Configuration(object):
                 this attribute pre-defined.
         """
         if name == 'log_level':
-            logger.warning("Set log level with environemnt variables, see `logging.py` for details")
+            logger.warning("Set log level with environment variables, see `logging.py` for details")
             return
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
