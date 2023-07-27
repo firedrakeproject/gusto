@@ -68,9 +68,6 @@ class Configuration(object):
             AttributeError: if the :class:`Configuration` object does not have
                 this attribute pre-defined.
         """
-        if name == 'log_level':
-            logger.warning("Set log level with environment variables, see `logging.py` for details")
-            raise ValueError("Log level in configuration (temporary error)")
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
 
