@@ -28,6 +28,7 @@ from gusto.labels import *                           # noqa
 from gusto.limiters import *                         # noqa
 from gusto.linear_solvers import *                   # noqa
 from gusto.meshes import *                           # noqa
+from gusto.numerical_integrator import *             # noqa
 from gusto.physics import *                          # noqa
 from gusto.preconditioners import *                  # noqa
 from gusto.recovery import *                         # noqa
