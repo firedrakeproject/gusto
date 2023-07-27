@@ -39,7 +39,7 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain, options=opts)
+        transport_scheme = TrapeziumRule(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
@@ -81,7 +81,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain, options=opts)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain, options=opts)
+        transport_scheme = TrapeziumRule(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)

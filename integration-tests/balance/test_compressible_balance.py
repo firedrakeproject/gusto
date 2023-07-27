@@ -39,7 +39,7 @@ def setup_balance(dirname):
     io = IO(domain, output)
 
     # Set up transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=EmbeddedDGOptions())]
     transport_methods = [DGUpwind(eqns, 'u'),

@@ -62,7 +62,7 @@ transported_fields = [SSPRK3(domain, "rho"),
                       SSPRK3(domain, "theta", options=EmbeddedDGOptions()),
                       SSPRK3(domain, "water_vapour", options=EmbeddedDGOptions()),
                       SSPRK3(domain, "cloud_water", options=EmbeddedDGOptions()),
-                      ImplicitMidpoint(domain, "u")]
+                      TrapeziumRule(domain, "u")]
 
 transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta", "water_vapour", "cloud_water"]]
 

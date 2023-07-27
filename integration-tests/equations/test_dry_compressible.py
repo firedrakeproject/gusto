@@ -39,7 +39,7 @@ def run_dry_compressible(tmpdir):
     io = IO(domain, output)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta")]
     transport_methods = [DGUpwind(eqn, 'u'),
