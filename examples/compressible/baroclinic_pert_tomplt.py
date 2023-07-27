@@ -30,15 +30,17 @@ omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
+print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_tomplot_ref25'
+dirname = 'baroclinicPerturbation_tomplot_ref25_extradiag'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dump_nc=True,
                           dump_vtus=False,
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
-                     RadialComponent('u'), CourantNumber()]
+                     RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
+                     MeridionalComponent('u_pert'), Temperature(), Pressure()]
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -140,8 +142,6 @@ zonal_pert = conditional(le(d,err_tol), 0,
 meridional_pert = conditional(le(d,err_tol), 0, 
                               conditional(ge(d,d0-err_tol), 0, perturb_magnitude * cos(lat_c)*sin(lon - lon_c) / sin(d / a)))
 
-conditional_test = conditional(le(d,err_tol), 0, 
-                         conditional(ge(d,(d0-err_tol)), 0, 10))
 rho_expr = P_expr / (Rd * Temp)
 # -------------------------------------------------------------- #
 # Configuring fields
@@ -151,8 +151,12 @@ zonal_u = wind + zonal_pert
 merid_u = Constant(0.0) + meridional_pert
 radial_u = Constant(0.0)
 
+(u_pert, v_pert, w_pert) = sphere_to_cartesian(mesh, zonal_pert, merid_u)
 # now convert to global Cartesian coordinates
 (u_expr, v_expr, w_expr) = sphere_to_cartesian(mesh, zonal_u, merid_u)
+
+wind_pert = stepper.fields('u_pert', space=Vu)
+wind_pert.project(as_vector([u_pert, v_pert, w_pert]))
 
 # obtain initial conditions
 print('Set up initial conditions')
