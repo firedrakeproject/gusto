@@ -40,7 +40,7 @@ output = OutputParameters(dirname=dirname,
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
-                     MeridionalComponent('u_pert'), Temperature(), Pressure()]
+                     MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn)]
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
