@@ -752,7 +752,8 @@ class IMEX_RK(TimeDiscretisation):
         self.k3 = Function(self.fs)
         self.k4 = Function(self.fs)
         self.x_exp = Function(self.fs)
-        self.x1_exp = Function(self.fs)           
+        self.x1_exp = Function(self.fs)
+        self.F_exp = Function(self.fs)         
 
     @property
     def lhs(self):
@@ -771,13 +772,30 @@ class IMEX_RK(TimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, self.idx),
             map_if_false=drop)
+        
         # r = r.label_map(
-        #     lambda t: t.has_label(time_derivative),
-        #     map_if_false=lambda t: -0.3*self.dt*t)
+        #     lambda t: t.has_label(implicit),
+        #     map_if_true=lambda t: 0.5*self.dt*t)
+        # r_exp = self.residual.label_map(
+        #     lambda t: t.has_label(transport),
+        #     map_if_true=replace_subject(self.F_exp, self.idx),
+        #     map_if_false=drop)
+        # r_exp = r_exp.label_map(
+        #     all_terms,
+        #     map_if_true=lambda t: -self.dt*t)
         r_exp = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1_exp, self.idx),
             map_if_false=drop)
+        # r_exp = r_exp.label_map(
+        #      lambda t: t.has_label(implicit),
+        #      map_if_true=drop)
+        # r_exp = r_exp.label_map(
+        #      lambda t: t.has_label(transport),
+        #     map_if_true=lambda t: -0.5*self.dt*t)
+        # r_exp = r_exp.label_map(
+        #     all_terms,
+        #     map_if_true=lambda t: -1.*t)
         r = r - r_exp
         return r.form
 
@@ -802,13 +820,13 @@ class IMEX_RK(TimeDiscretisation):
     def rhs_e(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1_exp, self.idx))
+            lambda t: t.has_label(implicit),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.x1_exp, self.idx))
 
         r = r.label_map(
-            lambda t: any(t.has_label(time_derivative, implicit)),
-            map_if_true=drop,
-            map_if_false=lambda t: -1*t)
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.dt*t)
 
         return r.form
     
@@ -829,24 +847,23 @@ class IMEX_RK(TimeDiscretisation):
         """
         if stage == 0:
             self.solver_e.solve()
-            self.k1.assign(self.x_exp)
+            self.k1.assign((self.x_exp - self.x1_exp)/self.dt)
             self.x1_exp.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
             self.solver_e.solve()
-            self.k2.assign(self.x_exp)
+            self.k2.assign((self.x_exp - self.x1_exp)/self.dt)
             self.x1_exp.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
             self.solver_e.solve()
-            self.k3.assign(self.x_exp)
+            self.k3.assign((self.x_exp - self.x1_exp)/self.dt)
             self.x1_exp.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
             self.solver_e.solve()
-            self.k4.assign(self.x_exp)
+            self.k4.assign((self.x_exp - self.x1_exp)/self.dt)
             self.x1_exp.assign(1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
-
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
         self.x1_exp.assign(x_in)
