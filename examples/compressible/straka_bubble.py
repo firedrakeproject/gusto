@@ -62,7 +62,7 @@ for delta, dt in res_dt.items():
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziodalMethod(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=theta_opts)]
     transport_methods = [DGUpwind(eqns, "u"),

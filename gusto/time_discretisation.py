@@ -634,7 +634,7 @@ class BackwardEuler(TimeDiscretisation):
 
 class ThetaMethod(TimeDiscretisation):
     """
-    Implements the theta implicit-explicit timestepping method, which can 
+    Implements the theta implicit-explicit timestepping method, which can
     be thought as a generalised trapezium rule.
 
     The theta implicit-explicit timestepping method for operator F is written as
