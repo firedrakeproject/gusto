@@ -307,7 +307,37 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
 class ExplicitMultistage(ExplicitTimeDiscretisation):   
     """
-    A class for implementing general explicit multistage methods based on the Butcher Tableau
+    A class for implementing general explicit multistage methods based on its Butcher tableau.
+    
+    A Butcher tableau is formed in the following way for a s-th order explicit scheme:
+    
+    c_0 | a_00    
+    c_1 | a_10 a_11
+     .  | a_20 a_21 a_22
+     .  |   .   .    .    . 
+     -------------------------
+    c_s |  b_1  b_2  ...  b_s
+    
+    The gradient function has no time-dependence, so c elements are not needed.
+    A square 'butcher_matrix' is defined in each class that uses 
+    the ExplicitMultiStage structure,
+    
+    [a_00   0   .       0  ]
+    [a_10 a_11  .       0  ]
+    [  .    .   .       .  ]
+    [ b_0  b_1  .   b_{s-1}]
+    
+    All upper diagonal a_ij elements are zero for explicit methods.
+    
+    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
+    
+    For an s stage method,
+      At iteration i (from 0 to s-1)
+        An intermediate location is computed as y_i = y^n + sum{over j less than i} (dt*a_ij*k_i)
+        Compute the gradient at the intermediate location, k_i = F(y_i)
+        
+    At the last stage, compute the new solution by:
+    y^{n+1} = y^n + sum_{j from 0 to s-1} (dt*b_i*k_i)
     
     """
     
@@ -401,7 +431,8 @@ class ForwardEuler(ExplicitMultistage):
     Implements the forward Euler timestepping scheme.
 
     The forward Euler method for operator F is the most simple explicit scheme:
-    y^(n+1) = y^n + dt*F[y^n].
+    k0 = F[y^n]
+    y^(n+1) = y^n + dt*k0
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
@@ -412,17 +443,13 @@ class ForwardEuler(ExplicitMultistage):
 
 class SSPRK3(ExplicitMultistage):
     u"""
-    Implements the 3-stage Strong-Stability-Prevering Runge-Kutta method.
+    Implements the 3-stage Strong-Stability-Preserving Runge-Kutta method
+    for solving ∂y/∂t = F(y). It can be written as:
 
-    The 3-stage Strong-Stability-Preserving Runge-Kutta method (SSPRK), for
-    solving ∂y/∂t = F(y). It can be written as:
-
-    y_1 = y^n + F[y^n]
-    y_2 = (3/4)y^n + (1/4)(y_1 + F[y_1])
-    y^(n+1) = (1/3)y^n + (2/3)(y_2 + F[y_2])
-
-    where superscripts indicate the time-level and subscripts indicate the stage
-    number. See e.g. Shu and Osher (1988).
+    k0 = F[y^n]
+    k1 = F[y^n + dt*k1]
+    k2 = F[y^n + (1/4)*dt*(k0+k1)]
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
@@ -438,11 +465,11 @@ class RK4(ExplicitMultistage):
     The classic 4-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
     written as:
 
-    k1 = F[y^n]
-    k2 = F[y^n + 1/2*dt*k1]
-    k3 = F[y^n + 1/2*dt*k2]
-    k4 = F[y^n + dt*k3]
-    y^(n+1) = y^n + (1/6) * dt * (k1 + 2*k2 + 2*k3 + k4)
+    k0 = F[y^n]
+    k1 = F[y^n + 1/2*dt*k1]
+    k2 = F[y^n + 1/2*dt*k2]
+    k3 = F[y^n + dt*k3]
+    y^(n+1) = y^n + (1/6) * dt * (k0 + 2*k1 + 2*k2 + k3)
 
     where superscripts indicate the time-level.
     """
@@ -457,14 +484,12 @@ class Heun(ExplicitMultistage):
     u"""
     Implements Heun's method.
 
-    The 2-stage Runge-Kutta scheme known as Heun's method,for solving
+    The 2-stage Runge-Kutta scheme known as Heun's method, for solving
     ∂y/∂t = F(y). It can be written as:
 
-    y_1 = F[y^n]
-    y^(n+1) = (1/2)y^n + (1/2)F[y_1]
-
-    where superscripts indicate the time-level and subscripts indicate the stage
-    number.
+    k0 = F[y^n]
+    k1 = F[y^n + dt*k0]
+    y^(n+1) = y^n + (1/2)*dt*(k0 + k1)
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name,
