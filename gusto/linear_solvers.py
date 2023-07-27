@@ -20,6 +20,7 @@ from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.fml.form_manipulation_labelling import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
+from gusto.solver_parameters import *
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -543,20 +544,6 @@ class LinearTimesteppingSolver(object):
     solved using a hybridised-mixed method.
     """
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
-
     def __init__(self, equation, alpha):
         """
         Args:
@@ -593,7 +580,7 @@ class LinearTimesteppingSolver(object):
                                            self.dy, bcs=bcs)
 
         self.solver = LinearVariationalSolver(problem,
-                                              solver_parameters=self.solver_parameters,
+                                              solver_parameters=lines_parameters,
                                               options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")

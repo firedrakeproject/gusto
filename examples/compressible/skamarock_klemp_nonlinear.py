@@ -43,7 +43,7 @@ domain = Domain(mesh, dt, "CG", 1)
 
 # Equation
 Tsurf = 300.
-parameters = CompressibleParameters()
+parameters = CompressibleEulerParameters()
 eqns = CompressibleEulerEquations(domain, parameters)
 
 # I/O
