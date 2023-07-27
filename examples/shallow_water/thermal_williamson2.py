@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos)
+from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos,
+                       as_vector)
 
 # ----------------------------------------------------------------- #
 # Test case parameters
@@ -62,9 +63,9 @@ u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 b0 = stepper.fields("b")
 
-phi, lamda = latlon_coords(mesh)
+lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
+uexpr = lonlatr_vector_from_xyz(as_vector([u_max*cos(phi), 0, 0]), x)
 g = params.g
 w = Omega*R*u_max + (u_max**2)/2
 sigma = 0
