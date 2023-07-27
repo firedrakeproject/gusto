@@ -903,11 +903,16 @@ class SW_SaturationAdjustment(Physics):
 
         # Saturation adjustment expression, adjusted to stop negative values
         sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
+        print(sat_adj_expr)
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr,
                                              -self.cloud / self.tau),
                                    min_value(sat_adj_expr,
                                              self.water_v / self.tau))
+        print(sat_adj_expr)
+        sat_adj_func = Function(self.water_v.function_space())
+        sat_adj_func.interpolate(sat_adj_expr)
+        print(sat_adj_func.dat.data.max())
 
         # If gamma_v depends on variables
         if self.time_varying_gamma_v:
@@ -932,6 +937,7 @@ class SW_SaturationAdjustment(Physics):
         self.source = [Function(Vc) for factor in factors]
         self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
                                      for factor, source in zip(factors, self.source)]
+
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
@@ -965,5 +971,10 @@ class SW_SaturationAdjustment(Physics):
         self.cloud.assign(x_in.split()[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
+        int_func = Function(self.b.function_space())
         for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+            interpolator.interpolate(output=int_func)
+            print("max interpolator:")
+            print(int_func.dat.data.max())
+            print("min interpolator:")
+            print(int_func.dat.data.min())

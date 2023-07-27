@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm)
+from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm,
+                       max_value, min_value)
 
 process = "condensation"
 
@@ -51,9 +52,7 @@ physics_schemes = [(SW_SaturationAdjustment(eqns, sat, L=L,
                     ForwardEuler(domain))]
 
 # Time stepper
-scheme = ForwardEuler(domain)
-
-stepper = SplitPhysicsTimestepper(eqns, scheme, io,
+stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
                                   physics_schemes=physics_schemes)
 
 # ------------------------------------------------------------------------ #
@@ -78,10 +77,15 @@ if process == "evaporation":
     # lose cloud and add this to vapour
     v_true = Function(v0.function_space()).interpolate(sat*(0.96+0.005*pert))
     c_true = Function(c0.function_space()).interpolate(Constant(0.0))
-    # lose buoyancy (sat_adj_expr is -0.005 here)
-    factor = Constant(parameters.g*L*beta2)
-    sat_adj_expr = -0.005
-    b_true = Function(b0.function_space()).interpolate(factor*sat_adj_expr)
+    # gain buoyancy
+    factor = parameters.g*10
+    sat_adj_expr = (v0 - sat) / dt
+    sat_adj_expr = conditional(sat_adj_expr < 0,
+                               max_value(sat_adj_expr, -c0 / dt),
+                               min_value(sat_adj_expr, v0 / dt))
+    # include factor of -1 in true solution to compare term to LHS in Gusto
+    b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
+
 
 elif process == "condensation":
     # vapour is above saturation
@@ -89,12 +93,17 @@ elif process == "condensation":
     # lose vapour and add this to cloud
     v_true = Function(v0.function_space()).interpolate(Constant(sat))
     c_true = Function(c0.function_space()).interpolate(v0 - sat)
-    # gain buoyancy (sat_adj_expr is 0.04 here)
-    factor = Constant(parameters.g*L*beta2)
-    sat_adj_expr = 0.004
-    b_true = Function(b0.function_space()).interpolate(factor*sat_adj_expr)
+    # lose buoyancy
+    sat_adj_expr = (v0 - sat) / dt
+    factor = parameters.g*L
+    sat_adj_expr = conditional(sat_adj_expr < 0,
+                               max_value(sat_adj_expr, -c0 / dt),
+                               min_value(sat_adj_expr, v0 / dt))
+    # include factor of -1 in true solution to compare term to LHS in Gusto
+    b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
 
 c_init = Function(c0.function_space()).interpolate(c0)
+
 print("initial vapour:")
 print(v0.dat.data.max())
 print("initial cloud:")
@@ -106,13 +115,18 @@ vapour = stepper.fields("water_vapour")
 cloud = stepper.fields("cloud_water")
 buoyancy = stepper.fields("b")
 
+# Check that the water vapour is correct
 assert norm(vapour - v_true) / norm(v_true) < 0.001, \
     f'Final vapour field is incorrect for {process}'
 
-# Check that cloud has been created / removed
+# Check that cloud has been created/removed
 denom = norm(c_true) if process == "condensation" else norm(c_init)
 assert norm(cloud - c_true) / denom < 0.001, \
     f'Final cloud field is incorrect for {process}'
+
+# Check that the buoyancy perturbation has the correct sign and size
+assert norm(buoyancy - b_true) / norm(b_true) < 0.01, \
+    f'Latent heating is incorrect for {process}'
 
 ###################
 # printing to try
@@ -120,23 +134,19 @@ assert norm(cloud - c_true) / denom < 0.001, \
 
 print(process)
 
-# if norm(vapour - v_true) / norm(v_true) < 0.001:
-    # print("passed vapour!")
-    # print(norm(vapour - v_true) / norm(v_true))
-
-denom = norm (c_true) if process == "condensation" else norm(c_init)
-# if norm(cloud - c_true) / denom < 0.001:
-    # print("passed cloud!")
-    # print(norm(cloud - c_true) / denom)
-
-print("true buoyancy:")
+print("true max buoyancy:")
 print(b_true.dat.data.max())
-print("b field:")
+print("true min buoyancy:")
+print(b_true.dat.data.min())
+print("max b field:")
 print(buoyancy.dat.data.max())
-# print("norm:")
-# print(norm(buoyancy - b_true))
+print("min b field:")
+print(buoyancy.dat.data.min())
 
 print("vapour after:")
 print(vapour.dat.data.max())
 print("cloud after:")
 print(cloud.dat.data.max())
+
+print("This the bouyancy assert:")
+print(norm(buoyancy - b_true) / norm(b_true))
