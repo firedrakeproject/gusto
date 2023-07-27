@@ -113,12 +113,18 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     dirname_2 = str(tmpdir)+'/checkpointing_2'
     dirname_3 = str(tmpdir)+'/checkpointing_3'
 
-    output_1 = OutputParameters(dirname=dirname_1, dumpfreq=1,
-                                checkpoint_method=checkpoint_method,
-                                chkptfreq=4, log_level='INFO')
-    output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
-                                checkpoint_method=checkpoint_method,
-                                chkptfreq=2, log_level='INFO')
+    output_1 = OutputParameters(
+        dirname=dirname_1,
+        dumpfreq=1,
+        checkpoint_method=checkpoint_method,
+        chkptfreq=4,
+    )
+    output_2 = OutputParameters(
+        dirname=dirname_2,
+        dumpfreq=1,
+        checkpoint_method=checkpoint_method,
+        chkptfreq=2,
+    )
 
     stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type)
     stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type)
@@ -144,10 +150,13 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     chkpt_filename = 'chkpt' if checkpoint_method == 'dumbcheckpoint' else 'chkpt.h5'
     chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
-    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO',
-                                checkpoint_method=checkpoint_method,
-                                checkpoint_pickup_filename=chkpt_2_path)
+    output_3 = OutputParameters(
+        dirname=dirname_3,
+        dumpfreq=1,
+        chkptfreq=2,
+        checkpoint_method=checkpoint_method,
+        checkpoint_pickup_filename=chkpt_2_path,
+    )
 
     if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
@@ -180,10 +189,13 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     # Run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
-    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO',
-                                checkpoint_method=checkpoint_method,
-                                checkpoint_pickup_filename=chkpt_2_path)
+    output_3 = OutputParameters(
+        dirname=dirname_3,
+        dumpfreq=1,
+        chkptfreq=2,
+        checkpoint_method=checkpoint_method,
+        checkpoint_pickup_filename=chkpt_2_path
+    )
     if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)

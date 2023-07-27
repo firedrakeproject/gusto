@@ -29,9 +29,10 @@ def run_sw_fplane(tmpdir):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/sw_fplane",
-                              dumpfreq=1,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=str(tmpdir)+"/sw_fplane",
+        dumpfreq=1,
+    )
 
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
