@@ -58,7 +58,7 @@ def run_instant_rain(dirname):
 
     # Time stepper
     stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
-                                 physics_schemes=physics_schemes)
+                                      physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
