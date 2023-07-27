@@ -7,8 +7,7 @@ model's time interval.
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       as_vector, inner, interpolate, VectorFunctionSpace,
-                       Function)
+                       as_vector, inner, grad, VectorFunctionSpace, Function)
 import numpy as np
 
 
@@ -80,8 +79,8 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         # Figure out if we're on a sphere
-        # TODO: could we run on other domains that could confuse this?
-        # TODO: could this be combined with domain metadata below?
+        # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
+        # or torus) then the identification of domains would no longer be unique
         if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
@@ -92,7 +91,7 @@ class Domain(object):
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
-            self.k = interpolate(x/R, mesh.coordinates.function_space())
+            self.k = grad(R)
             if dim == 2:
                 if hasattr(mesh, "_bash_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
@@ -123,7 +122,6 @@ class Domain(object):
         # Construct metadata about domain
         # -------------------------------------------------------------------- #
 
-        # TODO: would this be better as an object?
         self.metadata = {}
         self.metadata['extruded'] = mesh.extruded
 
