@@ -1,5 +1,5 @@
 """
-Tests the replace_subject routine from labels.py
+Tests the different replacement routines from replacement.py
 """
 
 from firedrake import (UnitSquareMesh, FunctionSpace, Function, TestFunction,
@@ -127,7 +127,6 @@ def mixed_test_argsets():
         ReplaceTestArgs(TestFunction(W), {'old_idx': 0, 'new_idx': 0}, None),
         ReplaceTestArgs(TestFunctions(W), {'old_idx': 0}, ValueError),
         ReplaceTestArgs(TestFunction(W), {'new_idx': 0}, ValueError),
-        # ReplaceTestArgs(TestFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTestArgs(TestFunction(V0), {'old_idx': 0}, None),
         ReplaceTestArgs(TestFunctions(V0), {'new_idx': 1}, ValueError),
         ReplaceTestArgs(TestFunction(W), {'old_idx': 7, 'new_idx': 7}, IndexError)
@@ -140,14 +139,12 @@ def mixed_trial_argsets():
         ReplaceTrialArgs(TrialFunction(W), {}, None),
         ReplaceTrialArgs(TrialFunctions(W), {}, None),
         ReplaceTrialArgs(TrialFunction(W), {'old_idx': 0, 'new_idx': 0}, None),
-        # ReplaceTrialArgs(TrialFunctions(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTrialArgs(TrialFunction(V0), {'old_idx': 0}, None),
         ReplaceTrialArgs(TrialFunctions(V0), {'new_idx': 1}, ValueError),
         ReplaceTrialArgs(TrialFunction(W), {'old_idx': 7, 'new_idx': 7}, IndexError),
         ReplaceTrialArgs(Function(W), {}, None),
         ReplaceTrialArgs(split(Function(W)), {}, None),
         ReplaceTrialArgs(Function(W), {'old_idx': 0, 'new_idx': 0}, None),
-        # ReplaceTrialArgs(Function(W), {'old_idx': 1, 'new_idx': 1}, None),
         ReplaceTrialArgs(Function(V0), {'old_idx': 0}, None),
         ReplaceTrialArgs(Function(V0), {'new_idx': 0}, ValueError),
         ReplaceTrialArgs(Function(W), {'old_idx': 7, 'new_idx': 7}, IndexError),
@@ -189,8 +186,7 @@ def vector_test_argsets():
         ReplaceTestArgs(TestFunction(Wv), {'new_idx': 0}, None),
         ReplaceTestArgs(TestFunction(Wv), {'new_idx': 1}, ValueError),
         ReplaceTestArgs(TestFunctions(Wv), {'new_idx': 0}, None),
-        # ReplaceTestArgs(TestFunction(W), {'new_idx': 0}, None),
-        # ReplaceTestArgs(TestFunction(W), {'new_idx': 7}, IndexError),
+        ReplaceTestArgs(TestFunction(W), {'new_idx': 7}, IndexError),
     ]
     return argsets
 
