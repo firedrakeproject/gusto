@@ -34,7 +34,7 @@ class Fields(object):
 
         if len(space) > 1:
             assert len(space) == len(subfield_names)
-            for field_name, field in zip(subfield_names, value.split()):
+            for field_name, field in zip(subfield_names, value.subfunctions):
                 setattr(self, field_name, field)
                 field.rename(field_name)
                 self.fields.append(field)
