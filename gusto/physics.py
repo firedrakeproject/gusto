@@ -768,3 +768,19 @@ class InstantRain(Physics):
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
         self.source.assign(self.source_interpolator.interpolate())
+        
+        
+class interacting_species(Physics):
+  """
+  This enables multiple species to interact with each other.
+  The interaction equations are implemented as forcing terms 
+  in a CoupledTransportEquation.
+  
+  For n species there will be an equation for each of the form:
+  D/Dt (X_i) = F(X_1,X_2, ..., X_n, k1, k2, ..., kn)
+  """
+
+
+
+
+
