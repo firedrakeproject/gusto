@@ -5,6 +5,7 @@ from firedrake import Function, Projector, Constant, split
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.fml import drop, Label, Term
+from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
 from gusto.labels import (
     transport, diffusion, time_derivative, linearisation, prognostic,

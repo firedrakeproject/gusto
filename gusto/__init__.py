@@ -13,6 +13,9 @@ def _monkey_patch_ufl():
 
 _monkey_patch_ufl()
 
+# Start logging first, incase anything goes wrong
+from gusto.logging import *                          # noqa
+
 from gusto.active_tracers import *                   # noqa
 from gusto.common_forms import *                     # noqa
 from gusto.configuration import *                    # noqa
@@ -27,7 +30,6 @@ from gusto.io import *                               # noqa
 from gusto.labels import *                           # noqa
 from gusto.limiters import *                         # noqa
 from gusto.linear_solvers import *                   # noqa
-from gusto.logging import *                          # noqa
 from gusto.meshes import *                           # noqa
 from gusto.numerical_integrator import *             # noqa
 from gusto.physics import *                          # noqa

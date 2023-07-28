@@ -2,7 +2,6 @@
 from abc import ABCMeta, abstractproperty
 from enum import Enum
 from firedrake import sqrt, Constant
-from gusto.logging import logger
 
 
 __all__ = [
