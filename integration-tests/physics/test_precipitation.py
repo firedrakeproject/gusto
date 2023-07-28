@@ -33,7 +33,7 @@ def setup_fallout(dirname):
     # Equation
     Vrho = domain.spaces("DG1_equispaced")
     active_tracers = [Rain(space='DG1_equispaced')]
-    eqn = ForcedAdvectionEquation(domain, Vrho, "rho", active_tracers=active_tracers)
+    eqn = CoupledTransportEquation(domain, Vrho, "rho", active_tracers=active_tracers)
     transport_method = DGUpwind(eqn, "rho")
 
     # I/O

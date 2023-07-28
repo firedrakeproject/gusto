@@ -47,7 +47,7 @@ def run_forced_advection(tmpdir):
 
     rain = Rain(space='tracer',
                 transport_eqn=TransportEquationType.no_transport)
-    meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
+    meqn = CoupledTransportEquation(domain, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
     transport_method = DGUpwind(meqn, "water_vapour")
     physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
