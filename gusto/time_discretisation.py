@@ -7,7 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+                       NonlinearVariationalSolver, DirichletBC, split)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
@@ -742,6 +742,30 @@ class ImplicitMidpoint(ThetaMethod):
         super().__init__(domain, field_name, theta=0.5,
                          solver_parameters=solver_parameters,
                          options=options)
+
+    @cached_property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup solver using lhs and rhs defined in derived class
+        xnph = tuple([a + b for a, b in zip(split(self.x_out), split(self.x1))])
+        residual = self.residual.label_map(
+            lambda t: not t.has_label(time_derivative),
+            replace_subject(xnph),
+            drop
+        )
+        residual = residual.label_map(
+            all_terms,
+            lambda t: 0.5*self.dt*t)
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual += mass_form.label_map(all_terms,
+                                        replace_subject(self.x_out))
+        residual -= mass_form.label_map(all_terms,
+                                        replace_subject(self.x1))
+        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
 
 class MultilevelTimeDiscretisation(TimeDiscretisation):
