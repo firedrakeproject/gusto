@@ -275,6 +275,25 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
+        self.dx1 = TestFunction(self.fs)
+
+    @cached_property
+    def lhs(self):
+        """Set up the discretisation's left hand side (the time derivative)."""
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.dx1, self.idx),
+            map_if_false=drop)
+
+        return l.form
+    
+    @cached_property
+    def solver(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dx1, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply_cycle(self, x_out, x_in):
@@ -300,7 +319,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         for i in range(self.ncycles):
             for evaluate in self.evaluate_source:
                 evaluate(x_in, self.dt)
-            print("I'm applying")
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
@@ -366,8 +384,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         super().setup(equation, apply_bcs, *active_labels)
 
         self.k = [Function(self.fs) for i in range(self.nStages)]
-
-        self.x_int = Function(self.fs)
     
     @cached_property
     def lhs(self):
@@ -390,19 +406,18 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
-        self.x_int.assign(x0)
         for i in range(stage):
             self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1,i]*self.k[i])
         if self.limiter is not None:
                 self.limiter.apply(self.x1)
         self.solver.solve()
-        self.k[stage].assign(self.x_out)
+        self.k[stage].assign(self.dx1)
             
         if (stage == self.nStages -1):
-        
+            self.x1.assign(x0)
             for i in range(self.nStages):
-                self.x_int.assign(self.x_int + self.dt*self.butcher_matrix[stage,i]*self.k[i])
-            self.x1.assign(self.x_int)
+                self.x_int.assign(self.x1 + self.dt*self.butcher_matrix[stage,i]*self.k[i])
+            self.x1.assign(self.x1)
 
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
@@ -420,7 +435,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
-        self.x_out.assign(x_in)
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
