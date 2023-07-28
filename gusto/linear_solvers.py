@@ -18,7 +18,7 @@ from gusto.active_tracers import TracerVariableType
 from gusto.configuration import logger, DEBUG
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
-from gusto.fml.form_manipulation_labelling import Term, drop
+from gusto.fml.form_manipulation_language import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -373,7 +373,7 @@ class CompressibleSolver(TimesteppingSolver):
         # Solve the hybridized system
         self.hybridized_solver.solve()
 
-        broken_u, rho1, _ = self.urhol0.split()
+        broken_u, rho1, _ = self.urhol0.subfunctions
         u1 = self.u_hdiv
 
         # Project broken_u into the HDiv space
@@ -387,7 +387,7 @@ class CompressibleSolver(TimesteppingSolver):
             bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
-        u, rho, theta = dy.split()[0:3]
+        u, rho, theta = dy.subfunctions[0:3]
         u.assign(u1)
         rho.assign(rho1)
 
@@ -495,7 +495,7 @@ class IncompressibleSolver(TimesteppingSolver):
         b = TrialFunction(Vb)
         gamma = TestFunction(Vb)
 
-        u, p = self.up.split()
+        u, p = self.up.subfunctions
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in
@@ -522,8 +522,8 @@ class IncompressibleSolver(TimesteppingSolver):
         with timed_region("Gusto:VelocityPressureSolve"):
             self.up_solver.solve()
 
-        u1, p1 = self.up.split()
-        u, p, b = dy.split()
+        u1, p1 = self.up.subfunctions
+        u, p, b = dy.subfunctions
         u.assign(u1)
         p.assign(p1)
 

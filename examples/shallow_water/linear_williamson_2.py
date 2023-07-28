@@ -53,9 +53,10 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transport_schemes = [ForwardEuler(domain, "D")]
+transport_methods = [DGUpwind(eqns, "D")]
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes)
+stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)
 
 # ---------------------------------------------------------------------------- #
 # Initial conditions
