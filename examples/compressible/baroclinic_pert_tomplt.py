@@ -32,7 +32,7 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_tomplot_anomaly'
+dirname = 'baroclinicPerturbation_thetalimiter'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dump_nc=True,
@@ -44,12 +44,14 @@ diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
                      SteadyStateError('Temperature'), SteadyStateError('Pressure_Vt')]
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+Vtheta = domain.spaces("theta")
+limiter = ThetaLimiter(Vtheta)
 
 # Transport Schemes
 transported_fields = []
 transported_fields.append(ImplicitMidpoint(domain, "u"))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
+transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions(), limiter=limiter))
 transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
 
 # Linear Solver
