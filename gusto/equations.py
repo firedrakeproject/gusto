@@ -7,11 +7,10 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        DirichletBC, conditional, SpatialCoordinate,
                        split, Constant, action)
 from gusto.fields import PrescribedFields
-from gusto.fml.form_manipulation_labelling import Term, all_terms, keep, drop, Label
-from gusto.labels import (subject, time_derivative, transport, prognostic,
-                          replace_subject, linearisation,
-                          name, pressure_gradient, coriolis, perp,
-                          replace_trial_function, hydrostatic)
+from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
+                       replace_subject, replace_trial_function)
+from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
+                          linearisation, pressure_gradient, coriolis)
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
@@ -700,17 +699,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
             V = FunctionSpace(domain.mesh, 'CG', 1)
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
-                prognostic(f*inner(domain.perp(u), w)*dx, 'u'), self.X))
-            if not domain.on_sphere:
-                coriolis_form = perp(coriolis_form, domain.perp)
+                prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
             # Add linearisation
             if self.linearisation_map(coriolis_form.terms[0]):
-                linear_coriolis = perp(
-                    coriolis(
-                        subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, 'u'), self.X)
-                    ), domain.perp)
-                if not domain.on_sphere:
-                    linear_coriolis = perp(linear_coriolis, domain.perp)
+                linear_coriolis = coriolis(
+                    subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, 'u'), self.X))
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
