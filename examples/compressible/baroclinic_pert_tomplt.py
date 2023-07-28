@@ -32,7 +32,7 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_tomplot_ref25_extradiag'
+dirname = 'baroclinicPerturbation_tomplot_anomaly'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dump_nc=True,
@@ -40,7 +40,8 @@ output = OutputParameters(dirname=dirname,
                           log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
-                     MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn)]
+                     MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
+                     SteadyStateError('Temperature'), SteadyStateError('Pressure_Vt')]
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
