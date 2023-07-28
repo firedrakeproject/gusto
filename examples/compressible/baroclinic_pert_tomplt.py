@@ -6,10 +6,10 @@ from gusto import *                                            #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 540.
+dt = 270.
 days = 10.
 tmax = days * 24. * 60. * 60.
-deltaz = 3.0e3
+deltaz = 2e3 # 15 layers, as we are in a higher space this matches the paper better
 
 # -------------------------------------------------------------- #
 # Set up Model
@@ -34,7 +34,7 @@ print(eqn.X.function_space().dim())
 
 dirname = 'baroclinicPerturbation_thetalimiter'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=20,
+                          dumpfreq=40,
                           dump_nc=True,
                           dump_vtus=False,
                           log_level=('INFO'))
@@ -51,7 +51,7 @@ limiter = ThetaLimiter(Vtheta)
 transported_fields = []
 transported_fields.append(ImplicitMidpoint(domain, "u"))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions(), limiter=limiter))
+transported_fields.append(SSPRK3(domain, "theta", options=EmbeddedDGOptions(), limiter=limiter))
 transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
 
 # Linear Solver
