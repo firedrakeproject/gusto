@@ -12,6 +12,16 @@ import sys
 # ----------------------------------------------------------------- #
 
 dt = 300
+
+if '--running-tests' in sys.argv:
+    tmax = dt
+    dumpfreq = 1
+else:
+    day = 24*60*60
+    tmax = 50*day
+    ndumps = 50
+    dumpfreq = int(tmax / (ndumps*dt))
+
 R = 6371220.
 H = 5960.
 u_max = 20.
@@ -32,15 +42,6 @@ R0 = pi/9.
 R0sq = R0**2
 lamda_c = -pi/2.
 phi_c = pi/6.
-
-if '--running-tests' in sys.argv:
-    tmax = dt
-    dumpfreq = 1
-else:
-    day = 24*60*60
-    tmax = 50*day
-    ndumps = 50
-    dumpfreq = int(tmax / (ndumps*dt))
 
 # ----------------------------------------------------------------- #
 # Set up model objects
