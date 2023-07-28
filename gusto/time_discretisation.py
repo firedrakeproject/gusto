@@ -6,8 +6,8 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+from firedrake import (Function, TestFunction, TrialFunction, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, LinearVariationalSolver, LinearVariationalProblem, DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
@@ -275,14 +275,15 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
-        self.dx1 = TestFunction(self.fs)
+        self.dx1_trial = TrialFunction(self.fs)
+        self.dx1 = Function(self.fs)
 
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dx1, self.idx),
+            map_if_true=replace_subject(self.dx1_trial, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -366,11 +367,11 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         if butcher_matrix is not None:
             self.butcher_matrix = butcher_matrix
             self.nbutcher = int(np.shape(self.butcher_matrix)[0])
-    
+
     @property
     def nStages(self):
         return self.nbutcher
-                
+
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -403,7 +404,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             map_if_false=lambda t: -1.*t)
 
         return r.form
-            
+
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         for i in range(stage):
@@ -412,17 +413,16 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 self.limiter.apply(self.x1)
         self.solver.solve()
         self.k[stage].assign(self.dx1)
-            
+
         if (stage == self.nStages -1):
             self.x1.assign(x0)
             for i in range(self.nStages):
-                self.x_int.assign(self.x1 + self.dt*self.butcher_matrix[stage,i]*self.k[i])
+                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage,i]*self.k[i])
             self.x1.assign(self.x1)
 
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
-            
-        
+
     def apply_cycle(self, x_out, x_in):
         """
         Apply the time discretisation through a single sub-step.
