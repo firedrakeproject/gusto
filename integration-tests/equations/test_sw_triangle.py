@@ -156,7 +156,7 @@ def test_sw_setup(tmpdir, u_transport_option):
     domain, eqns, io = setup_sw(dirname, dt, u_transport_option)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D")]
 
     transport_methods = [DGUpwind(eqns, 'u'),
