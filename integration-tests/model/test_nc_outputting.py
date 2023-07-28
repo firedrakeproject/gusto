@@ -9,7 +9,8 @@ from firedrake import (IntervalMesh, RectangleMesh, CubedSphereMesh,
                        as_vector, exp)
 from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ForwardEuler, OutputParameters, VelocityX, VelocityY,
-                   VelocityZ, MeridionalComponent, ZonalComponent, RadialComponent)
+                   VelocityZ, MeridionalComponent, ZonalComponent,
+                   RadialComponent, DGUpwind)
 from netCDF4 import Dataset
 import pytest
 
@@ -71,6 +72,7 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     else:
         eqn = AdvectionEquation(domain, V, 'f')
     transport_scheme = ForwardEuler(domain)
+    transport_method = DGUpwind(eqn, 'f')
     output = OutputParameters(dirname=dirname, dumpfreq=1, dump_nc=True,
                               dumplist=['f'], log_level='INFO', checkpoint=False)
 
@@ -89,7 +91,7 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u'), RadialComponent('u')]
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-    stepper = PrescribedTransport(eqn, transport_scheme, io)
+    stepper = PrescribedTransport(eqn, transport_scheme, io, transport_method)
 
     # ------------------------------------------------------------------------ #
     # Initialise fields

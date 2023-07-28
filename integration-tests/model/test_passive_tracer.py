@@ -43,9 +43,11 @@ def run_tracer(setup):
     # Set up tracer transport
     tracer_transport = [(tracer_eqn, SSPRK3(domain))]
 
+    transport_methods = [DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
+
     # build time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes,
+        eqns, io, transport_schemes, transport_methods,
         auxiliary_equations_and_schemes=tracer_transport)
 
     # ------------------------------------------------------------------------ #

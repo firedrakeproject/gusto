@@ -44,9 +44,9 @@ for delta, dt in res_dt.items():
 
     # Equation
     parameters = CompressibleParameters()
-    diffusion_options = [
-        ("u", DiffusionParameters(kappa=75., mu=10./delta)),
-        ("theta", DiffusionParameters(kappa=75., mu=10./delta))]
+    u_diffusion_opts = DiffusionParameters(kappa=75., mu=10./delta)
+    theta_diffusion_opts = DiffusionParameters(kappa=75., mu=10./delta)
+    diffusion_options = [("u", u_diffusion_opts), ("theta", theta_diffusion_opts)]
     eqns = CompressibleEulerEquations(domain, parameters,
                                       diffusion_options=diffusion_options)
 
@@ -62,9 +62,12 @@ for delta, dt in res_dt.items():
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=theta_opts)]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "rho"),
+                         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
@@ -72,9 +75,12 @@ for delta, dt in res_dt.items():
     # Diffusion schemes
     diffusion_schemes = [BackwardEuler(domain, "u"),
                          BackwardEuler(domain, "theta")]
+    diffusion_methods = [InteriorPenaltyDiffusion(eqns, "u", u_diffusion_opts),
+                         InteriorPenaltyDiffusion(eqns, "theta", theta_diffusion_opts)]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      spatial_methods=transport_methods+diffusion_methods,
                                       linear_solver=linear_solver,
                                       diffusion_schemes=diffusion_schemes)
 

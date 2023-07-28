@@ -11,9 +11,8 @@ from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.transport_forms import advection_form
-from gusto.fml import identity, Term
-from gusto.labels import subject, physics, transporting_velocity
+from gusto.fml import identity, Term, subject
+from gusto.labels import physics, transporting_velocity
 from gusto.configuration import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
@@ -109,8 +108,8 @@ class SaturationAdjustment(Physics):
         # Vapour and cloud variables are needed for every form of this scheme
         cloud_idx = equation.field_names.index(cloud_name)
         vap_idx = equation.field_names.index(vapour_name)
-        cloud_water = self.X.split()[cloud_idx]
-        water_vapour = self.X.split()[vap_idx]
+        cloud_water = self.X.subfunctions[cloud_idx]
+        water_vapour = self.X.subfunctions[vap_idx]
 
         # Indices of variables in mixed function space
         V_idxs = [vap_idx, cloud_idx]
@@ -120,8 +119,8 @@ class SaturationAdjustment(Physics):
         if isinstance(equation, CompressibleEulerEquations):
             rho_idx = equation.field_names.index('rho')
             theta_idx = equation.field_names.index('theta')
-            rho = self.X.split()[rho_idx]
-            theta = self.X.split()[theta_idx]
+            rho = self.X.subfunctions[rho_idx]
+            theta = self.X.subfunctions[theta_idx]
             if latent_heat:
                 V_idxs.append(theta_idx)
 
@@ -147,7 +146,7 @@ class SaturationAdjustment(Physics):
             if (active_tracer.phase == Phases.liquid
                     and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
-                liquid_water += self.X.split()[liq_idx]
+                liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -257,7 +256,8 @@ class Fallout(Physics):
     for Cartesian geometry.
     """
 
-    def __init__(self, equation, rain_name, domain, moments=AdvectedMoments.M3):
+    def __init__(self, equation, rain_name, domain, transport_method,
+                 moments=AdvectedMoments.M3):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -265,6 +265,8 @@ class Fallout(Physics):
                 'rain'.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
+            transport_method (:class:`TransportMethod`): the spatial method
+                used for transporting the rain.
             moments (int, optional): an :class:`AdvectedMoments` enumerator,
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
@@ -278,8 +280,7 @@ class Fallout(Physics):
         self.X = Function(equation.X.function_space())
 
         rain_idx = equation.field_names.index(rain_name)
-        rain = self.X.split()[rain_idx]
-        test = equation.tests[rain_idx]
+        rain = self.X.subfunctions[rain_idx]
 
         Vu = domain.spaces("HDiv")
         # TODO: there must be a better way than forcing this into the equation
@@ -289,7 +290,9 @@ class Fallout(Physics):
         # Create physics term -- which is actually a transport term
         # -------------------------------------------------------------------- #
 
-        adv_term = advection_form(domain, test, rain, outflow=True)
+        assert transport_method.outflow, \
+            'Fallout requires a transport method with outflow=True'
+        adv_term = transport_method.form
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(
@@ -311,7 +314,7 @@ class Fallout(Physics):
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
             rho_idx = equation.field_names.index('rho')
-            rho = self.X.split()[rho_idx]
+            rho = self.X.subfunctions[rho_idx]
             rho_w = Constant(1000.0)  # density of liquid water
             # assume n(D) = n_0 * D^mu * exp(-Lambda*D)
             # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
@@ -448,8 +451,8 @@ class Coalescence(Physics):
         """
         # Update the values of internal variables
         self.dt.assign(dt)
-        self.rain.assign(x_in.split()[self.rain_idx])
-        self.cloud_water.assign(x_in.split()[self.cloud_idx])
+        self.rain.assign(x_in.subfunctions[self.rain_idx])
+        self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
         # Evaluate the source
         self.source.assign(self.source_interpolator.interpolate())
 
@@ -506,8 +509,8 @@ class EvaporationOfRain(Physics):
         # Vapour and cloud variables are needed for every form of this scheme
         rain_idx = equation.field_names.index(rain_name)
         vap_idx = equation.field_names.index(vapour_name)
-        rain = self.X.split()[rain_idx]
-        water_vapour = self.X.split()[vap_idx]
+        rain = self.X.subfunctions[rain_idx]
+        water_vapour = self.X.subfunctions[vap_idx]
 
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
@@ -517,8 +520,8 @@ class EvaporationOfRain(Physics):
         if isinstance(equation, CompressibleEulerEquations):
             rho_idx = equation.field_names.index('rho')
             theta_idx = equation.field_names.index('theta')
-            rho = self.X.split()[rho_idx]
-            theta = self.X.split()[theta_idx]
+            rho = self.X.subfunctions[rho_idx]
+            theta = self.X.subfunctions[theta_idx]
             if latent_heat:
                 V_idxs.append(theta_idx)
 
@@ -540,7 +543,7 @@ class EvaporationOfRain(Physics):
             if (active_tracer.phase == Phases.liquid
                     and active_tracer.chemical == 'H2O' and active_tracer.name != rain_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
-                liquid_water += self.X.split()[liq_idx]
+                liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -760,12 +763,12 @@ class InstantRain(Physics):
                 interval for the scheme.
         """
         if self.convective_feedback:
-            self.D.assign(x_in.split()[self.VD_idx])
+            self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.time_varying_saturation:
             self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
-        self.water_v.assign(x_in.split()[self.Vv_idx])
+        self.water_v.assign(x_in.subfunctions[self.Vv_idx])
         self.source.assign(self.source_interpolator.interpolate())
 
 

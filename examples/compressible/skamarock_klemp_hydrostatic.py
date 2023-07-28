@@ -55,16 +55,21 @@ diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
-transported_fields = []
-transported_fields.append(ImplicitMidpoint(domain, "u"))
-transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
+theta_opts = SUPGOptions()
+transported_fields = [TrapeziumRule(domain, "u"),
+                      SSPRK3(domain, "rho"),
+                      SSPRK3(domain, "theta", options=theta_opts)]
+
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "rho"),
+                     DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #
