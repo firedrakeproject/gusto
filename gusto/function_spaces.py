@@ -3,15 +3,58 @@ This module contains routines to generate the compatible function spaces to be
 used by the model.
 """
 
-from firedrake import (HDiv, FunctionSpace, FiniteElement, TensorProductElement,
-                       interval)
+from gusto import logger
+from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement,
+                       TensorProductElement, interval)
 
-# TODO: there is danger here for confusion about degree, particularly for the CG
-# spaces -- does a "CG" space with degree = 1 mean the "CG" space in the de Rham
-# complex of degree 1 ("CG3"), or "CG1"?
-# TODO: would it be better to separate creation of specific named spaces from
-# the creation of the de Rham complex spaces?
-# TODO: how do we create HCurl spaces if we want them?
+__all__ = ["Spaces", "check_degree_args"]
+
+# HDiv spaces are keys, HCurl spaces are values
+hdiv_hcurl_dict = {'RT': 'RTE',
+                   'RTE': 'RTE',
+                   'RTF': 'RTE',
+                   'BDM': 'BDME',
+                   'BDME': 'BDME',
+                   'BDMF': 'BDME',
+                   'RTCF': 'RTCE',
+                   'RTCE': 'RTCE',
+                   'CG': 'DG',
+                   'BDFM': None}
+
+# HCurl spaces are keys, HDiv spaces are values
+# Can't just reverse the other dictionary as values are not necessarily unique
+hcurl_hdiv_dict = {'RT': 'RTF',
+                   'RTE': 'RTF',
+                   'RTF': 'RTF',
+                   'BDM': 'BDMF',
+                   'BDME': 'BDMF',
+                   'BDMF': 'BDMF',
+                   'RTCE': 'RTCF',
+                   'RTCF': 'RTCF',
+                   'CG': 'CG',
+                   'BDFM': 'BDFM'}
+
+
+# Degree to use for H1 space for a particular family
+def h1_degree(family, l2_degree):
+    """
+    Return the degree of the H1 space, for a particular de Rham complex.
+
+    Args:
+        family (str): the family of the HDiv or HCurl elements.
+        l2_degree (int): the degree of the L2 space at the bottom of the complex
+
+    Returns:
+        int: the degree of the H1 space at the top of the complex.
+    """
+    if family in ['CG', 'RT', 'RTE', 'RTF', 'RTCE', 'RTCF']:
+        return l2_degree + 1
+    elif family in ['BDM', 'BDME', 'BDMF']:
+        return l2_degree + 2
+    elif family == 'BDFM':
+        return l2_degree + 1
+    else:
+        raise ValueError(f'family {family} not recognised')
 
 
 class Spaces(object):
@@ -63,6 +106,12 @@ class Spaces(object):
             :class:`FunctionSpace`: the desired function space.
         """
 
+        implemented_families = ["DG", "CG", "RT", "RTF", "RTE", "RTCF", "RTCE",
+                                "BDM", "BDMF", "BDME", "BDFM"]
+        if family not in [None]+implemented_families:
+            raise NotImplementedError(f'family {family} either not recognised '
+                                      + 'or implemented in Gusto')
+
         if hasattr(self, name) and (V is None or not overwrite_space):
             # We have requested a space that should already have been created
             if V is not None:
@@ -79,7 +128,7 @@ class Spaces(object):
 
             elif name == "DG1_equispaced":
                 # Special case as no degree arguments need providing
-                value = self.build_dg_space(1, 1, variant='equispaced', name='DG1_equispaced')
+                value = self.build_l2_space(1, 1, variant='equispaced', name='DG1_equispaced')
 
             else:
                 check_degree_args('Spaces', self.mesh, degree, horizontal_degree, vertical_degree)
@@ -89,14 +138,18 @@ class Spaces(object):
                 vertical_degree = degree if vertical_degree is None else vertical_degree
 
                 # Loop through name and family combinations
-                if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF"]:
-                    value = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
+                if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF", "RTF", "BDMF"]:
+                    hdiv_family = hcurl_hdiv_dict[family]
+                    value = self.build_hdiv_space(hdiv_family, horizontal_degree, vertical_degree)
+                elif name == "HCurl" and family in ["BDM", "RT", "CG", "RTCE", "RTE", "BDME"]:
+                    hcurl_family = hdiv_hcurl_dict[family]
+                    value = self.build_hcurl_space(hcurl_family, horizontal_degree, vertical_degree)
                 elif name == "theta":
                     value = self.build_theta_space(horizontal_degree, vertical_degree)
                 elif family == "DG":
-                    value = self.build_dg_space(horizontal_degree, vertical_degree, name=name)
+                    value = self.build_l2_space(horizontal_degree, vertical_degree, name=name)
                 elif family == "CG":
-                    value = self.build_cg_space(horizontal_degree, vertical_degree, name=name)
+                    value = self.build_h1_space(horizontal_degree, vertical_degree, name=name)
                 else:
                     raise ValueError(f'There is no space corresponding to {name}')
             setattr(self, name, value)
@@ -108,60 +161,146 @@ class Spaces(object):
         Builds the sequence of compatible finite element spaces for the mesh.
 
         If the mesh is not extruded, this builds and returns the spaces:      \n
-        (HDiv, DG).                                                           \n
+        (H1, HCurl, HDiv, L2).                                                \n
         If the mesh is extruded, this builds and returns the spaces:          \n
-        (HDiv, DG, theta).                                                    \n
+        (H1, HCurl, HDiv, L2, theta).                                         \n
         The 'theta' space corresponds to the vertical component of the velocity.
 
         Args:
             family (str): the family of the horizontal part of the HDiv space.
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space.
+                part of the L2 space.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the DG space. Defaults to None. Must be
+                vertical part of the L2 space. Defaults to None. Must be
                 specified if the mesh is extruded.
 
         Returns:
             tuple: the created compatible :class:`FunctionSpace` objects.
         """
-        if self.extruded_mesh and not self._initialised_base_spaces:
+        if self._initialised_base_spaces:
+            pass
+
+        elif self.extruded_mesh and not self._initialised_base_spaces:
+            # Base spaces need building, while horizontal and vertical degrees
+            # need specifying separately. Vtheta needs returning.
             self.build_base_spaces(family, horizontal_degree, vertical_degree)
-            Vu = self.build_hdiv_space(family, horizontal_degree, vertical_degree)
+            Vcg = self.build_h1_space(h1_degree(family, horizontal_degree),
+                                      h1_degree(family, vertical_degree), name='H1')
+            setattr(self, "H1", Vcg)
+            hcurl_family = hdiv_hcurl_dict[family]
+            Vcurl = self.build_hcurl_space(hcurl_family, horizontal_degree, vertical_degree)
+            setattr(self, "HCurl", Vcurl)
+            hdiv_family = hcurl_hdiv_dict[family]
+            Vu = self.build_hdiv_space(hdiv_family, horizontal_degree, vertical_degree)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
-            setattr(self, "DG", Vdg)
+            Vdg = self.build_l2_space(horizontal_degree, vertical_degree, name='L2')
+            setattr(self, "L2", Vdg)
+            setattr(self, "DG", Vdg)  # Register this as "L2" and "DG"
             Vth = self.build_theta_space(horizontal_degree, vertical_degree)
             setattr(self, "theta", Vth)
-            return Vu, Vdg, Vth
-        else:
+
+            return Vcg, Vcurl, Vu, Vdg, Vth
+
+        elif self.mesh.topological_dimension() > 1:
+            # 2D: two de Rham complexes (hcurl or hdiv) with 3 spaces
+            # 3D: one de Rham complexes with 4 spaces
+            # either way, build all spaces
+            Vcg = self.build_h1_space(h1_degree(family, horizontal_degree), name='H1')
+            setattr(self, "H1", Vcg)
+            hcurl_family = hdiv_hcurl_dict[family]
+            Vcurl = self.build_hcurl_space(hcurl_family, horizontal_degree+1)
+            setattr(self, "HCurl", Vcurl)
+            hdiv_family = hcurl_hdiv_dict[family]
             Vu = self.build_hdiv_space(family, horizontal_degree+1)
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_dg_space(horizontal_degree, vertical_degree, name='DG')
-            setattr(self, "DG", Vdg)
-            return Vu, Vdg
+            Vdg = self.build_l2_space(horizontal_degree, vertical_degree, name='L2')
+            setattr(self, "L2", Vdg)
+            setattr(self, "DG", Vdg)  # Register this as "L2" and "DG"
+
+            return Vcg, Vcurl, Vu, Vdg
+
+        else:
+            # 1D domain, de Rham complex has 2 spaces
+            # CG, hdiv and hcurl spaces should be the same
+            Vcg = self.build_h1_space(horizontal_degree+1, name='H1')
+            setattr(self, "H1", Vcg)
+            setattr(self, "HCurl", None)
+            setattr(self, "HDiv", Vcg)
+            Vdg = self.build_l2_space(horizontal_degree, name='L2')
+            setattr(self, "L2", Vdg)
+            setattr(self, "DG", Vdg)  # Register this as "L2" and "DG"
+
+            return Vcg, Vdg
 
     def build_base_spaces(self, family, horizontal_degree, vertical_degree):
         """
         Builds the :class:`FiniteElement` objects for the base mesh.
 
         Args:
-            family (str): the family of the horizontal part of the HDiv space.
+            family (str): the family of the horizontal part of either the HDiv
+                or HCurl space.
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space.
+                part of the L2 space.
             vertical_degree (int): the polynomial degree of the vertical part of
-                the DG space.
+                the L2 space.
         """
+
+        if family == 'BDFM':
+            # Need a special implementation of base spaces here as it does not
+            # fit the same pattern as other spaces
+            self.build_bdfm_base_spaces(horizontal_degree, vertical_degree)
+            return
+
         cell = self.mesh._base_mesh.ufl_cell().cellname()
 
+        hdiv_family = hcurl_hdiv_dict[family]
+        hcurl_family = hdiv_hcurl_dict[family]
+
         # horizontal base spaces
-        self.S1 = FiniteElement(family, cell, horizontal_degree+1)
-        self.S2 = FiniteElement("DG", cell, horizontal_degree)
+        self.base_elt_hori_hdiv = FiniteElement(hdiv_family, cell, horizontal_degree+1)
+        self.base_elt_hori_hcurl = FiniteElement(hcurl_family, cell, horizontal_degree+1)
+        self.base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree)
+        self.base_elt_hori_cg = FiniteElement("CG", cell, h1_degree(family, horizontal_degree))
 
         # vertical base spaces
-        self.T0 = FiniteElement("CG", interval, vertical_degree+1)
-        self.T1 = FiniteElement("DG", interval, vertical_degree)
+        self.base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree+1)
+        self.base_elt_vert_dg = FiniteElement("DG", interval, vertical_degree)
 
         self._initialised_base_spaces = True
+
+    def build_hcurl_space(self, family, horizontal_degree, vertical_degree=None):
+        """
+        Builds and returns the HCurl :class:`FunctionSpace`.
+
+        Args:
+            family (str): the family of the horizontal part of the HCurl space.
+            horizontal_degree (int): the polynomial degree of the horizontal
+                part of the L2 space from the de Rham complex.
+            vertical_degree (int, optional): the polynomial degree of the
+                vertical part of the L2 space from the de Rham complex.
+                Defaults to None. Must be specified if the mesh is extruded.
+
+        Returns:
+            :class:`FunctionSpace`: the HCurl space.
+        """
+        if family is None:
+            logger.warning('There is no HCurl space for this family. Not creating one')
+            return None
+
+        if self.extruded_mesh:
+            if not self._initialised_base_spaces:
+                if vertical_degree is None:
+                    raise ValueError('vertical_degree must be specified to create HCurl space on an extruded mesh')
+                self.build_base_spaces(family, horizontal_degree, vertical_degree)
+            Vh_elt = HCurl(TensorProductElement(self.base_elt_hori_hcurl, self.base_elt_vert_cg))
+            Vv_elt = HCurl(TensorProductElement(self.base_elt_hori_cg, self.base_elt_vert_dg))
+            V_elt = Vh_elt + Vv_elt
+        else:
+            cell = self.mesh.ufl_cell().cellname()
+            hcurl_family = hdiv_hcurl_dict[family]
+            V_elt = FiniteElement(hcurl_family, cell, horizontal_degree)
+
+        return FunctionSpace(self.mesh, V_elt, name='HCurl')
 
     def build_hdiv_space(self, family, horizontal_degree, vertical_degree=None):
         """
@@ -170,9 +309,9 @@ class Spaces(object):
         Args:
             family (str): the family of the horizontal part of the HDiv space.
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space from the de Rham complex.
+                part of the L2 space from the de Rham complex.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the the DG space from the de Rham complex.
+                vertical part of the L2 space from the de Rham complex.
                 Defaults to None. Must be specified if the mesh is extruded.
 
         Returns:
@@ -183,47 +322,52 @@ class Spaces(object):
                 if vertical_degree is None:
                     raise ValueError('vertical_degree must be specified to create HDiv space on an extruded mesh')
                 self.build_base_spaces(family, horizontal_degree, vertical_degree)
-            Vh_elt = HDiv(TensorProductElement(self.S1, self.T1))
-            Vt_elt = TensorProductElement(self.S2, self.T0)
+            Vh_elt = HDiv(TensorProductElement(self.base_elt_hori_hdiv, self.base_elt_vert_dg))
+            Vt_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_cg)
             Vv_elt = HDiv(Vt_elt)
             V_elt = Vh_elt + Vv_elt
         else:
             cell = self.mesh.ufl_cell().cellname()
-            V_elt = FiniteElement(family, cell, horizontal_degree)
+            hdiv_family = hcurl_hdiv_dict[family]
+            V_elt = FiniteElement(hdiv_family, cell, horizontal_degree)
         return FunctionSpace(self.mesh, V_elt, name='HDiv')
 
-    def build_dg_space(self, horizontal_degree, vertical_degree=None, variant=None, name='DG'):
+    def build_l2_space(self, horizontal_degree, vertical_degree=None, variant=None, name='L2'):
         """
-        Builds and returns the DG :class:`FunctionSpace`.
+        Builds and returns the discontinuous L2 :class:`FunctionSpace`.
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space.
+                part of the L2 space.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the DG space. Defaults to None. Must be
+                vertical part of the L2 space. Defaults to None. Must be
                 specified if the mesh is extruded.
             variant (str, optional): the variant of the underlying
                 :class:`FiniteElement` to use. Defaults to None, which will call
                 the default variant.
             name (str, optional): name to assign to the function space. Default
-                is "DG".
+                is "L2".
 
         Returns:
-            :class:`FunctionSpace`: the DG space.
+            :class:`FunctionSpace`: the L2 space.
         """
         assert not hasattr(self, name), f'There already exists a function space with name {name}'
 
         if self.extruded_mesh:
             if vertical_degree is None:
-                raise ValueError('vertical_degree must be specified to create DG space on an extruded mesh')
-            if not self._initialised_base_spaces or self.T1.degree() != vertical_degree or self.T1.variant() != variant:
+                raise ValueError('vertical_degree must be specified to create L2 space on an extruded mesh')
+            if (not self._initialised_base_spaces
+                    or self.base_elt_vert_dg.degree() != vertical_degree
+                    or self.base_elt_vert_dg.variant() != variant
+                    or self.base_elt_hori_dg.degree() != horizontal_degree
+                    or self.base_elt_hori_dg.degree() != variant):
                 cell = self.mesh._base_mesh.ufl_cell().cellname()
-                S2 = FiniteElement("DG", cell, horizontal_degree, variant=variant)
-                T1 = FiniteElement("DG", interval, vertical_degree, variant=variant)
+                base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree, variant=variant)
+                base_elt_vert_dg = FiniteElement("DG", interval, vertical_degree, variant=variant)
             else:
-                S2 = self.S2
-                T1 = self.T1
-            V_elt = TensorProductElement(S2, T1)
+                base_elt_hori_dg = self.base_elt_hori_dg
+                base_elt_vert_dg = self.base_elt_vert_dg
+            V_elt = TensorProductElement(base_elt_hori_dg, base_elt_vert_dg)
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("DG", cell, horizontal_degree, variant=variant)
@@ -240,9 +384,9 @@ class Spaces(object):
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the DG space from the de Rham complex.
+                part of the L2 space from the de Rham complex.
             vertical_degree (int): the polynomial degree of the vertical part of
-                the DG space from the de Rham complex.
+                the L2 space from the de Rham complex.
 
         Raises:
             AssertionError: the mesh is not extruded.
@@ -253,23 +397,23 @@ class Spaces(object):
         assert self.extruded_mesh, 'Cannot create theta space if mesh is not extruded'
         if not self._initialised_base_spaces:
             cell = self.mesh._base_mesh.ufl_cell().cellname()
-            self.S2 = FiniteElement("DG", cell, horizontal_degree)
-            self.T0 = FiniteElement("CG", interval, vertical_degree+1)
-        V_elt = TensorProductElement(self.S2, self.T0)
+            self.base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree)
+            self.base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree+1)
+        V_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_cg)
         return FunctionSpace(self.mesh, V_elt, name='theta')
 
-    def build_cg_space(self, horizontal_degree, vertical_degree=None, name='CG'):
+    def build_h1_space(self, horizontal_degree, vertical_degree=None, name='H1'):
         """
         Builds the continuous scalar space at the top of the de Rham complex.
 
         Args:
             horizontal_degree (int): the polynomial degree of the horizontal
-                part of the CG space.
+                part of the H1 space.
             vertical_degree (int, optional): the polynomial degree of the
-                vertical part of the the CG space. Defaults to None. Must be
+                vertical part of the H1 space. Defaults to None. Must be
                 specified if the mesh is extruded.
             name (str, optional): name to assign to the function space. Default
-                is "CG".
+                is "H1".
 
         Returns:
             :class:`FunctionSpace`: the continuous space.
@@ -278,16 +422,52 @@ class Spaces(object):
 
         if self.extruded_mesh:
             if vertical_degree is None:
-                raise ValueError('vertical_degree must be specified to create CG space on an extruded mesh')
-            cell = self.mesh._base_mesh.ufl_cell().cellname()
-            CG_hori = FiniteElement("CG", cell, horizontal_degree)
-            CG_vert = FiniteElement("CG", interval, vertical_degree)
-            V_elt = TensorProductElement(CG_hori, CG_vert)
+                raise ValueError('vertical_degree must be specified to create H1 space on an extruded mesh')
+            if (not self._initialised_base_spaces
+                    or self.base_elt_vert_cg.degree() != vertical_degree
+                    or self.base_elt_hori_cg.degree() != horizontal_degree):
+                cell = self.mesh._base_mesh.ufl_cell().cellname()
+                base_elt_hori_cg = FiniteElement("CG", cell, horizontal_degree)
+                base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree)
+            else:
+                base_elt_hori_cg = self.base_elt_hori_cg
+                base_elt_vert_cg = self.base_elt_vert_cg
+            V_elt = TensorProductElement(base_elt_hori_cg, base_elt_vert_cg)
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement("CG", cell, horizontal_degree)
 
         return FunctionSpace(self.mesh, V_elt, name=name)
+
+    def build_bdfm_base_spaces(self, horizontal_degree, vertical_degree):
+        """
+        Builds the :class:`FiniteElement` objects for the base mesh when using
+        the .
+
+        Args:
+            horizontal_degree (int): the polynomial degree of the horizontal
+                part of the L2 space.
+            vertical_degree (int): the polynomial degree of the vertical part of
+                the L2 space.
+        """
+
+        cell = self.mesh._base_mesh.ufl_cell().cellname()
+
+        hdiv_family = 'BDFM'
+
+        # horizontal base spaces
+        self.base_elt_hori_hdiv = FiniteElement(hdiv_family, cell, horizontal_degree+1)
+        self.base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree)
+
+        # Add bubble space
+        self.base_elt_hori_cg = FiniteElement("CG", cell, horizontal_degree+1)
+        self.base_elt_hori_cg += FiniteElement("Bubble", cell, horizontal_degree+2)
+
+        # vertical base spaces
+        self.base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree+1)
+        self.base_elt_vert_dg = FiniteElement("DG", interval, vertical_degree)
+
+        self._initialised_base_spaces = True
 
 
 def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):

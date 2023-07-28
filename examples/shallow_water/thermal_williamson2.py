@@ -1,14 +1,22 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos)
+import sys
 
 # ----------------------------------------------------------------- #
 # Test case parameters
 # ----------------------------------------------------------------- #
 
-day = 24*60*60
-tmax = 5*day
-ndumps = 5
 dt = 100
+
+if '--running-tests' in sys.argv:
+    tmax = dt
+    dumpfreq = 1
+else:
+    day = 24*60*60
+    tmax = 5*day
+    ndumps = 5
+    dumpfreq = int(tmax / (ndumps*dt))
+
 R = 6371220.
 u_max = 20
 phi_0 = 3e4
@@ -35,7 +43,6 @@ eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='ve
 
 # IO
 dirname = "thermal_williamson2"
-dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],

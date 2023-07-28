@@ -19,7 +19,7 @@ def test_replace_perp():
     Nx = 5
     mesh = UnitSquareMesh(Nx, Nx)
     domain = Domain(mesh, 0.1, "BDM", 1)
-    spaces = [space for space in domain.compatible_spaces]
+    spaces = [domain.spaces('HDiv'), domain.spaces('L2')]
     W = MixedFunctionSpace(spaces)
 
     #  set up labelled form with subject u
