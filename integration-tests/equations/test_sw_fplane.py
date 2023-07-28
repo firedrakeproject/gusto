@@ -36,7 +36,7 @@ def run_sw_fplane(tmpdir):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D")]
     transport_methods = [DGUpwind(eqns, "u"),
                          DGUpwind(eqns, "D")]

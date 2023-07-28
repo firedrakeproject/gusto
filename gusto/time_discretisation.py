@@ -18,7 +18,7 @@ from gusto.wrappers import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
+           "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
 def wrapper_apply(original_apply):
@@ -373,10 +373,14 @@ class SSPRK3(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.75*x_in + 0.25*self.x_out)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
 
@@ -470,16 +474,22 @@ class RK4(ExplicitTimeDiscretisation):
             self.x1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k2.assign(self.x_out)
             self.x1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k3.assign(self.x_out)
             self.x1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k4.assign(self.x_out)
             self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
@@ -538,6 +548,8 @@ class Heun(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
@@ -634,23 +646,24 @@ class BackwardEuler(TimeDiscretisation):
 
 class ThetaMethod(TimeDiscretisation):
     """
-    Implements the theta implicit-explicit timestepping method.
+    Implements the theta implicit-explicit timestepping method, which can
+    be thought as a generalised trapezium rule.
 
     The theta implicit-explicit timestepping method for operator F is written as
     y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]
     for off-centring parameter theta.
     """
 
-    def __init__(self, domain, field_name=None, theta=None,
+    def __init__(self, domain, theta, field_name=None,
                  solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
+            theta (float): the off-centring parameter. theta = 1
+                corresponds to a backward Euler method. Defaults to None.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            theta (float, optional): the off-centring parameter. theta = 1
-                corresponds to a backward Euler method. Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -661,9 +674,7 @@ class ThetaMethod(TimeDiscretisation):
         Raises:
             ValueError: if theta is not provided.
         """
-        # TODO: would this be better as a non-optional argument? Or should the
-        # check be on the provided value?
-        if theta is None:
+        if (theta < 0 or theta > 1):
             raise ValueError("please provide a value for theta between 0 and 1")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -715,11 +726,12 @@ class ThetaMethod(TimeDiscretisation):
         x_out.assign(self.x_out)
 
 
-class ImplicitMidpoint(ThetaMethod):
+class TrapeziumRule(ThetaMethod):
     """
-    Implements the implicit midpoint timestepping method.
+    Implements the trapezium rule timestepping method, also commonly known as
+    Crank Nicholson.
 
-    The implicit midpoint timestepping method for operator F is written as
+    The trapezium rule timestepping method for operator F is written as
     y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].
     It is equivalent to the "theta" method with theta = 1/2.
     """
@@ -739,7 +751,7 @@ class ImplicitMidpoint(ThetaMethod):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(domain, field_name, theta=0.5,
+        super().__init__(domain, 0.5, field_name,
                          solver_parameters=solver_parameters,
                          options=options)
 
