@@ -45,12 +45,15 @@ for Mesh in [meshs]:
     
     # Output and IO
     dirname = f'Williamson3_mesh={Mesh.__name__}'
-    dumpfreq = int(tmax / (ndumps * dt))
+
     output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO')
-    diagnostic_fields = [CourantNumber(), SteadyStateError('u'), SteadyStateError('D'), RelativeVorticity()]
+                          dumpfreq=int(tmax / (ndumps * dt)),
+                          dump_nc=True,
+                          dump_vtus=False,
+                          log_level=('INFO'))
+    diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+                     CourantNumber(), SteadyStateError('u'), SteadyStateError('D')]
+          
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport Fields and time stepper
