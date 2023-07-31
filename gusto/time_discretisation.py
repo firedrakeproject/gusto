@@ -224,6 +224,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         pass
 
+
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
@@ -287,7 +288,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             map_if_false=drop)
 
         return l.form
-    
+
     @cached_property
     def solver(self):
         """Set up the problem and the solver."""
@@ -324,42 +325,43 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
 
-class ExplicitMultistage(ExplicitTimeDiscretisation):   
+
+class ExplicitMultistage(ExplicitTimeDiscretisation):
     """
     A class for implementing general explicit multistage methods based on its Butcher tableau.
-    
+
     A Butcher tableau is formed in the following way for a s-th order explicit scheme:
-    
-    c_0 | a_00    
+
+    c_0 | a_00
     c_1 | a_10 a_11
      .  | a_20 a_21 a_22
-     .  |   .   .    .    . 
+     .  |   .   .    .    .
      -------------------------
     c_s |  b_1  b_2  ...  b_s
-    
+
     The gradient function has no time-dependence, so c elements are not needed.
-    A square 'butcher_matrix' is defined in each class that uses 
+    A square 'butcher_matrix' is defined in each class that uses
     the ExplicitMultiStage structure,
-    
+
     [a_00   0   .       0  ]
     [a_10 a_11  .       0  ]
     [  .    .   .       .  ]
     [ b_0  b_1  .   b_{s-1}]
-    
+
     All upper diagonal a_ij elements are zero for explicit methods.
-    
+
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
-    
+
     For an s stage method,
       At iteration i (from 0 to s-1)
         An intermediate location is computed as y_i = y^n + sum{over j less than i} (dt*a_ij*k_i)
         Compute the gradient at the intermediate location, k_i = F(y_i)
-        
+
     At the last stage, compute the new solution by:
     y^{n+1} = y^n + sum_{j from 0 to s-1} (dt*b_i*k_i)
-    
+
     """
-    
+
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
@@ -385,7 +387,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         super().setup(equation, apply_bcs, *active_labels)
 
         self.k = [Function(self.fs) for i in range(self.nStages)]
-    
+
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -408,16 +410,16 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         for i in range(stage):
-            self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1,i]*self.k[i])
+            self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
         if self.limiter is not None:
-                self.limiter.apply(self.x1)
+            self.limiter.apply(self.x1)
         self.solver.solve()
         self.k[stage].assign(self.dx1)
 
-        if (stage == self.nStages -1):
+        if (stage == self.nStages - 1):
             self.x1.assign(x0)
             for i in range(self.nStages):
-                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage,i]*self.k[i])
+                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
             self.x1.assign(self.x1)
 
             if self.limiter is not None:
@@ -440,6 +442,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
 
+
 class ForwardEuler(ExplicitMultistage):
     """
     Implements the forward Euler timestepping scheme.
@@ -455,6 +458,7 @@ class ForwardEuler(ExplicitMultistage):
         self.butcher_matrix = np.array([1.]).reshape(1, 1)
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
+
 class SSPRK3(ExplicitMultistage):
     u"""
     Implements the 3-stage Strong-Stability-Preserving Runge-Kutta method
@@ -469,8 +473,9 @@ class SSPRK3(ExplicitMultistage):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
-        self.butcher_matrix = np.array([[1., 0., 0.],[1./4., 1./4., 0.],[1./6., 1./6., 2./3.]])
+        self.butcher_matrix = np.array([[1., 0., 0.], [1./4., 1./4., 0.], [1./6., 1./6., 2./3.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+
 
 class RK4(ExplicitMultistage):
     u"""
@@ -491,8 +496,9 @@ class RK4(ExplicitMultistage):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
-        self.butcher_matrix = np.array([[0.5, 0., 0., 0.],[0., 0.5, 0., 0.],[0., 0., 1., 0.],[1./6., 1./3., 1./3., 1./6.]])
+        self.butcher_matrix = np.array([[0.5, 0., 0., 0.], [0., 0.5, 0., 0.], [0., 0., 1., 0.], [1./6., 1./3., 1./3., 1./6.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+
 
 class Heun(ExplicitMultistage):
     u"""
@@ -509,8 +515,9 @@ class Heun(ExplicitMultistage):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[1., 0.],[0.5, 0.5]])
+        self.butcher_matrix = np.array([[1., 0.], [0.5, 0.5]])
         self.nbutcher = np.shape(self.butcher_matrix)[0]
+
 
 class BackwardEuler(TimeDiscretisation):
     """
