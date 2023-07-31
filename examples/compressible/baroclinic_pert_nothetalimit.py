@@ -49,7 +49,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 transported_fields = []
 transported_fields.append(ImplicitMidpoint(domain, "u"))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions))
+transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
 transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
 
 # Linear Solver
