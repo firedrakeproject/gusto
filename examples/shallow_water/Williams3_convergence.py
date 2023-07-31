@@ -5,7 +5,7 @@ and meshes.
 
 from gusto import *
 from gusto.numerical_integrator import NumericalIntegral
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, errornorm
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, errornorm, CubedSphereMesh
 import numpy as np
 
 
@@ -35,10 +35,10 @@ for i in range(len(ref)):
     # ------------------------------------------------------------------------ #
 
     # Mesh and domain
-    mesh = IcosahedralSphereMesh(radius=a,
-                                 refinement_level=ref[i], degree=1)
+    mesh = CubedSphereMesh(radius=a,
+                                 refinement_level=ref[i], degree=2)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt[i], "BDM", 1)
+    domain = Domain(mesh, dt[i], "RTCF", 1)
 
     # Equations
     lat, lon = latlon_coords(mesh)
@@ -47,7 +47,7 @@ for i in range(len(ref)):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
 
     # Output and IO
-    dirname = 'convergenceplotting_ref_%s' % ref[i]
+    dirname = 'Cubed_Sphere_convergenceplotting_ref_%s' % ref[i]
     dumpfreq = int(tmax / (ndumps*dt[i]))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
