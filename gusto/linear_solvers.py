@@ -18,7 +18,7 @@ from gusto.active_tracers import TracerVariableType
 from gusto.configuration import logger, DEBUG
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
-from gusto.fml.form_manipulation_labelling import Term, drop
+from gusto.fml.form_manipulation_language import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
