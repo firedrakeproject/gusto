@@ -12,18 +12,14 @@ import numpy as np
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref = [3, 4, 5, 6, 7]
-dt = [4000, 2000, 1000, 500, 250]
+ref = [3, 4, 5, 6]
+dt = [4000, 2000, 1000, 500]
 tmax = 5*day
 ndumps = 5
 
 # Shallow Water Parameters
 a = 6371220.
 H = 5960.
-
-error = []
-ref_level = []
-dt_step = []
 
 parameters = ShallowWaterParameters(H=H)
 timediscretisation = [SSPRK3]
@@ -35,10 +31,10 @@ for i in range(len(ref)):
     # ------------------------------------------------------------------------ #
 
     # Mesh and domain
-    mesh = CubedSphereMesh(radius=a,
+    mesh = IcosahedralSphereMesh(radius=a,
                                  refinement_level=ref[i], degree=2)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt[i], "RTCF", 1)
+    domain = Domain(mesh, dt[i], "BDM", 1)
 
     # Equations
     lat, lon = latlon_coords(mesh)
@@ -48,7 +44,7 @@ for i in range(len(ref)):
     print(eqns.X.function_space().dim())
 
     # Output and IO
-    dirname = 'Cubed_Sphere_convergenceplotting_ref_%s' % ref[i]
+    dirname = 'Icosahedral_convergenceplotting_ref_%s' % ref[i]
     dumpfreq = int(tmax / (ndumps*dt[i]))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
