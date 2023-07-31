@@ -4,21 +4,23 @@ An implementation of the Williams 3 Test case with convergence plotting
 
 from gusto import *
 from gusto.numerical_integrator import NumericalIntegral
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, exp, CubedSphereMesh
+
 import numpy as np
 
 
 # Set up timestepping variables
 day = 24. * 60. * 60.
-ref_levels = [3,4,5,6,7]
-time_step = [4000, 2000, 1000, 500, 250]
+ref_level = 6
+time_step = 500
+meshs = [IcosahedralSphereMesh, CubedSphereMesh]
 
-for i in range(len(ref_levels)):
+for Mesh in [meshs]:
     
     tmax = 5*day
     ndumps = 5
-    ref = ref_levels[i]
-    dt = time_step[i]
+    ref = ref_level
+    dt = time_step
 
     # Shallow Water Parameters
     a = 6371220.
@@ -31,8 +33,7 @@ for i in range(len(ref_levels)):
     # ------------------------------------------------------------------------ #
 
     # Mesh and domain
-    mesh = IcosahedralSphereMesh(radius=a,
-                                refinement_level=ref, degree=1)
+    mesh = Mesh(radius=a, refinement_level=ref, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, "BDM", 1)
 
@@ -41,9 +42,9 @@ for i in range(len(ref_levels)):
     Omega = parameters.Omega
     fexpr = 2*Omega * x[2] / a
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
-
+    
     # Output and IO
-    dirname = f'Williamson3_ref={ref}'
+    dirname = f'Williamson3_mesh={Mesh.__name__}'
     dumpfreq = int(tmax / (ndumps * dt))
     output = OutputParameters(dirname=dirname,
                               dumpfreq=dumpfreq,
