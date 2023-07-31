@@ -226,7 +226,6 @@ class ForcedAdvectionEquation(PrognosticEquation):
 
         self.residual = prognostic(subject(mass_form + transport_form, q), field_name)
         
-        # IS THIS RIGHT ??
         self.residual += self.generate_tracer_transport_terms(domain, field_name)
 
 
@@ -524,14 +523,11 @@ class CoupledTransportEquation(PrognosticEquationSet):
     interacting, so q and F are vectors.
     
     """
-    def __init__(self, domain, function_space, active_tracers, 
-                  Vu=None, **kwargs):
+    def __init__(self, domain, active_tracers, Vu=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            function_space (:class:`FunctionSpace`): the function space that the
-                equation's prognostic is defined on.
             active_tracers (list): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. This is required for using this class; if there
@@ -542,12 +538,11 @@ class CoupledTransportEquation(PrognosticEquationSet):
                 set up by the domain. Defaults to None.
         """
 
-        self.field_names = [field_name]
         self.active_tracers = active_tracers
         self.terms_to_linearise = {}
 
         # Build finite element spaces
-        self.spaces = [domain.spaces("tracer", V=function_space)]
+        self.spaces = []
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -556,10 +551,6 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
-
-        # Can now call the underlying PrognosticEquation
-        full_field_name = "_".join(self.field_names)
-        PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
@@ -571,13 +562,11 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.X = Function(W)
 
         mass_form = self.generate_mass_terms()
-        transport_form = prognostic(advection_form(self.tests[0], split(self.X)[0], u), field_name)
 
-        self.residual = subject(mass_form + transport_form, self.X)
+        self.residual = subject(mass_form, self.X)
 
         # Add transport of tracers
-        if len(active_tracers) > 0:
-            self.residual += self.generate_tracer_transport_terms(domain, active_tracers)
+        self.residual += self.generate_tracer_transport_terms(domain, active_tracers)
 
 # ============================================================================ #
 # Specified Equation Sets
