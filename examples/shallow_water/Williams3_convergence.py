@@ -45,6 +45,7 @@ for i in range(len(ref)):
     Omega = parameters.Omega
     fexpr = 2*Omega * x[2] / a
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
+    print(eqns.X.function_space().dim())
 
     # Output and IO
     dirname = 'Cubed_Sphere_convergenceplotting_ref_%s' % ref[i]
@@ -120,9 +121,6 @@ for i in range(len(ref)):
     u0.project(as_vector(e_lon * uexpr))
     D0.interpolate(Dexpr)
 
-    Vu = stepper.fields("u")
-    uexact = Function(Vu)
-    uexact.interpolate(u0)
     # Dbar is a background field for diagnostics
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
@@ -130,9 +128,3 @@ for i in range(len(ref)):
     # Run!
     # ------------------------------------------------------------------------ #
     stepper.run(t=0, tmax=tmax)
-
-    u = stepper.fields("u")
-    L2_error = errornorm(uexact, u)
-    error.append(L2_error)
-    dt_step.append(dt[i])
-    ref_level.append(ref[i])
