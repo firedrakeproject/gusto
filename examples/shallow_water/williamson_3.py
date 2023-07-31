@@ -15,7 +15,7 @@ ref_level = 6
 time_step = 500
 meshs = [IcosahedralSphereMesh, CubedSphereMesh]
 
-for Mesh in [meshs]:
+for Mesh in meshs:
     
     tmax = 5*day
     ndumps = 5
