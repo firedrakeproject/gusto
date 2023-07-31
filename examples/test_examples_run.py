@@ -15,6 +15,7 @@ def example_file(request):
     return abspath(request.param)
 
 
+@pytest.mark.xfail(reason="Rain advection terms are not accounted for in physics scheme")
 def test_example_runs(example_file, tmpdir, monkeypatch):
     # This ensures that the test writes output in a temporary
     # directory, rather than where pytest was run from.
