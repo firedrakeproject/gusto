@@ -540,6 +540,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         self.active_tracers = active_tracers
         self.terms_to_linearise = {}
+        self.field_names = []
 
         # Build finite element spaces
         self.spaces = []
@@ -551,6 +552,9 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
+        
+        full_field_name = "_".join(self.field_names)
+        PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
