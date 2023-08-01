@@ -8,7 +8,7 @@ from gusto.fml import drop, replace_subject, name
 from gusto.labels import (
     transport, diffusion, time_derivative, hydrostatic
 )
-from gusto.logging import logger, DEBUG
+from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 
 
 __all__ = ["Forcing"]
@@ -97,21 +97,19 @@ class Forcing(object):
             a.form, L_implicit.form, self.xF, bcs=bcs
         )
 
-        solver_parameters = {}
-        if logger.isEnabledFor(DEBUG):
-            solver_parameters["ksp_monitor_true_residual"] = None
-
         self.solvers = {}
         self.solvers["explicit"] = LinearVariationalSolver(
             explicit_forcing_problem,
-            solver_parameters=solver_parameters,
             options_prefix="ExplicitForcingSolver"
         )
         self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
-            solver_parameters=solver_parameters,
             options_prefix="ImplicitForcingSolver"
         )
+
+        if logger.isEnabledFor(DEBUG):
+            self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+            self.solvers["implicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
     def apply(self, x_in, x_nl, x_out, label):
         """

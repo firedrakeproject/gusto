@@ -33,6 +33,8 @@ from datetime import datetime
 from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL  # noqa: F401
 from pathlib import Path
 
+from firedrake.slate.static_condensation import scpc, hybridization
+from petsc4py import PETSc
 from pyop2.mpi import COMM_WORLD
 
 __all__ = [
@@ -185,4 +187,105 @@ def update_logfile_location(new_path):
         raise LoggingError(
             "More than one log handler with name `gusto-temp-file-log`\n"
             "Logging has been set up incorrectly"
+        )
+
+
+# We want a map from ENUM to Norm names
+_norm_to_enum = {k: v for k, v in PETSc.KSP.NormType.__dict__.items() if isinstance(v, int)}
+_enum_to_norm = {v: k.lower() for k, v in _norm_to_enum.items() if 'NORM_' not in k}
+
+
+# The logging monitors will only log at level debug, but you should avoid
+# adding an expensive Python callback the log level is not DEBUG by
+# checking the logger like so:
+# ```
+# if logger.isEnabledFor(DEBUG):
+#    ksp.setMonitor(logging_ksp_monitor)
+# ```
+def logging_ksp_monitor(ksp, iteration, residual_norm):
+    '''
+    Clone of C code at:
+    https://petsc.org/main/src/ksp/ksp/interface/iterativ.c.html#KSPMonitorResidual
+    Example output:
+    Residual norms for firedrake_0_ solve
+    0 KSP Residual norm 3.175267221735e+00
+
+    '''
+    tab_level = ksp.getTabLevel()
+    tab = '    '
+    if iteration == 0:
+        logger.debug(tab*tab_level + f'Residual norms for {ksp.prefix} solve')
+    logger.debug(
+        tab*(tab_level - 1)
+        + f'{iteration: 5d} KSP Residual norm {residual_norm:14.12e}'
+    )
+
+
+def logging_ksp_monitor_true_residual(ksp, iteration, residual_norm):
+    '''
+    Clone of C code:
+    https://petsc.org/main/src/ksp/ksp/interface/iterativ.c.html#KSPMonitorTrueResidual
+    Example output:
+    Residual norms for firedrake_0_ solve
+    0 KSP preconditioned resid norm 3.175267221735e+00 true resid norm 3.175267221735e+00 ||r(i)||/||b|| 1.000000000000e+00
+
+    '''
+    tab_level = ksp.getTabLevel()
+    tab = '    '
+    residual = ksp.buildResidual()
+    true_norm = residual.norm(PETSc.NormType.NORM_2)
+    bnorm = ksp.vec_rhs.norm(PETSc.NormType.NORM_2)
+    if bnorm == 0:
+        residual_over_b = float('inf')
+    else:
+        residual_over_b = true_norm / bnorm
+    if iteration == 0:
+        logger.debug(tab*tab_level + f'Residual norms for {ksp.prefix} solve')
+    logger.debug(
+        tab*(tab_level - 1)
+        + f'{iteration: 5d} KSP {_enum_to_norm[ksp.norm_type]} resid norm {residual_norm:14.12e}'
+        + f' true resid norm {true_norm:14.12e}'
+        + f' ||r(i)||/||b|| {residual_over_b:14.12e}'
+    )
+
+
+def _wrap_method(obj, method_str, ksp_str, monitor):
+    '''
+    Used to patch the method with name `method_str` of the object `obj`,
+    by setting the monitor of the solver with name `ksp_str` to `monitor`.
+
+    Intended use:
+    ```
+    foo.initialize = _wraps_initialize(
+        context
+        "initialize",
+        "my_ksp",
+        my_custom_monitor
+    )
+    ```
+
+    If this is confusing, do not try and call this function!
+    '''
+    old_init = getattr(obj, method_str)
+
+    def new_init(pc):
+        old_init(pc)
+        getattr(obj, ksp_str).setMonitor(monitor)
+    return new_init
+
+
+def attach_custom_monitor(context, monitor):
+    if isinstance(context, scpc.SCPC):
+        context.initialize = _wrap_method(
+            context,
+            "initialize",
+            "condensed_ksp",
+            monitor
+        )
+    elif isinstance(context, hybridization.HybridizationPC):
+        context.initialize = _wrap_method(
+            context,
+            "initialize",
+            "trace_ksp",
+            monitor
         )
