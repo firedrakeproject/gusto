@@ -52,6 +52,7 @@ for index, Mesh in enumerate(meshs):
                      RelativeVorticity, PotentialVorticity, AbsoluteVorticity,
                      ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy(parameters),
                        Divergence(), ShallowWaterPotentialEnstrophy()]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport Fields and time stepper
     transported_fields = [SSPRK3(domain, "u"),
