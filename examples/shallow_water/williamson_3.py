@@ -13,7 +13,7 @@ import numpy as np
 day = 24. * 60. * 60.
 ref_level = 6
 time_step = 500
-meshs = [IcosahedralSphereMesh, CubedSphereMesh]
+meshs = [CubedSphereMesh]
 
 for Mesh in meshs:
     
@@ -35,14 +35,14 @@ for Mesh in meshs:
     # Mesh and domain
     mesh = Mesh(radius=a, refinement_level=ref, degree=2)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, "BDM", 1)
+    domain = Domain(mesh, dt, "RTCF", 1)
 
     # Equations
     lat, lon = latlon_coords(mesh)
     Omega = parameters.Omega
     fexpr = 2*Omega * x[2] / a
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option='vector_advection_form')
-    
+    print(eqns.X.function_space().dim())
     # Output and IO
     dirname = f'Williamson3_mesh={Mesh.__name__}'
 
