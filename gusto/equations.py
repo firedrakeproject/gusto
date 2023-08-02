@@ -490,9 +490,9 @@ class CoupledTransportEquation(PrognosticEquationSet):
     Discretises a transport equation with a source/sink term,               \n
     ∂q/∂t + (u.∇)q = F,
     which uses multiple active tracers.
-    In this class, we have multiple tracers or species that are 
+    In this class, we have multiple tracers or species that are
     interacting, so q and F are vectors.
-    
+
     """
     def __init__(self, domain, active_tracers, Vu=None):
         """
@@ -512,6 +512,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.active_tracers = active_tracers
         self.terms_to_linearise = {}
         self.field_names = []
+        self.space_names = {}
 
         # Build finite element spaces
         self.spaces = []
@@ -523,7 +524,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
-        
+
         full_field_name = "_".join(self.field_names)
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
