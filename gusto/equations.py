@@ -532,7 +532,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        u = self.prescribed_fields("u", V)
+        _ = self.prescribed_fields("u", V)
 
         self.tests = TestFunctions(W)
         self.X = Function(W)
