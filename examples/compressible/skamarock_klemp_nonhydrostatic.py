@@ -51,12 +51,13 @@ points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 dirname = 'skamarock_klemp_nonlinear'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          pddumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          point_data=[('theta_perturbation', points)],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    pddumpfreq=dumpfreq,
+    dumplist=['u'],
+    point_data=[('theta_perturbation', points)],
+)
 diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
                      Gradient("theta_perturbation"), Perturbation('rho'),
                      RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]

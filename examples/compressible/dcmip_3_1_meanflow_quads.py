@@ -78,9 +78,10 @@ eqns = CompressibleEulerEquations(domain, parameters)
 
 # I/O
 dirname = 'dcmip_3_1_meanflow'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+)
 diagnostic_fields = [Perturbation('theta'), Perturbation('rho'), CompressibleKineticEnergy()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 

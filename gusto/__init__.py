@@ -13,6 +13,10 @@ def _monkey_patch_ufl():
 
 _monkey_patch_ufl()
 
+# Start logging first, incase anything goes wrong
+from gusto.logging import *                          # noqa
+set_log_handler()
+
 from gusto.active_tracers import *                   # noqa
 from gusto.common_forms import *                     # noqa
 from gusto.configuration import *                    # noqa
