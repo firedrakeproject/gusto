@@ -1,3 +1,18 @@
+# This monkey patch is required so that Gusto can redefine the UFL perp.
+# It should be removed if the UFL perp gets its own operator
+# The main thing to be aware of is if we could now do (and should avoid doing)
+# from gusto import _monkey_patch_ufl()
+def _monkey_patch_ufl():
+    from ufl.algorithms.apply_algebra_lowering import LowerCompoundAlgebra
+
+    def perp(self, o, a):
+        from firedrake import as_vector
+        return as_vector([-a[1], a[0]])
+    LowerCompoundAlgebra.perp = perp
+
+
+_monkey_patch_ufl()
+
 from gusto.active_tracers import *                   # noqa
 from gusto.common_forms import *                     # noqa
 from gusto.configuration import *                    # noqa
@@ -13,6 +28,7 @@ from gusto.labels import *                           # noqa
 from gusto.limiters import *                         # noqa
 from gusto.linear_solvers import *                   # noqa
 from gusto.meshes import *                           # noqa
+from gusto.numerical_integrator import *             # noqa
 from gusto.physics import *                          # noqa
 from gusto.preconditioners import *                  # noqa
 from gusto.recovery import *                         # noqa

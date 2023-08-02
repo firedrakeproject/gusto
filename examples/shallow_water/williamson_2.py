@@ -66,7 +66,7 @@ for ref_level, dt in ref_dt.items():
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D", subcycles=2)]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 

@@ -6,7 +6,7 @@ from pyop2.profiling import timed_stage
 from gusto.configuration import logger
 from gusto.equations import PrognosticEquationSet
 from gusto.forcing import Forcing
-from gusto.fml.form_manipulation_labelling import drop, Label, Term
+from gusto.fml.form_manipulation_language import drop, Label, Term
 from gusto.labels import (transport, diffusion, time_derivative, linearisation,
                           prognostic, physics, transporting_velocity)
 from gusto.linear_solvers import LinearTimesteppingSolver
@@ -210,7 +210,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 assert field_name in self.equation.field_names, \
                     f'Cannot set reference profile as field {field_name} not found'
                 idx = self.equation.field_names.index(field_name)
-                X_ref = self.equation.X_ref.split()[idx]
+                X_ref = self.equation.X_ref.subfunctions[idx]
                 X_ref.assign(ref)
 
         self.reference_profiles_initialised = True

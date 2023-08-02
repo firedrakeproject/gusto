@@ -6,7 +6,7 @@ that interact and checks the results agains a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
-                       cos, pi)
+                       cos, pi, as_vector)
 import numpy as np
 
 
@@ -36,7 +36,7 @@ def run_sw_fplane(tmpdir):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D")]
     transport_methods = [DGUpwind(eqns, "u"),
                          DGUpwind(eqns, "D")]

@@ -15,15 +15,16 @@ import sys
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-nlayers = 10           # Number of vertical layers
-refinements = 3        # Number of horiz. refinements
-
 dt = 100.0             # Time-step size (s)
 
 if '--running-tests' in sys.argv:
+    nlayers = 4           # Number of vertical layers
+    refinements = 2        # Number of horiz. refinements
     tmax = dt
     dumpfreq = 1
 else:
+    nlayers = 10           # Number of vertical layers
+    refinements = 3        # Number of horiz. refinements
     tmax = 3600.0
     dumpfreq = int(tmax / (4*dt))
 
@@ -84,7 +85,7 @@ diagnostic_fields = [Perturbation('theta'), Perturbation('rho'), CompressibleKin
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "rho", subcycles=2),
                       SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
 transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
