@@ -15,6 +15,10 @@ from gusto.logging import logger, update_logfile_location
 __all__ = ["pick_up_mesh", "IO"]
 
 
+class GustoIOError(IOError):
+    pass
+
+
 def pick_up_mesh(output, mesh_name):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
@@ -72,6 +76,8 @@ class PointDataOutput(object):
         self.field_points = field_points
         self.tolerance = tolerance
         self.comm = comm
+        if self.comm.size > 1:
+            raise GustoIOError("PointDataOutput does not work in parallel")
         if not create:
             return
         if self.comm.rank == 0:
