@@ -125,7 +125,8 @@ def set_log_handler(comm=COMM_WORLD):
     logfile_name = f"temp-gusto-{timestamp.strftime('%Y-%m-%dT%H%M%S')}"
     if parallel_log in ["FILE", "BOTH"]:
         logfile_name += f"_{comm.rank}"
-    logfile_name += ".log"
+    # PID is required here for running pytest with xdist
+    logfile_name += f"_{os.getpid()}.log"
     if comm.rank == 0:
         os.makedirs("results", exist_ok=True)
     logfile_path = os.path.join("results", logfile_name)
@@ -176,8 +177,11 @@ def update_logfile_location(new_path):
         filename = Path(old_path.name.removeprefix("temp-"))
         fh.flush()
         fh.close()
+        logger.removeHandler(fh)
 
         os.makedirs(new_path, exist_ok=True)
+        # Use shutil.move and not os.rename as new path may be on a
+        # different file system. Notably, this is the case for CI.
         shutil.move(old_path, new_path/filename)
 
         new_fh = create_logfile_handler(new_path/filename, mode="a")
