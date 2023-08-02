@@ -28,7 +28,7 @@ def test_coupled_transport_scalar(tmpdir, geometry, equation_form1, equation_for
     if equation_form1 == "advective":
         tracer1 = ActiveTracer(name='f1', space='DG',
                                variable_type=TracerVariableType.density,
-                               transport_eqn=TransportEquationType.advective)                
+                               transport_eqn=TransportEquationType.advective)
     else:
         tracer1 = ActiveTracer(name='f1', space='DG',
                                variable_type=TracerVariableType.density,
