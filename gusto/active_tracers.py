@@ -77,8 +77,8 @@ class ActiveTracer(object):
         self.variable_type = variable_type
         self.phase = phase
         self.chemical = chemical
-        if self.variable_type != TracerVariableType.mixing_ratio:
-            raise NotImplementedError('Only mixing ratio tracers are currently implemented')
+        #if self.variable_type != TracerVariableType.mixing_ratio:
+        #    raise NotImplementedError('Only mixing ratio tracers are currently implemented')
 
         if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '

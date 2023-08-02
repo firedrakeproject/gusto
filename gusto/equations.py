@@ -192,44 +192,6 @@ class AdvectionDiffusionEquation(PrognosticEquation):
             mass_form + transport_form + diffusive_form, q), field_name)
 
 
-class ForcedAdvectionEquation(PrognosticEquation):
-    u"""
-    Discretises the advection equation with a source/sink term,               \n
-    ∂q/∂t + (u.∇)q = F.
-    """
-    
-    def __init__(self, domain, function_space, field_name, Vu=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            function_space (:class:`FunctionSpace`): the function space that the
-                equation's prognostic is defined on.
-            field_name (str): name of the prognostic field.
-            Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is not specified, uses the HDiv spaces
-                set up by the domain. Defaults to None.
-            **kwargs: any keyword arguments to be passed to the advection form.
-        """
-        super().__init__(domain, function_space, field_name)
-
-        if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
-        u = self.prescribed_fields("u", V)
-
-        test = self.test
-        q = self.X
-        mass_form = time_derivative(inner(q, test)*dx)
-        transport_form = advection_form(test, q, u)
-
-        self.residual = prognostic(subject(mass_form + transport_form, q), field_name)
-        
-        self.residual += self.generate_tracer_transport_terms(domain, field_name)
-
-
-
 class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     """
     Base class for solving a set of prognostic equations.
