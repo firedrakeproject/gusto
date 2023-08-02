@@ -28,25 +28,25 @@ def test_coupled_transport_scalar(tmpdir, geometry, equation_form1, equation_for
     if equation_form1 == "advective":
         tracer1 = ActiveTracer(name='f1', space='DG',
                                variable_type=TracerVariableType.density,
-                               transport_eqn=TransportEquationType.advective)                  
+                               transport_eqn=TransportEquationType.advective)                
     else:
         tracer1 = ActiveTracer(name='f1', space='DG',
                                variable_type=TracerVariableType.density,
-                               transport_eqn=TransportEquationType.conservative) 
-                            
+                               transport_eqn=TransportEquationType.conservative)
+
     if equation_form2 == "advective":
         tracer2 = ActiveTracer(name='f2', space='DG',
                                variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.advective)                   
+                               transport_eqn=TransportEquationType.advective)
     else:
         tracer2 = ActiveTracer(name='f2', space='DG',
                                variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.conservative) 
-                            
-    tracers = [tracer1,tracer2]
+                               transport_eqn=TransportEquationType.conservative)
+
+    tracers = [tracer1, tracer2]
 
     V = domain.spaces("HDiv")
-    eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu = V)
+    eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
 
     transport_scheme = SSPRK3(domain)
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
