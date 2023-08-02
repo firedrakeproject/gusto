@@ -28,6 +28,7 @@ the logfile name.
 import logging
 import sys
 import os
+import shutil
 
 from datetime import datetime
 from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL  # noqa: F401
@@ -177,7 +178,7 @@ def update_logfile_location(new_path):
         fh.close()
 
         os.makedirs(new_path, exist_ok=True)
-        os.rename(old_path, new_path/filename)
+        shutil.move(old_path, new_path/filename)
 
         new_fh = create_logfile_handler(new_path/filename, mode="a")
         new_fh.name = "gusto-file-log"
