@@ -1,5 +1,9 @@
 """
 Tests the CoupledTransportEquation() class.
+Two tracers -- a mixing ratio and a density -- are transported using
+combinations of advective and conservative forms.
+
+
 """
 
 from firedrake import norm, VectorFunctionSpace, as_vector, max_value
