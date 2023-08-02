@@ -6,7 +6,7 @@ combinations of advective and conservative forms.
 
 """
 
-from firedrake import norm, VectorFunctionSpace, as_vector, max_value
+from firedrake import norm
 from gusto import *
 import pytest
 
@@ -24,32 +24,31 @@ def run(timestepper, tmax, f_end):
 def test_coupled_transport_scalar(tmpdir, geometry, equation_form1, equation_form2, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
-    
+
     if equation_form1 == "advective":
-      tracer1 = ActiveTracer(name = 'f1', space = 'DG', 
-                            variable_type = TracerVariableType.density,
-                            transport_eqn = TransportEquationType.advective)                  
+        tracer1 = ActiveTracer(name='f1', space='DG',
+                               variable_type=TracerVariableType.density,
+                               transport_eqn=TransportEquationType.advective)                  
     else:
-      tracer1 = ActiveTracer(name = 'f1', space = 'DG', 
-                            variable_type = TracerVariableType.density,
-                            transport_eqn = TransportEquationType.conservative) 
+        tracer1 = ActiveTracer(name='f1', space='DG',
+                               variable_type=TracerVariableType.density,
+                               transport_eqn=TransportEquationType.conservative) 
                             
     if equation_form2 == "advective":
-      tracer2 = ActiveTracer(name = 'f2', space = 'DG', 
-                            variable_type = TracerVariableType.mixing_ratio,
-                            transport_eqn = TransportEquationType.advective)                   
+        tracer2 = ActiveTracer(name='f2', space='DG',
+                               variable_type=TracerVariableType.mixing_ratio,
+                               transport_eqn=TransportEquationType.advective)                   
     else:
-      tracer2 = ActiveTracer(name = 'f2', space = 'DG', 
-                            variable_type = TracerVariableType.mixing_ratio,
-                            transport_eqn = TransportEquationType.conservative) 
+        tracer2 = ActiveTracer(name='f2', space='DG',
+                               variable_type=TracerVariableType.mixing_ratio,
+                               transport_eqn=TransportEquationType.conservative) 
                             
     tracers = [tracer1,tracer2]
 
     V = domain.spaces("HDiv")
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu = V)
-    
+
     transport_scheme = SSPRK3(domain)
-    #transport_method = DGUpwind(eqn, for tracer in tracers)
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
 
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
