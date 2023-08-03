@@ -7,6 +7,7 @@ from firedrake import (UnitIntervalMesh, ExtrudedMesh, UnitSquareMesh,
 from gusto import Domain
 import pytest
 
+
 @pytest.mark.parametrize("domain_name", ['interval', 'vertical_slice',
                                          'plane', 'extruded_plane',
                                          'spherical_shell',
@@ -44,4 +45,3 @@ def test_domain(domain_name):
     # Check that the Domain correctly works out what kind of domain it is
     assert domain_name == domain.metadata['domain_type'], \
         f'The Domain has not correctly recognised domain {domain_name}'
-
