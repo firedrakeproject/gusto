@@ -35,18 +35,14 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           python -m pip install -r requirements.txt
           python -m pip install -e .
-      - name: Gusto unit-tests
+          python -m pip install  \
+            pytest-cov pytest-timeout pytest-xdist
+      - name: Gusto tests
         run: |
           . /home/firedrake/firedrake/bin/activate
           which firedrake-clean
-          python -m pytest -n 12 -v unit-tests
-      - name: Gusto integration-tests
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          firedrake-clean
-          python -m pytest -n 12 -v integration-tests
-      - name: Gusto examples
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          firedrake-clean
-          python -m pytest -n 12 -v examples
+          python -m pytest \
+            -n 12 --dist worksteal \
+            --durations=100 \
+            --cov gusto \
+            -v unit-tests integration-tests examples
