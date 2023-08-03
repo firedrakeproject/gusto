@@ -80,8 +80,6 @@ class AdvectionEquation(PrognosticEquation):
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is not specified, uses the HDiv spaces
                 set up by the domain. Defaults to None.
-            **kwargs: any keyword arguments to be passed to the advection form.
-            (SHOULD THIS BE AN ARGUMENT IN THE ABOVE FUNCTION????)
         """
         super().__init__(domain, function_space, field_name)
 
@@ -487,12 +485,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
 class CoupledTransportEquation(PrognosticEquationSet):
     u"""
-    Discretises a transport equation with a source/sink term,               \n
+    Discretises the transport equation,               \n
     ∂q/∂t + (u.∇)q = F,
-    which uses multiple active tracers.
-    In this class, we have multiple tracers or species that are
-    interacting, so q and F are vectors.
-
+    with the application of active tracers.
+    As there are multiple tracers or species that are
+    interacting, q and F are vectors.
+    This equation can be enhanced through the addition of
+    sources or sinks (F) by applying it with physics schemes.
     """
     def __init__(self, domain, active_tracers, Vu=None):
         """
@@ -502,7 +501,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
             active_tracers (list): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. This is required for using this class; if there
-                is only a field to be advected, use ForcedAvectionEquation()
+                is only a field to be advected, use the AdvectionEquation
                 instead.
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is not specified, uses the HDiv spaces
