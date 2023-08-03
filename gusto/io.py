@@ -358,7 +358,7 @@ class IO(object):
                 state from a checkpointing file. Defaults to False.
 
         Raises:
-            IOError: if the results directory already exists, and the model is
+            GustoIOError: if the results directory already exists, and the model is
                 not picking up or running in test mode.
         """
 
@@ -376,7 +376,7 @@ class IO(object):
                 elif not (running_tests or pick_up):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
-                    raise IOError(f'results directory {self.dumpdir} already exists')
+                    raise GustoIOError(f'results directory {self.dumpdir} already exists')
 
             update_logfile_location(self.dumpdir, self.mesh.comm)
 
