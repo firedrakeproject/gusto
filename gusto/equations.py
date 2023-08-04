@@ -483,7 +483,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return adv_form
 
-
     def get_active_tracer(self, field_name):
         """
         Returns the active tracer metadata object for a particular field.

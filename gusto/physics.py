@@ -277,8 +277,8 @@ class Fallout(Physics):
         # Check if variable is a mixing ratio
         rain_tracer = equation.get_active_tracer(rain_name)
         if rain_tracer.variable_type != TracerVariableType.mixing_ratio:
-            raise NotImplementedError('Fallout only implemented when rain ' +
-                                      'variable is a mixing ratio')
+            raise NotImplementedError('Fallout only implemented when rain '
+                                      + 'variable is a mixing ratio')
 
         # Set up rain and velocity
         self.X = Function(equation.X.function_space())
