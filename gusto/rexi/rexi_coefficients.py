@@ -1,6 +1,6 @@
 import numpy
 
-original_constants = False
+original_constants = True
 
 
 class REXIConstants(object):
@@ -179,5 +179,8 @@ def RexiCoefficients(rexi_parameters):
         beta2 = numpy.zeros(len(beta))
 
     alpha = numpy.concatenate((alpha, -alpha))
+
+    print("original constants?")
+    print(original_constants)
 
     return alpha, beta, beta2
