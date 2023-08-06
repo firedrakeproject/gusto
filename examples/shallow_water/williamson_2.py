@@ -52,11 +52,12 @@ for ref_level, dt in ref_dt.items():
     # I/O
     dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO',
-                              dump_nc=True)
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        dumplist_latlon=['D', 'D_error'],
+        dump_nc=True,
+    )
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
