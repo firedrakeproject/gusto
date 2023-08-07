@@ -305,7 +305,7 @@ class Fallout(Physics):
 
         # We don't want this term to be picked up by normal transport, so drop
         # the transport label
-        transport.remove(adv_term)
+        adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
         equation.residual += physics(adv_term, self.evaluate)
