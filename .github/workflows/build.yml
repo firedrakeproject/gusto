@@ -46,3 +46,17 @@ jobs:
             --durations=100 \
             --cov gusto \
             -v unit-tests integration-tests examples
+        timeout-minutes: 60
+      - name: Prepare logs
+        if: always()
+        run: |
+          mkdir logs
+          cd /tmp/pytest-of-firedrake/pytest-0/
+          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v1
+        with:
+          name: log-files
+          path: /__w/gusto/gusto/logs
+          retention-days: 1
