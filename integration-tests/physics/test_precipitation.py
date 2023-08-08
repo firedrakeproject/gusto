@@ -43,12 +43,12 @@ def setup_fallout(dirname):
 
     # Physics schemes
     rainfall_method = DGUpwind(eqn, 'rain', outflow=True)
-    physics_schemes = [(Fallout(eqn, 'rain', domain, rainfall_method), SSPRK3(domain, 'rain'))]
+    physics_parametrisations = [Fallout(eqn, 'rain', domain, rainfall_method)]
 
     # build time stepper
-    scheme = ForwardEuler(domain)
+    scheme = SSPRK3(domain)
     stepper = PrescribedTransport(eqn, scheme, io, transport_method,
-                                  physics_schemes=physics_schemes)
+                                  physics_parametrisations=physics_parametrisations)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

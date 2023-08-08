@@ -73,8 +73,13 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
         eqn = AdvectionEquation(domain, V, 'f')
     transport_scheme = ForwardEuler(domain)
     transport_method = DGUpwind(eqn, 'f')
-    output = OutputParameters(dirname=dirname, dumpfreq=1, dump_nc=True,
-                              dumplist=['f'], log_level='INFO', checkpoint=False)
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=1,
+        dump_nc=True,
+        dumplist=['f'],
+        checkpoint=False
+    )
 
     # Make velocity components for this geometry
     if geometry == "interval":

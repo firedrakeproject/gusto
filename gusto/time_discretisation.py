@@ -6,14 +6,20 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+
+from firedrake import (
+    Function, TestFunction, NonlinearVariationalProblem,
+    NonlinearVariationalSolver, DirichletBC
+)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
-from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
+
+from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
+from gusto.fml import (
+    replace_subject, replace_test_function, Term, all_terms, drop
+)
 from gusto.labels import time_derivative, prognostic, physics
-from gusto.fml import (replace_subject, replace_test_function, Term,
-                       all_terms, drop)
+from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
 
@@ -92,8 +98,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                                       'sub_pc_type': 'ilu'}
         else:
             self.solver_parameters = solver_parameters
-            if logger.isEnabledFor(DEBUG):
-                self.solver_parameters["ksp_monitor_true_residual"] = None
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -209,7 +213,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        solver = NonlinearVariationalSolver(
+            problem,
+            solver_parameters=self.solver_parameters,
+            options_prefix=solver_name
+        )
+        if logger.isEnabledFor(DEBUG):
+            solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+        return solver
 
     @abstractmethod
     def apply(self, x_out, x_in):

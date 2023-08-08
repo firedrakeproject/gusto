@@ -10,7 +10,7 @@ from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
-from gusto.configuration import logger, set_log_handler
+from gusto.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
 
@@ -36,6 +36,7 @@ def pick_up_mesh(output, mesh_name):
         chkfile = output.checkpoint_pickup_filename
     else:
         dumpdir = path.join("results", output.dirname)
+        update_logfile_location(dumpdir)
         chkfile = path.join(dumpdir, "chkpt.h5")
     with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
@@ -222,10 +223,6 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
-        # setup logger
-        logger.setLevel(output.log_level)
-        set_log_handler(self.mesh.comm)
-
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -297,6 +294,7 @@ class IO(object):
                 self.output.point_data, self.output.checkpoint and not pick_up]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
+            update_logfile_location(self.dumpdir)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             if self.mesh.comm.Get_rank() == 0:
@@ -433,6 +431,7 @@ class IO(object):
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
+            update_logfile_location(self.dumpdir)
 
         # Need to pick up reference profiles, but don't know which are stored
         possible_ref_profiles = []

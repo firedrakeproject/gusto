@@ -74,10 +74,11 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
 
 # I/O
 dirname = "moist_thermal_williamson5"
-output = OutputParameters(dirname=dirname,
-                          dumplist_latlon=['D'],
-                          dumpfreq=dumpfreq,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumplist_latlon=['D'],
+    dumpfreq=dumpfreq,
+)
 diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
