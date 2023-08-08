@@ -57,8 +57,8 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=deltaz, extrusion_type='radial')
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=5, degree=2)
+mesh = ExtrudedMesh(m, layers=5, layer_height=deltaz, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=0)
 
 # Equations
@@ -104,9 +104,9 @@ theta_opts = RecoveryOptions(embedding_space=VDG1,
                              recovered_space=VCG1)
 
 transported_fields = []
-transported_fields.append(SSPRK3(domain, "u", options=u_opts))
-transported_fields.append(SSPRK3(domain, "rho", options=rho_opts))
-transported_fields.append(SSPRK3(domain, "theta", options=theta_opts))
+transported_fields.append(SSPRK3(domain, "u"))#, options=u_opts))
+transported_fields.append(SSPRK3(domain, "rho"))#, options=rho_opts))
+transported_fields.append(SSPRK3(domain, "theta"))#, options=theta_opts))
 
 transport_methods = [DGUpwind(eqn, 'u'),
                      DGUpwind(eqn, 'rho'),
