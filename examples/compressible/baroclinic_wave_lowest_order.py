@@ -58,8 +58,8 @@ Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
 print('make mesh)')
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=1, degree=2)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=3, extrusion_type='radial')
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=deltaz, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=0)
 
 # Equations
