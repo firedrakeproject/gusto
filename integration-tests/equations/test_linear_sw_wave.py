@@ -6,7 +6,7 @@ checks the result against a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Constant, sin,
-                       cos, pi)
+                       cos, pi, as_vector)
 import numpy as np
 
 
@@ -33,9 +33,10 @@ def run_linear_sw_wave(tmpdir):
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/linear_sw_wave",
-                              dumpfreq=1,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=str(tmpdir)+"/linear_sw_wave",
+        dumpfreq=1,
+    )
     io = IO(domain, output)
     transport_methods = [DefaultTransport(eqns, "D")]
 

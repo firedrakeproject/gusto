@@ -53,16 +53,17 @@ for delta, dt in res_dt.items():
     # I/O
     dirname = "straka_dx%s_dt%s" % (delta, dt)
     dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist=['u'],
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        dumplist=['u'],
+    )
     diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta", options=theta_opts)]
     transport_methods = [DGUpwind(eqns, "u"),

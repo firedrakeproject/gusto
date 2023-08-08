@@ -8,12 +8,12 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from gusto.active_tracers import Phases
+from gusto.active_tracers import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.fml import identity, Term
-from gusto.labels import subject, physics, transporting_velocity
-from gusto.configuration import logger
+from gusto.fml import identity, Term, subject
+from gusto.labels import physics, transporting_velocity, transport, prognostic
+from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics
@@ -24,7 +24,7 @@ from types import FunctionType
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
-           "AdvectedMoments", "InstantRain"]
+           "AdvectedMoments", "InstantRain", "SWSaturationAdjustment"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -108,8 +108,8 @@ class SaturationAdjustment(Physics):
         # Vapour and cloud variables are needed for every form of this scheme
         cloud_idx = equation.field_names.index(cloud_name)
         vap_idx = equation.field_names.index(vapour_name)
-        cloud_water = self.X.split()[cloud_idx]
-        water_vapour = self.X.split()[vap_idx]
+        cloud_water = self.X.subfunctions[cloud_idx]
+        water_vapour = self.X.subfunctions[vap_idx]
 
         # Indices of variables in mixed function space
         V_idxs = [vap_idx, cloud_idx]
@@ -119,8 +119,8 @@ class SaturationAdjustment(Physics):
         if isinstance(equation, CompressibleEulerEquations):
             rho_idx = equation.field_names.index('rho')
             theta_idx = equation.field_names.index('theta')
-            rho = self.X.split()[rho_idx]
-            theta = self.X.split()[theta_idx]
+            rho = self.X.subfunctions[rho_idx]
+            theta = self.X.subfunctions[theta_idx]
             if latent_heat:
                 V_idxs.append(theta_idx)
 
@@ -146,7 +146,7 @@ class SaturationAdjustment(Physics):
             if (active_tracer.phase == Phases.liquid
                     and active_tracer.chemical == 'H2O' and active_tracer.name != cloud_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
-                liquid_water += self.X.split()[liq_idx]
+                liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -274,13 +274,17 @@ class Fallout(Physics):
         # Check that fields exist
         assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # TODO: check if variable is a mixing ratio
+        # Check if variable is a mixing ratio
+        rain_tracer = equation.get_active_tracer(rain_name)
+        if rain_tracer.variable_type != TracerVariableType.mixing_ratio:
+            raise NotImplementedError('Fallout only implemented when rain '
+                                      + 'variable is a mixing ratio')
 
         # Set up rain and velocity
         self.X = Function(equation.X.function_space())
 
         rain_idx = equation.field_names.index(rain_name)
-        rain = self.X.split()[rain_idx]
+        rain = self.X.subfunctions[rain_idx]
 
         Vu = domain.spaces("HDiv")
         # TODO: there must be a better way than forcing this into the equation
@@ -299,7 +303,12 @@ class Fallout(Physics):
                                           ufl.replace(t.form, {t.get(transporting_velocity): v}),
                                           t.labels))
 
-        equation.residual += physics(subject(adv_term, equation.X), self.evaluate)
+        # We don't want this term to be picked up by normal transport, so drop
+        # the transport label
+        adv_term = transport.remove(adv_term)
+
+        adv_term = prognostic(subject(adv_term, equation.X), rain_name)
+        equation.residual += physics(adv_term, self.evaluate)
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -314,7 +323,7 @@ class Fallout(Physics):
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
             rho_idx = equation.field_names.index('rho')
-            rho = self.X.split()[rho_idx]
+            rho = self.X.subfunctions[rho_idx]
             rho_w = Constant(1000.0)  # density of liquid water
             # assume n(D) = n_0 * D^mu * exp(-Lambda*D)
             # n_0 = N_r * Lambda^(1+mu) / gamma(1 + mu)
@@ -340,7 +349,10 @@ class Fallout(Physics):
                                         / (math.gamma(4 + mu) * Lambda0 ** b)
                                         * (rho0 / rho) ** g))
         else:
-            raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
+            raise NotImplementedError(
+                'Currently there are only implementations for zero and one '
+                + 'moment schemes for rainfall. Valid options are '
+                + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
             self.determine_v = Projector(-v_expression*domain.k, v)
@@ -451,8 +463,8 @@ class Coalescence(Physics):
         """
         # Update the values of internal variables
         self.dt.assign(dt)
-        self.rain.assign(x_in.split()[self.rain_idx])
-        self.cloud_water.assign(x_in.split()[self.cloud_idx])
+        self.rain.assign(x_in.subfunctions[self.rain_idx])
+        self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
         # Evaluate the source
         self.source.assign(self.source_interpolator.interpolate())
 
@@ -509,8 +521,8 @@ class EvaporationOfRain(Physics):
         # Vapour and cloud variables are needed for every form of this scheme
         rain_idx = equation.field_names.index(rain_name)
         vap_idx = equation.field_names.index(vapour_name)
-        rain = self.X.split()[rain_idx]
-        water_vapour = self.X.split()[vap_idx]
+        rain = self.X.subfunctions[rain_idx]
+        water_vapour = self.X.subfunctions[vap_idx]
 
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
@@ -520,8 +532,8 @@ class EvaporationOfRain(Physics):
         if isinstance(equation, CompressibleEulerEquations):
             rho_idx = equation.field_names.index('rho')
             theta_idx = equation.field_names.index('theta')
-            rho = self.X.split()[rho_idx]
-            theta = self.X.split()[theta_idx]
+            rho = self.X.subfunctions[rho_idx]
+            theta = self.X.subfunctions[theta_idx]
             if latent_heat:
                 V_idxs.append(theta_idx)
 
@@ -543,7 +555,7 @@ class EvaporationOfRain(Physics):
             if (active_tracer.phase == Phases.liquid
                     and active_tracer.chemical == 'H2O' and active_tracer.name != rain_name):
                 liq_idx = equation.field_names.index(active_tracer.name)
-                liquid_water += self.X.split()[liq_idx]
+                liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -639,8 +651,8 @@ class InstantRain(Physics):
 
     def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False,
-                 vapour_name="water_vapour", rain_name=None,
-                 convective_feedback=False, gamma=None, tau=None,
+                 vapour_name="water_vapour", rain_name=None, gamma_r=1,
+                 convective_feedback=False, beta1=None, tau=None,
                  parameters=None):
         """
         Args:
@@ -654,9 +666,12 @@ class InstantRain(Physics):
                 Defaults to "water_vapour".
             rain_name (str, optional): name of the rain variable. Defaults to
                 None.
+            gamma_r (float, optional): Fraction of vapour above the threshold
+                which is converted to rain. Defaults to one, in which case all
+                vapour above the threshold is converted.
             convective_feedback (bool, optional): True if the conversion of
                 vapour affects the height equation. Defaults to False.
-            gamma (float, optional): Condensation proportionality constant,
+            beta1 (float, optional): Condensation proportionality constant,
                 used if convection causes a response in the height equation.
                 Defaults to None, but must be specified if convective_feedback
                 is True.
@@ -681,7 +696,7 @@ class InstantRain(Physics):
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
-            assert gamma is not None, "If convective feedback is used, gamma parameter must be specified"
+            assert beta1 is not None, "If convective feedback is used, beta1 parameter must be specified"
 
         # obtain function space and functions; vapour needed for all cases
         W = equation.function_space
@@ -707,7 +722,7 @@ class InstantRain(Physics):
         else:
             self.set_tau_to_dt = True
             self.tau = Constant(0)
-            logger.info("Timescale for moisture conversion has been set to dt. If this is not the intention then set a tau parameter.")
+            logger.info("Timescale for rain conversion has been set to dt. If this is not the intention then provide a tau parameter as an argument to InstantRain.")
 
         if self.time_varying_saturation:
             if isinstance(saturation_curve, FunctionType):
@@ -720,7 +735,7 @@ class InstantRain(Physics):
             assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
             self.saturation_curve = saturation_curve
 
-        # lose vapour above the saturation curve
+        # lose proportion of vapour above the saturation curve
         equation.residual += physics(subject(test_v * self.source * dx,
                                              equation.X),
                                      self.evaluate)
@@ -736,16 +751,15 @@ class InstantRain(Physics):
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            test_D = equation.tests[self.VD_idx]
             equation.residual += physics(subject
-                                         (test_D * gamma * self.source * dx,
+                                         (test_D * beta1 * self.source * dx,
                                           equation.X),
                                          self.evaluate)
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
             self.water_v > self.saturation_curve,
-            (1/self.tau)*(self.water_v - self.saturation_curve),
+            (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
             0), Vv)
 
     def evaluate(self, x_in, dt):
@@ -761,10 +775,208 @@ class InstantRain(Physics):
                 interval for the scheme.
         """
         if self.convective_feedback:
+            self.D.assign(x_in.subfunctions[self.VD_idx])
+        if self.time_varying_saturation:
+            self.saturation_curve.interpolate(self.saturation_computation(x_in))
+        if self.set_tau_to_dt:
+            self.tau.assign(dt)
+        self.water_v.assign(x_in.subfunctions[self.Vv_idx])
+        self.source.assign(self.source_interpolator.interpolate())
+
+
+class SWSaturationAdjustment(Physics):
+    """
+    Represents the process of adjusting water vapour and cloud water according
+    to a saturation function, via condensation and evaporation processes.
+
+    This physics scheme follows that of Zerroukat and Allen (2015).
+
+    """
+
+    def __init__(self, equation, saturation_curve, L_v=None,
+                 time_varying_saturation=False, vapour_name='water_vapour',
+                 cloud_name='cloud_water', convective_feedback=False,
+                 beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
+                 time_varying_gamma_v=False, tau=None,
+                 parameters=None):
+        """
+        Args:
+            equation (:class: 'PrognosticEquationSet'): the model's equation
+            saturation_curve (ufl expression or :class: `function`): the
+                curve which dictates when phase changes occur. In a saturated
+                atmosphere vapour above the saturation curve becomes cloud,
+                and if the atmosphere is sub-saturated and there is cloud
+                present cloud will become vapour until the saturation curve is
+                reached. The saturation curve is either prescribed or
+                dependent on a prognostic field.
+            time_varying_saturation (bool, optional): set this to True if the
+                saturation curve is changing in time. Defaults to False.
+            L_v (float, optional): The air expansion factor multiplied by the
+                latent heat due to phase change divided by the specific heat
+                capacity. For the atmosphere we take L_v to be 10, following A.2
+                in Zerroukat and Allen (2015). Defaults to None but must be
+                specified if using thermal feedback.
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to 'water_vapour'.
+            cloud_name (str, optional): name of the cloud variable. Defaults to
+                'cloud_water'.
+            convective_feedback (bool, optional): True if the conversion of
+                vapour affects the height equation. Defaults to False.
+            beta1 (float, optional): Condensation proportionality constant for
+                height feedback, used if convection causes a response in the
+                height equation. Defaults to None, but must be specified if
+                convective_feedback is True.
+            thermal_feedback (bool, optional): True if moist conversions
+                affect the buoyancy equation. Defaults to False.
+            beta2 (float, optional): Condensation proportionality constant
+                for thermal feedback. Defaults to None, but must be specified
+                if thermal_feedback is True.
+            gamma_v (ufl expression or :class: `function`): The proportion of
+                moist species that is converted when a conversion between
+                vapour and cloud is taking place. Defaults to one, in which
+                case the full amount of species to bring vapour to the
+                saturation curve will undergo a conversion. Converting only a
+                fraction avoids a two-timestep oscillation between vapour and
+                cloud when saturation is tempertature/height-dependent.
+            time_varying_gamma_v (bool, optional): set this to True
+                if the fraction of moist species converted changes in time
+                (if gamma_v is temperature/height-dependent).
+            tau (float, optional): Timescale for condensation and evaporation.
+                Defaults to None, in which case the timestep dt is used.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
+        """
+
+        super().__init__(equation, parameters=None)
+
+        self.time_varying_saturation = time_varying_saturation
+        self.convective_feedback = convective_feedback
+        self.thermal_feedback = thermal_feedback
+        self.time_varying_gamma_v = time_varying_gamma_v
+
+        # Check for the correct fields
+        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
+        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
+        self.Vv_idx = equation.field_names.index(vapour_name)
+        self.Vc_idx = equation.field_names.index(cloud_name)
+
+        if self.convective_feedback:
+            assert "D" in equation.field_names, "Depth field must exist for convective feedback"
+            assert beta1 is not None, "If convective feedback is used, beta1 parameter must be specified"
+
+        if self.thermal_feedback:
+            assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
+            assert beta2 is not None, "If thermal feedback is used, beta2 parameter must be specified"
+            assert L_v is not None, "If thermal feedback is used, L_v parameter must be specified"
+
+        # Obtain function spaces and functions
+        W = equation.function_space
+        Vv = W.sub(self.Vv_idx)
+        Vc = W.sub(self.Vc_idx)
+        V_idxs = [self.Vv_idx, self.Vc_idx]
+
+        # Source functions for both vapour and cloud
+        self.water_v = Function(Vv)
+        self.cloud = Function(Vc)
+
+        # depth needed if convective feedback
+        if self.convective_feedback:
+            self.VD_idx = equation.field_names.index("D")
+            VD = W.sub(self.VD_idx)
+            self.D = Function(VD)
+            V_idxs.append(self.VD_idx)
+
+        # buoyancy needed if thermal feedback
+        if self.thermal_feedback:
+            self.Vb_idx = equation.field_names.index("b")
+            Vb = W.sub(self.Vb_idx)
+            self.b = Function(Vb)
+            V_idxs.append(self.Vb_idx)
+
+        # tau is the timescale for condensation/evaporation (may or may not be the timestep)
+        if tau is not None:
+            self.set_tau_to_dt = False
+            self.tau = tau
+        else:
+            self.set_tau_to_dt = True
+            self.tau = Constant(0)
+            logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to SWSaturationAdjustment.")
+
+        if self.time_varying_saturation:
+            if isinstance(saturation_curve, FunctionType):
+                self.saturation_computation = saturation_curve
+                self.saturation_curve = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If time_varying_saturation is True then saturation must be a Python function of at least one prognostic field.")
+        else:
+            assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
+            self.saturation_curve = saturation_curve
+
+        # Saturation adjustment expression, adjusted to stop negative values
+        sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
+        sat_adj_expr = conditional(sat_adj_expr < 0,
+                                   max_value(sat_adj_expr,
+                                             -self.cloud / self.tau),
+                                   min_value(sat_adj_expr,
+                                             self.water_v / self.tau))
+
+        # If gamma_v depends on variables
+        if self.time_varying_gamma_v:
+            if isinstance(gamma_v, FunctionType):
+                self.gamma_v_computation = gamma_v
+                self.gamma_v = Function(Vv)
+            else:
+                raise NotImplementedError(
+                    "If time_varying_thermal_feedback is True then gamma_v must be a Python function of at least one prognostic field.")
+        else:
+            assert not isinstance(gamma_v, FunctionType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
+            self.gamma_v = gamma_v
+
+        # Factors for multiplying source for different variables
+        factors = [self.gamma_v, -self.gamma_v]
+        if convective_feedback:
+            factors.append(self.gamma_v*beta1)
+        if thermal_feedback:
+            factors.append(parameters.g*L_v*self.gamma_v*beta2)
+
+        # Add terms to equations and make interpolators
+        self.source = [Function(Vc) for factor in factors]
+        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
+                                     for factor, source in zip(factors, self.source)]
+
+        tests = [equation.tests[idx] for idx in V_idxs]
+
+        # Add source terms to residual
+        for test, source in zip(tests, self.source):
+            equation.residual += physics(subject(test * source * dx,
+                                                 equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source term generated by the physics.
+
+        Computes the phyiscs contributions to water vapour and cloud water at
+        each timestep.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+
+        if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
+        if self.thermal_feedback:
+            self.b.assign(x_in.split()[self.Vb_idx])
         if self.time_varying_saturation:
             self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.split()[self.Vv_idx])
-        self.source.assign(self.source_interpolator.interpolate())
+        self.cloud.assign(x_in.split()[self.Vc_idx])
+        if self.time_varying_gamma_v:
+            self.gamma_v.interpolate(self.gamma_v_computation(x_in))
+        for interpolator in self.source_interpolators:
+            interpolator.interpolate()

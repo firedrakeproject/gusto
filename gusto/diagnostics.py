@@ -1,7 +1,7 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
-    TestFunction, TrialFunction, Constant, grad, inner, curl, cross, sin, tan,  \
+from firedrake import op2, assemble, dot, dx, Function, sqrt, \
+    TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_v, div, avg, jump, pi,\
     TensorFunctionSpace, SpatialCoordinate, as_vector,  \
@@ -1543,13 +1543,7 @@ class Vorticity(DiagnosticField):
         vorticity_types = ["relative", "absolute", "potential"]
         if vorticity_type not in vorticity_types:
             raise ValueError(f"vorticity type must be one of {vorticity_types}, not {vorticity_type}")
-        try:
-            space = domain.spaces("CG")
-        except ValueError:
-            dgspace = domain.spaces("DG")
-            # TODO: should this be degree + 1?
-            cg_degree = dgspace.ufl_element().degree() + 2
-            space = FunctionSpace(domain.mesh, "CG", cg_degree, name=f"CG{cg_degree}")
+        space = domain.spaces("H1")
 
         u = state_fields("u")
         if vorticity_type in ["absolute", "potential"]:

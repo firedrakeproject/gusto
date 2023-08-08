@@ -50,8 +50,8 @@ def run_forced_advection(tmpdir):
     meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
                                    active_tracers=[rain])
     transport_method = DGUpwind(meqn, "water_vapour")
-    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
-                                    parameters=None), ForwardEuler(domain))]
+    physics_parametrisations = [InstantRain(meqn, msat, rain_name="rain",
+                                            parameters=None)]
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
@@ -60,7 +60,7 @@ def run_forced_advection(tmpdir):
 
     # Time Stepper
     stepper = PrescribedTransport(meqn, RK4(domain), io, transport_method,
-                                  physics_schemes=physics_schemes)
+                                  physics_parametrisations=physics_parametrisations)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

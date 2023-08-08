@@ -1,64 +1,76 @@
 """
-The dry rising bubble test case of Robert (1993).
+The non-linear gravity wave test case of Skamarock and Klemp (1994).
 
-Potential temperature is transported using the embedded DG technique.
+Potential temperature is transported using SUPG.
 """
 
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
 from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       Constant, pi, cos, Function, sqrt, conditional)
+import itertools
+from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
+                       ExtrudedMesh, exp, sin, Function, pi)
+import numpy as np
 import sys
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-dt = 1.
-L = 1000.
-H = 1000.
+dt = 6.
+L = 3.0e5  # Domain length
+H = 1.0e4  # Height position of the model top
 
 if '--running-tests' in sys.argv:
+    nlayers = 5
+    columns = 30
     tmax = dt
     dumpfreq = 1
-    nlayers = int(H/50.)
-    ncolumns = int(L/50.)
 else:
-    tmax = 600.
-    dumpfreq = int(tmax / (6*dt))
-    nlayers = int(H/10.)
-    ncolumns = int(L/10.)
+    nlayers = 10
+    columns = 150
+    tmax = 3600.
+    dumpfreq = int(tmax / (2*dt))
 
 # ---------------------------------------------------------------------------- #
 # Set up model objects
 # ---------------------------------------------------------------------------- #
 
-# Domain
-m = PeriodicIntervalMesh(ncolumns, L)
+# Domain -- 3D volume mesh
+m = PeriodicIntervalMesh(columns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 domain = Domain(mesh, dt, "CG", 1)
 
 # Equation
+Tsurf = 300.
 parameters = CompressibleParameters()
 eqns = CompressibleEulerEquations(domain, parameters)
 
 # I/O
-dirname = 'robert_bubble'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          log_level='INFO')
-diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
+points_x = np.linspace(0., L, 100)
+points_z = [H/2.]
+points = np.array([p for p in itertools.product(points_x, points_z)])
+dirname = 'skamarock_klemp_nonlinear'
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    pddumpfreq=dumpfreq,
+    dumplist=['u'],
+    point_data=[('theta_perturbation', points)],
+)
+diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
+                     Gradient("theta_perturbation"), Perturbation('rho'),
+                     RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
-theta_opts = EmbeddedDGOptions()
-transported_fields = [ImplicitMidpoint(domain, "u"),
+theta_opts = SUPGOptions()
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "rho"),
                       SSPRK3(domain, "theta", options=theta_opts)]
-
 transport_methods = [DGUpwind(eqns, "u"),
                      DGUpwind(eqns, "rho"),
-                     DGUpwind(eqns, "theta")]
+                     DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
@@ -81,24 +93,28 @@ Vu = domain.spaces("HDiv")
 Vt = domain.spaces("theta")
 Vr = domain.spaces("DG")
 
-# Isentropic background state
-Tsurf = Constant(300.)
+# Thermodynamic constants required for setting initial conditions
+# and reference profiles
+g = parameters.g
+N = parameters.N
 
-theta_b = Function(Vt).interpolate(Tsurf)
+x, z = SpatialCoordinate(mesh)
+
+# N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
+thetab = Tsurf*exp(N**2*z/g)
+
+theta_b = Function(Vt).interpolate(thetab)
 rho_b = Function(Vr)
 
 # Calculate hydrostatic exner
-compressible_hydrostatic_balance(eqns, theta_b, rho_b, solve_for_rho=True)
+compressible_hydrostatic_balance(eqns, theta_b, rho_b)
 
-x = SpatialCoordinate(mesh)
-xc = 500.
-zc = 350.
-rc = 250.
-r = sqrt((x[0]-xc)**2 + (x[1]-zc)**2)
-theta_pert = conditional(r > rc, 0., 0.25*(1. + cos((pi/rc)*r)))
-
+a = 5.0e3
+deltaTheta = 1.0e-2
+theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 theta0.interpolate(theta_b + theta_pert)
-rho0.interpolate(rho_b)
+rho0.assign(rho_b)
+u0.project(as_vector([20.0, 0.0]))
 
 stepper.set_reference_profiles([('rho', rho_b),
                                 ('theta', theta_b)])

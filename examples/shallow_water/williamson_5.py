@@ -62,15 +62,16 @@ for ref_level, dt in ref_dt.items():
     # I/O
     dirname = "williamson_5_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumplist_latlon=['D'],
-                              dumpfreq=dumpfreq,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=dirname,
+        dumplist_latlon=['D'],
+        dumpfreq=dumpfreq,
+    )
     diagnostic_fields = [Sum('D', 'topography')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D")]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
