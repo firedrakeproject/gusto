@@ -482,6 +482,30 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return adv_form
 
+    def get_active_tracer(self, field_name):
+        """
+        Returns the active tracer metadata object for a particular field.
+
+        Args:
+            field_name (str): the name of the field to return the metadata for.
+
+        Returns:
+            :class:`ActiveTracer`: the object storing the metadata describing
+                the tracer.
+        """
+
+        active_tracer_to_return = None
+
+        for active_tracer in self.active_tracers:
+            if active_tracer.name == field_name:
+                active_tracer_to_return = active_tracer
+                break
+
+        if active_tracer_to_return is None:
+            raise RuntimeError(f'Unable to find active tracer {field_name}')
+
+        return active_tracer_to_return
+
 
 class CoupledTransportEquation(PrognosticEquationSet):
     u"""

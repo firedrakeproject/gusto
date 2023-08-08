@@ -43,10 +43,11 @@ eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='ve
 
 # IO
 dirname = "thermal_williamson2"
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          dumplist_latlon=['D', 'D_error'],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    dumplist_latlon=['D', 'D_error'],
+)
 
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterKineticEnergy(),

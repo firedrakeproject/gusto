@@ -8,7 +8,8 @@ what type of variable the tracer is, what phase it is, etc).
 """
 
 from enum import Enum
-from gusto.configuration import TransportEquationType, logger
+from gusto.configuration import TransportEquationType
+from gusto.logging import logger
 
 __all__ = ["TracerVariableType", "Phases", "ActiveTracer",
            "WaterVapour", "CloudWater", "Rain"]

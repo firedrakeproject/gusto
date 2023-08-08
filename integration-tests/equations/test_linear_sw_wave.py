@@ -33,9 +33,10 @@ def run_linear_sw_wave(tmpdir):
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/linear_sw_wave",
-                              dumpfreq=1,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=str(tmpdir)+"/linear_sw_wave",
+        dumpfreq=1,
+    )
     io = IO(domain, output)
     transport_methods = [DefaultTransport(eqns, "D")]
 
