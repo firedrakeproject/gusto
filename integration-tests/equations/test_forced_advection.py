@@ -58,7 +58,6 @@ def run_forced_advection(tmpdir):
     physics_parametrisations = [InstantRain(meqn, msat, rain_name="rain",
                                             parameters=None)]
 
-
     # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
     diagnostic_fields = [CourantNumber()]

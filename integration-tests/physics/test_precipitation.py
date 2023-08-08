@@ -30,11 +30,15 @@ def setup_fallout(dirname):
     domain = Domain(mesh, dt, "CG", 1)
     x = SpatialCoordinate(mesh)
 
+    # Define the tracers
+    rho = ActiveTracer(name='rho', space='DG1_equispaced', variable_type=TracerVariableType.density)
+    rain = Rain(space='DG1_equispaced')
+
+    Vu = domain.spaces("HDiv")
+
     # Equation
-    Vrho = domain.spaces("DG1_equispaced")
-    active_tracers = [Rain(space='DG1_equispaced')]
-    eqn = CoupledTransportEquation(domain, Vrho, "rho", active_tracers=active_tracers)
-    transport_method = DGUpwind(eqn, "rho")
+    eqn = CoupledTransportEquation(domain, active_tracers=[rho, rain], Vu=Vu)
+    transport_method = [DGUpwind(eqn, "rho"), DGUpwind(eqn, "rain")]
 
     # I/O
     output = OutputParameters(dirname=dirname+"/fallout", dumpfreq=10, dumplist=['rain'])
