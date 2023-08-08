@@ -57,7 +57,6 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-print('make mesh)')
 m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=deltaz, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=0)
@@ -73,8 +72,8 @@ dirname = 'baroclinicPerturbation_lowestorder'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
-                          dump_vtus=False,
-                          log_level=('INFO'))
+                          dump_vtus=False)
+                         # log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
                      MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
@@ -83,13 +82,13 @@ diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes Transport Recovery 
-print('make recovery spaces')
+
 VDG1 = domain.spaces('DG1_equispaced')
 VCG1 = FunctionSpace(mesh, 'CG', 1)
 VHDiv1, VHcurl = buildUrecoverySpaces(mesh, 1)
 VHDiv0, VHcurl0 = buildUrecoverySpaces(mesh, 0)
 
-print('setting transport options')
+
 u_opts = RecoveryOptions(embedding_space=VHDiv1,
                          recovered_space=VHcurl0,
                          boundary_method=BoundaryMethod.hcurl, # try on 1 if doesnt work
@@ -104,21 +103,19 @@ rho_opts = RecoveryOptions(embedding_space=VDG1,
 theta_opts = RecoveryOptions(embedding_space=VDG1,
                              recovered_space=VCG1)
 
-print('assigning transports schemes')
 transported_fields = []
 transported_fields.append(SSPRK3(domain, "u", options=u_opts))
 transported_fields.append(SSPRK3(domain, "rho", options=rho_opts))
 transported_fields.append(SSPRK3(domain, "theta", options=theta_opts))
-print('assigning transport methods')
+
 transport_methods = [DGUpwind(eqn, 'u'),
                      DGUpwind(eqn, 'rho'),
                      DGUpwind(eqn, 'theta')]
 # Linear Solver
-print('linear solver')
+
 linear_solver = CompressibleSolver(eqn)
 
 # Time Stepper
-print('time stepper')
 stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                   transport_methods,
                                   linear_solver=linear_solver)
@@ -126,7 +123,6 @@ stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
 # -------------------------------------------------------------- #
 # Initial Conditions
 # -------------------------------------------------------------- #
-print('setting IC')
 x, y, z = SpatialCoordinate(mesh)
 lat, lon = latlon_coords(mesh)
 r = sqrt(x**2 + y**2 + z**2)
