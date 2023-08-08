@@ -2,6 +2,7 @@ from firedrake import (ExtrudedMesh, functionspaceimpl,
                        SpatialCoordinate, cos, sin, pi, sqrt, File,
                        exp, Constant, Function, as_vector, acos,
                        errornorm, norm, min_value, max_value, le, ge, FiniteElement,
+                       NonlinearVariationalProblem, NonlinearVariationalSolver, dot,
                        interval, TensorProductElement, HDiv, HCurl)
 from gusto import *                                            
 
@@ -215,13 +216,28 @@ radial_u = Constant(0.0)
 # now convert to global Cartesian coordinates
 (u_expr, v_expr, w_expr) = sphere_to_cartesian(mesh, zonal_u, merid_u)
 
+print('project wind perturbation')
 wind_pert = stepper.fields('u_pert', space=Vu)
-wind_pert.project(as_vector([u_pert, v_pert, w_pert]))
+psi = TestFunction(Vu)
+dxp = dx(degree=4)
+proj_eqn = dot(psi, wind_pert)*dxp - dot(psi, as_vector([u_pert, v_pert, w_pert]))*dxp
+prob = NonlinearVariationalProblem(proj_eqn, wind_pert)
+solver = NonlinearVariationalSolver(prob)
+solver.solve()
+
 
 # obtain initial conditions
 print('Set up initial conditions')
 print('project u')
-u.project(as_vector([u_expr, v_expr, w_expr]))
+
+wind_func = stepper.fields('u', space=Vu)
+psi = TestFunction(Vu)
+dxp = dx(degree=4)
+proj_eqn = dot(psi, wind_func)*dxp - dot(psi, as_vector([u_expr, v_expr, w_expr]))*dxp
+prob = NonlinearVariationalProblem(proj_eqn, wind_func)
+solver = NonlinearVariationalSolver(prob)
+solver.solve()
+
 print('interpolate theta')
 theta0.interpolate(theta_expr)
 print('find pi')
