@@ -1,5 +1,4 @@
-from firedrake import (ExtrudedMesh, functionspaceimpl,
-                       SpatialCoordinate, cos, sin, pi, sqrt, File,
+from firedrake import (ExtrudedMesh, SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector, acos,
                        errornorm, norm, min_value, max_value, le, ge)
 from gusto import *                                            # 
