@@ -10,7 +10,7 @@ dt = 270.
 days = 10.
 tmax = days * 24. * 60. * 60.
 deltaz = 2e3 # 15 layers, as we are in a higher space this matches the paper better
-Alpha = [0.51, 0.52, 0.53, 0.54, 0.55] # affects the ratio between implciit and explicit in the time solver 
+Alpha = [0.50, 0.52, 0.53, 0.54, 0.55] # affects the ratio between implciit and explicit in the time solver 
 # -------------------------------------------------------------- #
 # Set up Model
 # -------------------------------------------------------------- #
@@ -52,7 +52,6 @@ for a in Alpha:
     transported_fields.append(SSPRK3(domain, "rho"))
     transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
     transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
-
     # Linear Solver
     linear_solver = CompressibleSolver(eqn, alpha=a)
 
