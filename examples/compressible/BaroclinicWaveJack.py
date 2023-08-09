@@ -2,7 +2,8 @@ from firedrake import (ExtrudedMesh, SpatialCoordinate, cos, sin, pi, sqrt,
                        exp, Constant, Function, as_vector, acos,
                        errornorm, norm, min_value, max_value, le, ge)
 from gusto import *
-from gusto.logging import info
+from gusto.logging import logger
+info = logger.info
 
 
 # ----------------------- #
@@ -22,7 +23,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=10, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
 
@@ -207,7 +208,7 @@ compressible_hydrostatic_balance(eqn, theta0, rho0, exner_boundary=pie, solve_fo
 
 info('make analytic rho')
 rho_analytic = Function(Vr).interpolate(rho_expr)
-info('Normalised rho error is:', errornorm(rho_analytic, rho0) / norm(rho_analytic))
+info(f'Normalised rho error is: {errornorm(rho_analytic, rho0) / norm(rho_analytic)}')
 
 # make mean fields
 info('make mean fields')
