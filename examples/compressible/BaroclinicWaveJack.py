@@ -52,14 +52,12 @@ diagnostic_fields = [
 ]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-Vtheta = domain.spaces("theta")
-limiter = ThetaLimiter(Vtheta)
 
 # Transport Schemes
 transported_fields = []
 transported_fields.append(TrapeziumRule(domain, "u"))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=EmbeddedDGOptions(), limiter=limiter))
+transported_fields.append(SSPRK3(domain, "theta", options=EmbeddedDGOptions()))
 transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
 
 # Linear Solver
