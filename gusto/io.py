@@ -32,14 +32,17 @@ def pick_up_mesh(output, mesh_name):
     """
 
     # Open the checkpointing file for writing
+    dumpdir = None
     if output.checkpoint_pickup_filename is not None:
         chkfile = output.checkpoint_pickup_filename
     else:
         dumpdir = path.join("results", output.dirname)
-        update_logfile_location(dumpdir)
         chkfile = path.join(dumpdir, "chkpt.h5")
     with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
+
+    if dumpdir:
+        update_logfile_location(dumpdir, mesh.comm)
 
     return mesh
 
@@ -294,7 +297,6 @@ class IO(object):
                 self.output.point_data, self.output.checkpoint and not pick_up]):
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
-            update_logfile_location(self.dumpdir)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             if self.mesh.comm.Get_rank() == 0:
@@ -305,6 +307,8 @@ class IO(object):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
                     raise IOError(f'results directory {self.dumpdir} already exists')
+
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
@@ -431,7 +435,7 @@ class IO(object):
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
-            update_logfile_location(self.dumpdir)
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         # Need to pick up reference profiles, but don't know which are stored
         possible_ref_profiles = []
