@@ -35,11 +35,15 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 info(f'Number of degrees of freedom {eqn.X.function_space().dim()}')
 
-dirname = 'baroclinicPerturbation_thetalimiter'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=40,
-                          dump_nc=True,
-                          dump_vtus=False)
+# Dump every 3 hours dt = 270
+dirname = 'BarocliniWaveArcher'
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=40,
+    dump_nc=True,
+    dump_vtus=True
+)
+
 diagnostic_fields = [
     MeridionalComponent('u'), ZonalComponent('u'),
     RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
