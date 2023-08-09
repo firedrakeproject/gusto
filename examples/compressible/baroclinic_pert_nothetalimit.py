@@ -36,8 +36,7 @@ dirname = 'baroclinicPerturbation_nolimiter'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
-                          dump_vtus=False,
-                          log_level=('INFO'))
+                          dump_vtus=False)
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
                      MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
@@ -45,13 +44,17 @@ diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-# Transport Schemes
-transported_fields = []
-transported_fields.append(ImplicitMidpoint(domain, "u", options=SUPGOptions()))
-transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
-transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
+# Transport Schemes # SUPG transport with correspoding ipb options for the method
 
+transport_option=SUPGOptions()
+transported_fields = []
+transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
+transported_fields.append(SSPRK3(domain, "rho"))
+transported_fields.append(SSPRK3(domain, "theta", options=transport_option))
+
+transport_methods = [DGUpwind(eqn, 'u', ibp=transport_option.ibp),
+                     DGUpwind(eqn, 'rho'),
+                     DGUpwind(eqn, 'theta', ibp=transport_option.ibp)]
 # Linear Solver
 linear_solver = CompressibleSolver(eqn)
 
