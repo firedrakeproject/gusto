@@ -50,7 +50,7 @@ print(eqns.X.function_space().dim())
 dirname = 'dry_baroclinic_channel'
 output = OutputParameters(dirname=dirname, dump_vtus=False, dumpfreq=dumpfreq, dump_nc=True,
                           dumplist=['cloud_water'])
-diagnostic_fields = [Perturbation('theta'), VelocityX, VelocityY, 
+diagnostic_fields = [Perturbation('theta'), VelocityX('u'), VelocityY('u'), 
                      Temperature(eqns), Pressure(eqns)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
