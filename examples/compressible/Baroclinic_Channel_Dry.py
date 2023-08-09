@@ -1,4 +1,5 @@
 from gusto import *
+from gusto import thermodynamics
 from firedrake import (PeriodicRectangleMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, sin, pi, sqrt,
                        ln, exp, Constant, Function, DirichletBC, as_vector,
@@ -43,10 +44,11 @@ params = CompressibleParameters()
 coriolis = 2*omega*sin(phi0)*domain.k
 eqns = CompressibleEulerEquations(domain, params, 
                                   Omega=coriolis/2, no_normal_flow_bc_ids=[1, 2])
+print(eqns.X.function_space().dim())
 
 # I/O
 dirname = 'dry_baroclinic_channel'
-output = OutputParameters(dirname=dirname, dumbVTU=False, dumpfreq=dumpfreq, dump_nc=True,
+output = OutputParameters(dirname=dirname, dump_vtus=False, dumpfreq=dumpfreq, dump_nc=True,
                           dumplist=['cloud_water'])
 diagnostic_fields = [Perturbation('theta'), VelocityX, VelocityY, 
                      Temperature(eqns), Pressure(eqns)]
@@ -60,14 +62,11 @@ transported_fields = [SSPRK3(domain, "u"),
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
-# Physics schemes
-#physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                   linear_solver=linear_solver)
                                   
-
 # ---------------------------------------------------------------------------- #
 # Initial conditions
 # ---------------------------------------------------------------------------- #
@@ -107,4 +106,60 @@ eta = Function(Vt).interpolate(Constant(1e-7))
 Phi = Function(Vt).interpolate(g * z)
 T = Function(Vt)
 
-Phi_expr = (T0 * g / lapse)*(1 - eta**() ) 
+#Steady State
+
+Phi_prime = u0 / 2 * ((f0 - beta0 * y0) *(y - (Ly/2) - (Ly/(2*pi))*sin(2*pi*y/Ly))
+                       + beta0/2*(y**2 - (Ly*y/pi)*sin(2*pi*y/Ly)
+                                  - (Ly**2/(2*pi**2))*cos(2*pi*y/Ly) - (Ly**2/3) - (Ly**2/(2*pi**2))))
+Phi_expr = (T0 * g / lapse)*(1 - eta**(Rd * lapse / g)) + Phi_prime * ln(eta) * exp(-(ln(eta) / b)**2)
+Temp_expr = T0 * eta**(Rd * lapse / g) + (Phi_prime / Rd) * (2/b**2 * ln(eta)**2 - 1) * exp(-(ln(eta) / b)**2)
+
+u_zonal = -u0 ** sin(pi * y / Ly) ** 2 * ln(eta) * eta**(-ln(eta)/b**2)
+u_expr = as_vector([u_zonal, 0, 0])
+# iterae to make eta
+eta_new = Function(Vt)
+F = -Phi + Phi_expr
+dF = -Rd * Temp_expr / eta
+max_iterations = 40
+tolerance = 1e-10
+for i in range(max_iterations):
+    eta_new.interpolate(eta - F/dF)
+    if errornorm(eta_new, eta) / norm(eta) < tolerance:
+        eta.assign(eta_new)
+        break
+    eta.assign(eta_new)
+
+# make mean u and theta
+u.project(u_expr)
+T.interpolate(Temp_expr)
+theta.interpolate(thermodynamics.theta(params, Temp_expr, p0 * eta))
+Phi_test = Function(Vt).interpolate(Phi_expr)
+print("Error in setting up p:", errornorm(Phi_test, Phi) / norm(Phi))
+
+# Calculate hydrostatic fields
+compressible_hydrostatic_balance(eqns, theta, rho,  solve_for_rho=True)
+
+# make mean fields
+rho_b = Function(Vr).assign(rho)
+u_b = stepper.fields("ubar", space=Vu, dump=False).project(u)
+theta_b = Function(Vt).assign(theta)
+
+xc = 2.0e6
+yc = 2.5e6
+Lp = 6.0e5
+up = Constant(1.0)
+r = sqrt((x - xc) ** 2 + (y - yc) ** 2)
+u_pert = Function(Vu).project(as_vector([up * exp(-(r/Lp)**2), 0.0, 0.0]))
+
+# define initial u
+u.assign(u_b + u_pert)
+
+# initialise fields
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b)])
+
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
+
+stepper.run(t=0, tmax=tmax)
