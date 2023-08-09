@@ -50,7 +50,7 @@ eqns = CompressibleEulerEquations(domain, params,
 dirname = 'dry_baroclinic_channel'
 output = OutputParameters(dirname=dirname, dump_vtus=False, dumpfreq=dumpfreq, dump_nc=True,
                           dumplist=['cloud_water'])
-diagnostic_fields = [Perturbation('theta'), VelocityX('u'), VelocityY('u'), 
+diagnostic_fields = [Perturbation('theta'), VelocityX(), VelocityY(), 
                      Temperature(eqns), Pressure(eqns)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
