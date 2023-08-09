@@ -31,11 +31,11 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_thetalimiter'
+dirname = 'BarocliniWaveArcher'
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=40,
+                          dumpfreq=40, # dumps every 3 hours dt = 270
                           dump_nc=True,
-                          dump_vtus=False)
+                          dump_vtus=True)
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
                      MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
