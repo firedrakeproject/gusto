@@ -23,7 +23,8 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
+           "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -1488,3 +1489,34 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+        
+class TracerDensity(DiagnosticField):
+    """Diagnostic for computing the density of a tracer. This is 
+    computed as the product of a mixing ratio and dry density"""
+    
+    name = "TracerDensity"
+    
+    def __init__(self, m_X, rho_d):
+        """
+        Args:
+            m_X: the mixing ratio of the tracer
+            rho_d: the dry density of the tracer
+        """
+        super().__init__(method='assign', required_fields=(m_X,rho_d))
+        self.m_X = m_X
+        self.rho_d = rho_d
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        m_X = state_fields(self.m_X)
+        rho_d = state_fields(self.rho_d)
+        space = m_X.function_space()
+        self.expr = m_X*rho_d
+        super().setup(domain, state_fields, space=space)
+
