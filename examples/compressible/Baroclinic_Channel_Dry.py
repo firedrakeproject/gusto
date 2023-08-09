@@ -44,7 +44,7 @@ params = CompressibleParameters()
 coriolis = 2*omega*sin(phi0)*domain.k
 eqns = CompressibleEulerEquations(domain, params, 
                                   Omega=coriolis/2, no_normal_flow_bc_ids=[1, 2])
-print(eqns.X.function_space().dim())
+# print(eqns.X.function_space().dim())
 
 # I/O
 dirname = 'dry_baroclinic_channel'
@@ -137,8 +137,7 @@ u.project(u_expr)
 T.interpolate(Temp_expr)
 theta.interpolate(thermodynamics.theta(params, Temp_expr, p0 * eta))
 Phi_test = Function(Vt).interpolate(Phi_expr)
-print("Error in setting up p:", errornorm(Phi_test, Phi) / norm(Phi))
-
+#print("Error in setting up p:", errornorm(Phi_test, Phi) / norm(Phi))
 # Calculate hydrostatic fields
 compressible_hydrostatic_balance(eqns, theta, rho,  solve_for_rho=True)
 
