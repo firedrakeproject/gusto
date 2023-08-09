@@ -37,8 +37,7 @@ for a in Alpha:
     output = OutputParameters(dirname=dirname,
                             dumpfreq=40,
                             dump_nc=True,
-                            dump_vtus=False,
-                            log_level=('INFO'))
+                            dump_vtus=False)
     diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                         RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
                         MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
