@@ -59,12 +59,15 @@ transported_fields = [SSPRK3(domain, "u"),
                       SSPRK3(domain, "rho"),
                       SSPRK3(domain, "theta")]
 
+transport_methods = [DGUpwind(eqns, 'u'),
+                     DGUpwind(eqns, 'rho'),
+                     DGUpwind(eqns, 'theta')]
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods,
                                   linear_solver=linear_solver)
                                   
 # ---------------------------------------------------------------------------- #
