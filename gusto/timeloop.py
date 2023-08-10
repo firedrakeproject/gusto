@@ -34,7 +34,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.equation = equation
         self.io = io
         self.dt = self.equation.domain.dt
-        self.t = Constant(0.0)
+        self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
 
         self.setup_fields()

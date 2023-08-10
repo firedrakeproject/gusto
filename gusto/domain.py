@@ -59,6 +59,9 @@ class Domain(object):
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
+        # Make a placeholder for the time
+        self.t = Constant(0.0)
+
         # -------------------------------------------------------------------- #
         # Build compatible function spaces
         # -------------------------------------------------------------------- #
