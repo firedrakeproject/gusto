@@ -94,16 +94,24 @@ class SourceSink(Physics):
         self.time_varying = time_varying
 
         # Check the variable exists
-        assert variable_name in equation.field_names, \
-            f'Field {variable_name} does not exist in the equation set'
+        if hasattr(equation, "field_names"):
+            assert variable_name in equation.field_names, \
+                f'Field {variable_name} does not exist in the equation set'
+        else:
+            assert variable_name == equation.field_name, \
+                f'Field {variable_name} does not exist in the equation'
 
         # Work out the appropriate function space
-        V_idx = equation.field_names.index(variable_name)
-        W = equation.function_space
-        V = W.sub(V_idx)
+        if hasattr(equation, "field_names"):
+            V_idx = equation.field_names.index(variable_name)
+            W = equation.function_space
+            V = W.sub(V_idx)
+            test = equation.tests[V_idx]
+        else:
+            V = equation.function_space
+            test = equation.test
 
         # Make source/sink term
-        test = equation.tests[V_idx]
         self.source = Function(V)
         equation.residual += physics(subject(test * self.source * dx, equation.X),
                                      self.evaluate)
@@ -123,9 +131,9 @@ class SourceSink(Physics):
         # If not time-varying, evaluate for the first time here
         if not self.time_varying:
             if self.method == 'interpolate':
-                self.source_interpolator.interpolate()
+                self.source.assign(self.source_interpolator.interpolate())
             else:
-                self.source_projector.project()
+                self.source.assign(self.source_projector.project())
 
     def evaluate(self, x_in, dt):
         """

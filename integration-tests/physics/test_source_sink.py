@@ -3,11 +3,11 @@ This tests the source/sink
 """
 
 from gusto import *
-from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
-                       sqrt, conditional, cos, pi, FunctionSpace)
+from firedrake import (as_vector, PeriodicSquareMesh, SpatialCoordinate,
+                       sqrt, sin, pi, assemble, Constant)
+import pytest
 
-
-def run_source_sink(dirname):
+def run_source_sink(dirname, process, time_varying):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -18,81 +18,90 @@ def run_source_sink(dirname):
     nx = 10
     mesh = PeriodicSquareMesh(nx, nx, L, quadrilateral=True)
     dt = 0.1
+    tmax = 5*dt
     domain = Domain(mesh, dt, "RTCF", 1)
     x, y = SpatialCoordinate(mesh)
 
-    # Source is a Gaussian centred on a point
-    centre_x = L / 4.0
-
     # Equation
-    eqns = AdvectionEquation(domain, V, "ash")
+    V = domain.spaces('DG')
+    eqn = AdvectionEquation(domain, V, "ash")
 
     # I/O
-    output = OutputParameters(dirname=dirname+"/instant_rain",
-                              dumpfreq=1,
-                              dumplist=['vapour', "rain"])
+    output = OutputParameters(dirname=dirname+"/source_sink",
+                              dumpfreq=1)
     diagnostic_fields = [CourantNumber()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-    transport_method = [DGUpwind(eqns, "water_vapour")]
+    transport_method = [DGUpwind(eqn, "ash")]
 
-    # Physics schemes
-    # define saturation function
-    saturation = Constant(0.5)
-    physics_schemes = [(SourceSink(eqns, saturation, rain_name="rain"),
-                        ForwardEuler(domain))]
+    # Physics scheme --------------------------------------------------------- #
+    # Source is a Lorentzian centred on a point
+    centre_x = L / 4.0
+    centre_y = 3*L / 4.0
+    width = L / 8.0
+    dist_x = periodic_distance(x, centre_x, L)
+    dist_y = periodic_distance(y, centre_y, L)
+    dist = sqrt(dist_x**2 + dist_y**2)
+    # Lorentzian function
+    basic_expression = width / (dist**2 + width**2)
+
+    if process == 'source':
+        basic_expression = -basic_expression
+
+    def time_varying_expression(t):
+        return 2*basic_expression*sin(pi*t/(2.0*tmax))
+
+    if time_varying:
+        expression = time_varying_expression
+    else:
+        expression = basic_expression
+
+    physics_parametrisations = [SourceSink(eqn, 'ash', expression, time_varying)]
 
     # Time stepper
-    stepper = PrescribedTransport(eqns, SSPRK3(domain), io, transport_method,
-                                  physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(eqn, SSPRK3(domain), io, transport_method,
+                                  physics_parametrisations=physics_parametrisations)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    vapour0 = stepper.fields("water_vapour")
+    ash0 = stepper.fields("ash")
 
-    # set up vapour
-    xc = L/2
-    yc = L/2
-    rc = L/4
-    r = sqrt((x - xc)**2 + (y - yc)**2)
-    vapour_expr = conditional(r > rc, 0., 1 * (cos(pi * r / (rc * 2))) ** 2)
+    if process == "source":
+        # Start with no ash
+        background_ash = Constant(0.0)
+    elif process == "sink":
+        # Take ash away
+        background_ash = Constant(100.0)
+    ash0.interpolate(background_ash)
+    initial_ash = Function(V).assign(ash0)
 
-    vapour0.interpolate(vapour_expr)
-
-    VD = FunctionSpace(mesh, "DG", 1)
-    initial_vapour = Function(VD).interpolate(vapour_expr)
-
-    # TODO: This test is based on the assumption that final vapour should be
-    # equal to saturation, which might not be true when timestepping physics.
-    vapour_true = Function(VD).interpolate(saturation)
-    rain_true = Function(VD).interpolate(vapour0 - saturation)
+    # Constant wind
+    u = stepper.fields("u")
+    u.project(as_vector([1.0, 0.0]))
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=5*dt)
-    return stepper, saturation, initial_vapour, vapour_true, rain_true
+    stepper.run(t=0, tmax=tmax)
+    return stepper, initial_ash
 
 
-def test_instant_rain_setup(tmpdir):
+@pytest.mark.parametrize("process", ["source", "sink"])
+@pytest.mark.parametrize("time_varying", [False, True])
+def test_source_sink(tmpdir, process, time_varying):
     dirname = str(tmpdir)
-    stepper, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
-    v = stepper.fields("water_vapour")
-    r = stepper.fields("rain")
+    stepper, initial_ash = run_source_sink(dirname, process, time_varying)
+    final_ash = stepper.fields("ash")
 
-    # check that the maximum of the vapour field is equal to the saturation
-    assert v.dat.data.max() - saturation.values() < 0.1, "The maximum of the final vapour field should be equal to saturation"
+    initial_total_ash = assemble(initial_ash*dx)
+    final_total_ash = assemble(final_ash*dx)
 
-    # check that the minimum of the vapour field hasn't changed
-    assert v.dat.data.min() - initial_vapour.dat.data.min() < 0.1, "The minimum of the vapour field should not change"
-
-    # check that the maximum of the excess vapour agrees with the maximum of the
-    # rain
-    VD = Function(v.function_space())
-    excess_vapour = Function(VD).interpolate(initial_vapour - saturation)
-    assert excess_vapour.dat.data.max() - r.dat.data.max() < 0.1
-
-    # check that the minimum of the rain is 0
-    assert r.dat.data.min() < 1e-8
+    tol = 1.0
+    if process == "source":
+        assert final_total_ash > initial_total_ash + tol, \
+            "Source process does not appear to have created tracer"
+    else:
+        assert final_total_ash < initial_total_ash - tol, \
+            "Sink process does not appear to have removed tracer"
