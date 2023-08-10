@@ -10,7 +10,7 @@ import ufl
 __all__ = ["xyz_from_lonlatr", "lonlatr_from_xyz", "xyz_vector_from_lonlatr",
            "lonlatr_vector_from_xyz", "rodrigues_rotation", "pole_rotation",
            "rotated_lonlatr_coords_and_vectors", "periodic_distance",
-           "great_arc_length"]
+           "great_arc_angle"]
 
 
 def firedrake_or_numpy(variable):
@@ -392,9 +392,77 @@ def rotated_lonlatr_coords_and_vectors(old_xyz, old_e_lonlatr, new_pole):
     return new_lonlatr, new_e_lonlatr
 
 
-def periodic_distance():
-    pass
+def periodic_distance(x1, x2, max_x, min_x=0.0):
+    """
+    Finds the shortest distance between two points x1 and x2, on a periodic
+    interval of length Lx.
+
+    Args:
+        x1 (:class:`np.ndarray` or :class:`ufl.Expr`): first set of position
+            values.
+        x2 (:class:`np.ndarray` or :class:`ufl.Expr`): second set of position
+            values.
+        max_x (:class:`Constant` or float): maximum coordinate on the domain.
+        min_x (:class:`Constant` or float, optional): minimum coordinate on the
+            domain. Defaults to None.
+
+    Returns:
+        :class:`np.ndarray` or :class:`ufl.Expr`: the shortest distance between
+            the two points.
+    """
+
+    module, _ = firedrake_or_numpy(x1)
+
+    # Use firedrake.conditional or numpy.where
+    conditional = module.conditional if hasattr(module, "conditional") else module.where
+
+    Lx = max_x - min_x
+    longest_dist = Lx / 2
+    trial_dist = x1 - x2
+    dist = conditional(trial_dist > longest_dist, trial_dist - Lx,
+                       conditional(trial_dist < - longest_dist, trial_dist + Lx,
+                                   trial_dist))
+
+    return dist
 
 
-def great_arc_length():
-    pass
+def great_arc_angle(lon1, lat1, lon2, lat2, units='rad'):
+    """
+    Finds the arc angle along a great circle between two points on the sphere.
+
+    Args:
+        lon1 (:class:`np.ndarray` or :class:`ufl.Expr`): first longitude value
+            or set of longitude values.
+        lat1 (:class:`np.ndarray` or :class:`ufl.Expr`): first latitude value or
+            set of latitude values.
+        lon2 (:class:`np.ndarray` or :class:`ufl.Expr`): second longitude value
+            or set of longitude values.
+        lat2 (:class:`np.ndarray` or :class:`ufl.Expr`): second latitude value
+            or set of latitude values.
+        units (str, optional): which units the angles are expressed in. Should
+            be "deg" or "rad". Defaults to "rad".
+
+    Returns:
+        :class:`np.ndarray` or :class:`ufl.Expr`: the great-circle arc angle
+            values between the two points.
+    """
+
+    # Determine whether to use firedrake or numpy functions
+    module, _ = firedrake_or_numpy(lon1)
+    cos = module.cos
+    sin = module.sin
+    acos = module.acos if hasattr(module, "acos") else module.arccos
+    pi = module.pi
+
+    if units == 'deg':
+        lon1 *= pi / 180.0
+        lat1 *= pi / 180.0
+        lon2 *= pi / 180.0
+        lat2 *= pi / 180.0
+
+    arc_length = acos(cos(lon1 - lon2)*cos(lat1)*cos(lat2) + sin(lat1)*sin(lat2))
+
+    if units == 'deg':
+        arc_length *= 180.0 / pi
+
+    return arc_length

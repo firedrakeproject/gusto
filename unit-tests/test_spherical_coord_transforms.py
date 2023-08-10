@@ -44,7 +44,7 @@ def check_coords(new_values, answers, module_name, routine):
         answers = [answer.dat.data[:] for answer in answers]
 
     for i, (new_value, answer) in enumerate(zip(new_values, answers)):
-        assert np.all(np.isclose(new_value, answer, atol=tol)), \
+        assert np.allclose(new_value, answer, atol=tol), \
             f'Incorrect answer for {module_name} module and {routine} ' \
             + f'routine, coord {i}'
 
