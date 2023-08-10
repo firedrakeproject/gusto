@@ -47,7 +47,7 @@ for ref_level, dt in ref_dt.items():
     # Equation
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
-    theta, lamda = latlon_coords(mesh)
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     R0 = pi/9.
     R0sq = R0**2
     lamda_c = -pi/2.

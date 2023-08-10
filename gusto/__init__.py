@@ -20,6 +20,7 @@ set_log_handler()
 from gusto.active_tracers import *                   # noqa
 from gusto.common_forms import *                     # noqa
 from gusto.configuration import *                    # noqa
+from gusto.coord_transforms import *                 # noqa
 from gusto.domain import *                           # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion_methods import *                # noqa

@@ -9,7 +9,7 @@ are checked against these.
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       pi, sin, cos)
+                       pi, sin, cos, as_vector)
 from netCDF4 import Dataset
 
 R = 6371220.
@@ -65,9 +65,10 @@ def set_up_initial_conditions(domain, equation, stepper):
     g = equation.parameters.g
     Omega = equation.parameters.Omega
 
-    phi, lamda = latlon_coords(domain.mesh)
+    x = SpatialCoordinate(domain.mesh)
+    lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-    uexpr = sphere_to_cartesian(domain.mesh, u_max*cos(phi), 0)
+    uexpr = lonlatr_vector_from_xyz(as_vector([u_max*cos(phi), 0, 0]), x)
     w = Omega*R*u_max + (u_max**2)/2
     sigma = 0
     Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
