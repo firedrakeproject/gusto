@@ -182,6 +182,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.t.assign(self.t + self.dt)
 
             with timed_stage("Dump output"):
+                logger.debug('Dumping output to disk')
                 self.io.dump(self.fields, float(self.t), self.get_initial_timesteps())
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
@@ -549,7 +550,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs = self.xrhs
         dy = self.dy
 
+        logger.debug("Entering Semi-implicit Quasi-Newton timestep method")
         with timed_stage("Apply forcing terms"):
+            logger.debug("Semi-implicit Quasi-Newton applying initial forcing")
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
         xp(self.field_name).assign(xstar(self.field_name))
@@ -561,6 +564,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                                     f'transporting velocity, outer iteration {k}')
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
+                    logger.debug(f"Semi-implicit Quasi-Newton transporting {name}")
                     scheme.apply(xp(name), xstar(name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
@@ -568,11 +572,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             for i in range(self.maxi):
 
                 with timed_stage("Apply forcing terms"):
+                    logger.debug(f"Semi-implicit Quasi-Newton applying forcing at stage {k =}, {i =}")
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
+                    logger.debug(f"Semi-implicit Quasi-Newton perform implicit solve at stage {k =}, {i =}")
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
@@ -585,15 +591,20 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
+            logger.debug(f"Semi-implicit Quasi-Newton auxiliary scheme for {name}")
             scheme.apply(xnp1(name), xn(name))
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
+                logger.debug(f"Semi-implicit Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
 
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
+                logger.debug(f"Semi-implicit Quasi-Newton doing physics on {name}")
                 scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+
+        logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
     def run(self, t, tmax, pick_up=False):
         """
