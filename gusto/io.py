@@ -9,6 +9,7 @@ from gusto.diagnostics import Diagnostics
 from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+from pyop2.mpi import MPI
 import numpy as np
 from gusto.logging import logger, update_logfile_location
 
@@ -291,6 +292,9 @@ class IO(object):
             IOError: if the results directory already exists, and the model is
                 not picking up or running in test mode.
         """
+        # Use 0 for okay, 1 for internal exception 2 for external exception
+        raise_parallel_exception = 0
+        error = None
 
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
@@ -299,14 +303,28 @@ class IO(object):
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
+            # Raising exceptions needs to be done in parallel
             if self.mesh.comm.Get_rank() == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
-                    makedirs(self.dumpdir)
+                    try:
+                        makedirs(self.dumpdir)
+                    except OSError as e:
+                        error = e
+                        raise_parallel_exception = 2
                 elif not (running_tests or pick_up):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
-                    raise IOError(f'results directory {self.dumpdir} already exists')
+                    raise_parallel_exception = 1
+
+            raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            if raise_exception == 1:
+                raise IOError(f'results directory {self.dumpdir} already exists')
+            elif raise_exception == 2:
+                if error:
+                    raise error
+                else:
+                    raise OSError('Check error message on rank 0')
 
             update_logfile_location(self.dumpdir, self.mesh.comm)
 
@@ -630,7 +648,7 @@ class IO(object):
                     # that we can't output for so instead just skip outputting
                     logger.warning(f'netCDF outputting for space {space_name} '
                                    + 'not yet implemented, so unable to output'
-                                   + '{field_name} field')
+                                   + f'{field_name} field')
                 else:
                     nc_field_file.createGroup(field_name)
                     nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
