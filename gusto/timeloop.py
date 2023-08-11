@@ -171,7 +171,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Time loop
         while float(self.t) < tmax - 0.5*float(self.dt):
-            logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
+            logger.info(f'at start of timestep, t={float(self.t):.5f}, dt={float(self.dt):.5f}')
 
             self.x.update()
 
@@ -188,7 +188,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
 
-        logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')
+        logger.info(f'TIMELOOP complete. t={float(self.t):.5f}, {tmax=:.5f}')
 
     def set_reference_profiles(self, reference_profiles):
         """
