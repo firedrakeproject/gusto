@@ -1,6 +1,6 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
+from firedrake import op2, assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_v, div, avg, jump, \
@@ -67,7 +67,7 @@ class Diagnostics(object):
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=f._comm)
         op2.par_loop(op2.Kernel("""
 static void minify(double *a, double *b) {
     a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
@@ -85,7 +85,7 @@ static void minify(double *a, double *b) {
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=f._comm)
         op2.par_loop(op2.Kernel("""
 static void maxify(double *a, double *b) {
     a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
@@ -1368,13 +1368,7 @@ class Vorticity(DiagnosticField):
         vorticity_types = ["relative", "absolute", "potential"]
         if vorticity_type not in vorticity_types:
             raise ValueError(f"vorticity type must be one of {vorticity_types}, not {vorticity_type}")
-        try:
-            space = domain.spaces("CG")
-        except ValueError:
-            dgspace = domain.spaces("DG")
-            # TODO: should this be degree + 1?
-            cg_degree = dgspace.ufl_element().degree() + 2
-            space = FunctionSpace(domain.mesh, "CG", cg_degree, name=f"CG{cg_degree}")
+        space = domain.spaces("H1")
 
         u = state_fields("u")
         if vorticity_type in ["absolute", "potential"]:

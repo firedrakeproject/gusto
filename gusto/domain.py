@@ -6,9 +6,9 @@ model's time interval.
 
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
+from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       as_vector, inner, interpolate, VectorFunctionSpace,
-                       Function)
+                       inner, interpolate, VectorFunctionSpace, Function)
 import numpy as np
 
 
@@ -72,8 +72,8 @@ class Domain(object):
         self.mesh = mesh
         self.family = family
         self.spaces = Spaces(mesh)
-        # Build and store compatible spaces
-        self.compatible_spaces = [space for space in self.spaces.build_compatible_spaces(self.family, self.horizontal_degree, self.vertical_degree)]
+        self.spaces.build_compatible_spaces(self.family, self.horizontal_degree,
+                                            self.vertical_degree)
 
         # -------------------------------------------------------------------- #
         # Determine some useful aspects of domain
@@ -97,7 +97,8 @@ class Domain(object):
                 if hasattr(mesh, "_bash_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
-                    mesh.init_cell_orientations(x)
+                    if not hasattr(mesh, "_cell_orientations"):
+                        mesh.init_cell_orientations(x)
                     sphere_degree = mesh.coordinates.function_space().ufl_element().degree()
                 V = VectorFunctionSpace(mesh, "DG", sphere_degree)
                 self.outward_normals = Function(V).interpolate(CellNormal(mesh))
@@ -107,7 +108,7 @@ class Domain(object):
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
             if dim == 2:
-                self.perp = lambda u: as_vector([-u[1], u[0]])
+                self.perp = perp
 
         # -------------------------------------------------------------------- #
         # Set up coordinates
@@ -142,9 +143,7 @@ class Domain(object):
             raise ValueError('Unable to determine domain type')
 
         comm = self.mesh.comm
-        comm_size = comm.Get_size()
         my_rank = comm.Get_rank()
-        max_num_domain_infos = 3
 
         # Properties of domain will be determined from full coords, so need
         # doing on the first processor then broadcasting to others
@@ -158,19 +157,8 @@ class Domain(object):
             if mesh.extruded:
                 self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
 
-            # Send information to other processors
-            for j, metadata_key in enumerate([f'domain_extent_{xyz}' for xyz in ['x', 'y', 'z']]):
-                if metadata_key in self.metadata.keys():
-                    metadata_value = self.metadata[metadata_key]
-                else:
-                    metadata_value = None
-                for procid in range(1, comm_size):
-                    my_tag = comm_size*j + my_rank
-                    comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
         else:
-            # Need to receive information and store in metadata
-            for j in range(max_num_domain_infos):
-                my_tag = comm_size*j + my_rank
-                metadata_key, metadata_value = comm.recv(source=0, tag=my_tag)
-                if metadata_value is not None:
-                    self.metadata[metadata_key] = metadata_value
+            self.metadata = {}
+
+        # Send information to other processors
+        self.metadata = comm.bcast(self.metadata, root=0)

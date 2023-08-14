@@ -58,8 +58,7 @@ class AverageKernel(object):
         par_loop(self._kernel, dx,
                  {"vo": (v_out, INC),
                   "w": (weighting, READ),
-                  "v": (v_in, READ)},
-                 is_loopy_kernel=True)
+                  "v": (v_in, READ)})
 
 
 class AverageWeightings(object):
@@ -103,8 +102,7 @@ class AverageWeightings(object):
                 lives in the continuous target space.
         """
         par_loop(self._kernel, dx,
-                 {"w": (w, INC)},
-                 is_loopy_kernel=True)
+                 {"w": (w, INC)})
 
 
 class BoundaryRecoveryExtruded():
@@ -167,7 +165,6 @@ class BoundaryRecoveryExtruded():
         par_loop(self._bot_kernel, dx,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)},
-                 is_loopy_kernel=True,
                  iteration_region=ON_BOTTOM)
 
 
@@ -240,7 +237,6 @@ class BoundaryRecoveryHCurl():
         par_loop(self._top_kernel, dx,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)},
-                 is_loopy_kernel=True,
                  iteration_region=ON_TOP)
         par_loop(self._bot_kernel, dx,
                  args={"x_out": (x_out, WRITE),
@@ -521,5 +517,4 @@ class BoundaryGaussianElimination(object):
                   "DG1": (v_DG1, WRITE),
                   "ACT_COORDS": (act_coords, READ),
                   "EFF_COORDS": (eff_coords, READ),
-                  "NUM_EXT": (num_ext, READ)},
-                 is_loopy_kernel=True)
+                  "NUM_EXT": (num_ext, READ)})

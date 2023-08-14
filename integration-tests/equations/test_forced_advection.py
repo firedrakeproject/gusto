@@ -45,12 +45,18 @@ def run_forced_advection(tmpdir):
     msat = Function(VD)
     msat.interpolate(msat_expr)
 
-    rain = Rain(space='tracer',
+    # Rain is a first tracer
+    rain = Rain(space='DG',
                 transport_eqn=TransportEquationType.no_transport)
-    meqn = ForcedAdvectionEquation(domain, VD, field_name="water_vapour", Vu=Vu,
-                                   active_tracers=[rain])
-    physics_schemes = [(InstantRain(meqn, msat, rain_name="rain",
-                                    parameters=None), ForwardEuler(domain))]
+
+    # Also, have water_vapour as a tracer:
+    water_vapour = WaterVapour(space='DG')
+
+    meqn = CoupledTransportEquation(domain, active_tracers=[rain, water_vapour], Vu=Vu)
+
+    transport_method = DGUpwind(meqn, "water_vapour")
+    physics_parametrisations = [InstantRain(meqn, msat, rain_name="rain",
+                                            parameters=None)]
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
@@ -58,8 +64,8 @@ def run_forced_advection(tmpdir):
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Time Stepper
-    stepper = PrescribedTransport(meqn, RK4(domain), io,
-                                  physics_schemes=physics_schemes)
+    stepper = PrescribedTransport(meqn, RK4(domain), io, transport_method,
+                                  physics_parametrisations=physics_parametrisations)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -70,6 +76,10 @@ def run_forced_advection(tmpdir):
 
     stepper.fields("u").project(as_vector([u_max]))
     stepper.fields("water_vapour").project(mexpr)
+
+    # Start with no rain:
+    no_rain = 0*x
+    stepper.fields("rain").interpolate(no_rain)
 
     # exact rainfall profile (analytically)
     r_exact = stepper.fields("r_exact", space=VD)

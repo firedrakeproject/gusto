@@ -1,14 +1,22 @@
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos)
+import sys
 
 # ----------------------------------------------------------------- #
 # Test case parameters
 # ----------------------------------------------------------------- #
 
-day = 24*60*60
-tmax = 5*day
-ndumps = 5
 dt = 100
+
+if '--running-tests' in sys.argv:
+    tmax = dt
+    dumpfreq = 1
+else:
+    day = 24*60*60
+    tmax = 5*day
+    ndumps = 5
+    dumpfreq = int(tmax / (ndumps*dt))
+
 R = 6371220.
 u_max = 20
 phi_0 = 3e4
@@ -35,21 +43,25 @@ eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='ve
 
 # IO
 dirname = "thermal_williamson2"
-dumpfreq = int(tmax / (ndumps*dt))
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          dumplist_latlon=['D', 'D_error'],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    dumplist_latlon=['D', 'D_error'],
+)
 
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterKineticEnergy(),
                      ShallowWaterPotentialEnergy(params),
                      ShallowWaterPotentialEnstrophy(),
-                     SteadyStateError('u'), SteadyStateError('D')]
+                     SteadyStateError('u'), SteadyStateError('D'),
+                     MeridionalComponent('u'), ZonalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "D"),
+                     DGUpwind(eqns, "b")]
 
 # Time stepper
-stepper = Timestepper(eqns, RK4(domain), io)
+stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
@@ -64,11 +76,11 @@ phi, lamda = latlon_coords(mesh)
 uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
 g = params.g
 w = Omega*R*u_max + (u_max**2)/2
-sigma = 0
+sigma = w/10
 
 Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
 
-numerator = theta_0 - sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
+numerator = theta_0 + sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
 
 denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
 

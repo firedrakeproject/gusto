@@ -1,77 +1,191 @@
-"""Provides forms for different transport operators."""
+"""
+Defines TransportMethod objects, which are used to solve a transport problem.
+"""
 
-from firedrake import (Function, FacetNormal,
-                       dx, dot, grad, div, jump, avg, dS, dS_v, dS_h, inner,
-                       ds_v, ds_t, ds_b,
-                       outer, sign, cross, curl)
+from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer,
+                       jump, grad, div, FacetNormal, Function, sign, avg, cross,
+                       curl)
 from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.labels import transport, transporting_velocity, ibp_label
+from gusto.fml import Term, keep, drop
+from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
+from gusto.logging import logger
+from gusto.spatial_methods import SpatialMethod
+
+__all__ = ["DefaultTransport", "DGUpwind"]
 
 
-__all__ = ["advection_form", "continuity_form", "vector_invariant_form",
-           "vector_manifold_advection_form", "kinetic_energy_form",
-           "advection_equation_circulation_form", "linear_continuity_form"]
-
-
-def linear_advection_form(domain, test, qbar):
+# ---------------------------------------------------------------------------- #
+# Base TransportMethod class
+# ---------------------------------------------------------------------------- #
+class TransportMethod(SpatialMethod):
     """
-    The form corresponding to the linearised advective transport operator.
-
-    Args:
-        domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
-        test (:class:`TestFunction`): the test function.
-        qbar (:class:`ufl.Expr`): the variable to be transported.
-
-    Returns:
-        :class:`LabelledForm`: a labelled transport form.
+    The base object for describing a transport scheme.
     """
 
-    ubar = Function(domain.spaces("HDiv"))
+    def __init__(self, equation, variable):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+        """
 
-    # TODO: why is there a k here?
-    L = test*dot(ubar, domain.k)*dot(domain.k, grad(qbar))*dx
+        # Inherited init method extracts original term to be replaced
+        super().__init__(equation, variable, transport)
 
-    form = transporting_velocity(L, ubar)
+        self.transport_equation_type = self.original_form.terms[0].get(transport)
 
-    return transport(form, TransportEquationType.advective)
+    def replace_form(self, equation):
+        """
+        Replaces the form for the transport term in the equation with the
+        form for the transport discretisation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the equation or scheme whose
+                transport term should be replaced with the transport term of
+                this discretisation.
+        """
+
+        # We need to take care to replace the term with all the same labels,
+        # except the label for the transporting velocity
+        # This is easiest to do by extracting the transport term itself
+        original_form = equation.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
+            map_if_true=keep, map_if_false=drop
+        )
+
+        if len(original_form.terms) == 0:
+            # This is likely not the appropriate equation so skip
+            logger.warning(f'No transport term found for {self.variable} in '
+                           + 'this equation. Skipping.')
+
+        elif len(original_form.terms) == 1:
+            # Replace form
+            original_term = original_form.terms[0]
+
+            # Update transporting velocity
+            new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
+            original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
+
+            # Create new term
+            new_term = Term(self.form.form, original_term.labels)
+
+            # Replace original term with new term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport) and t.get(prognostic) == self.variable,
+                map_if_true=lambda t: new_term)
+
+        else:
+            raise RuntimeError('Found multiple transport terms for '
+                               + f'{self.variable}. {len(original_form.terms)} found')
 
 
-def linear_continuity_form(domain, test, qbar, facet_term=False):
+# ---------------------------------------------------------------------------- #
+# TransportMethod for using underlying default transport form
+# ---------------------------------------------------------------------------- #
+class DefaultTransport(TransportMethod):
     """
-    The form corresponding to the linearised continuity transport operator.
-
-    Args:
-        domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
-        test (:class:`TestFunction`): the test function.
-        qbar (:class:`ufl.Expr`): the variable to be transported.
-        facet_term (bool, optional): whether to include interior facet terms.
-            Defaults to False.
-
-    Returns:
-        :class:`LabelledForm`: a labelled transport form.
+    Performs no manipulation of the transport form, so the scheme is simply
+    based on the transport terms that are declared when the equation is set up.
     """
+    def __init__(self, equation, variable):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+        """
 
-    Vu = domain.spaces("HDiv")
-    ubar = Function(Vu)
+        super().__init__(equation, variable)
 
-    L = qbar*test*div(ubar)*dx
+    def replace_form(self, equation):
+        """
+        In theory replaces the transport form in the equation, but in this case
+        does nothing.
 
-    if facet_term:
-        n = FacetNormal(domain.mesh)
-        Vu = domain.spaces("HDiv")
-        dS_ = (dS_v + dS_h) if Vu.extruded else dS
-        L += jump(ubar*test, n)*avg(qbar)*dS_
-
-    form = transporting_velocity(L, ubar)
-
-    return transport(form, TransportEquationType.conservative)
+        Args:
+            equation (:class:`PrognosticEquation`): the equation or scheme whose
+                transport term should (not!) be replaced with the transport term
+                of this discretisation.
+        """
+        pass
 
 
-def advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+# ---------------------------------------------------------------------------- #
+# Class for DG Upwind transport methods
+# ---------------------------------------------------------------------------- #
+class DGUpwind(TransportMethod):
+    """
+    The Discontinuous Galerkin Upwind transport scheme.
+
+    Discretises the gradient of a field weakly, taking the upwind value of the
+    transported variable at facets.
+    """
+    def __init__(self, equation, variable, ibp=IntegrateByParts.ONCE,
+                 vector_manifold_correction=False, outflow=False):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+            ibp (:class:`IntegrateByParts`, optional): an enumerator for how
+                many times to integrate by parts. Defaults to `ONCE`.
+            vector_manifold_correction (bool, optional): whether to include a
+                vector manifold correction term. Defaults to False.
+            outflow (bool, optional): whether to include outflow at the domain
+                boundaries, through exterior facet terms. Defaults to False.
+        """
+
+        super().__init__(equation, variable)
+        self.ibp = ibp
+        self.vector_manifold_correction = vector_manifold_correction
+        self.outflow = outflow
+
+        # -------------------------------------------------------------------- #
+        # Determine appropriate form to use
+        # -------------------------------------------------------------------- #
+
+        if self.transport_equation_type == TransportEquationType.advective:
+            if vector_manifold_correction:
+                form = vector_manifold_advection_form(self.domain, self.test,
+                                                      self.field, ibp=ibp,
+                                                      outflow=outflow)
+            else:
+                form = upwind_advection_form(self.domain, self.test, self.field,
+                                             ibp=ibp, outflow=outflow)
+
+        elif self.transport_equation_type == TransportEquationType.conservative:
+            if vector_manifold_correction:
+                form = vector_manifold_continuity_form(self.domain, self.test,
+                                                       self.field, ibp=ibp,
+                                                       outflow=outflow)
+            else:
+                form = upwind_continuity_form(self.domain, self.test, self.field,
+                                              ibp=ibp, outflow=outflow)
+
+        elif self.transport_equation_type == TransportEquationType.circulation:
+            if outflow:
+                raise NotImplementedError('Outflow not implemented for upwind circulation')
+            form = upwind_circulation_form(self.domain, self.test, self.field, ibp=ibp)
+
+        elif self.transport_equation_type == TransportEquationType.vector_invariant:
+            if outflow:
+                raise NotImplementedError('Outflow not implemented for upwind vector invariant')
+            form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
+
+        else:
+            raise NotImplementedError('Upwind transport scheme has not been '
+                                      + 'implemented for this transport equation type')
+
+        self.form = form
+
+
+# ---------------------------------------------------------------------------- #
+# Forms for DG Upwind transport
+# ---------------------------------------------------------------------------- #
+def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
-    The form corresponding to the advective transport operator.
+    The form corresponding to the DG upwind advective transport operator.
 
     This discretises (u.∇)q, for transporting velocity u and transported
     variable q. An upwind discretisation is used for the facet terms when the
@@ -127,9 +241,9 @@ def advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     return ibp_label(transport(form, TransportEquationType.advective), ibp)
 
 
-def continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
-    The form corresponding to the continuity transport operator.
+    The form corresponding to the DG upwind continuity transport operator.
 
     This discretises ∇.(u*q), for transporting velocity u and transported
     variable q. An upwind discretisation is used for the facet terms when the
@@ -209,7 +323,7 @@ def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, o
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = advection_form(domain, test, q, ibp, outflow)
+    L = upwind_advection_form(domain, test, q, ibp, outflow)
 
     # TODO: there should maybe be a restriction on IBP here
     Vu = domain.spaces("HDiv")
@@ -247,7 +361,7 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = continuity_form(domain, test, q, ibp, outflow)
+    L = upwind_continuity_form(domain, test, q, ibp, outflow)
 
     Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
@@ -262,20 +376,16 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
     return transport(form)
 
 
-def vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
+def upwind_circulation_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     u"""
-    The form corresponding to the vector invariant transport operator.
+    The form corresponding to the DG upwind vector circulation operator.
 
     The self-transporting transport operator for a vector-valued field u can be
     written as circulation and kinetic energy terms:
     (u.∇)u = (∇×u)×u + (1/2)∇u^2
 
-    When the transporting field u and transported field q are similar, we write
-    this as:
-    (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
-
-    This form discretises this final equation, using an upwind discretisation
-    when integrating by parts.
+    This form discretises the first term in this equation, (∇×u)×u, using an
+    upwind discretisation when integrating by parts.
 
     Args:
         domain (:class:`Domain`): the model's domain object, containing the
@@ -341,43 +451,14 @@ def vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
                              perp(ubar))*perp(q), n)*dS_
             )
 
-    L -= 0.5*div(test)*inner(q, ubar)*dx
-
     form = transporting_velocity(L, ubar)
 
-    return transport(form, TransportEquationType.vector_invariant)
+    return transport(form, TransportEquationType.circulation)
 
 
-def kinetic_energy_form(domain, test, q):
+def upwind_vector_invariant_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     u"""
-    The form corresponding to the kinetic energy term.
-
-    Writing the kinetic energy term as (1/2)∇u^2, if the transported variable
-    q is similar to the transporting variable u then this can be written as:
-    (1/2)∇(u.q).
-
-    Args:
-        domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
-        test (:class:`TestFunction`): the test function.
-        q (:class:`ufl.Expr`): the variable to be transported.
-
-    Returns:
-        class:`LabelledForm`: a labelled transport form.
-    """
-
-    ubar = Function(domain.spaces("HDiv"))
-    L = 0.5*div(test)*inner(q, ubar)*dx
-
-    form = transporting_velocity(L, ubar)
-
-    return transport(form, TransportEquationType.vector_invariant)
-
-
-def advection_equation_circulation_form(domain, test, q,
-                                        ibp=IntegrateByParts.ONCE):
-    u"""
-    The circulation term in the transport of a vector-valued field.
+    The form corresponding to the DG upwind vector invariant transport operator.
 
     The self-transporting transport operator for a vector-valued field u can be
     written as circulation and kinetic energy terms:
@@ -387,8 +468,8 @@ def advection_equation_circulation_form(domain, test, q,
     this as:
     (u.∇)q = (∇×q)×u + (1/2)∇(u.q)
 
-    The form returned by this function corresponds to the (∇×q)×u circulation
-    term. An an upwind discretisation is used when integrating by parts.
+    This form discretises this final equation, using an upwind discretisation
+    when integrating by parts.
 
     Args:
         domain (:class:`Domain`): the model's domain object, containing the
@@ -406,9 +487,10 @@ def advection_equation_circulation_form(domain, test, q,
         class:`LabelledForm`: a labelled transport form.
     """
 
-    form = (
-        vector_invariant_form(domain, test, q, ibp=ibp)
-        - kinetic_energy_form(domain, test, q)
-    )
+    circulation_form = upwind_circulation_form(domain, test, q, ibp=ibp)
+    ubar = circulation_form.terms[0].get(transporting_velocity)
 
-    return form
+    L = circulation_form.terms[0].form - 0.5*div(test)*inner(q, ubar)*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.vector_invariant)

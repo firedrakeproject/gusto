@@ -6,15 +6,17 @@ that interact and checks the results agains a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
-                       norm, cos, pi)
+                       cos, pi, as_vector)
+import numpy as np
 
 
 def run_sw_fplane(tmpdir):
     # Domain
+    mesh_name = 'sw_fplane_mesh'
     Nx = 32
     Ny = Nx
     Lx = 10
-    mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True)
+    mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True, name=mesh_name)
     dt = 0.01
     domain = Domain(mesh, dt, 'RTCF', 1)
 
@@ -27,19 +29,21 @@ def run_sw_fplane(tmpdir):
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/sw_fplane",
-                              dumpfreq=1,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=str(tmpdir)+"/sw_fplane",
+        dumpfreq=1,
+    )
 
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    transported_fields = []
-    transported_fields.append((ImplicitMidpoint(domain, "u")))
-    transported_fields.append((SSPRK3(domain, "D")))
+    transported_fields = [TrapeziumRule(domain, "u"),
+                          SSPRK3(domain, "D")]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -98,15 +102,16 @@ def run_sw_fplane(tmpdir):
     stepper.run(t=0, tmax=10*dt)
 
     # State for checking checkpoints
-    checkpoint_name = 'sw_fplane_chkpt'
+    checkpoint_name = 'sw_fplane_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
     check_output = OutputParameters(dirname=tmpdir+"/sw_fplane",
                                     checkpoint_pickup_filename=new_path)
-    check_io = IO(domain, output=check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
-    check_stepper.set_reference_profiles([])
-    check_stepper.run(t=0, tmax=0, pick_up=True)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, 'RTCF', 1)
+    check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper
 
@@ -119,7 +124,8 @@ def test_sw_fplane(tmpdir):
     for variable in ['u', 'D']:
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
-        error = norm(new_variable - check_variable) / norm(check_variable)
+        diff_array = new_variable.dat.data - check_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
 
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \

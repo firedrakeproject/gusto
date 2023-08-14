@@ -44,24 +44,27 @@ parameters = CompressibleParameters()
 eqns = IncompressibleBoussinesqEquations(domain, parameters)
 
 # I/O
-output = OutputParameters(dirname='skamarock_klemp_incompressible',
-                          dumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname='skamarock_klemp_incompressible',
+    dumpfreq=dumpfreq,
+    dumplist=['u'],
+)
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 b_opts = SUPGOptions()
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "b", options=b_opts)]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "b", ibp=b_opts.ibp)]
 
 # Linear solver
 linear_solver = IncompressibleSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #

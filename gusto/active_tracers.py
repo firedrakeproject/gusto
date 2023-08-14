@@ -8,7 +8,8 @@ what type of variable the tracer is, what phase it is, etc).
 """
 
 from enum import Enum
-from gusto.configuration import TransportEquationType, logger
+from gusto.configuration import TransportEquationType
+from gusto.logging import logger
 
 __all__ = ["TracerVariableType", "Phases", "ActiveTracer",
            "WaterVapour", "CloudWater", "Rain"]
@@ -77,8 +78,6 @@ class ActiveTracer(object):
         self.variable_type = variable_type
         self.phase = phase
         self.chemical = chemical
-        if self.variable_type != TracerVariableType.mixing_ratio:
-            raise NotImplementedError('Only mixing ratio tracers are currently implemented')
 
         if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '
