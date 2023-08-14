@@ -142,9 +142,7 @@ class Domain(object):
             raise ValueError('Unable to determine domain type')
 
         comm = self.mesh.comm
-        comm_size = comm.Get_size()
         my_rank = comm.Get_rank()
-        max_num_domain_infos = 3
 
         # Properties of domain will be determined from full coords, so need
         # doing on the first processor then broadcasting to others
@@ -158,19 +156,8 @@ class Domain(object):
             if mesh.extruded:
                 self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
 
-            # Send information to other processors
-            for j, metadata_key in enumerate([f'domain_extent_{xyz}' for xyz in ['x', 'y', 'z']]):
-                if metadata_key in self.metadata.keys():
-                    metadata_value = self.metadata[metadata_key]
-                else:
-                    metadata_value = None
-                for procid in range(1, comm_size):
-                    my_tag = comm_size*j + procid
-                    comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
         else:
-            # Need to receive information and store in metadata
-            for j in range(max_num_domain_infos):
-                my_tag = comm_size*j + my_rank
-                metadata_key, metadata_value = comm.recv(source=0, tag=my_tag)
-                if metadata_value is not None:
-                    self.metadata[metadata_key] = metadata_value
+            self.metadata = {}
+
+        # Send information to other processors
+        self.metadata = comm.bcast(self.metadata, root=0)

@@ -129,6 +129,9 @@ def set_log_handler(comm=COMM_WORLD):
     logfile_name += f"_{os.getpid()}.log"
     if comm.rank == 0:
         os.makedirs("results", exist_ok=True)
+    if parallel_log in ["FILE", "BOTH"]:
+        # If all ranks are logging wait here for the directory to be created
+        comm.Barrier()
     logfile_path = os.path.join("results", logfile_name)
 
     console_format_str = ""
@@ -160,7 +163,7 @@ def set_log_handler(comm=COMM_WORLD):
     logger.info("Running %s" % " ".join(sys.argv))
 
 
-def update_logfile_location(new_path):
+def update_logfile_location(new_path, comm):
     """ Update the location of the logfile.
 
     This is used to move the temporary log file created in the results
@@ -180,6 +183,9 @@ def update_logfile_location(new_path):
         logger.removeHandler(fh)
 
         os.makedirs(new_path, exist_ok=True)
+        if parallel_log in ["FILE", "BOTH"]:
+            # If all ranks are logging wait here in case a directory is being created
+            comm.Barrier()
         # Use shutil.move and not os.rename as new path may be on a
         # different file system. Notably, this is the case for CI.
         shutil.move(old_path, new_path/filename)
