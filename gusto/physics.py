@@ -8,12 +8,12 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from gusto.active_tracers import Phases
+from gusto.active_tracers import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
-from gusto.labels import physics, transporting_velocity
-from gusto.configuration import logger
+from gusto.labels import physics, transporting_velocity, transport, prognostic
+from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
 from gusto import thermodynamics
@@ -274,7 +274,11 @@ class Fallout(Physics):
         # Check that fields exist
         assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
-        # TODO: check if variable is a mixing ratio
+        # Check if variable is a mixing ratio
+        rain_tracer = equation.get_active_tracer(rain_name)
+        if rain_tracer.variable_type != TracerVariableType.mixing_ratio:
+            raise NotImplementedError('Fallout only implemented when rain '
+                                      + 'variable is a mixing ratio')
 
         # Set up rain and velocity
         self.X = Function(equation.X.function_space())
@@ -299,7 +303,12 @@ class Fallout(Physics):
                                           ufl.replace(t.form, {t.get(transporting_velocity): v}),
                                           t.labels))
 
-        equation.residual += physics(subject(adv_term, equation.X), self.evaluate)
+        # We don't want this term to be picked up by normal transport, so drop
+        # the transport label
+        adv_term = transport.remove(adv_term)
+
+        adv_term = prognostic(subject(adv_term, equation.X), rain_name)
+        equation.residual += physics(adv_term, self.evaluate)
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -340,7 +349,10 @@ class Fallout(Physics):
                                         / (math.gamma(4 + mu) * Lambda0 ** b)
                                         * (rho0 / rho) ** g))
         else:
-            raise NotImplementedError('Currently we only have implementations for zero and one moment schemes for rainfall. Valid options are AdvectedMoments.M0 and AdvectedMoments.M3')
+            raise NotImplementedError(
+                'Currently there are only implementations for zero and one '
+                + 'moment schemes for rainfall. Valid options are '
+                + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
             self.determine_v = Projector(-v_expression*domain.k, v)

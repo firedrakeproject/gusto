@@ -10,7 +10,7 @@ from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
-from gusto.configuration import logger, set_log_handler
+from gusto.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
 
@@ -32,6 +32,7 @@ def pick_up_mesh(output, mesh_name):
     """
 
     # Open the checkpointing file for writing
+    dumpdir = None
     if output.checkpoint_pickup_filename is not None:
         chkfile = output.checkpoint_pickup_filename
     else:
@@ -39,6 +40,9 @@ def pick_up_mesh(output, mesh_name):
         chkfile = path.join(dumpdir, "chkpt.h5")
     with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
+
+    if dumpdir:
+        update_logfile_location(dumpdir, mesh.comm)
 
     return mesh
 
@@ -222,10 +226,6 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
-        # setup logger
-        logger.setLevel(output.log_level)
-        set_log_handler(self.mesh.comm)
-
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -307,6 +307,8 @@ class IO(object):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
                     raise IOError(f'results directory {self.dumpdir} already exists')
+
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
@@ -433,6 +435,7 @@ class IO(object):
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         # Need to pick up reference profiles, but don't know which are stored
         possible_ref_profiles = []

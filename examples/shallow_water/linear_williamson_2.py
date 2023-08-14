@@ -45,9 +45,10 @@ fexpr = 2*Omega*x[2]/R
 eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O
-output = OutputParameters(dirname='linear_williamson_2',
-                          dumpfreq=dumpfreq,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname='linear_williamson_2',
+    dumpfreq=dumpfreq,
+)
 diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
