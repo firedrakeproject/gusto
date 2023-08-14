@@ -238,6 +238,21 @@ class IO(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
 
+    def log_courant(self, state_fields):
+        """
+        Logs the maximum Courant number value.
+        """
+
+        diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+        if 'CourantNumber' in diagnostic_names:
+            courant_idx = diagnostic_names.index('CourantNumber')
+            courant_diagnostic = self.diagnostic_fields[courant_idx]
+            courant_diagnostic.compute()
+            courant_field = state_fields('CourantNumber')
+            courant_max = self.diagnostics.max(courant_field)
+
+            logger.info(f'Max Courant number: {courant_max}')
+
     def setup_diagnostics(self, state_fields):
         """
         Prepares the I/O for computing the model's global diagnostics and

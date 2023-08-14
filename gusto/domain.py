@@ -8,7 +8,8 @@ from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, grad, VectorFunctionSpace, Function)
+                       inner, grad, VectorFunctionSpace, Function, dot,
+                       FunctionSpace)
 import numpy as np
 
 
@@ -122,6 +123,10 @@ class Domain(object):
         _ = self.spaces('DG1_equispaced')
         self.coords.register_space(self, 'DG1_equispaced')
 
+        # Set height above surface (requires coordinates)
+        if hasattr(mesh, "_base_mesh"):
+            self.set_height_above_surface()
+
         # -------------------------------------------------------------------- #
         # Construct metadata about domain
         # -------------------------------------------------------------------- #
@@ -164,3 +169,32 @@ class Domain(object):
 
         # Send information to other processors
         self.metadata = comm.bcast(self.metadata, root=0)
+
+
+    def set_height_above_surface(self):
+        """
+        Sets a coordinate field which corresponds to height above the domain's
+        surface.
+        """
+
+        x = SpatialCoordinate(self.mesh)
+
+        # Make a height field in CG1
+        CG1 = self.spaces('CG1', family='CG', degree=1)
+        self.coords.register_space(self, 'CG1')
+        CG1_height = Function(CG1)
+        CG1_height.interpolate(dot(self.k, x))
+
+        # Turn height into columnwise data
+        columnwise_height, index_data = self.coords.get_column_data(CG1_height)
+
+        # Find minimum height in each column
+        surface_height_1d = np.min(columnwise_height, axis=1)
+        height_above_surface_data = columnwise_height - surface_height_1d[:, None]
+
+        height_above_surface = Function(CG1)
+        self.coords.set_field_from_column_data(height_above_surface,
+                                               height_above_surface_data,
+                                               index_data)
+
+        self.height_above_surface = height_above_surface

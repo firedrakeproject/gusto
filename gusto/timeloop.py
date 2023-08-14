@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant, split
+from firedrake import Function, Projector, split
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.fml import drop, Label, Term
@@ -171,6 +171,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.x.update()
 
+            self.io.log_courant(self.fields)
+
             self.timestep()
 
             self.t.assign(self.t + self.dt)
@@ -323,8 +325,8 @@ class SplitPhysicsTimestepper(Timestepper):
 
         for _, phys_scheme in self.physics_schemes:
             # check that the supplied schemes for physics are explicit
-            assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
-                "Only explicit time discretisations can be used for physics"
+            # assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
+            #     "Only explicit time discretisations can be used for physics"
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, physics)
 
@@ -654,6 +656,21 @@ class PrescribedTransport(Timestepper):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
+
+    def run(self, t, tmax, pick_up=False):
+        """
+        Runs the model for the specified time, from t to tmax
+
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pick_up: (bool): specify whether to pick_up from a previous run
+        """
+        # It's best to have evaluated the velocity before we start
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
+
+        super().run(t, tmax, pick_up=pick_up)
 
     def timestep(self):
         if self.velocity_projection is not None:

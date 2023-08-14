@@ -14,8 +14,9 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
 from gusto.labels import physics, transporting_velocity, transport, prognostic
 from gusto.logging import logger
-from firedrake import (Interpolator, conditional, Function, dx,
-                       min_value, max_value, Constant, pi, Projector)
+from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
+                       min_value, max_value, Constant, pi, Projector,
+                       TestFunctions)
 from gusto import thermodynamics
 import ufl
 import math
@@ -25,7 +26,7 @@ from types import FunctionType
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
-           "SourceSink"]
+           "SourceSink", "SurfaceFluxes"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -756,10 +757,10 @@ class InstantRain(Physics):
                  parameters=None):
         """
         Args:
-            equation (:class: 'PrognosticEquationSet'): the model's equation.
-            saturation_curve (ufl expression or :class: `function`): the
-                curve above which excess moisture is converted to rain. Is
-                either prescribed or dependent on a prognostic field.
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            saturation_curve (:class:`ufl.Expr` or func): the curve above which
+                excess moisture is converted to rain. Is either prescribed or
+                dependent on a prognostic field.
             time_varying_saturation (bool, optional): set this to True if the
                 saturation curve is changing in time. Defaults to False.
             vapour_name (str, optional): name of the water vapour variable.
@@ -901,14 +902,14 @@ class SWSaturationAdjustment(Physics):
                  parameters=None):
         """
         Args:
-            equation (:class: 'PrognosticEquationSet'): the model's equation
-            saturation_curve (ufl expression or :class: `function`): the
-                curve which dictates when phase changes occur. In a saturated
-                atmosphere vapour above the saturation curve becomes cloud,
-                and if the atmosphere is sub-saturated and there is cloud
-                present cloud will become vapour until the saturation curve is
-                reached. The saturation curve is either prescribed or
-                dependent on a prognostic field.
+            equation (:class:`PrognosticEquationSet`): the model's equation
+            saturation_curve (:class:`ufl.Expr` or func): the curve which
+                dictates when phase changes occur. In a saturated atmosphere
+                vapour above the saturation curve becomes cloud, and if the
+                atmosphere is sub-saturated and there is cloud present cloud
+                will become vapour until the saturation curve is reached. The
+                saturation curve is either prescribed or dependent on a
+                prognostic field.
             time_varying_saturation (bool, optional): set this to True if the
                 saturation curve is changing in time. Defaults to False.
             L_v (float, optional): The air expansion factor multiplied by the
@@ -1080,3 +1081,149 @@ class SWSaturationAdjustment(Physics):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+
+
+class SurfaceFluxes(Physics):
+    """
+    Prescribed surface temperature and moisture fluxes, to be used in aquaplanet
+    simulations as Sea Surface Temperature fluxes.
+
+    These can be used either with an in-built implicit formulation, or with a
+    generic time discretisation.
+
+    Written to assume that dry density is unchanged by the parametrisation.
+    """
+
+    def __init__(self, equation, T_surface_expr, vapour_name=None,
+                 implicit_formulation=False, parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            T_surface_expr (:class:`ufl.Expr`): the surface temperature.
+            vapour_name (str, optional): name of the water vapour variable.
+                Defaults to None, in which case no moisture fluxes are applied.
+            implicit_formulation (bool, optional): whether the scheme is already
+                put into a Backwards Euler formulation (which allows this scheme
+                to actually be used with a Forwards Euler or other explicit time
+                discretisation. Otherwise, this is formulated more generally and
+                can be used with any time stepper. Defaults to False.
+            parameters (:class:`BoundaryLayerParameters`): configuration object
+                giving the parameters for boundary and surface level schemes.
+                Defaults to None, in which case default values are used.
+        """
+
+        # -------------------------------------------------------------------- #
+        # Check arguments and generic initialisation
+        # -------------------------------------------------------------------- #
+        assert isinstance(equation, CompressibleEulerEquations), \
+            "Surface fluxes can only be used with Compressible Euler equations"
+
+        if vapour_name is not None:
+            assert vapour_name in equation.field_names, \
+                f"Field {vapour_name} does not exist in the equation set"
+
+        if parameters is None:
+            parameters = BoundaryLayerParameters()
+
+        super().__init__(equation, parameters=None)
+
+        self.implicit_formulation = implicit_formulation
+        self.X = Function(equation.X.function_space())
+
+        # -------------------------------------------------------------------- #
+        # Extract prognostic variables
+        # -------------------------------------------------------------------- #
+        u_idx = equation.field_names.index('u')
+        T_idx = equation.field_names.index('theta')
+        rho_idx = equation.field_names.index('rho')
+        if vapour_name is not None:
+            m_v_idx = equation.field_names.index(vapour_name)
+
+        # For implicit formulation, use internal variables. Otherwise equation's
+        X = self.X if implicit_formulation else equation.X
+        tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
+
+        u = X.subfunctions[u_idx]
+        theta_vd = X.subfunctions[T_idx]
+        rho = X.subfunctions[rho_idx]
+        test_rho = tests[rho_idx]
+        test_theta = tests[T_idx]
+
+        if vapour_name is not None:
+            m_v = X.subfunctions[m_v_idx]
+            test_m_v = tests[m_v_idx]
+        else:
+            m_v = None
+
+        if implicit_formulation:
+            # Need to evaluate rho at theta-points
+            boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
+            rho_averaged = Function(equation.function_space.sub(T_idx))
+            self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+            exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, theta_vd)
+        else:
+            # Exner is more general expression
+            exner = thermodynamics.exner_pressure(equation.parameters, rho, theta_vd)
+
+        # Alternative variables
+        T = thermodynamics.T(equation.parameters, theta_vd, exner, r_v=m_v)
+        p = thermodynamics.p(equation.parameters, exner)
+
+        # -------------------------------------------------------------------- #
+        # Expressions for surface fluxes
+        # -------------------------------------------------------------------- #
+        z = equation.domain.height_above_surface
+        z_a = parameters.height_surface_layer
+        # TODO: should surface be a function (like a mask?)
+        surface = conditional(z < z_a, Constant(1.0), Constant(0.0))
+
+        u_hori = u - equation.domain.k*dot(u, equation.domain.k)
+        u_hori_mag = sqrt(dot(u_hori, u_hori))
+
+        C_H = parameters.coeff_heat
+        C_E = parameters.coeff_evap
+
+        if implicit_formulation:
+            raise NotImplementedError('implicit formulation not yet implemented')
+            # Plan here is to first evaluate T and m_v properly
+            # Then back out what the new value of theta_vd will be from new T
+        else:
+            # Construct underlying expressions
+            kappa = equation.parameters.kappa
+            dT_dt = surface * C_H * u_hori_mag * (T_surface_expr - T) / z_a
+
+            if vapour_name is not None:
+                mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
+                dmv_dt = surface * C_E * u_hori_mag * (mv_sat - m_v) / z_a
+                source_mv_expr = test_m_v * dmv_dt * dx
+                equation.residual -= physics(
+                    prognostic(subject(source_mv_expr, equation.X),
+                               vapour_name), self.evaluate)
+
+                # Theta expression depends on dmv_dt
+                epsilon = equation.parameters.R_d / equation.parameters.R_v
+                dtheta_vd_dt = (dT_dt * ((1 + m_v / epsilon) / exner - kappa * theta_vd / rho)
+                                + dmv_dt * (T / (epsilon * exner) - kappa * theta_vd / (epsilon + m_v)))
+
+            else:
+                dtheta_vd_dt = dT_dt * (1 / exner - kappa * theta_vd / rho)
+
+            source_theta_expr = test_theta * dtheta_vd_dt * dx
+
+            equation.residual -= physics(
+                prognostic(subject(source_theta_expr, equation.X),
+                            'theta'), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source term generated by the physics.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+
+        if self.implicit_formulation:
+            for sourcetor in self.source_interpolators:
+                source_interpolator.interpolate()
