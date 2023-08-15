@@ -29,10 +29,10 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_invariant_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_nolimiter'
+dirname = 'baroclinicPerturbation_SUPGoptions'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
