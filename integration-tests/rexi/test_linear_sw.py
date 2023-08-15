@@ -29,12 +29,11 @@ def run_rexi_sw(tmpdir):
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=Constant(f))
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/waves_sw",
-                              log_level='INFO')
+    output = OutputParameters(dirname=str(tmpdir)+"/waves_sw")
     io = IO(domain, output)
 
     # Timestepper
-    stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
+    stepper = Timestepper(eqns, TrapeziumRule(domain), io)
 
     # Initial conditions
     x, y = SpatialCoordinate(mesh)
