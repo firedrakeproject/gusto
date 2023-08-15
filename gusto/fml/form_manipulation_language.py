@@ -6,7 +6,8 @@ import operator
 from firedrake import Constant, Function
 
 
-__all__ = ["Label", "Term", "LabelledForm", "identity", "drop", "all_terms",
+__all__ = ["Label", "Term", "NullTerm", "LabelledForm",
+           "identity", "drop", "all_terms",
            "keep", "subject", "name"]
 
 # ---------------------------------------------------------------------------- #
