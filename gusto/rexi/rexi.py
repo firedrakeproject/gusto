@@ -6,15 +6,6 @@ from gusto import Configuration, replace_subject, drop, time_derivative, all_ter
 from firedrake.formmanipulation import split_form
 
 
-class RexiParameters(Configuration):
-    """
-    Parameters for the REXI coefficients
-    """
-    h = 0.2
-    M = 64
-    reduce_to_half = False
-
-
 class Rexi(object):
     """
     Class defining the solver for the system
