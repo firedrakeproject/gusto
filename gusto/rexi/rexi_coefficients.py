@@ -1,7 +1,8 @@
 import numpy
+from gusto import Configuration
 
 
-class REXIParameters(object):
+class RexiParameters(Configuration):
     """
     mu and a coefficients from
     "A high-order time-parallel scheme for solving wave propagation problems
@@ -9,7 +10,11 @@ class REXIParameters(object):
     Haut et.al.
     """
 
+    h = 0.2
+    M = 64
+    reduce_to_half = False
     mu = -4.315321510875024 + 1j*0
+    # The variables below this line should not be changed.
     L = 11
     a = [
         -1.0845749544592896e-7 + 1j*2.77075431662228e-8,
@@ -71,10 +76,9 @@ def RexiCoefficients(rexi_parameters):
     M = int(float(rexi_parameters.M))
 
     # get L, mu and the a coefficients
-    params = REXIParameters()
-    L = params.L
-    mu = params.mu
-    a = params.a
+    L = rexi_parameters.L
+    mu = rexi_parameters.mu
+    a = rexi_parameters.a
 
     # calculate the b coefficients
     b = b_coefficients(h, M)
