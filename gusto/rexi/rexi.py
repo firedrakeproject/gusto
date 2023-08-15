@@ -105,7 +105,7 @@ class Rexi(object):
                 lambda t: Term(
                     split_form(t.form)[i].form,
                     t.labels),
-                drop)
+                map_if_false=drop)
 
             mass_form = ith_res.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -113,32 +113,32 @@ class Rexi(object):
 
             m = mass_form.label_map(
                 all_terms,
-                replace_test_function(tests_r[i], i))
+                replace_test_function(tests_r[i]))
             a += (
                 (ar + ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], i))
+                                        replace_subject(trials_r[i], old_idx=i))
                 + (ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_i[i], i))
+                                        replace_subject(trials_i[i], old_idx=i))
                 )
 
             L += (
-                m.label_map(all_terms, replace_subject(self.U0.split()[2*i], i))
-                + m.label_map(all_terms, replace_subject(self.U0.split()[2*i+1], i))
+                m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
+                + m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i+1], old_idx=i))
             )
 
             m = mass_form.label_map(
                 all_terms,
-                replace_test_function(tests_i[i], i))
+                replace_test_function(tests_i[i]))
             a += (
                 (ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], i))
+                                        replace_subject(trials_r[i], old_idx=i))
                 +(-ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_i[i], i))
+                                        replace_subject(trials_i[i], old_idx=i))
                 )
 
             L += (
-                m.label_map(all_terms, replace_subject(self.U0.split()[2*i], i))
-                - m.label_map(all_terms, replace_subject(self.U0.split()[2*i+1], i))
+                m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
+                - m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i+1], i))
             )
 
             L_form = ith_res.label_map(
@@ -147,7 +147,7 @@ class Rexi(object):
 
             Lr = L_form.label_map(
                 all_terms,
-                replace_test_function(tests_r[i], i))
+                replace_test_function(tests_r[i]))
             a -= self.tau * Lr.label_map(all_terms,
                                          replace_subject(trials_r))
             a -= self.tau * Lr.label_map(all_terms,
@@ -155,7 +155,7 @@ class Rexi(object):
 
             Li = L_form.label_map(
                 all_terms,
-                replace_test_function(tests_i[i], i))
+                replace_test_function(tests_i[i]))
             a -= self.tau * Li.label_map(all_terms,
                                         replace_subject(trials_r))
             a += self.tau * Li.label_map(all_terms,
@@ -204,13 +204,13 @@ class Rexi(object):
 
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        Uin = x_in.split()
-        U0 = self.U0.split()
+        Uin = x_in.subfunctions
+        U0 = self.U0.subfunctions
         for i in range(len(Uin)):
             U0[2*i].assign(Uin[i])
         self.w_.assign(0.)
-        w_ = self.w_.split()
-        w = self.w.split()
+        w_ = self.w_.subfunctions
+        w = self.w.subfunctions
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
@@ -228,8 +228,8 @@ class Rexi(object):
         else:
             self.w_sum.assign(self.w_)
 
-        w_sum = self.w_sum.split()
-        w_out = self.w_out.split()
+        w_sum = self.w_sum.subfunctions
+        w_out = self.w_out.subfunctions
         for i in range(len(w_out)):
             w_out[i].assign(w_sum[2*i])
 
