@@ -20,7 +20,7 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz)
 
-m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
+m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=5, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Height/nlayers, 
                                        extrusion_type='radial')
 domain = Domain(mesh, dt, "RTCF", degree=1)
@@ -31,28 +31,36 @@ omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, 
-                                 u_transport_option='vector_invariant_form')
+                                 u_transport_option='vector_advection_form')
 
 dirname = 'SBR_Steady_25'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=20,
                           dump_nc=True,
-                          dump_vtus=False,
-                          log_level=('INFO'))
+                          dump_vtus=False)
+                          #log_level=('INFO'))
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
                      RadialComponent('u'), CourantNumber()]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport Schemes
+transport_option=SUPGOptions()
 transported_fields = []
-transported_fields.append(ImplicitMidpoint(domain, "u"))
+transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions()))
-transport_methods = [DGUpwind(eqn, field) for field in ["u", "rho", "theta"]]
+transported_fields.append(SSPRK3(domain, "theta", options=transport_option))
+
+transport_methods = [DGUpwind(eqn, 'u', ibp=transport_option.ibp),
+                     DGUpwind(eqn, 'rho'),
+                     DGUpwind(eqn, 'theta', ibp=transport_option.ibp)]
+
 
 # Linear Solver
 linear_solver = CompressibleSolver(eqn)
+print('linear solver complete')
+
+
 
 # Time Stepper
 stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
