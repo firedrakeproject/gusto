@@ -2,7 +2,10 @@ from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, TrialFunctions, TestFunctions, \
     Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
-from gusto import Configuration, replace_subject, drop, time_derivative, all_terms, replace_test_function, prognostic, Term, perp, NullTerm, linearisation, subject, replace_trial_function
+from gusto import (replace_subject, drop, time_derivative,
+                   all_terms, replace_test_function, prognostic,
+                   Term, NullTerm, linearisation, subject,
+                   replace_trial_function)
 from firedrake.formmanipulation import split_form
 
 
@@ -109,8 +112,8 @@ class Rexi(object):
                 (ar + ai) * m.label_map(all_terms,
                                         replace_subject(trials_r[i], old_idx=i))
                 + (ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_i[i], old_idx=i))
-                )
+                                          replace_subject(trials_i[i], old_idx=i))
+            )
 
             L += (
                 m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
@@ -123,13 +126,15 @@ class Rexi(object):
             a += (
                 (ar - ai) * m.label_map(all_terms,
                                         replace_subject(trials_r[i], old_idx=i))
-                +(-ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_i[i], old_idx=i))
-                )
+                + (-ar - ai) * m.label_map(all_terms,
+                                           replace_subject(trials_i[i], old_idx=i))
+            )
 
             L += (
-                m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
-                - m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i+1], i))
+                m.label_map(all_terms,
+                            replace_subject(self.U0.subfunctions[2*i], i))
+                - m.label_map(all_terms,
+                              replace_subject(self.U0.subfunctions[2*i+1], i))
             )
 
             L_form = ith_res.label_map(
@@ -142,16 +147,15 @@ class Rexi(object):
             a -= self.tau * Lr.label_map(all_terms,
                                          replace_subject(trials_r))
             a -= self.tau * Lr.label_map(all_terms,
-                                        replace_subject(trials_i))
+                                         replace_subject(trials_i))
 
             Li = L_form.label_map(
                 all_terms,
                 replace_test_function(tests_i[i]))
             a -= self.tau * Li.label_map(all_terms,
-                                        replace_subject(trials_r))
+                                         replace_subject(trials_r))
             a += self.tau * Li.label_map(all_terms,
-                                        replace_subject(trials_i))
-
+                                         replace_subject(trials_i))
 
         a = a.label_map(lambda t: t is NullTerm, drop)
         L = L.label_map(lambda t: t is NullTerm, drop)
@@ -173,7 +177,7 @@ class Rexi(object):
                                              bcs=bcs,
                                              constant_jacobian=False)
 
-        #if solver_parameters is None:
+        # if solver_parameters is None:
         #    solver_parameters = equation.solver_parameters
 
         self.solver = LinearVariationalSolver(
