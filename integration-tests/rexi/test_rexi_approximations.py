@@ -5,7 +5,6 @@ full REXI approximation.
 
 from gusto.rexi import *
 from firedrake import exp, sqrt, pi
-import pytest
 
 params = RexiParameters()
 mu = params.mu
@@ -15,7 +14,7 @@ a = params.a
 
 def exactGaussian(x, h):
     """
-    An exact Gaussian, for comparison with approximations. 
+    An exact Gaussian, for comparison with approximations.
     """
     return exp(-(x*x)/(4.0*h*h))/sqrt(4.0*pi)
 
@@ -27,7 +26,7 @@ def approx_exp_as_Gaussian(h, M, x):
     b = b_coefficients(h, M)
     sum = 0
     for m in range(-M, M+1):
-        sum += b[m+M] * exactGaussian(x+ (m*h), h)
+        sum += b[m+M] * exactGaussian(x + (m * h), h)
     return sum
 
 
@@ -69,14 +68,15 @@ def approx_e_ix(x, h, M, use_Gaussian_approx):
 # Test 1: This tests the first REXI approximation: the exponential as a sum of
 # Gaussians. The Gaussians are exact. The test compares the linear combination
 # of Gaussian functions (with b coefficients as weights) with the exact
-# exponential, for scalars between 1 and 10. 
+# exponential, for scalars between 1 and 10.
 # ------------------------------------------------------------------------ #
+
 
 def test_sum_of_gaussian_approx():
     h = 0.2
     M = 64
     for x in range(10):
-        exact =  exp(1j*x)
+        exact = exp(1j * x)
         approx = approx_exp_as_Gaussian(h, M, x)
         assert abs(exact - approx) < 1e-14
 
@@ -87,6 +87,7 @@ def test_sum_of_gaussian_approx():
 # varies depending on the choice of 'original_constants'.
 # ------------------------------------------------------------------------ #
 
+
 def test_gaussian_approx():
     h = 0.2
     for x in range(10):
@@ -95,10 +96,11 @@ def test_gaussian_approx():
         assert abs(exact - approx) < 7.15344e-13
 
 # ------------------------------------------------------------------------ #
-# Test 3: This combines Tests 1 and 2 to compare the exact exponential with an 
+# Test 3: This combines Tests 1 and 2 to compare the exact exponential with an
 # approximation produced using a linear combination of Gaussian functions, which
 # are themselves approximated by a sum of rational functions.
 # ------------------------------------------------------------------------ #
+
 
 def test_exponential_approx():
     h = 0.2
@@ -110,8 +112,9 @@ def test_exponential_approx():
 
 # ------------------------------------------------------------------------ #
 # Test 3: This test the full REXI appromimation, i.e. the combination of steps
-# 1 and 2 into a single sum. 
+# 1 and 2 into a single sum.
 # ------------------------------------------------------------------------ #
+
 
 def test_rexi_exponential_approx():
     h = 0.2
