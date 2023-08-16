@@ -22,8 +22,8 @@ nlayers = int(Height/deltaz)
 layerHeight=[]
 
 # Calculating Non-uniform height field
-for n in range(0,15):
-    mu = 7 
+for n in range(1,16):
+    mu = 8 
     width = Height * ((mu * (n / 15)**2 + 1)**0.5 - 1) / ((mu + 1)**0.5 - 1)
     layerHeight.append(width)
 
