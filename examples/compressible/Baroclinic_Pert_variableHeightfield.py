@@ -20,11 +20,13 @@ a = 6.371229e6  # radius of earth
 Height = 3.0e4  # height
 nlayers = int(Height/deltaz) 
 layerHeight=[]
-
+runningHeight=0
 # Calculating Non-uniform height field
 for n in range(1,16):
-    mu = 8 
-    width = Height * ((mu * (n / 15)**2 + 1)**0.5 - 1) / ((mu + 1)**0.5 - 1)
+    mu = 8
+    height = Height * ((mu * (n / 15)**2 + 1)**0.5 - 1) / ((mu + 1)**0.5 - 1)
+    width = height - runningHeight
+    runningHeight = height
     layerHeight.append(width)
 
 m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=25, degree=2)
