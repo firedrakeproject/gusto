@@ -1502,7 +1502,7 @@ class TracerDensity(DiagnosticField):
             m_X: the mixing ratio of the tracer
             rho_d: the dry density of the tracer
         """
-        super().__init__(method='assign', required_fields=(m_X,rho_d))
+        super().__init__(method='interpolate', required_fields=(m_X,rho_d))
         self.m_X = m_X
         self.rho_d = rho_d
 
