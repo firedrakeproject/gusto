@@ -24,7 +24,8 @@ from types import FunctionType
 
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
-           "AdvectedMoments", "InstantRain", "SWSaturationAdjustment"]
+           "AdvectedMoments", "InstantRain", "SWSaturationAdjustment", 
+           "TerminatorToy"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -980,3 +981,60 @@ class SWSaturationAdjustment(Physics):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+            
+            
+class TerminatorToy(Physics):
+  """
+  Setup the Terminator Toy chemistry interaction
+  as specified in 'The terminator toy chemisty test ...'
+  Lauritzen et. al. (2014).
+  """
+  def __init__(self, equation, k1=1, k2=1, species1_name='X',
+                species2_name='X2', accumulation=True):
+        """
+        Args:
+            equation (:class: 'PrognosticEquationSet'): the model's equation
+            k1(float, optional): Reaction rate for species 1 (X). Defaults to a constant
+            over the domain.
+            k2(float, optional): Reaction rate for species 2 (X2). Defaults to a constant 
+            over the domain.
+            species1_name(str, optional): Name of the first interacting species. Defaults 
+            to 'X'.
+            species2_name(str, optional): Name of the first interacting species. Defaults 
+            to 'X2'.
+            
+        """
+                 
+                 
+        assert species_1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
+        assert rain_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
+        
+        self.species1_idx = equation.field_names.index(species1_name)
+        self.species2_idx = equation.field_names.index(species2_name)
+        V1 = equation.function_space.sub(self.species1_idx)
+        V2 = equation.function_space.sub(self.species2_idx)
+        self.species1 = Function(V1)
+        self.species2 = Function(V2)
+                 
+        Vs1 = self.species1.function_space()
+        Vs2 = self.species2.function_space()
+        
+        self.source1 = Function(Vs1)
+        self.source2 = Function(Vs2)
+        
+        s1_expr = 2*k1*self.species2 - 2*k2*(self.species1**2)
+        s2_expr = -k1*species2 + k2*()self.species1**2)
+                 
+        self.source1_interpolator = Interpolator(s1_expr, self.source1)
+        self.source2_interpolator = Interpolator(s2_expr, self.source2)
+
+        # Add term to equation's residual
+        test_1 = equation.tests[self.species1_idx]
+        test_2 = equation.tests[self.species2_idx]
+        equation.residual += physics(subject(test_1 * self.source1 * dx
+                                             + test_2 * self.source2 * dx,
+                                             equation.X),
+                                     self.evaluate)         
+                 
+                 
+                 
