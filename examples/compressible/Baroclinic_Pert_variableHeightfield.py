@@ -41,7 +41,7 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_SUPGoptions'
+dirname = 'baroclinicPerturbation_variable_depth'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
