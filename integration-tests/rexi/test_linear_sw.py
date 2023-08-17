@@ -1,79 +1,75 @@
 """
 This runs the wave scenario from Schreiber et al 2018 for the linear f-plane
-shallow water equations and compares the REXI output to the Implicit Midpoint
-output to confirm that REXI is correct
+shallow water equations and compares the REXI output to a known checkpointed
+answer to confirm that REXI is correct.
 """
 
 from os.path import join, abspath, dirname
 from gusto import *
 from gusto.rexi import *
 from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, Constant, sin,
-                       cos, pi, norm, as_vector, Function, File)
+                       cos, pi, as_vector, Function, File)
+
+import numpy as np
 
 
 def run_rexi_sw(tmpdir):
-    # timestepping parameters
+    # Parameters
     dt = 0.001
     tmax = 0.1
+    H = 1
+    f = 1
+    g = 1
 
     # Domain
+    mesh_name = 'linear_sw_mesh'
+    L = 1
     n = 20
-    mesh = PeriodicUnitSquareMesh(n, n)
+    mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name)
     domain = Domain(mesh, dt, 'BDM', 1)
 
-    # set up linear shallow water equations
-    H = 1
-    f = 1.
-    g = 1
+    # Equation
     parameters = ShallowWaterParameters(H=H, g=g)
-    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=Constant(f))
+    fexpr = Constant(f)
+    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
-    # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/waves_sw")
-    io = IO(domain, output)
-
-    # Timestepper
-    stepper = Timestepper(eqns, TrapeziumRule(domain), io)
+    # REXI output
+    rexi_output = File(str(tmpdir)+"/waves_sw/rexi.pvd")
 
     # Initial conditions
     x, y = SpatialCoordinate(mesh)
-    u0 = stepper.fields("u")
-    D0 = stepper.fields("D")
-    uexpr = as_vector([cos(8*pi*x)*cos(2*pi*y), cos(4*pi*x)*cos(4*pi*y)])
-    Dexpr = sin(4*pi*x)*cos(2*pi*y) - 0.2*cos(4*pi*x)*sin(4*pi*y)
-    u0.project(uexpr)
-    D0.interpolate(Dexpr)
+    uexpr = as_vector([cos(8*pi*(x-L/2))*cos(2*pi*(y-L/2)), cos(4*pi*(x-L/2))*cos(4*pi*(y-L/2))])
+    Dexpr = H + sin(4*pi*(x-L/2))*cos(2*pi*(y-L/2)) - 0.2*cos(4*pi*(x-L/2))*sin(4*pi*(y-L/2))
 
-    # Compute implicit midpoint solution
-    stepper.run(t=0, tmax=tmax)
-    usoln = stepper.fields("u")
-    Dsoln = stepper.fields("D")
-
-    # Compute exponential solution and write out
-    rexi_output = File(str(tmpdir)+"/waves_sw/rexi.pvd")
-    domain = Domain(mesh, dt, 'BDM', 1)
-    parameters = ShallowWaterParameters(H=H, g=g)
-    linearisation_map = lambda t: \
-        t.get(prognostic) in ["u", "D"] \
-        and (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-             or (t.get(prognostic) == "D" and t.has_label(transport)))
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=Constant(f),
-                                 linearisation_map=linearisation_map)
-
-    U_in = Function(eqns.function_space)
-    Uexpl = Function(eqns.function_space)
+    U_in = Function(eqns.function_space, name="U_in")
+    Uexpl = Function(eqns.function_space, name="Uexpl")
     u, D = U_in.split()
     u.project(uexpr)
     D.interpolate(Dexpr)
     rexi_output.write(u, D)
 
+    # Compute exponential solution and write it out
     rexi = Rexi(eqns, RexiParameters())
     rexi.solve(Uexpl, U_in, tmax)
 
     uexpl, Dexpl = Uexpl.split()
     u.assign(uexpl)
     D.assign(Dexpl)
-    rexi_output.write(u, D)    
+    rexi_output.write(u, D)
+
+    # Checkpointing
+    checkpoint_name = 'linear_sw_wave_rexi_chkpt.h5'
+    new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
+    check_output = OutputParameters(dirname=tmpdir+"/linear_sw_wave",
+                                    checkpoint_pickup_filename=new_path)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, 'BDM', 1)
+    check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
+    usoln = check_stepper.fields("u")
+    Dsoln = check_stepper.fields("D")
 
     return usoln, Dsoln, uexpl, Dexpl
 
@@ -84,8 +80,11 @@ def test_rexi_sw(tmpdir):
 
     usoln, Dsoln, uexpl, Dexpl = run_rexi_sw(dirname)
 
-    uerror = norm(usoln - uexpl) / norm(usoln)
-    assert uerror < 0.04
+    udiff_arr = uexpl.dat.data - usoln.dat.data
+    Ddiff_arr = Dexpl.dat.data - Dsoln.dat.data
 
-    Derror = norm(Dsoln - Dexpl) / norm(Dsoln)
-    assert Derror < 0.02
+    uerror = np.linalg.norm(udiff_arr) / np.linalg.norm(usoln.dat.data)
+    Derror = np.linalg.norm(Ddiff_arr) / np.linalg.norm(Dsoln.dat.data)
+
+    assert uerror < 0.04, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 0.02, 'D values in REXI linear shallow water wave test do not match KGO values'
