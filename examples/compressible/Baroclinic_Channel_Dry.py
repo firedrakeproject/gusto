@@ -23,8 +23,18 @@ phi0 = Constant(pi/4)
 tmax = days * 24 * 60 * 60
 deltax = 2.5e5
 deltay = deltax
-deltaz = 1.5e3
+deltaz = 2.0e3
 dumpfreq = int(tmax / (3 * days * dt))
+
+layerHeight=[]
+runningHeight=0
+# Calculating Non-uniform height field
+for n in range(1,16):
+    mu = 8
+    height = H * ((mu * (n / 15)**2 + 1)**0.5 - 1) / ((mu + 1)**0.5 - 1)
+    width = height - runningHeight
+    runningHeight = height
+    layerHeight.append(width)
 
 # ---------------------------------------------------------------------------- #
 # Set up model objects
@@ -35,7 +45,7 @@ nlayers = int(H/deltaz)
 ncolumnsx = int(Lx/deltax)
 ncolumnsy = int(Ly/deltay)
 m = PeriodicRectangleMesh(ncolumnsx, ncolumnsy, Lx, Ly, "x", quadrilateral=True)
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=layerHeight)
 domain = Domain(mesh, dt, "RTCF", degree)
 x,y,z = SpatialCoordinate(mesh)
 
@@ -44,10 +54,9 @@ params = CompressibleParameters()
 coriolis = 2*omega*sin(phi0)*domain.k
 eqns = CompressibleEulerEquations(domain, params, 
                                   Omega=coriolis/2, no_normal_flow_bc_ids=[1, 2])
-# print(eqns.X.function_space().dim())
 
 # I/O
-dirname = 'dry_baroclinic_channel'
+dirname = f'dry_baroclinic_channel_dt={dt}'
 output = OutputParameters(dirname=dirname, dump_vtus=False, dumpfreq=dumpfreq, dump_nc=True,
                           dumplist=['cloud_water'])
 diagnostic_fields = [Perturbation('theta'), VelocityX(), VelocityY(), 
