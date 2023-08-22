@@ -16,7 +16,7 @@ from gusto.labels import physics, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
                        min_value, max_value, Constant, pi, Projector,
-                       TestFunctions)
+                       TestFunctions, FunctionSpace, Function, split, inner)
 from gusto import thermodynamics
 import ufl
 import math
@@ -26,7 +26,7 @@ from types import FunctionType
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
-           "SourceSink", "SurfaceFluxes"]
+           "SourceSink", "SurfaceFluxes", "WindDrag"]
 
 
 class Physics(object, metaclass=ABCMeta):
@@ -1086,7 +1086,8 @@ class SWSaturationAdjustment(Physics):
 class SurfaceFluxes(Physics):
     """
     Prescribed surface temperature and moisture fluxes, to be used in aquaplanet
-    simulations as Sea Surface Temperature fluxes.
+    simulations as Sea Surface Temperature fluxes. This formulation is taken
+    from the DCMIP (2016) test case document.
 
     These can be used either with an in-built implicit formulation, or with a
     generic time discretisation.
@@ -1129,6 +1130,7 @@ class SurfaceFluxes(Physics):
 
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
+        self.dt = equation.domain.dt
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1139,18 +1141,16 @@ class SurfaceFluxes(Physics):
         if vapour_name is not None:
             m_v_idx = equation.field_names.index(vapour_name)
 
-        # For implicit formulation, use internal variables. Otherwise equation's
-        X = self.X if implicit_formulation else equation.X
+        X = self.X
         tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
 
-        u = X.subfunctions[u_idx]
-        theta_vd = X.subfunctions[T_idx]
-        rho = X.subfunctions[rho_idx]
-        test_rho = tests[rho_idx]
+        u = split(X)[u_idx]
+        rho = split(X)[rho_idx]
+        theta_vd = split(X)[T_idx]
         test_theta = tests[T_idx]
 
         if vapour_name is not None:
-            m_v = X.subfunctions[m_v_idx]
+            m_v = split(X)[m_v_idx]
             test_m_v = tests[m_v_idx]
         else:
             m_v = None
@@ -1174,8 +1174,7 @@ class SurfaceFluxes(Physics):
         # -------------------------------------------------------------------- #
         z = equation.domain.height_above_surface
         z_a = parameters.height_surface_layer
-        # TODO: should surface be a function (like a mask?)
-        surface = conditional(z < z_a, Constant(1.0), Constant(0.0))
+        surface_expr = conditional(z < z_a, Constant(1.0), Constant(0.0))
 
         u_hori = u - equation.domain.k*dot(u, equation.domain.k)
         u_hori_mag = sqrt(dot(u_hori, u_hori))
@@ -1183,40 +1182,76 @@ class SurfaceFluxes(Physics):
         C_H = parameters.coeff_heat
         C_E = parameters.coeff_evap
 
+        # Implicit formulation ----------------------------------------------- #
+        # For use with ForwardEuler only, as implicit solution is hand-written
         if implicit_formulation:
-            raise NotImplementedError('implicit formulation not yet implemented')
-            # Plan here is to first evaluate T and m_v properly
-            # Then back out what the new value of theta_vd will be from new T
+            self.source_interpolators = []
+
+            # First specify T_np1 expression
+            Vtheta = equation.spaces[T_idx]
+            T_np1_expr = ((T + C_H*u_hori_mag*T_surface_expr*self.dt/z_a)
+                          / (1 + C_H*u_hori_mag*self.dt/z_a))
+
+            # If moist formulation, determine next vapour value
+            if vapour_name is not None:
+                source_mv = Function(Vtheta)
+                mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
+                mv_np1_expr = ((m_v + C_E*u_hori_mag*mv_sat*self.dt/z_a)
+                               / (1 + C_E*u_hori_mag*self.dt/z_a))
+                dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
+                source_mv_expr = test_m_v * source_mv * dx
+
+                self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
+                equation.residual -= physics(subject(prognostic(source_mv_expr, vapour_name),
+                                                     X), self.evaluate)
+
+                # Moisture needs including in theta_vd expression
+                # NB: still using old pressure here, which implies constant p?
+                epsilon = equation.parameters.R_d / equation.parameters.R_v
+                theta_np1_expr = (thermodynamics.theta(equation.parameters, T_np1_expr, p)
+                                  * (1 + mv_np1_expr / epsilon))
+
+            else:
+                theta_np1_expr = thermodynamics.theta(equation.parameters, T_np1_expr, p)
+
+            source_theta_vd = Function(Vtheta)
+            dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
+            source_theta_expr = test_theta * source_theta_vd * dx
+            self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
+            equation.residual -= physics(subject(prognostic(source_theta_expr, 'theta'),
+                                                 X), self.evaluate)
+
+        # General formulation ------------------------------------------------ #
         else:
             # Construct underlying expressions
             kappa = equation.parameters.kappa
-            dT_dt = surface * C_H * u_hori_mag * (T_surface_expr - T) / z_a
+            dT_dt = surface_expr * C_H * u_hori_mag * (T_surface_expr - T) / z_a
 
             if vapour_name is not None:
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
-                dmv_dt = surface * C_E * u_hori_mag * (mv_sat - m_v) / z_a
+                dmv_dt = surface_expr * C_E * u_hori_mag * (mv_sat - m_v) / z_a
                 source_mv_expr = test_m_v * dmv_dt * dx
                 equation.residual -= physics(
-                    prognostic(subject(source_mv_expr, equation.X),
+                    prognostic(subject(source_mv_expr, X),
                                vapour_name), self.evaluate)
 
                 # Theta expression depends on dmv_dt
                 epsilon = equation.parameters.R_d / equation.parameters.R_v
-                dtheta_vd_dt = (dT_dt * ((1 + m_v / epsilon) / exner - kappa * theta_vd / rho)
+                dtheta_vd_dt = (dT_dt * ((1 + m_v / epsilon) / exner - kappa * theta_vd / (rho * T))
                                 + dmv_dt * (T / (epsilon * exner) - kappa * theta_vd / (epsilon + m_v)))
-
             else:
-                dtheta_vd_dt = dT_dt * (1 / exner - kappa * theta_vd / rho)
+                dtheta_vd_dt = dT_dt * (1 / exner - kappa * theta_vd / (rho * T))
 
             source_theta_expr = test_theta * dtheta_vd_dt * dx
 
             equation.residual -= physics(
-                prognostic(subject(source_theta_expr, equation.X),
-                            'theta'), self.evaluate)
+                subject(prognostic(source_theta_expr, 'theta'), X),
+                        self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
-        Evaluates the source term generated by the physics.
+        Evaluates the source term generated by the physics. This does nothing if
+        the implicit formulation is not used.
 
         Args:
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
@@ -1225,5 +1260,116 @@ class SurfaceFluxes(Physics):
         """
 
         if self.implicit_formulation:
-            for sourcetor in self.source_interpolators:
+            self.X.assign(x_in)
+            self.dt.assign(dt)
+            self.rho_recoverer.project()
+            for source_interpolator in self.source_interpolators:
                 source_interpolator.interpolate()
+
+
+class WindDrag(Physics):
+    """
+    A simple surface wind drag scheme. This formulation is taken from the DCMIP
+    (2016) test case document.
+
+    These can be used either with an in-built implicit formulation, or with a
+    generic time discretisation.
+    """
+
+    def __init__(self, equation, implicit_formulation=False, parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            implicit_formulation (bool, optional): whether the scheme is already
+                put into a Backwards Euler formulation (which allows this scheme
+                to actually be used with a Forwards Euler or other explicit time
+                discretisation. Otherwise, this is formulated more generally and
+                can be used with any time stepper. Defaults to False.
+            parameters (:class:`BoundaryLayerParameters`): configuration object
+                giving the parameters for boundary and surface level schemes.
+                Defaults to None, in which case default values are used.
+        """
+
+        # -------------------------------------------------------------------- #
+        # Check arguments and generic initialisation
+        # -------------------------------------------------------------------- #
+        assert isinstance(equation, CompressibleEulerEquations), \
+            "Surface fluxes can only be used with Compressible Euler equations"
+
+        if parameters is None:
+            parameters = BoundaryLayerParameters()
+
+        super().__init__(equation, parameters=None)
+
+        k = equation.domain.k
+        self.implicit_formulation = implicit_formulation
+        self.X = Function(equation.X.function_space())
+        self.dt = equation.domain.dt
+
+        # -------------------------------------------------------------------- #
+        # Extract prognostic variables
+        # -------------------------------------------------------------------- #
+        u_idx = equation.field_names.index('u')
+
+        X = self.X
+        tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
+
+        test = tests[u_idx]
+
+        u = split(X)[u_idx]
+        u_hori = u - k*dot(u, k)
+        u_hori_mag = sqrt(dot(u_hori, u_hori))
+
+        # -------------------------------------------------------------------- #
+        # Expressions for wind drag
+        # -------------------------------------------------------------------- #
+        z = equation.domain.height_above_surface
+        z_a = parameters.height_surface_layer
+        surface_expr = conditional(z < z_a, Constant(1.0), Constant(0.0))
+
+        C_D0 = parameters.coeff_drag_0
+        C_D1 = parameters.coeff_drag_1
+        C_D2 = parameters.coeff_drag_2
+
+        C_D = conditional(u_hori_mag < 20.0, C_D0 + C_D1*u_hori_mag, C_D2)
+
+        # Implicit formulation ----------------------------------------------- #
+        # For use with ForwardEuler only, as implicit solution is hand-written
+        if implicit_formulation:
+
+            # First specify T_np1 expression
+            Vu = equation.spaces[u_idx]
+            source_u = Function(Vu)
+            u_np1_expr = u_hori / (1 + C_D*u_hori_mag*self.dt/z_a)
+
+            du_expr = surface_expr * (u_np1_expr - u_hori) / self.dt
+            self.source_projector = Projector(du_expr, source_u)
+
+            source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
+            equation.residual -= physics(subject(prognostic(source_expr, 'u'),
+                                                 X), self.evaluate)
+
+        # General formulation ------------------------------------------------ #
+        else:
+            # Construct underlying expressions
+            du_dt = -surface_expr * C_D * u_hori_mag * u_hori / z_a
+
+            source_expr = inner(test, du_dt) * dx
+
+            equation.residual -= physics(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source term generated by the physics. This does nothing if
+        the implicit formulation is not used.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+
+        if self.implicit_formulation:
+            self.X.assign(x_in)
+            self.dt.assign(dt)
+            self.source_projector.project()

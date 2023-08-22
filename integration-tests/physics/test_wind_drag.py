@@ -1,10 +1,7 @@
 """
-This tests the physics routine to provide surface fluxes. The initial fields are
-set to correspond to a different temperature at the surface -- we then check
-that afterwards the surface temperature is correct.
+This tests the physics routine to apply drag to the wind.
 """
 
-from os import path
 from gusto import *
 import gusto.thermodynamics as td
 from gusto.labels import physics
@@ -14,7 +11,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def run_surface_fluxes(dirname, moist, implicit_formulation):
+def run_wind_drag(dirname, implicit_formulation):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -36,10 +33,8 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     _, z = SpatialCoordinate(mesh)
 
     # Set up equation
-    tracers = [WaterVapour()] if moist else None
-    vapour_name = 'water_vapour' if moist else None
     parameters = CompressibleParameters()
-    eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
+    eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(dirname=dirname+"/surface_fluxes",
@@ -49,9 +44,7 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
 
     # Physics scheme
     surf_params = BoundaryLayerParameters()
-    T_surf = Constant(300.0)
-    physics_parametrisation = SurfaceFluxes(eqn, T_surf, vapour_name,
-                                            implicit_formulation, surf_params)
+    physics_parametrisation = WindDrag(eqn, implicit_formulation, surf_params)
 
     time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
 
@@ -62,7 +55,6 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics)),
                                           map_if_true=identity, map_if_false=drop)
 
-
     # Time stepper
     scheme = ForwardEuler(domain)
     stepper = SplitPhysicsTimestepper(eqn, scheme, io,
@@ -72,11 +64,12 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
     surface_mask = Function(Vt)
-    surface_mask.interpolate(conditional(z < 100., 0.1, 0.0))
+    surface_mask.interpolate(conditional(z < 100., 1.0, 0.0))
 
     # Declare prognostic fields
     u0 = stepper.fields("u")
@@ -87,29 +80,16 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     pressure = Function(Vr).interpolate(Constant(100000.))
     temperature = Function(Vt).interpolate(Constant(295.))
     theta_d = td.theta(parameters, temperature, pressure)
-    mv_sat = td.r_sat(parameters, temperature, pressure)
 
-    # Set prognostic variables
-    if moist:
-        water_v0 = stepper.fields("water_vapour")
-        water_v0.interpolate(0.95*mv_sat)
-        theta0.project(theta_d*(1 + water_v0 * parameters.R_v / parameters.R_d))
-        rho0.interpolate(pressure / (temperature*parameters.R_d * (1 + water_v0 * parameters.R_v / parameters.R_d)))
-    else:
-        theta0.project(theta_d)
-        rho0.interpolate(pressure / (temperature*parameters.R_d))
-
-    T_true = Function(Vt)
-    T_true.interpolate(surface_mask*T_surf + (1-surface_mask)*temperature)
-
-    if moist:
-        mv_true = Function(Vt)
-        mv_true.interpolate(surface_mask*mv_sat + (1-surface_mask)*water_v0)
-    else:
-        mv_true = None
+    theta0.project(theta_d)
+    rho0.interpolate(pressure / (temperature*parameters.R_d))
 
     # Constant horizontal wind
-    u0.project(as_vector([5.0, 0.0]))
+    u0.project(as_vector([15.0, 0.0]))
+
+    # Answer: slower winds than initially
+    u_true = Function(Vu)
+    u_true.project(surface_mask*as_vector([14.53, 0.0]) + (1-surface_mask)*u0)
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -117,30 +97,27 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
 
     stepper.run(t=0, tmax=dt)
 
-    return eqn, stepper, T_true, mv_true
+    return mesh, stepper, u_true
 
 
-@pytest.mark.parametrize("moist", [False, True])
 @pytest.mark.parametrize("implicit_formulation", [False, True])
-def test_surface_fluxes(tmpdir, moist, implicit_formulation):
+def test_wind_drag(tmpdir, implicit_formulation):
 
     dirname = str(tmpdir)
-    eqn, stepper, T_true, mv_true = run_surface_fluxes(dirname, moist, implicit_formulation)
+    mesh, stepper, u_true = run_wind_drag(dirname, implicit_formulation)
 
-    # Back out temperature from prognostic fields
-    theta_vd = stepper.fields('theta')
-    rho = stepper.fields('rho')
-    exner = td.exner_pressure(eqn.parameters, rho, theta_vd)
-    mv = stepper.fields('water_vapour') if moist else None
-    T_expr = td.T(eqn.parameters, theta_vd, exner, r_v=mv)
+    u_final = stepper.fields('u')
 
-    # Project T_expr
-    T = Function(theta_vd.function_space())
-    T.project(T_expr)
-    denom = norm(T)
-    assert norm(T - T_true) / denom < 0.001, f'Final temperature is incorrect'
+    # Project into CG1 to get sensible values
+    e_x = as_vector([1.0, 0.0])
+    e_z = as_vector([0.0, 1.0])
 
+    DG0 = FunctionSpace(mesh, "DG", 0)
+    u_x_final = Function(DG0).project(dot(u_final, e_x))
+    u_x_true = Function(DG0).project(dot(u_true, e_x))
+    u_z_final = Function(DG0).project(dot(u_final, e_z))
+    u_z_true = Function(DG0).project(dot(u_true, e_z))
 
-    if moist:
-        denom = norm(mv_true)
-        assert norm(mv - mv_true) / denom < 0.01, f'Final water vapour is incorrect'
+    denom = norm(u_x_true)
+    assert norm(u_x_final - u_x_true) / denom < 0.01, f'Final horizontal wind is incorrect'
+    assert norm(u_z_final - u_z_true) < 1e-12, f'Final vertical wind is incorrect'
