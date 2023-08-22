@@ -6,19 +6,24 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC, split)
+from firedrake import (
+    Function, TestFunction, NonlinearVariationalProblem,
+    NonlinearVariationalSolver, DirichletBC, split
+)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
-from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
-from gusto.labels import (time_derivative, prognostic, physics,
-                          replace_subject, replace_test_function)
-from gusto.fml.form_manipulation_labelling import Term, all_terms, drop
+
+from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
+from gusto.fml import (
+    replace_subject, replace_test_function, Term, all_terms, drop
+)
+from gusto.labels import time_derivative, prognostic, physics
+from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "ImplicitMidpoint", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
+           "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
 
 
 def wrapper_apply(original_apply):
@@ -92,8 +97,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                                       'sub_pc_type': 'ilu'}
         else:
             self.solver_parameters = solver_parameters
-            if logger.isEnabledFor(DEBUG):
-                self.solver_parameters["ksp_monitor_true_residual"] = None
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -185,7 +188,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
 
         return l.form
@@ -195,7 +198,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -209,7 +212,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        solver = NonlinearVariationalSolver(
+            problem,
+            solver_parameters=self.solver_parameters,
+            options_prefix=solver_name
+        )
+        if logger.isEnabledFor(DEBUG):
+            solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+        return solver
 
     @abstractmethod
     def apply(self, x_out, x_in):
@@ -373,10 +383,14 @@ class SSPRK3(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.75*x_in + 0.25*self.x_out)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign((1./3.)*x_in + (2./3.)*self.x_out)
 
@@ -437,7 +451,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
 
         return l.form
@@ -447,7 +461,7 @@ class RK4(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -470,16 +484,22 @@ class RK4(ExplicitTimeDiscretisation):
             self.x1.assign(x_in + 0.5 * self.dt * self.k1)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k2.assign(self.x_out)
             self.x1.assign(x_in + 0.5 * self.dt * self.k2)
 
         elif stage == 2:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k3.assign(self.x_out)
             self.x1.assign(x_in + self.dt * self.k3)
 
         elif stage == 3:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.k4.assign(self.x_out)
             self.x1.assign(x_in + 1/6 * self.dt * (self.k1 + 2*self.k2 + 2*self.k3 + self.k4))
@@ -538,6 +558,8 @@ class Heun(ExplicitTimeDiscretisation):
             self.x1.assign(self.x_out)
 
         elif stage == 1:
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             self.solver.solve()
             self.x1.assign(0.5 * x_in + 0.5 * (self.x_out))
 
@@ -603,7 +625,7 @@ class BackwardEuler(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -614,7 +636,7 @@ class BackwardEuler(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_true=replace_subject(self.x1, old_idx=self.idx),
             map_if_false=drop)
 
         return r.form
@@ -634,23 +656,24 @@ class BackwardEuler(TimeDiscretisation):
 
 class ThetaMethod(TimeDiscretisation):
     """
-    Implements the theta implicit-explicit timestepping method.
+    Implements the theta implicit-explicit timestepping method, which can
+    be thought as a generalised trapezium rule.
 
     The theta implicit-explicit timestepping method for operator F is written as
     y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]
     for off-centring parameter theta.
     """
 
-    def __init__(self, domain, field_name=None, theta=None,
+    def __init__(self, domain, theta, field_name=None,
                  solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
+            theta (float): the off-centring parameter. theta = 1
+                corresponds to a backward Euler method. Defaults to None.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            theta (float, optional): the off-centring parameter. theta = 1
-                corresponds to a backward Euler method. Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -661,9 +684,7 @@ class ThetaMethod(TimeDiscretisation):
         Raises:
             ValueError: if theta is not provided.
         """
-        # TODO: would this be better as a non-optional argument? Or should the
-        # check be on the provided value?
-        if theta is None:
+        if (theta < 0 or theta > 1):
             raise ValueError("please provide a value for theta between 0 and 1")
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
@@ -685,7 +706,7 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
@@ -696,7 +717,7 @@ class ThetaMethod(TimeDiscretisation):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
@@ -715,11 +736,12 @@ class ThetaMethod(TimeDiscretisation):
         x_out.assign(self.x_out)
 
 
-class ImplicitMidpoint(ThetaMethod):
+class TrapeziumRule(ThetaMethod):
     """
-    Implements the implicit midpoint timestepping method.
+    Implements the trapezium rule timestepping method, also commonly known as
+    Crank Nicholson.
 
-    The implicit midpoint timestepping method for operator F is written as
+    The trapezium rule timestepping method for operator F is written as
     y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].
     It is equivalent to the "theta" method with theta = 1/2.
     """
@@ -739,7 +761,7 @@ class ImplicitMidpoint(ThetaMethod):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        super().__init__(domain, field_name, theta=0.5,
+        super().__init__(domain, 0.5, field_name,
                          solver_parameters=solver_parameters,
                          options=options)
 
@@ -822,7 +844,7 @@ class BDF2(MultilevelTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.dt*t)
 
@@ -833,7 +855,7 @@ class BDF2(MultilevelTimeDiscretisation):
         """Set up the time discretisation's right hand side for inital BDF step."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_true=replace_subject(self.x1, old_idx=self.idx),
             map_if_false=drop)
 
         return r.form
@@ -843,7 +865,7 @@ class BDF2(MultilevelTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: (2/3)*self.dt*t)
 
@@ -854,11 +876,11 @@ class BDF2(MultilevelTimeDiscretisation):
         """Set up the time discretisation's right hand side for BDF2 steps."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x1, self.idx),
+            map_if_true=replace_subject(self.x1, old_idx=self.idx),
             map_if_false=drop)
         xnm1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.xnm1, self.idx),
+            map_if_true=replace_subject(self.xnm1, old_idx=self.idx),
             map_if_false=drop)
 
         r = (4/3.) * xn - (1/3.) * xnm1
@@ -954,7 +976,7 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xnpg, self.idx))
+            map_if_true=replace_subject(self.xnpg, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
 
@@ -965,7 +987,7 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the time discretisation's right hand side for the TR stage."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xn, self.idx))
+            map_if_true=replace_subject(self.xn, old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -0.5*self.gamma*self.dt*t)
 
@@ -976,7 +998,7 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative) for the BDF2 stage."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: ((1.0-self.gamma)/(2.0-self.gamma))*self.dt*t)
 
@@ -987,11 +1009,11 @@ class TR_BDF2(TimeDiscretisation):
         """Set up the time discretisation's right hand side for the BDF2 stage."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.xn, self.idx),
+            map_if_true=replace_subject(self.xn, old_idx=self.idx),
             map_if_false=drop)
         xnpg = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.xnpg, self.idx),
+            map_if_true=replace_subject(self.xnpg, old_idx=self.idx),
             map_if_false=drop)
 
         r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma))) * xn
@@ -1044,7 +1066,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
         """Set up the discretisation's right hand side for initial forward euler step."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.dt*t)
 
@@ -1060,9 +1082,9 @@ class Leapfrog(MultilevelTimeDiscretisation):
         """Set up the discretisation's right hand side for leapfrog steps."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_false=replace_subject(self.x1, self.idx))
+            map_if_false=replace_subject(self.x1, old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=replace_subject(self.xnm1, self.idx),
+                        map_if_true=replace_subject(self.xnm1, old_idx=self.idx),
                         map_if_false=lambda t: -2.0*self.dt*t)
 
         return r.form
@@ -1167,7 +1189,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         """Set up the discretisation's right hand side for initial forward euler step."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x[-1], self.idx))
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.dt*t)
 
@@ -1182,13 +1204,13 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
     def rhs(self):
         """Set up the discretisation's right hand side for Adams Bashforth steps."""
         r = self.residual.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x[-1], self.idx))
+                                    map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.b[-1]*self.dt*t)
         for n in range(self.nlevels-1):
             rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_true=drop,
-                                            map_if_false=replace_subject(self.x[n], self.idx))
+                                            map_if_false=replace_subject(self.x[n], old_idx=self.idx))
             rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: -self.dt*self.b[n]*t)
             r += rtemp
@@ -1298,7 +1320,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """Set up the discretisation's right hand side for initial trapezoidal step."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x[-1], self.idx))
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -0.5*self.dt*t)
 
@@ -1309,7 +1331,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """Set up the time discretisation's right hand side for initial trapezoidal step."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: 0.5*self.dt*t)
         return l.form
@@ -1319,7 +1341,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """Set up the time discretisation's right hand side for Adams Moulton steps."""
         l = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, self.idx))
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         l = l.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: self.bl*self.dt*t)
         return l.form
@@ -1328,13 +1350,13 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
     def rhs(self):
         """Set up the discretisation's right hand side for Adams Moulton steps."""
         r = self.residual.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x[-1], self.idx))
+                                    map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.br[-1]*self.dt*t)
         for n in range(self.nlevels-1):
             rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_true=drop,
-                                            map_if_false=replace_subject(self.x[n], self.idx))
+                                            map_if_false=replace_subject(self.x[n], old_idx=self.idx))
             rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: -self.dt*self.br[n]*t)
             r += rtemp

@@ -51,12 +51,13 @@ points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 dirname = 'skamarock_klemp_nonlinear'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          pddumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          point_data=[('theta_perturbation', points)],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    pddumpfreq=dumpfreq,
+    dumplist=['u'],
+    point_data=[('theta_perturbation', points)],
+)
 diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
                      Gradient("theta_perturbation"), Perturbation('rho'),
                      RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
@@ -64,7 +65,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 theta_opts = SUPGOptions()
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "rho"),
                       SSPRK3(domain, "theta", options=theta_opts)]
 transport_methods = [DGUpwind(eqns, "u"),

@@ -1,36 +1,16 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
-import logging
-from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
-           "TransportEquationType", "OutputParameters",
-           "CompressibleBoussinesqParameters", "CompressibleEulerParameters",
-           "ShallowWaterParameters",
-           "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
-           "SpongeLayerParameters", "DiffusionParameters"]
-
-logger = logging.getLogger("gusto")
-
-
-def set_log_handler(comm):
-    """
-    Sets the handler for logging.
-
-    Args:
-        comm (:class:`MPI.Comm`): MPI communicator.
-    """
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    if comm.rank == 0:
-        logger.addHandler(handler)
-    else:
-        logger.addHandler(logging.NullHandler())
+__all__ = [
+    "IntegrateByParts", "TransportEquationType", "OutputParameters",
+    "ShallowWaterParameters",
+    "CompressibleBoussinesqParameters", "CompressibleEulerParameters",
+    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+    "SpongeLayerParameters", "DiffusionParameters"
+]
 
 
 class IntegrateByParts(Enum):
@@ -93,7 +73,7 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
@@ -102,9 +82,6 @@ class Configuration(object):
 class OutputParameters(Configuration):
     """Parameters for controlling outputting."""
 
-    #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
-    #: default value "warning"
-    log_level = WARNING
     dump_vtus = True
     dump_nc = False
     dumpfreq = 1
