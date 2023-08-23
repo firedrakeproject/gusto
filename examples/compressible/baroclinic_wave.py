@@ -10,7 +10,7 @@ dt = 270.
 days = 15.
 tmax = days * 24. * 60. * 60.
 n = 25     # cells per cubed sphere face edge
-deltaz = 2e3 # 15 layers, as we are in a higher space this matches the paper better
+deltaz = 2.0e3 # 15 layers, as we are in a higher space this matches the paper better
 
 # --------------------------------------------------------------#
 # Script Options
@@ -24,7 +24,7 @@ else:
 u_form = 'vector_advection_form'
 dirname = f'{dirname}{u_form}_'
 
-variable_height = True
+variable_height = False
 limit_theta = False
 if limit_theta:
     dirname = f'{dirname}theta_limited_'
@@ -61,7 +61,7 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 print('making eqn')    
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option=u_form)
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 print(eqn.X.function_space().dim())
 
 dirname = f'{dirname}dt={dt}_n={n}'
@@ -85,10 +85,6 @@ else:
     limiter = None 
     options = SUPGOptions()   
 
-if options == SUPGOptions():
-    ibp=options.ibp
-else:
-    ibp = None
 transport_option=SUPGOptions()
 transported_fields = []
 transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
