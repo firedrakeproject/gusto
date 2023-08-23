@@ -89,14 +89,17 @@ if options == SUPGOptions():
     ibp=options.ibp
 else:
     ibp = None
-ibp = SUPGOptions().ibp
-transported_fields=[]
-transported_fields.append(TrapeziumRule(domain, "u"))
+transport_option=SUPGOptions()
+transported_fields = []
+transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
 transported_fields.append(SSPRK3(domain, "rho"))
-transported_fields.append(SSPRK3(domain, "theta", options=SUPGOptions(), limiter=None))
-transport_methods = [DGUpwind(eqn, 'u'),
+transported_fields.append(SSPRK3(domain, "theta", options=transport_option))
+
+transport_methods = [DGUpwind(eqn, 'u', ibp=transport_option.ibp),
                      DGUpwind(eqn, 'rho'),
-                     DGUpwind(eqn, 'theta', ibp=ibp)]
+                     DGUpwind(eqn, 'theta', ibp=transport_option.ibp)]
+
+
 # Linear Solver
 linear_solver = CompressibleSolver(eqn)
 
