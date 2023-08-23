@@ -70,8 +70,7 @@ output = OutputParameters(dirname=dirname,
                           dump_nc=True,
                           dump_vtus=False)
 diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
-                     RadialComponent('u'), CourantNumber(), ZonalComponent('u_pert'),
-                     MeridionalComponent('u_pert'), Temperature(eqn), Pressure(eqn), 
+                     RadialComponent('u'), CourantNumber(), Temperature(eqn), Pressure(eqn), 
                      SteadyStateError('Temperature'), SteadyStateError('Pressure_Vt')]
           
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
