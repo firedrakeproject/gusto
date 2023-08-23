@@ -11,6 +11,7 @@ import pytest
 
 tol = 1e-12
 
+
 # Structure of values for testing Firedrake and numpy routines are different
 def setup_values(values_list, config_name, mesh=None):
     # Values should be a list of lists

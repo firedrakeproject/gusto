@@ -9,6 +9,7 @@ import pytest
 
 tol = 1e-12
 
+
 # Structure of coordinates for testing Firedrake and numpy routines are different
 def setup_coordinates(coords_list, module_name, mesh=None):
     # Coords should be a list of lists
