@@ -305,7 +305,6 @@ def rodrigues_rotation(old_vector, rot_axis, rot_angle):
     cos = module.cos
     sin = module.sin
     cross = module.cross
-    dot = module.dot
 
     # Numpy vector may need reshaping
     if module_name == 'numpy' and np.shape(rot_axis) != np.shape(old_vector):
@@ -319,6 +318,8 @@ def rodrigues_rotation(old_vector, rot_axis, rot_angle):
             dotted_vectors = np.einsum('ij,ij->i', a, b)
             # Add new axis to allow further multiplication by a vector
             return dotted_vectors[:, np.newaxis]
+    else:
+        dot = module.dot
 
     new_vector = (old_vector * cos(rot_angle)
                   + cross(rot_axis, old_vector) * sin(rot_angle)
