@@ -90,9 +90,9 @@ transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
 transported_fields.append(SSPRK3(domain, "rho"))
 transported_fields.append(SSPRK3(domain, "theta", options=transport_option))
 
-transport_methods = [DefaultTransport(eqn, 'u', ibp=transport_option.ibp),
-                     DefaultTransport(eqn, 'rho'),
-                     DefaultTransport(eqn, 'theta', ibp=transport_option.ibp)]
+transport_methods = [DGUpwind(eqn, 'u'),
+                     DGUpwind(eqn, 'rho'),
+                     DGUpwind(eqn, 'theta', ibp=transport_option.ibp)]
 
 
 # Linear Solver
