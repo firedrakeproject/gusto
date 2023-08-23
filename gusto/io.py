@@ -644,8 +644,8 @@ class IO(object):
                     # TODO: we should fail here, but currently there are some spaces
                     # that we can't output for so instead just skip outputting
                     logger.warning(f'netCDF outputting for space {space_name} '
-                                   + 'not yet implemented, so unable to output'
-                                   + '{field_name} field')
+                                   + 'not yet implemented, so unable to output '
+                                   + f'{field_name} field')
                 else:
                     nc_field_file.createGroup(field_name)
                     nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
