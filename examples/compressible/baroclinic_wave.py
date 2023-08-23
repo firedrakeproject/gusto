@@ -24,7 +24,7 @@ else:
 u_form = 'vector_advection_form'
 dirname = f'{dirname}{u_form}_'
 
-variable_height = False
+variable_height = True
 limit_theta = False
 if limit_theta:
     dirname = f'{dirname}theta_limited_'
@@ -69,7 +69,7 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
                           dump_vtus=False)
-diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'), 
+diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
                      RadialComponent('u'), CourantNumber(), Temperature(eqn), Pressure(eqn), 
                      SteadyStateError('Temperature'), SteadyStateError('Pressure_Vt')]
           
