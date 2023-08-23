@@ -197,8 +197,8 @@ rho_expr = P_expr / (Rd * Temp)
 # -------------------------------------------------------------- #
 # get components of u in spherical polar coordinates
 
-zonal_u = wind + zonal_pert
-merid_u = Constant(0.0) + meridional_pert
+zonal_u = wind 
+merid_u = Constant(0.0) 
 radial_u = Constant(0.0)
 
 #if perturbed == True:
