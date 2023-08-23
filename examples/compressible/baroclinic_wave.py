@@ -198,9 +198,9 @@ zonal_u = wind
 merid_u = Constant(0.0)
 radial_u = Constant(0.0)
 
-if perturbed == True:
-    zonal_u = zonal_u + zonal_pert
-    merid_u = meridional_pert
+#if perturbed == True:
+#    zonal_u = zonal_u + zonal_pert
+#    merid_u = meridional_pert
 
 (u_expr, v_expr, w_expr) = sphere_to_cartesian(mesh, zonal_u, merid_u)
 
