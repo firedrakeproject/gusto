@@ -24,7 +24,7 @@ else:
 u_form = 'vector_advection_form'
 dirname = f'{dirname}{u_form}_'
 
-variable_height = True
+variable_height = False
 limit_theta = False
 if limit_theta:
     dirname = f'{dirname}theta_limited_'
@@ -61,7 +61,7 @@ params = CompressibleParameters()
 omega = Constant(7.292e-5)
 Omega = as_vector((0, 0, omega))
 print('making eqn')    
-eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
+eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option=u_form)
 print(eqn.X.function_space().dim())
 
 dirname = f'{dirname}dt={dt}_n={n}'
