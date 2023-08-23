@@ -21,7 +21,7 @@ if perturbed == True:
 else: 
     dirname = 'baroclinic_sbr_'
 
-u_form = 'vector_advection_form'
+u_form = 'vector_invariant_form'
 dirname = f'{dirname}{u_form}_'
 
 variable_height = False
