@@ -49,7 +49,7 @@ if variable_height == True:
         runningheight = height
         layerheight.append(width)
 else: 
-    layerheight = ztop / deltaz
+    layerheight = ztop / nlayers
 
 m = GeneralCubedSphereMesh(a, num_cells_per_edge_of_panel=n, degree=2)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=layerheight, extrusion_type='radial')
@@ -157,7 +157,7 @@ C = ((k + 2) / 2)*((T0e - T0p) / (T0e * T0p))
 tao1 = A * lapse / T0 * exp((r - a)*lapse / T0) + B * (1 - 2*((r-a)/(b*H))**2)*exp(-((r-a) / (b*H))**2)
 tao2 = C * (1 - 2*((r-a)/(b*H))**2)*exp(-((r - a) / (b*H))**2)
 
-tao1_int = A * (exp(lapse * (r - a) / T0) - 1) + B * (r - a) * exp(-((r-a) / (b*H))**2)
+tao1_int = A * (exp(lapse * (r - a) / T0) - 1) + B * (r - a) * exp(-((r-a)/(b*H))**2)
 tao2_int = C * (r - a)  * exp(-((r-a) / (b*H))**2)
 
 # Variable fields
@@ -168,6 +168,7 @@ wind = ((g*k) / (2 * omega * a)) * (cos(lat)**(k-1) - cos(lat)**(k+1))*tao2_int*
 theta_expr = Temp * (P_expr / p0) ** (-params.kappa) 
 pie_expr = Temp / theta_expr
 rho_expr = P_expr / (Rd * Temp)
+
 # -------------------------------------------------------------- #
 # Perturbation
 # -------------------------------------------------------------- #
