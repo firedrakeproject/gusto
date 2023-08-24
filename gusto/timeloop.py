@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant, Mesh, TrialFunction, \
+from firedrake import Function, Projector, Constant, TrialFunction, \
     TestFunction, assemble, inner, dx, split
 from firedrake.petsc import PETSc
 from pyop2.profiling import timed_stage
@@ -723,7 +723,6 @@ class MeshMovement(SemiImplicitQuasiNewton):
             self.ksp[name] = PETSc.KSP().create()
         self.Lvec = {}
 
-        
     def setup_fields(self):
         super().setup_fields()
         self.x.add_fields(self.equation, levels=("mid",))
