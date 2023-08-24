@@ -248,7 +248,7 @@ class IO(object):
                 number of. Defaults to 'u'.
             expression (:class:`ufl.Expr`, optional): expression of velocity
                 field to take Courant number of. Defaults to None, in which case
-
+                the "name" argument must correspond to an existing field.
         """
 
         if self.output.log_courant:
