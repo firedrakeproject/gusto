@@ -94,7 +94,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        self.dt = 0.5*domain.dt
+        self.dt = domain.dt
 
         self.limiter = limiter
 
