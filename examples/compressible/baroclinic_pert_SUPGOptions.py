@@ -7,7 +7,7 @@ from gusto import *                                            #
 # Test case Parameters
 # -------------------------------------------------------------- #
 dt = 270.
-days = 10.
+days = 15.
 tmax = days * 24. * 60. * 60.
 deltaz = 2e3 # 15 layers, as we are in a higher space this matches the paper better
 
@@ -48,7 +48,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 transport_option=SUPGOptions()
 transported_fields = []
-transported_fields.append(TrapeziumRule(domain, "u", options=transport_option))
+transported_fields.append(SSPRK3(domain, "u", options=transport_option))
 transported_fields.append(SSPRK3(domain, "rho"))
 transported_fields.append(SSPRK3(domain, "theta", options=transport_option))
 
