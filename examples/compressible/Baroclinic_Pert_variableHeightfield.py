@@ -6,7 +6,7 @@ from gusto import *                                            #
 # -------------------------------------------------------------- #
 # Test case Parameters
 # -------------------------------------------------------------- #
-dt = 270.
+dt = 540.
 days = 10.
 tmax = days * 24. * 60. * 60.
 deltaz = 2e3 # 15 layers, as we are in a higher space this matches the paper better
@@ -41,7 +41,7 @@ Omega = as_vector((0, 0, omega))
 eqn = CompressibleEulerEquations(domain, params, Omega=Omega, u_transport_option='vector_advection_form')
 print(eqn.X.function_space().dim())
 
-dirname = 'baroclinicPerturbation_variable_depth'
+dirname = f'baroclinicPerturbation_variable_depth_dt={dt}'
 output = OutputParameters(dirname=dirname,
                           dumpfreq=40,
                           dump_nc=True,
