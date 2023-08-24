@@ -256,10 +256,10 @@ class IO(object):
             courant_name = None if name == 'u' else name
 
             # Set up diagnostic if it hasn't already been
-            if courant_name not in diagnostic_names:
+            if courant_name not in diagnostic_names and 'u' in state_fields._field_names:
                 if expression is None:
                     diagnostic = CourantNumber(to_dump=False)
-                else:
+                elif expression is not None:
                     diagnostic = CourantNumber(velocity=expression, name=courant_name, to_dump=False)
 
                 self.diagnostic_fields.append(diagnostic)
@@ -278,7 +278,7 @@ class IO(object):
                 None.
         """
 
-        if self.output.log_courant:
+        if self.output.log_courant and 'u' in state_fields._field_names:
             diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
             courant_name = 'CourantNumber' if name == 'u' else 'CourantNumber_'+name
             courant_idx = diagnostic_names.index(courant_name)
