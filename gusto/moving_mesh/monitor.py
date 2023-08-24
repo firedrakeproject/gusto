@@ -1,9 +1,9 @@
 from firedrake import *
-import math
 import numpy as np
 from mpi4py import MPI
 
 __all__ = ["MonitorFunction"]
+
 
 class MonitorFunction(object):
 
@@ -30,7 +30,7 @@ class MonitorFunction(object):
         self.f = Function(FunctionSpace(self.mesh, f.ufl_element()))  # make "own copy" of f on internal mesh
         self.user_f = f
 
-        ### SET UP FUNCTION SPACES ###
+        # Set up function spaces
         P1 = FunctionSpace(self.mesh, "Q" if quads else "P", 1)  # for representing m
         DP1 = FunctionSpace(self.mesh, "DQ" if quads else "DP", 1)  # for advection
         VectorP1 = VectorFunctionSpace(self.mesh, "Q" if quads else "P", 1)
@@ -43,7 +43,7 @@ class MonitorFunction(object):
 
         # get mesh area
         self.total_area = assemble(Constant(1.0)*dx(self.mesh))
-            
+
         self.m = Function(P1)
         self.m_prereg = Function(P1)
         self.m_old = Function(P1)
@@ -51,7 +51,7 @@ class MonitorFunction(object):
         self.dm = Function(DP1)
         self.m_int_form = self.m_prereg*dx
 
-        ### DEFINE MONITOR FUNCTION IN TERMS OF q ###
+        # define monitor function in terms of q
         if False:   # for plane
             v_ones = as_vector(np.ones(2))
         else:
@@ -72,7 +72,7 @@ class MonitorFunction(object):
             v_tp1 = TestFunction(TensorP1)
             self.a_tp1_lumped = inner(v_tp1, t_ones)*dx
             self.L_tp1 = inner(v_tp1, grad(self.gradq))*dx
-        
+
         # Define forms for lumped project of monitor function into P1
         v_p1 = TestFunction(P1)
         self.a_p1_lumped = v_p1*dx
@@ -129,7 +129,7 @@ class MonitorFunction(object):
         m_min = self.m.comm.allreduce(self.m.dat.data_ro.min(), op=MPI.MIN)
         self.m.dat.data[:] /= m_min
 
-        mmax_pre = max(self.m.dat.data)/min(self.m.dat.data)
+        # mmax_pre = max(self.m.dat.data)/min(self.m.dat.data)
 
     def get_monitor_on_new_mesh(self, m, x_old, x_new):
         # We have the function m on old mesh: m_old. We want to represent
@@ -150,4 +150,4 @@ class MonitorFunction(object):
             self.limiter.apply(self.m_dg)
 
         project(self.m_dg, self.m)  # project discontinuous m back into CG
-        mmax_post = max(self.m.dat.data)/min(self.m.dat.data)
+        # mmax_post = max(self.m.dat.data)/min(self.m.dat.data)

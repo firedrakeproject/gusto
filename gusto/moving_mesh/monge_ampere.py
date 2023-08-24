@@ -1,6 +1,7 @@
 from firedrake import *
 import numpy as np
 
+
 class OptimalTransportMeshGenerator(object):
 
     def __init__(self, mesh_in, monitor, initial_tol=1.e-4, tol=1.e-2, pre_meshgen_callback=None, post_meshgen_callback=None):
@@ -42,7 +43,7 @@ class OptimalTransportMeshGenerator(object):
         # get mesh area
         self.total_area = assemble(Constant(1.0)*dx(self.mesh))
 
-        ### SET UP FUNCTIONS ###
+        # set up functions
         P2 = FunctionSpace(self.mesh, "Q" if quads else "P", 2)
         TensorP2 = TensorFunctionSpace(self.mesh, "Q" if quads else "P", 2)
         MixedSpace = P2*TensorP2
@@ -65,7 +66,7 @@ class OptimalTransportMeshGenerator(object):
         self.m = Function(P1)
         self.theta = Constant(0.0)
 
-        ### DEFINE MESH EQUATIONS ###
+        # define mesh equations
         v, tau = TestFunctions(MixedSpace)
 
         if self.meshtype == "plane":
@@ -101,7 +102,7 @@ class OptimalTransportMeshGenerator(object):
         elif self.meshtype == "sphere":
             self.gradphi_cts2 = Function(W_cts)  # extra, as gradphi_cts not necessarily tangential
 
-        ### SET UP INITIAL SIGMA ### (needed on sphere)
+        # set up initial sigma (needed on sphere)
         sigma_ = TrialFunction(TensorP2)
         tau_ = TestFunction(TensorP2)
         sigma_ini = Function(TensorP2)
@@ -116,7 +117,7 @@ class OptimalTransportMeshGenerator(object):
 
         self.phisigma.sub(1).assign(sigma_ini)
 
-        ### SOLVER OPTIONS FOR MESH GENERATION ###
+        # solver options for mesh generation
         phi__, sigma__ = TrialFunctions(MixedSpace)
         v__, tau__ = TestFunctions(MixedSpace)
 
@@ -197,14 +198,11 @@ class OptimalTransportMeshGenerator(object):
             self.own_output_coords.interpolate(Constant(self.R)*self.x)
             self.output_coords.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.mesh_in.coordinates.assign(self.output_coords)
-            #self.mesh_in.coordinates.assign(self.x)
             self.initialise_fn()
-            #self.monitor.mesh.coordinates.dat.data[:] = self.mesh.coordinates.dat.data_ro[:]
             self.monitor.mesh.coordinates.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.monitor.update_monitor()
             self.m.dat.data[:] = self.monitor.m.dat.data_ro[:]
         else:
-            # self.mesh.coordinates.assign(self.x)
             self.own_output_coords.interpolate(Constant(self.R)*self.x)
             self.x_new.dat.data[:] = self.own_output_coords.dat.data_ro[:]
             self.monitor.get_monitor_on_new_mesh(self.monitor.m, self.x_old, self.x_new)
@@ -264,8 +262,6 @@ class OptimalTransportMeshGenerator(object):
 
         # Move data from internal mesh to output mesh.
         self.own_output_coords.interpolate(Constant(self.R)*self.x)
-        # self.mesh.coordinates.assign(self.x)
-        # self.output_coords.dat.data[:] = self.mesh.coordinates.dat.data_ro[:]
         self.output_coords.dat.data[:] = self.own_output_coords.dat.data_ro[:]
         return self.output_coords
 
