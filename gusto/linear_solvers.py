@@ -15,10 +15,10 @@ from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.active_tracers import TracerVariableType
-from gusto.configuration import logger, DEBUG
+from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
-from gusto.fml.form_manipulation_labelling import Term, drop
+from gusto.fml.form_manipulation_language import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -55,15 +55,24 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        if logger.isEnabledFor(DEBUG):
-            self.solver_parameters["ksp_monitor_true_residual"] = None
+        # ~ if logger.isEnabledFor(DEBUG):
+            # ~ self.solver_parameters["ksp_monitor_true_residual"] = None
 
         # setup the solver
         self._setup_solver()
 
+    @staticmethod
+    def log_ksp_residuals(ksp):
+        if logger.isEnabledFor(DEBUG):
+            ksp.setMonitor(logging_ksp_monitor_true_residual)
+
     @abstractproperty
     def solver_parameters(self):
         """Solver parameters for this solver"""
+        pass
+
+    @abstractmethod
+    def _setup_solver(self):
         pass
 
     @abstractmethod
@@ -150,16 +159,6 @@ class CompressibleSolver(TimesteppingSolver):
             if any(deg > 2 for deg in dgspace.ufl_element().degree()):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
-
-        if logger.isEnabledFor(DEBUG):
-            # Set outer solver to FGMRES and turn on KSP monitor for the outer system
-            self.solver_parameters["ksp_type"] = "fgmres"
-            self.solver_parameters["mat_type"] = "aij"
-            self.solver_parameters["pmat_type"] = "matfree"
-            self.solver_parameters["ksp_monitor_true_residual"] = None
-
-            # Turn monitor on for the trace system
-            self.solver_parameters["condensed_field"]["ksp_monitor_true_residual"] = None
 
         super().__init__(equations, alpha, solver_parameters,
                          overwrite_solver_parameters)
@@ -350,6 +349,13 @@ class CompressibleSolver(TimesteppingSolver):
         # post-solve
         self.bcs = self.equations.bcs['u']
 
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
+        # Log residuals on the trace system too
+        from gusto.logging import attach_custom_monitor
+        python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
+        attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
+
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
@@ -373,7 +379,7 @@ class CompressibleSolver(TimesteppingSolver):
         # Solve the hybridized system
         self.hybridized_solver.solve()
 
-        broken_u, rho1, _ = self.urhol0.split()
+        broken_u, rho1, _ = self.urhol0.subfunctions
         u1 = self.u_hdiv
 
         # Project broken_u into the HDiv space
@@ -387,7 +393,7 @@ class CompressibleSolver(TimesteppingSolver):
             bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
-        u, rho, theta = dy.split()[0:3]
+        u, rho, theta = dy.subfunctions[0:3]
         u.assign(u1)
         rho.assign(rho1)
 
@@ -495,7 +501,7 @@ class IncompressibleSolver(TimesteppingSolver):
         b = TrialFunction(Vb)
         gamma = TestFunction(Vb)
 
-        u, p = self.up.split()
+        u, p = self.up.subfunctions
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in
@@ -505,6 +511,9 @@ class IncompressibleSolver(TimesteppingSolver):
                                              rhs(b_eqn),
                                              self.b)
         self.b_solver = LinearVariationalSolver(b_problem)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.up_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -522,8 +531,8 @@ class IncompressibleSolver(TimesteppingSolver):
         with timed_region("Gusto:VelocityPressureSolve"):
             self.up_solver.solve()
 
-        u1, p1 = self.up.split()
-        u, p, b = dy.split()
+        u1, p1 = self.up.subfunctions
+        u, p, b = dy.subfunctions
         u.assign(u1)
         p.assign(p1)
 

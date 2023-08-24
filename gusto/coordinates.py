@@ -3,9 +3,8 @@ This file provides a coordinate object, dependent on the mesh.
 Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
-from gusto.configuration import logger
-from firedrake import (SpatialCoordinate, sqrt, atan_2, asin, Function,
-                       VectorElement, TensorElement)
+from gusto.logging import logger
+from firedrake import (SpatialCoordinate, sqrt, atan_2, asin, Function)
 import numpy as np
 
 
@@ -94,10 +93,12 @@ class Coordinates(object):
         space = domain.spaces(space_name)
 
         # Use the appropriate scalar function space if the space is vector
-        if (isinstance(space.ufl_element(), VectorElement)
-                or isinstance(space.ufl_element(), TensorElement)):
-            raise NotImplementedError('Coordinates for vector or tensor function spaces not implemented')
+        if np.prod(space.ufl_element().value_shape()) > 1:
             # TODO: get scalar space, and only compute coordinates if necessary
+            logger.warning(f'Space {space_name} has more than one dimension, '
+                           + 'and coordinates used for netCDF output have not '
+                           + 'yet been implemented for this.')
+            return None
 
         self.chi_coords[space_name] = []
 

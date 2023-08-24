@@ -52,10 +52,12 @@ for ref_level, dt in ref_dt.items():
     # I/O
     dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        dumplist_latlon=['D', 'D_error'],
+        dump_nc=True,
+    )
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
@@ -65,11 +67,12 @@ for ref_level, dt in ref_dt.items():
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D", subcycles=2)]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

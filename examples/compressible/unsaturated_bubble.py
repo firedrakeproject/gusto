@@ -51,9 +51,13 @@ eqns = CompressibleEulerEquations(domain, params,
 
 # I/O
 dirname = 'unsaturated_bubble'
-output = OutputParameters(dirname=dirname, dumpfreq=tdump, dump_nc=True,
-                          dumplist=['cloud_water', 'rain'], log_level='INFO',
-                          checkpoint=False)
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=tdump,
+    dump_nc=True,
+    dumplist=['cloud_water', 'rain'],
+    checkpoint=False
+)
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -80,18 +84,22 @@ transported_fields = [SSPRK3(domain, "u", options=u_opts),
                       SSPRK3(domain, "cloud_water", options=theta_opts, limiter=limiter),
                       SSPRK3(domain, "rain", options=theta_opts, limiter=limiter)]
 
+transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta", "water_vapour", "cloud_water", "rain"]]
+
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 # Physics schemes
-# NB: to use wrapper options with Fallout, need to pass field name to time discretisation
-physics_schemes = [(Fallout(eqns, 'rain', domain), SSPRK3(domain, field_name='rain', options=theta_opts, limiter=limiter)),
+# NB: can't yet use wrapper or limiter options with physics
+rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
+physics_schemes = [(Fallout(eqns, 'rain', domain, rainfall_method), SSPRK3(domain)),
                    (Coalescence(eqns), ForwardEuler(domain)),
                    (EvaporationOfRain(eqns), ForwardEuler(domain)),
                    (SaturationAdjustment(eqns), ForwardEuler(domain))]
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver,
                                   physics_schemes=physics_schemes)
 
