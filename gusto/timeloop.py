@@ -603,6 +603,8 @@ class MeshMovement(SemiImplicitQuasiNewton):
         self.ksp = {}
         for name in self.equation.field_names:
             self.ksp[name] = PETSc.KSP().create()
+        self.Lvec = {}
+
         
     def setup_fields(self):
         super().setup_fields()
@@ -626,73 +628,91 @@ class MeshMovement(SemiImplicitQuasiNewton):
         X0 = self.X0
         X1 = self.X1
 
+        # both X0 and X1 hold the mesh coordinates at the start of the timestep
         X1.assign(self.mesh.coordinates)
+        X0.assign(X1)
 
+        # this recomputes the fields that the monitor function depends on
+        self.mesh_generator.pre_meshgen_callback()
+
+        # solve for new mesh and store this in X1
+        with timed_stage("Mesh generation"):
+            X1.assign(self.mesh_generator.get_new_mesh())
+
+        # still on the old mesh, compute explicit forcing from xn and
+        # store in xstar
         with timed_stage("Apply forcing terms"):
             self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
 
+        # set xp to xstar
         xp(self.field_name).assign(xstar(self.field_name))
+
+        # Compute v (mesh velocity w.r.t. initial mesh) and
+        # v1 (mesh velocity w.r.t. final mesh)
+        # TODO: use Projectors below!
+        if self.on_sphere:
+            spherical_logarithm(X0, X1, self.v, self.mesh._radius)
+            self.v /= self.dt
+            spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
+            self.v1 /= -self.dt
+
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project(self.v)
+
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(self.v1)
+
+        else:
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project((X1 - X0)/self.dt)
+
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(-(X0 - X1)/self.dt)
+
+        with timed_stage("Transport"):
+            for name, scheme in self.active_transport:
+                # transport field from xstar to xmid on old mesh
+                self.mesh.coordinates.assign(X0)
+                self.uadv.assign(0.5*(un - self.v_V1))
+                scheme.apply(xmid(name), xstar(name))
+
+                # assemble the rhs of the projection operator on the
+                # old mesh
+                # TODO this should only be for fields that are in the HDiv
+                # space or are transported using the conservation form
+                rhs = inner(xmid(name), self.tests[name])*dx
+                with assemble(rhs).dat.vec as v:
+                    self.Lvec[name] = v
+
+            # put mesh_new into mesh
+            self.mesh.coordinates.assign(X1)
+
+            # this should reinterpolate any necessary fields
+            # (e.g. Coriolis and cell normals)
+            self.mesh_generator.post_meshgen_callback()
+
+            # now create the matrix for the projection and solve
+            # TODO this should only be for fields that are in the HDiv
+            # space or are transported using the conservation form
+            for name, scheme in self.active_transport:
+                lhs = inner(self.trials[name], self.tests[name])*dx
+                amat = assemble(lhs)
+                a = amat.M.handle
+                self.ksp[name].setOperators(a)
+                self.ksp[name].setFromOptions()
+
+                with xmid(name).dat.vec as x_:
+                    self.ksp[name].solve(self.Lvec[name], x_)
 
         for k in range(self.maxk):
 
-            X0.assign(X1)
+            for name, scheme in self.active_transport:
+                # transport field from xmid to xp on new mesh
+                self.uadv.assign(0.5*(unp1 - self.v1_V1))
+                scheme.apply(xp(name), xmid(name))
 
-            self.mesh_generator.pre_meshgen_callback()
-            with timed_stage("Mesh generation"):
-                X1.assign(self.mesh_generator.get_new_mesh())
-
-            # Compute v (mesh velocity w.r.t. initial mesh) and
-            # v1 (mesh velocity w.r.t. final mesh)
-            # TODO: use Projectors below!
-            if self.on_sphere:
-                spherical_logarithm(X0, X1, self.v, self.mesh._radius)
-                self.v /= self.dt
-                spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
-                self.v1 /= -self.dt
-
-                self.mesh.coordinates.assign(X0)
-                self.v_V1.project(self.v)
-
-                self.mesh.coordinates.assign(X1)
-                self.v1_V1.project(self.v1)
-
-            else:
-                self.mesh.coordinates.assign(X0)
-                self.v_V1.project((X1 - X0)/self.dt)
-
-                self.mesh.coordinates.assign(X1)
-                self.v1_V1.project(-(X0 - X1)/self.dt)
-
-            with timed_stage("Transport"):
-                for name, scheme in self.active_transport:
-                    # transport field from xstar to xmid on old mesh
-                    self.mesh.coordinates.assign(X0)
-                    self.uadv.assign(0.5*(un - self.v_V1))
-                    scheme.apply(xmid(name), xstar(name))
-
-                    rhs = inner(xmid(name), self.tests[name])*dx
-                    with assemble(rhs).dat.vec as v:
-                        Lvec = v
-
-                    # put mesh_new into mesh
-                    self.mesh.coordinates.assign(X1)
-
-                    lhs = inner(self.trials[name], self.tests[name])*dx
-                    amat = assemble(lhs)
-                    a = amat.M.handle
-                    self.ksp[name].setOperators(a)
-                    self.ksp[name].setFromOptions()
-
-                    with xmid(name).dat.vec as x_:
-                        self.ksp[name].solve(Lvec, x_)
-
-                    # transport field from xmid to xp on new mesh
-                    self.uadv.assign(0.5*(unp1 - self.v1_V1))
-                    scheme.apply(xp(name), xmid(name))
-
-            self.mesh_generator.post_meshgen_callback()
-
-            xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
+            # xrhs is the residual which goes in the linear solve
+            xrhs.assign(0.)
 
             for i in range(self.maxi):
 
@@ -702,7 +722,8 @@ class MeshMovement(SemiImplicitQuasiNewton):
                 xrhs -= xnp1(self.field_name)
 
                 with timed_stage("Implicit solve"):
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+                    # solves linear system and places result in dy
+                    self.linear_solver.solve(xrhs, dy)
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
