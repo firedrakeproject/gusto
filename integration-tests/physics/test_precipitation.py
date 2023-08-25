@@ -10,6 +10,7 @@ from firedrake import (PeriodicIntervalMesh, SpatialCoordinate,
                        ExtrudedMesh, sqrt, conditional, cos, pi)
 from netCDF4 import Dataset
 
+
 def setup_fallout(dirname):
 
     # ------------------------------------------------------------------------ #
