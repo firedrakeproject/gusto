@@ -44,7 +44,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.setup_scheme()
 
         self.io.log_parameters(equation)
-        self.io.setup_diagnostics(self.fields)
 
     @abstractproperty
     def transporting_velocity(self):
