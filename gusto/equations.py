@@ -10,7 +10,8 @@ from gusto.fields import PrescribedFields
 from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
                        replace_subject, replace_trial_function)
 from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
-                          linearisation, pressure_gradient, coriolis)
+                          linearisation, pressure_gradient, coriolis,
+                          transporting_velocity)
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
@@ -669,7 +670,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Transport Terms
         # -------------------------------------------------------------------- #
-
 
         # Mesh movement requires the circulation form, and an
         # additional modification
