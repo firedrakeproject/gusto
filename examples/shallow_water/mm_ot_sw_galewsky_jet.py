@@ -18,7 +18,7 @@ parameters = ShallowWaterParameters(H=H)
 # Domain
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=ref_level, degree=2)
-domain = Domain(mesh, dt, 'BDM', 1)
+domain = Domain(mesh, dt, 'BDM', 1, move_mesh=True)
 
 # Equation
 Omega = parameters.Omega
@@ -35,19 +35,19 @@ else:
 
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D', 'PotentialVorticity',
-                                           'RelativeVorticity'],
-                          log_level="INFO")
+                                           'RelativeVorticity'])
+
 pv = PotentialVorticity()
 diagnostic_fields = [pv, RelativeVorticity()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "D")]
 
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
 # Mesh movement
-
 def update_pv():
     pv()
 
@@ -64,6 +64,7 @@ mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
 
 # Time stepper
 stepper = MeshMovement(eqns, io, transported_fields,
+                       spatial_methods=transport_methods,
                        mesh_generator=mesh_generator)
 #stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 

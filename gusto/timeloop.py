@@ -5,7 +5,7 @@ from firedrake import Function, Projector, Constant, TrialFunction, \
     TestFunction, assemble, inner, dx, split
 from firedrake.petsc import PETSc
 from pyop2.profiling import timed_stage
-from gusto.equations import PrognosticEquationSet
+from gusto.equations import PrognosticEquationSet, ShallowWaterEquations
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
 from gusto.fml import drop, Label, Term
@@ -668,6 +668,7 @@ class PrescribedTransport(Timestepper):
 class MeshMovement(SemiImplicitQuasiNewton):
 
     def __init__(self, equation_set, io, transport_schemes,
+                 spatial_methods,
                  auxiliary_equations_and_schemes=None,
                  linear_solver=None,
                  diffusion_schemes=None,
@@ -684,6 +685,7 @@ class MeshMovement(SemiImplicitQuasiNewton):
         super().__init__(equation_set=equation_set,
                          io=io,
                          transport_schemes=transport_schemes,
+                         spatial_methods=spatial_methods,
                          auxiliary_equations_and_schemes=auxiliary_equations_and_schemes,
                          linear_solver=linear_solver,
                          diffusion_schemes=diffusion_schemes,
