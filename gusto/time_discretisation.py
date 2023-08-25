@@ -300,6 +300,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # setup linear solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
         return NonlinearVariationalSolver(problem, solver_parameters={'snes_type': 'ksponly'} | self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
@@ -415,6 +416,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         self.x1.assign(x0)
         for i in range(stage):
             self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
+        for evaluate in self.evaluate_source:
+            evaluate(self.x1, self.dt)
         if self.limiter is not None:
             self.limiter.apply(self.x1)
         self.solver.solve()
