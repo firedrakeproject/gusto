@@ -678,6 +678,9 @@ class MeshMovement(SemiImplicitQuasiNewton):
         Vu = equation_set.domain.spaces("HDiv")
         self.uadv = Function(Vu)
 
+        assert isinstance(equation_set, ShallowWaterEquations), \
+            'Mesh movement only works with the shallow water equation set'
+
         super().__init__(equation_set=equation_set,
                          io=io,
                          transport_schemes=transport_schemes,
@@ -707,6 +710,10 @@ class MeshMovement(SemiImplicitQuasiNewton):
         self.v_V1 = Function(Vu)
         self.v1 = Function(mesh.coordinates.function_space())
         self.v1_V1 = Function(Vu)
+
+        # Set up diagnostics - also called in the run method, is it ok
+        # to do this twice (I suspect not)
+        self.io.setup_diagnostics(self.fields)
 
         mesh_generator.monitor.setup(self.fields)
         mesh_generator.setup()

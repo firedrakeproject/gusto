@@ -669,20 +669,29 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Transport Terms
         # -------------------------------------------------------------------- #
+
+
+        # Mesh movement requires the circulation form, and an
+        # additional modification
+        if domain.move_mesh:
+            assert u_transport_option == "circulation_form"
+
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(domain, w, u, u), 'u')
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(domain, w, u), "u")
-            ke_form = transport.remove(ke_form)
-            ke_form = ke_form.label_map(
-                lambda t: t.has_label(transporting_velocity),
-                lambda t: Term(ufl.replace(
-                    t.form, {t.get(transporting_velocity): u}), t.labels))
-            ke_form = transporting_velocity.remove(ke_form)
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u), "u") - ke_form
+            ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
+            if domain.move_mesh:
+                ke_form = transport.remove(ke_form)
+                ke_form = ke_form.label_map(
+                    lambda t: t.has_label(transporting_velocity),
+                    lambda t: Term(ufl.replace(
+                        t.form, {t.get(transporting_velocity): u}), t.labels))
+                ke_form = transporting_velocity.remove(ke_form)
+                ke_form *= -1
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
