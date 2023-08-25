@@ -6,8 +6,8 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, TrialFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, LinearVariationalSolver, LinearVariationalProblem, DirichletBC)
+from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
@@ -283,15 +283,13 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
-        self.dx1_trial = TrialFunction(self.fs)
-        self.dx1 = Function(self.fs)
 
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.dx1_trial, self.idx),
+            map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
         return l.form
@@ -300,9 +298,9 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
     def solver(self):
         """Set up the problem and the solver."""
         # setup linear solver using lhs and rhs defined in derived class
-        problem = LinearVariationalProblem(self.lhs, self.rhs, self.dx1, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return LinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters={'snes_type': 'ksponly'} | self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply_cycle(self, x_out, x_in):
@@ -420,7 +418,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(self.x1)
         self.solver.solve()
-        self.k[stage].assign(self.dx1)
+        self.k[stage].assign(self.x_out)
 
         if (stage == self.nStages - 1):
             self.x1.assign(x0)

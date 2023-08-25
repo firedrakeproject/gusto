@@ -9,8 +9,6 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, SpatialCoordinate,
                        ExtrudedMesh, sqrt, conditional, cos, pi)
 from netCDF4 import Dataset
-import pytest
-
 
 def setup_fallout(dirname):
 
@@ -80,7 +78,6 @@ def run_fallout(dirname):
     stepper.run(t=0, tmax=tmax)
 
 
-@pytest.mark.xfail(reason="Rain advection terms are not accounted for in physics scheme")
 def test_fallout_setup(tmpdir):
 
     dirname = str(tmpdir)
