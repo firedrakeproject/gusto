@@ -80,7 +80,6 @@ class AdvectionEquation(PrognosticEquation):
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is not specified, uses the HDiv spaces
                 set up by the domain. Defaults to None.
-            **kwargs: any keyword arguments to be passed to the advection form.
         """
         super().__init__(domain, function_space, field_name)
 
@@ -483,37 +482,63 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return adv_form
 
+    def get_active_tracer(self, field_name):
+        """
+        Returns the active tracer metadata object for a particular field.
 
-class ForcedAdvectionEquation(PrognosticEquationSet):
+        Args:
+            field_name (str): the name of the field to return the metadata for.
+
+        Returns:
+            :class:`ActiveTracer`: the object storing the metadata describing
+                the tracer.
+        """
+
+        active_tracer_to_return = None
+
+        for active_tracer in self.active_tracers:
+            if active_tracer.name == field_name:
+                active_tracer_to_return = active_tracer
+                break
+
+        if active_tracer_to_return is None:
+            raise RuntimeError(f'Unable to find active tracer {field_name}')
+
+        return active_tracer_to_return
+
+
+class CoupledTransportEquation(PrognosticEquationSet):
     u"""
-    Discretises the advection equation with a source/sink term,               \n
+    Discretises the transport equation,               \n
     ∂q/∂t + (u.∇)q = F,
-    which can also be augmented with active tracers.
+    with the application of active tracers.
+    As there are multiple tracers or species that are
+    interacting, q and F are vectors.
+    This equation can be enhanced through the addition of
+    sources or sinks (F) by applying it with physics schemes.
     """
-    def __init__(self, domain, function_space, field_name, Vu=None,
-                 active_tracers=None, **kwargs):
+    def __init__(self, domain, active_tracers, Vu=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            function_space (:class:`FunctionSpace`): the function space that the
-                equation's prognostic is defined on.
-            field_name (str): name of the prognostic field.
+            active_tracers (list): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations. This is required for using this class; if there
+                is only a field to be advected, use the AdvectionEquation
+                instead.
             Vu (:class:`FunctionSpace`, optional): the function space for the
                 velocity field. If this is not specified, uses the HDiv spaces
                 set up by the domain. Defaults to None.
-            active_tracers (list, optional): a list of `ActiveTracer` objects
-                that encode the metadata for any active tracers to be included
-                in the equations. Defaults to None.
         """
 
-        self.field_names = [field_name]
-        self.space_names = {field_name: function_space.name}
         self.active_tracers = active_tracers
         self.terms_to_linearise = {}
+        self.field_names = []
+        self.space_names = {}
 
         # Build finite element spaces
-        self.spaces = [domain.spaces("tracer", V=function_space)]
+        self.spaces = []
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -523,7 +548,6 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
 
-        # Can now call the underlying PrognosticEquation
         full_field_name = "_".join(self.field_names)
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
@@ -531,19 +555,18 @@ class ForcedAdvectionEquation(PrognosticEquationSet):
             V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
         else:
             V = domain.spaces("HDiv")
-        u = self.prescribed_fields("u", V)
+        _ = self.prescribed_fields("u", V)
 
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
         mass_form = self.generate_mass_terms()
-        transport_form = prognostic(advection_form(self.tests[0], split(self.X)[0], u), field_name)
 
-        self.residual = subject(mass_form + transport_form, self.X)
+        self.residual = subject(mass_form, self.X)
 
         # Add transport of tracers
-        if len(active_tracers) > 0:
-            self.residual += self.generate_tracer_transport_terms(active_tracers)
+        self.residual += self.generate_tracer_transport_terms(active_tracers)
+
 
 # ============================================================================ #
 # Specified Equation Sets

@@ -8,7 +8,7 @@ from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, interpolate, VectorFunctionSpace, Function)
+                       inner, grad, VectorFunctionSpace, Function)
 import numpy as np
 
 
@@ -80,8 +80,8 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         # Figure out if we're on a sphere
-        # TODO: could we run on other domains that could confuse this?
-        # TODO: could this be combined with domain metadata below?
+        # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
+        # or torus) then the identification of domains would no longer be unique
         if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
@@ -92,7 +92,7 @@ class Domain(object):
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
-            self.k = interpolate(x/R, mesh.coordinates.function_space())
+            self.k = grad(R)
             if dim == 2:
                 if hasattr(mesh, "_bash_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
@@ -123,7 +123,6 @@ class Domain(object):
         # Construct metadata about domain
         # -------------------------------------------------------------------- #
 
-        # TODO: would this be better as an object?
         self.metadata = {}
         self.metadata['extruded'] = mesh.extruded
 
@@ -143,9 +142,7 @@ class Domain(object):
             raise ValueError('Unable to determine domain type')
 
         comm = self.mesh.comm
-        comm_size = comm.Get_size()
         my_rank = comm.Get_rank()
-        max_num_domain_infos = 3
 
         # Properties of domain will be determined from full coords, so need
         # doing on the first processor then broadcasting to others
@@ -159,19 +156,8 @@ class Domain(object):
             if mesh.extruded:
                 self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
 
-            # Send information to other processors
-            for j, metadata_key in enumerate([f'domain_extent_{xyz}' for xyz in ['x', 'y', 'z']]):
-                if metadata_key in self.metadata.keys():
-                    metadata_value = self.metadata[metadata_key]
-                else:
-                    metadata_value = None
-                for procid in range(1, comm_size):
-                    my_tag = comm_size*j + procid
-                    comm.send((metadata_key, metadata_value), dest=procid, tag=my_tag)
         else:
-            # Need to receive information and store in metadata
-            for j in range(max_num_domain_infos):
-                my_tag = comm_size*j + my_rank
-                metadata_key, metadata_value = comm.recv(source=0, tag=my_tag)
-                if metadata_value is not None:
-                    self.metadata[metadata_key] = metadata_value
+            self.metadata = {}
+
+        # Send information to other processors
+        self.metadata = comm.bcast(self.metadata, root=0)

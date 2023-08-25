@@ -10,10 +10,13 @@ from firedrake import (Function, TestFunction, TrialFunction, NonlinearVariation
                        NonlinearVariationalSolver, LinearVariationalSolver, LinearVariationalProblem, DirichletBC)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
-from gusto.configuration import (logger, DEBUG, EmbeddedDGOptions, RecoveryOptions)
+
+from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
+from gusto.fml import (
+    replace_subject, replace_test_function, Term, all_terms, drop
+)
 from gusto.labels import time_derivative, prognostic, physics
-from gusto.fml import (replace_subject, replace_test_function, Term,
-                       all_terms, drop)
+from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 import numpy as np
 
@@ -89,13 +92,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # get default solver options if none passed in
         if solver_parameters is None:
             self.solver_parameters = {'ksp_type': 'cg',
-                                      'ksp_atol': 1.e-14,
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
             self.solver_parameters = solver_parameters
-            if logger.isEnabledFor(DEBUG):
-                self.solver_parameters["ksp_monitor_true_residual"] = None
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -211,7 +211,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        solver = NonlinearVariationalSolver(
+            problem,
+            solver_parameters=self.solver_parameters,
+            options_prefix=solver_name
+        )
+        if logger.isEnabledFor(DEBUG):
+            solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+        return solver
 
     @abstractmethod
     def apply(self, x_out, x_in):
@@ -383,7 +390,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-
         super().setup(equation, apply_bcs, *active_labels)
 
         self.k = [Function(self.fs) for i in range(self.nStages)]
@@ -403,7 +409,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=lambda t: -1.*t)
+            map_if_false=lambda t: -1*t)
 
         return r.form
 
@@ -504,12 +510,14 @@ class Heun(ExplicitMultistage):
     u"""
     Implements Heun's method.
 
-    The 2-stage Runge-Kutta scheme known as Heun's method, for solving
+    The 2-stage Runge-Kutta scheme known as Heun's method,for solving
     ∂y/∂t = F(y). It can be written as:
 
-    k0 = F[y^n]
-    k1 = F[y^n + dt*k0]
-    y^(n+1) = y^n + (1/2)*dt*(k0 + k1)
+    y_1 = F[y^n]
+    y^(n+1) = (1/2)y^n + (1/2)F[y_1]
+
+    where superscripts indicate the time-level and subscripts indicate the stage
+    number.
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name,
@@ -553,7 +561,6 @@ class BackwardEuler(TimeDiscretisation):
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',
-                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
         super().__init__(domain=domain, field_name=field_name,
@@ -632,7 +639,6 @@ class ThetaMethod(TimeDiscretisation):
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
-                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
@@ -739,7 +745,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         pass
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
 
@@ -874,7 +880,6 @@ class TR_BDF2(TimeDiscretisation):
             # theta method leads to asymmetric matrix, per lhs function below,
             # so don't use CG
             solver_parameters = {'ksp_type': 'gmres',
-                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
@@ -1082,7 +1087,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         self.order = order
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation, apply_bcs,
+        super().setup(equation=equation, apply_bcs=apply_bcs,
                       *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
@@ -1202,7 +1207,6 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             solver_parameters = {'ksp_type': 'gmres',
-                                 'ksp_atol': 1.e-14,
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
@@ -1213,7 +1217,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         self.order = order
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
 

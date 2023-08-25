@@ -44,10 +44,11 @@ parameters = CompressibleParameters()
 eqns = IncompressibleBoussinesqEquations(domain, parameters)
 
 # I/O
-output = OutputParameters(dirname='skamarock_klemp_incompressible',
-                          dumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname='skamarock_klemp_incompressible',
+    dumpfreq=dumpfreq,
+    dumplist=['u'],
+)
 # list of diagnostic fields, each defined in a class in diagnostics.py
 diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)

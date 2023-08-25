@@ -9,7 +9,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     sin, cos, sqrt, asin, atan_2, as_vector, min_value, max_value, FunctionSpace, \
     errornorm, zero
 from gusto import thermodynamics
-from gusto.configuration import logger
+from gusto.logging import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 

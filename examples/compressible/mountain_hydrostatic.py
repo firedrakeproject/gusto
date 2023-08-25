@@ -61,10 +61,11 @@ eqns = CompressibleEulerEquations(domain, parameters, sponge=sponge)
 
 # I/O
 dirname = 'hydrostatic_mountain'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+    dumplist=['u'],
+)
 diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance(eqns),
                      Perturbation('theta'), Perturbation('rho')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
