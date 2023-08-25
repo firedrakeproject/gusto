@@ -1,5 +1,5 @@
 # The perp routine should come from UFL when it is fully implemented there
-from gusto import perp
+from gusto.perp import perp
 from gusto.fml import subject, replace_subject, all_terms
 from firedrake import (UnitSquareMesh, FunctionSpace, MixedFunctionSpace,
                        TestFunctions, Function, split, inner, dx, errornorm,
