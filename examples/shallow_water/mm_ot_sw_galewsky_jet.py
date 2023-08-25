@@ -24,7 +24,7 @@ domain = Domain(mesh, dt, 'BDM', 1, move_mesh=True)
 Omega = parameters.Omega
 x = SpatialCoordinate(domain.mesh)
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option="circulation_form")
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option="vector_invariant_form")
 
 # I/O
 perturb = True
