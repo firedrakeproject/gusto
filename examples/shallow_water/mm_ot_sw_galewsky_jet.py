@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
-    Function, assemble, dx, FunctionSpace, pi, CellNormal
+    Function, assemble, dx, pi, CellNormal
 
 import numpy as np
 
@@ -47,14 +47,17 @@ transported_fields = [TrapeziumRule(domain, "u"),
 
 transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
+
 # Mesh movement
 def update_pv():
     pv()
+
 
 def reinterpolate_coriolis():
     domain.k = interpolate(x/R, domain.mesh.coordinates.function_space())
     domain.outward_normals.interpolate(CellNormal(domain.mesh))
     eqns.prescribed_fields("coriolis").interpolate(fexpr)
+
 
 monitor = MonitorFunction("PotentialVorticity", adapt_to="gradient")
 mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
@@ -66,7 +69,6 @@ mesh_generator = OptimalTransportMeshGenerator(domain.mesh,
 stepper = MeshMovement(eqns, io, transported_fields,
                        spatial_methods=transport_methods,
                        mesh_generator=mesh_generator)
-#stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
 
 # initial conditions
 u0 = stepper.fields("u")
@@ -158,6 +160,7 @@ if perturb:
     D_pert = Function(D0.function_space()).interpolate(Dhat*cos(theta)*exp(-(lamda/alpha)**2)*exp(-((theta2 - theta)/beta)**2))
     D0 += D_pert
 
+
 def initialise_fn():
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
@@ -179,7 +182,7 @@ def initialise_fn():
     eqns.prescribed_fields("coriolis").interpolate(fexpr)
     pv()
 
-# stepper.prescribed_uexpr = sphere_to_cartesian(mesh, u_zonal, u_merid)
+
 pv.setup(domain, stepper.fields)
 mesh_generator.get_first_mesh(initialise_fn)
 
