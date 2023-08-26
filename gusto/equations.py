@@ -682,6 +682,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
             if domain.move_mesh:
+                ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
                 ke_form = transport.remove(ke_form)
                 ke_form = ke_form.label_map(
                     lambda t: t.has_label(transporting_velocity),
