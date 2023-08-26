@@ -7,8 +7,16 @@ import numpy as np
 
 day = 24.*60.*60.
 dt = 240.
-tmax = 6*day
-ref_level = 4
+
+if '--running-tests' in sys.argv:
+    ref_level = 3
+    dt = 480.
+    tmax = 1440.
+else:
+    # setup resolution and timestepping parameters for convergence test
+    ref_level = 4
+    dt = 240.
+    tmax = 6*day
 
 # setup shallow water parameters
 R = 6371220.
@@ -24,7 +32,8 @@ domain = Domain(mesh, dt, 'BDM', 1, move_mesh=True)
 Omega = parameters.Omega
 x = SpatialCoordinate(domain.mesh)
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, u_transport_option="vector_invariant_form")
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
+                             u_transport_option="vector_invariant_form")
 
 # I/O
 perturb = True
