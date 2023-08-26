@@ -5,7 +5,7 @@ Cartesian systems.
 
 import importlib
 import numpy as np
-from firedrake import Constant
+from firedrake import Constant, as_vector, SpatialCoordinate
 import ufl
 
 __all__ = ["xyz_from_lonlatr", "lonlatr_from_xyz", "xyz_vector_from_lonlatr",
@@ -281,7 +281,7 @@ def rodrigues_rotation(old_vector, rot_axis, rot_angle):
     Performs the rotation of a vector v about some axis k by some angle ϕ, as
     given by Rodrigues' rotation formula:                                     \n
 
-    v_rot = v * cos(ϕ) + (k cross v) sin(ϕ) + k (k . v)*(1 - cos(ϕ))              \n
+    v_rot = v * cos(ϕ) + (k cross v) sin(ϕ) + k (k . v)*(1 - cos(ϕ))          \n
 
     Returns a new vector. All components must be (x,y,z) components.
 
@@ -321,6 +321,7 @@ def rodrigues_rotation(old_vector, rot_axis, rot_angle):
     else:
         dot = module.dot
 
+    # import pdb; pdb.set_trace()
     new_vector = (old_vector * cos(rot_angle)
                   + cross(rot_axis, old_vector) * sin(rot_angle)
                   + rot_axis * dot(rot_axis, old_vector) * (1 - cos(rot_angle)))
@@ -370,61 +371,46 @@ def rotated_lonlatr_vectors(xyz, new_pole):
     """
     Returns the (X,Y,Z) components of rotated (lon,lat,r) unit basis vectors,
     given a rotation axis and the (X,Y,Z) coordinates and the old (lon,lat,r)
-    unit basis vectors.
+    unit basis vectors. Only implemented for Firedrake.
 
     Args:
-        xyz (tuple of :class:`np.ndarray` or :class:`ufl.Expr`): Original
-            geocentric Cartesian coordinates.
+        xyz (:class:`SpatialCoordinate`): Original geocentric Cartesian
+            coordinates.
         new_pole (tuple): a tuple of floats (lon, lat) of the new pole, in the
             original coordinate system. The longitude and latitude must be
             expressed in radians.
 
     Returns:
-        tuple of :class:`np.ndarray` or :class:`ufl.Expr`: the rotated basis
-            vectors (e_lon, e_lat, e_r).
+        tuple of :class:`ufl.Expr`: the rotated basis vectors (e_lon, e_lat, e_r).
     """
+
+    from firedrake import grad, sqrt, dot, as_vector
 
     rot_axis, rot_angle = pole_rotation(new_pole)
 
-    # Create old (lon,lat,r) basis vectors: need different handling of
-    # Firedrake and numpy situations
-    _, module_name = firedrake_or_numpy(xyz[0])
-    # For Firedrake, can just use Constants
-    if module_name == 'firedrake':
-        e_lon = (Constant(1.0), Constant(0.0), Constant(0.0))
-        e_lat = (Constant(0.0), Constant(1.0), Constant(0.0))
-        e_r = (Constant(0.0), Constant(0.0), Constant(1.0))
-    # For numpy, need to create arrays
-    else:
-        e_lon = np.zeros_like(xyz)
-        e_lat = np.zeros_like(xyz)
-        e_r = np.zeros_like(xyz)
+    new_xyz = rodrigues_rotation(xyz, as_vector(rot_axis), rot_angle)
+    new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
 
-        e_lon[0] = 1.0
-        e_lat[1] = 1.0
-        e_r[2] = 1.0
+    new_e_lon = grad(new_lonlatr[0])
+    new_e_lat = grad(new_lonlatr[1])
+    new_e_r = grad(sqrt(dot(xyz, xyz)))
 
-    # Get (X,Y,Z) components of (lon,lat,r) basis vectors
-    e_lon_xyz = xyz_vector_from_lonlatr(e_lon, xyz)
-    e_lat_xyz = xyz_vector_from_lonlatr(e_lat, xyz)
-    e_r_xyz = xyz_vector_from_lonlatr(e_r, xyz)
-
-    # Do rotations to get new coordinates
-    new_e_lon = rodrigues_rotation(e_lon_xyz, rot_axis, rot_angle)
-    new_e_lat = rodrigues_rotation(e_lat_xyz, rot_axis, rot_angle)
-    new_e_r = rodrigues_rotation(e_r_xyz, rot_axis, rot_angle)
+    # Normalise
+    new_e_lon /= sqrt(dot(new_e_lon, new_e_lon))
+    new_e_lat /= sqrt(dot(new_e_lat, new_e_lat))
+    new_e_r /= sqrt(dot(new_e_r, new_e_r))
 
     return (new_e_lon, new_e_lat, new_e_r)
 
 
-def rotated_lonlatr_coords(old_xyz, new_pole):
+def rotated_lonlatr_coords(xyz, new_pole):
     """
     Returns the rotated (lon,lat,r) coordinates, given a rotation axis and the
     (X,Y,Z) coordinates.
 
     Args:
-        old_xyz (tuple of :class:`np.ndarray` or :class:`ufl.Expr`): Original
-            geocentric Cartesian coordinates.
+        xyz (tuple of :class:`np.ndarray` or :class:`SpatialCoordinate`):
+            Original geocentric Cartesian coordinates.
         new_pole (tuple): a tuple of floats (lon, lat) of the new pole, in the
             original coordinate system. The longitude and latitude must be
             expressed in radians.
@@ -435,8 +421,24 @@ def rotated_lonlatr_coords(old_xyz, new_pole):
 
     rot_axis, rot_angle = pole_rotation(new_pole)
 
+    # If numpy, shape (x,y,z) array as a vector
+    _, module_name = firedrake_or_numpy(xyz[0])
+    if module_name == 'numpy':
+        old_xyz_vector = np.transpose(xyz)
+    else:
+        assert isinstance(xyz, SpatialCoordinate), 'Rotated lonlatr ' \
+            + 'coordinates require xyz to be a SpatialCoordinate object'
+        old_xyz_vector = xyz
+        rot_axis = as_vector(rot_axis)
+
     # Do rotations to get new coordinates
-    new_xyz = rodrigues_rotation(old_xyz, rot_axis, rot_angle)
+    new_xyz_vector = rodrigues_rotation(old_xyz_vector, rot_axis, rot_angle)
+
+    if module_name == 'numpy':
+        new_xyz = np.transpose(new_xyz_vector)
+    else:
+        new_xyz = new_xyz_vector
+
     new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
 
     return new_lonlatr

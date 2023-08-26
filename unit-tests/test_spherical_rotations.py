@@ -13,7 +13,7 @@ tol = 1e-12
 # Structure of values for testing Firedrake and numpy routines are different
 def setup_values(values, config_name, len_array, mesh=None):
     if config_name == "numpy_vector":
-        # Transform to list of arrays
+        # Transform to array
         vector = np.array(values)
         return vector
 
