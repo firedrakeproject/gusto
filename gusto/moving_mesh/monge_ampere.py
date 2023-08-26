@@ -1,4 +1,5 @@
 from firedrake import *
+from gusto.logging import logger
 import numpy as np
 
 
@@ -257,8 +258,9 @@ class OptimalTransportMeshGenerator(object):
         # Generate new mesh, coords put in self.x
         try:
             self.mesh_solv.solve()
-        except:
-            print("mesh solver did not converge - oh well, continuing anyway!")
+        except ConvergenceError:
+            logger.warning(
+                'mesh solver did not converge - oh well, continuing anyway!')
 
         # Move data from internal mesh to output mesh.
         self.own_output_coords.interpolate(Constant(self.R)*self.x)
