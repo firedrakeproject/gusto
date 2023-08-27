@@ -4,6 +4,7 @@ from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     Function, assemble, dx, pi, CellNormal
 
 import numpy as np
+import sys
 
 day = 24.*60.*60.
 dt = 240.
