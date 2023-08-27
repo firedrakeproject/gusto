@@ -156,6 +156,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         self.space = space
         self.method = method
         self.expr = None
+        self.to_dump = True
 
         # Property to allow graceful failures if solve method not valid
         if not hasattr(self, "solve_implemented"):
@@ -195,7 +196,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
                 f'Diagnostics {self.name} is using a function space which does not have a name'
             domain.spaces(space.name, V=space)
 
-            self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
+            self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
 
             if self.method != 'solve':
                 assert self.expr is not None, \
@@ -233,6 +234,52 @@ class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
 
+    def __init__(self, velocity='u', name=None, to_dump=True, space=None,
+                 method='interpolate', required_fields=()):
+        """
+        Args:
+            velocity (str or :class:`ufl.Expr`, optional): the velocity field to
+                take the Courant number of. Can be a string referring to an
+                existing field, or an expression. If it is an expression, the
+                name argument is required. Defaults to 'u'.
+            name (str, optional): the name to append to "CourantNumber" to form
+                the name of this diagnostic. This argument must be provided if
+                the velocity is an expression (rather than a string). Defaults
+                to None.
+            to_dump (bool, optional): whether this diagnostic should be dumped.
+                Defaults to True.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            required_fields (tuple, optional): tuple of names of the fields that
+                are required for the computation of this diagnostic field.
+                Defaults to ().
+        """
+        # Work out whether to take Courant number from field or expression
+        if type(velocity) is str:
+            # Default name should just be CourantNumber
+            if velocity == 'u':
+                self.name = 'CourantNumber'
+            elif name is None:
+                self.name = 'CourantNumber_'+velocity
+            else:
+                self.name = 'CourantNumber_'+name
+        else:
+            if name is None:
+                raise ValueError('CourantNumber diagnostic: if provided '
+                                 + 'velocity is an expression then the name '
+                                 + 'argument must be provided')
+            self.name = 'CourantNumber_'+name
+
+        self.velocity = velocity
+        super().__init__(space=space, method=method, required_fields=required_fields)
+
+        # Done after super init to ensure that it is not always set to True
+        self.to_dump = to_dump
+
     def setup(self, domain, state_fields):
         """
         Sets up the :class:`Function` for the diagnostic field.
@@ -247,7 +294,11 @@ class CourantNumber(DiagnosticField):
         test = TestFunction(V)
         self.area = Function(V)
         assemble(test*dx, tensor=self.area)
-        u = state_fields("u")
+
+        if type(self.velocity) is str:
+            u = state_fields(self.velocity)
+        else:
+            u = self.velocity
 
         self.expr = sqrt(dot(u, u))/sqrt(self.area)*domain.dt
 

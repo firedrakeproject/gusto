@@ -93,6 +93,7 @@ class OutputParameters(Configuration):
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
+    log_courant = True
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
