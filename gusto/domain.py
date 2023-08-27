@@ -8,8 +8,7 @@ from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, grad, VectorFunctionSpace, Function, dot,
-                       FunctionSpace)
+                       inner, grad, VectorFunctionSpace, Function, FunctionSpace)
 import numpy as np
 
 
@@ -26,7 +25,8 @@ class Domain(object):
     the same then this can be specified through the "degree" argument.
     """
     def __init__(self, mesh, dt, family, degree=None,
-                 horizontal_degree=None, vertical_degree=None):
+                 horizontal_degree=None, vertical_degree=None,
+                 rotated_pole=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -42,6 +42,11 @@ class Domain(object):
                 horizontal part of the DG space. Defaults to None.
             vertical_degree (int, optional): the element degree used for the
                 vertical part of the DG space. Defaults to None.
+            rotated_pole (tuple, optional): a tuple of floats (lon, lat) of the
+                location to use as the north pole in a spherical coordinate
+                system. These are expressed in the original coordinate system.
+                The longitude and latitude must be expressed in radians.
+                Defaults to None. This is unused for non-spherical domains.
 
         Raises:
             ValueError: if incompatible degrees are specified (e.g. specifying
@@ -98,7 +103,7 @@ class Domain(object):
             R = sqrt(inner(x, x))
             self.k = grad(R)
             if dim == 2:
-                if hasattr(mesh, "_bash_mesh"):
+                if hasattr(mesh, "_base_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
                     if not hasattr(mesh, "_cell_orientations"):
@@ -115,10 +120,24 @@ class Domain(object):
                 self.perp = perp
 
         # -------------------------------------------------------------------- #
+        # Construct information relating to height/radius
+        # -------------------------------------------------------------------- #
+
+        if self.on_sphere:
+            spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
+            CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
+            radius_field = Function(CG1).interpolate(R)
+            # TODO: this should use global min kernel
+            radius = np.min(radius_field.dat.data_ro)
+        else:
+            radius = None
+
+        # -------------------------------------------------------------------- #
         # Set up coordinates
         # -------------------------------------------------------------------- #
 
-        self.coords = Coordinates(mesh)
+        self.coords = Coordinates(mesh, on_sphere=self.on_sphere,
+                                  rotated_pole=rotated_pole, radius=radius)
         # Set up DG1 equispaced space, used for making metadata
         _ = self.spaces('DG1_equispaced')
         self.coords.register_space(self, 'DG1_equispaced')
@@ -131,45 +150,7 @@ class Domain(object):
         # Construct metadata about domain
         # -------------------------------------------------------------------- #
 
-        self.metadata = {}
-        self.metadata['extruded'] = mesh.extruded
-
-        if self.on_sphere and hasattr(mesh, "_base_mesh"):
-            self.metadata['domain_type'] = 'extruded_spherical_shell'
-        elif self.on_sphere:
-            self.metadata['domain_type'] = 'spherical_shell'
-        elif mesh.geometric_dimension() == 1 and mesh.topological_dimension() == 1:
-            self.metadata['domain_type'] = 'interval'
-        elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2 and mesh.extruded:
-            self.metadata['domain_type'] = 'vertical_slice'
-        elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2:
-            self.metadata['domain_type'] = 'plane'
-        elif mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 3 and mesh.extruded:
-            self.metadata['domain_type'] = 'extruded_plane'
-        else:
-            raise ValueError('Unable to determine domain type')
-
-        comm = self.mesh.comm
-        my_rank = comm.Get_rank()
-
-        # Properties of domain will be determined from full coords, so need
-        # doing on the first processor then broadcasting to others
-
-        if my_rank == 0:
-            chi = self.coords.global_chi_coords['DG1_equispaced']
-            if not self.on_sphere:
-                self.metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
-                if self.metadata['domain_type'] in ['plane', 'extruded_plane']:
-                    self.metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
-            if mesh.extruded:
-                self.metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
-
-        else:
-            self.metadata = {}
-
-        # Send information to other processors
-        self.metadata = comm.bcast(self.metadata, root=0)
-
+        self.metadata = construct_domain_metadata(mesh, self.coords, self.on_sphere)
 
     def set_height_above_surface(self):
         """
@@ -198,3 +179,56 @@ class Domain(object):
                                                index_data)
 
         self.height_above_surface = height_above_surface
+
+def construct_domain_metadata(mesh, coords, on_sphere):
+    """
+    Builds a dictionary containing metadata about the domain.
+
+    Args:
+        mesh (:class:`Mesh`): the model's mesh.
+        coords (:class:`Coordinates`): the model's coordinate object.
+        on_sphere (bool): whether the domain is on the sphere or not.
+
+    Returns:
+        dict: a dictionary of metadata relating to the domain.
+    """
+    metadata = {}
+    metadata['extruded'] = mesh.extruded
+
+    if on_sphere and hasattr(mesh, "_base_mesh"):
+        metadata['domain_type'] = 'extruded_spherical_shell'
+    elif on_sphere:
+        metadata['domain_type'] = 'spherical_shell'
+    elif mesh.geometric_dimension() == 1 and mesh.topological_dimension() == 1:
+        metadata['domain_type'] = 'interval'
+    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2 and mesh.extruded:
+        metadata['domain_type'] = 'vertical_slice'
+    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2:
+        metadata['domain_type'] = 'plane'
+    elif mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 3 and mesh.extruded:
+        metadata['domain_type'] = 'extruded_plane'
+    else:
+        raise ValueError('Unable to determine domain type')
+
+    comm = mesh.comm
+    my_rank = comm.Get_rank()
+
+    # Properties of domain will be determined from full coords, so need
+    # doing on the first processor then broadcasting to others
+
+    if my_rank == 0:
+        chi = coords.global_chi_coords['DG1_equispaced']
+        if not on_sphere:
+            metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
+            if metadata['domain_type'] in ['plane', 'extruded_plane']:
+                metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
+        if mesh.extruded:
+            metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
+
+    else:
+        metadata = {}
+
+    # Send information to other processors
+    metadata = comm.bcast(metadata, root=0)
+
+    return metadata

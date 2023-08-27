@@ -9,10 +9,11 @@ import pytest
 
 tol = 1e-12
 
+
 # Structure of values for testing Firedrake and numpy routines are different
 def setup_values(values, config_name, len_array, mesh=None):
     if config_name == "numpy_vector":
-        # Transform to list of arrays
+        # Transform to array
         vector = np.array(values)
         return vector
 
@@ -109,7 +110,3 @@ def test_rodrigues_rotation(config_name):
         new_vector = rodrigues_rotation(orig_vector, rot_axis, rot_angle)
 
         check_values(new_vector, answer_vector, config_name, f'rodrigues_rotation {j}')
-
-
-
-
