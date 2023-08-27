@@ -1,5 +1,6 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
+from firedrake import IcosahedralSphereMesh, \
+    Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
     Function, assemble, dx, pi, CellNormal
 
@@ -13,10 +14,16 @@ if '--running-tests' in sys.argv:
     ref_level = 3
     dt = 480.
     tmax = 1440.
+    cubed_sphere = False
 else:
-    # setup resolution and timestepping parameters for convergence test
-    ref_level = 4
-    dt = 240.
+    # setup resolution and timestepping parameters
+    cubed_sphere = True
+    if cubed_sphere:
+        ncells = 24
+        dt = 200.
+    else:
+        ref_level = 4
+        dt = 240.
     tmax = 6*day
 
 # setup shallow water parameters
@@ -24,10 +31,25 @@ R = 6371220.
 H = 10000.
 parameters = ShallowWaterParameters(H=H)
 
+perturb = True
+if perturb:
+    dirname = "mm_ot_sw_galewsky_jet_perturbed_dt%s" % dt
+else:
+    dirname = "mm_ot_sw_galewsky_jet_unperturbed"
+
 # Domain
-mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=ref_level, degree=2)
-domain = Domain(mesh, dt, 'BDM', 1, move_mesh=True)
+if cubed_sphere:
+    dirname += "_cs%s" % ncells
+    mesh = GeneralCubedSphereMesh(radius=R,
+                                  num_cells_per_edge_of_panel=ncells,
+                                  degree=2)
+    family = "RTCF"
+else:
+    dirname += "_is%s" % ref_level
+    mesh = IcosahedralSphereMesh(radius=R,
+                                 refinement_level=ref_level, degree=2)
+    family = "BDM"
+domain = Domain(mesh, dt, family, 1, move_mesh=True)
 
 # Equation
 Omega = parameters.Omega
@@ -37,12 +59,6 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                              u_transport_option="vector_invariant_form")
 
 # I/O
-perturb = True
-if perturb:
-    dirname = "mm_ot_sw_galewsky_jet_perturbed_ref%s_dt%s" % (ref_level, dt)
-else:
-    dirname = "mm_ot_sw_galewsky_jet_unperturbed"
-
 output = OutputParameters(dirname=dirname,
                           dumplist_latlon=['D', 'PotentialVorticity',
                                            'RelativeVorticity'])
