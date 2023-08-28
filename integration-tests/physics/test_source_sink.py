@@ -7,6 +7,7 @@ from firedrake import (as_vector, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, sin, pi, assemble, Constant)
 import pytest
 
+
 def run_source_sink(dirname, process, time_varying):
 
     # ------------------------------------------------------------------------ #

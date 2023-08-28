@@ -125,8 +125,11 @@ class Domain(object):
 
         if self.on_sphere:
             spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
+            xyz_shell = SpatialCoordinate(spherical_shell_mesh)
+            r_shell = sqrt(inner(xyz_shell, xyz_shell))
             CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
-            radius_field = Function(CG1).interpolate(R)
+            radius_field = Function(CG1)
+            radius_field.interpolate(r_shell)
             # TODO: this should use global min kernel
             radius = np.min(radius_field.dat.data_ro)
         else:
@@ -158,6 +161,8 @@ class Domain(object):
         surface.
         """
 
+        from firedrake import dot
+
         x = SpatialCoordinate(self.mesh)
 
         # Make a height field in CG1
@@ -179,6 +184,7 @@ class Domain(object):
                                                index_data)
 
         self.height_above_surface = height_above_surface
+
 
 def construct_domain_metadata(mesh, coords, on_sphere):
     """

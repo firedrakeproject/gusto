@@ -9,6 +9,7 @@ with "evaluate" methods.
 
 from abc import ABCMeta, abstractmethod
 from gusto.active_tracers import Phases, TracerVariableType
+from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
@@ -16,7 +17,7 @@ from gusto.labels import physics, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
                        min_value, max_value, Constant, pi, Projector,
-                       TestFunctions, FunctionSpace, Function, split, inner)
+                       TestFunctions, split, inner)
 from gusto import thermodynamics
 import ufl
 import math
@@ -1245,8 +1246,7 @@ class SurfaceFluxes(Physics):
             source_theta_expr = test_theta * dtheta_vd_dt * dx
 
             equation.residual -= physics(
-                subject(prognostic(source_theta_expr, 'theta'), X),
-                        self.evaluate)
+                subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """

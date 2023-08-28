@@ -5,7 +5,7 @@ Cartesian systems.
 
 import importlib
 import numpy as np
-from firedrake import Constant, as_vector, SpatialCoordinate
+from firedrake import as_vector, SpatialCoordinate
 import ufl
 
 __all__ = ["xyz_from_lonlatr", "lonlatr_from_xyz", "xyz_vector_from_lonlatr",

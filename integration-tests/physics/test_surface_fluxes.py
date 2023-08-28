@@ -4,13 +4,11 @@ set to correspond to a different temperature at the surface -- we then check
 that afterwards the surface temperature is correct.
 """
 
-from os import path
 from gusto import *
 import gusto.thermodynamics as td
 from gusto.labels import physics
 from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
-from netCDF4 import Dataset
 import pytest
 
 
@@ -61,7 +59,6 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     # Only want time derivatives and physics terms in equation, so drop the rest
     eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics)),
                                           map_if_true=identity, map_if_false=drop)
-
 
     # Time stepper
     scheme = ForwardEuler(domain)
@@ -138,9 +135,8 @@ def test_surface_fluxes(tmpdir, moist, implicit_formulation):
     T = Function(theta_vd.function_space())
     T.project(T_expr)
     denom = norm(T)
-    assert norm(T - T_true) / denom < 0.001, f'Final temperature is incorrect'
-
+    assert norm(T - T_true) / denom < 0.001, 'Final temperature is incorrect'
 
     if moist:
         denom = norm(mv_true)
-        assert norm(mv - mv_true) / denom < 0.01, f'Final water vapour is incorrect'
+        assert norm(mv - mv_true) / denom < 0.01, 'Final water vapour is incorrect'

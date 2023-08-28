@@ -156,7 +156,6 @@ class Coordinates(object):
                     (low_lim, up_lim) = self.parallel_array_lims[space_name][procid][:]
                     self.global_chi_coords[space_name][i, low_lim:up_lim+1] = new_coords
 
-
     def get_column_data(self, field):
         """
         Reshapes a field's data into columns.
@@ -210,7 +209,7 @@ class Coordinates(object):
             data = data.sort_values(by=['X', 'Y', 'Z'])
             first_X, first_Y = data['X'].values[0], data['Y'].values[0]
             first_point = data[(np.isclose(data['X'], first_X))
-                            & (np.isclose(data['Y'], first_Y))]
+                               & (np.isclose(data['Y'], first_Y))]
 
         else:
             data = data.sort_values(by=['X', 'Z'])
@@ -267,6 +266,6 @@ class Coordinates(object):
         _, num_levels = np.shape(columnwise_data)
 
         for lev_idx in range(num_levels):
-            field.dat.data[index_data[:,lev_idx]] = columnwise_data[:,lev_idx]
+            field.dat.data[index_data[:, lev_idx]] = columnwise_data[:, lev_idx]
 
         return field

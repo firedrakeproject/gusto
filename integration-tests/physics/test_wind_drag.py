@@ -7,7 +7,6 @@ import gusto.thermodynamics as td
 from gusto.labels import physics
 from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
-from netCDF4 import Dataset
 import pytest
 
 
@@ -119,5 +118,5 @@ def test_wind_drag(tmpdir, implicit_formulation):
     u_z_true = Function(DG0).project(dot(u_true, e_z))
 
     denom = norm(u_x_true)
-    assert norm(u_x_final - u_x_true) / denom < 0.01, f'Final horizontal wind is incorrect'
-    assert norm(u_z_final - u_z_true) < 1e-12, f'Final vertical wind is incorrect'
+    assert norm(u_x_final - u_x_true) / denom < 0.01, 'Final horizontal wind is incorrect'
+    assert norm(u_z_final - u_z_true) < 1e-12, 'Final vertical wind is incorrect'
