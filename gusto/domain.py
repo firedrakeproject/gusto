@@ -122,8 +122,11 @@ class Domain(object):
 
         if self.on_sphere:
             spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
+            xyz_shell = SpatialCoordinate(spherical_shell_mesh)
+            r_shell = sqrt(inner(xyz_shell, xyz_shell))
             CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
-            radius_field = Function(CG1).interpolate(R)
+            radius_field = Function(CG1)
+            radius_field.interpolate(r_shell)
             # TODO: this should use global min kernel
             radius = np.min(radius_field.dat.data_ro)
         else:
