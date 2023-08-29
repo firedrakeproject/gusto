@@ -21,8 +21,9 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "Heun",
-           "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", 
+           "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", 
+           "AdamsMoulton", "AdamsBashforth"]
 
 
 def wrapper_apply(original_apply):
@@ -167,7 +168,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.bcs = None
         elif self.wrapper is not None:
             # Transfer boundary conditions onto test function space
-            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain) for bc in bcs]
+            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain) 
+                        for bc in bcs]
         else:
             self.bcs = bcs
 
@@ -301,7 +303,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        return NonlinearVariationalSolver(problem, solver_parameters={'snes_type': 'ksponly'} | self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters={'snes_type': 'ksponly'} 
+                                          | self.solver_parameters, options_prefix=solver_name)
 
     @abstractmethod
     def apply_cycle(self, x_out, x_in):
@@ -334,7 +337,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
 class ExplicitMultistage(ExplicitTimeDiscretisation):
     """
-    A class for implementing general explicit multistage (Runge-Kutta) methods based on its Butcher tableau.
+    A class for implementing general explicit multistage (Runge-Kutta) 
+    methods based on its Butcher tableau.
 
     A Butcher tableau is formed in the following way for a s-th order explicit scheme:
 
@@ -368,7 +372,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
     """
 
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, 
+                 limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
@@ -458,7 +463,8 @@ class ForwardEuler(ExplicitMultistage):
     k0 = F[y^n]
     y^(n+1) = y^n + dt*k0
     """
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, 
+                 limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
@@ -476,7 +482,8 @@ class SSPRK3(ExplicitMultistage):
     k2 = F[y^n + (1/4)*dt*(k0+k1)]
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)
     """
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, 
+                 limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
@@ -499,7 +506,8 @@ class RK4(ExplicitMultistage):
 
     where superscripts indicate the time-level.
     """
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, 
+                 limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name=field_name, subcycles=subcycles,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options, butcher_matrix=butcher_matrix)
@@ -520,7 +528,8 @@ class Heun(ExplicitMultistage):
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
     """
-    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None, 
+                 limiter=None, options=None, butcher_matrix=None):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
@@ -817,7 +826,8 @@ class BDF2(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     @property
     def solver(self):
@@ -825,7 +835,8 @@ class BDF2(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, *x_in):
         """
@@ -849,8 +860,8 @@ class BDF2(MultilevelTimeDiscretisation):
 
 class TR_BDF2(TimeDiscretisation):
     """
-    Implements the two stage implicit TR-BDF2 time stepping method, with a trapezoidal stage (TR) followed
-    by a second order backwards difference stage (BDF2).
+    Implements the two stage implicit TR-BDF2 time stepping method, with a 
+    trapezoidal stage (TR) followed by a second order backwards difference stage (BDF2).
 
     The TR-BDF2 time stepping method for operator F is written as
     y^(n+g) = y^n + dt*g/2*F[y^n] + dt*g/2*F[y^(n+g)] (TR stage)
@@ -940,7 +951,8 @@ class TR_BDF2(TimeDiscretisation):
             map_if_true=replace_subject(self.xnpg, old_idx=self.idx),
             map_if_false=drop)
 
-        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma))) * xn
+        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg -
+            ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma)))*xn
 
         return r.form
 
@@ -950,7 +962,8 @@ class TR_BDF2(TimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_bdf2(self):
@@ -958,7 +971,8 @@ class TR_BDF2(TimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs_bdf2-self.rhs_bdf2, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_bdf2"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, x_in):
         """
@@ -1019,7 +1033,8 @@ class Leapfrog(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     @property
     def solver(self):
@@ -1027,7 +1042,8 @@ class Leapfrog(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, *x_in):
         """
@@ -1102,7 +1118,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         elif (self.order == 4):
             self.b = [-(9.0)/(24.0), (37.0)/(24.0), -(59.0)/(24.0), (55.0)/(24.0)]
         elif (self.order == 5):
-            self.b = [(251.0)/(720.0), -(1274.0)/(720.0), (2616.0)/(720.0), -(2774.0)/(720.0), (2901.0)/(720.0)]
+            self.b = [(251.0)/(720.0), -(1274.0)/(720.0), (2616.0)/(720.0), 
+                      -(2774.0)/(720.0), (2901.0)/(720.0)]
 
     @property
     def nlevels(self):
@@ -1146,7 +1163,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     @property
     def solver(self):
@@ -1154,7 +1172,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, *x_in):
         """
@@ -1292,7 +1311,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     @property
     def solver(self):
@@ -1300,7 +1320,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, 
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, *x_in):
         """
