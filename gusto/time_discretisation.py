@@ -334,7 +334,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
 class ExplicitMultistage(ExplicitTimeDiscretisation):
     """
-    A class for implementing general explicit multistage methods based on its Butcher tableau.
+    A class for implementing general explicit multistage (Runge-Kutta) methods based on its Butcher tableau.
 
     A Butcher tableau is formed in the following way for a s-th order explicit scheme:
 
