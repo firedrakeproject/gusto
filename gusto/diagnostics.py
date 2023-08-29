@@ -233,6 +233,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
 class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
+
     def __init__(self, velocity='u', component='whole', name=None, to_dump=True,
                  space=None, method='interpolate', required_fields=()):
         """
@@ -335,7 +336,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        self.expr = self.cell_flux *domain.dt / cell_volume
+        self.expr = self.cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
 
