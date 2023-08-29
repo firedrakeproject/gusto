@@ -951,8 +951,7 @@ class TR_BDF2(TimeDiscretisation):
             map_if_true=replace_subject(self.xnpg, old_idx=self.idx),
             map_if_false=drop)
 
-        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg -
-            ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma)))*xn
+        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma)))*xn
 
         return r.form
 
