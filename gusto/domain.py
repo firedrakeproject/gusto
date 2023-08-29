@@ -131,7 +131,7 @@ class Domain(object):
             radius_field = Function(CG1)
             radius_field.interpolate(r_shell)
             # TODO: this should use global min kernel
-            radius = np.min(radius_field.dat.data_ro)
+            radius = Constant(np.min(radius_field.dat.data_ro))
         else:
             radius = None
 
@@ -170,18 +170,27 @@ class Domain(object):
         self.coords.register_space(self, 'CG1')
         CG1_height = Function(CG1)
         CG1_height.interpolate(dot(self.k, x))
+        height_above_surface = Function(CG1)
 
         # Turn height into columnwise data
-        columnwise_height, index_data = self.coords.get_column_data(CG1_height)
+        try:
+            columnwise_height, index_data = self.coords.get_column_data(CG1_height)
 
-        # Find minimum height in each column
-        surface_height_1d = np.min(columnwise_height, axis=1)
-        height_above_surface_data = columnwise_height - surface_height_1d[:, None]
+            # Find minimum height in each column
+            surface_height_1d = np.min(columnwise_height, axis=1)
+            height_above_surface_data = columnwise_height - surface_height_1d[:, None]
 
-        height_above_surface = Function(CG1)
-        self.coords.set_field_from_column_data(height_above_surface,
-                                               height_above_surface_data,
-                                               index_data)
+            self.coords.set_field_from_column_data(height_above_surface,
+                                                height_above_surface_data,
+                                                index_data)
+        except ModuleNotFoundError:
+            # If no pandas, then don't take orography into account
+            logger.warning(
+                'Pandas not found, so using height as height above surface. '
+                + 'This will be incorrect in the presence of orography')
+
+            if self.on_sphere:
+                height_above_surface.assign(CG1_height - self.radius)
 
         self.height_above_surface = height_above_surface
 
