@@ -845,6 +845,7 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 space_names=None,
                  extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
@@ -888,6 +889,9 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
 
         field_names = ['u', 'p', 'b']
 
+        if space_names is None:
+            space_names = {'u': 'HDiv', 'p': 'L2', 'b': 'theta'}
+
         if active_tracers is None:
             active_tracers = []
 
@@ -899,6 +903,7 @@ class CompressibleBoussinesqEquations(PrognosticEquationSet):
                 and (t.has_label(time_derivative)
                      or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain,
+                         space_names=space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
@@ -1030,10 +1035,10 @@ class LinearCompressibleBoussinesqEquations(CompressibleBoussinesqEquations):
     """
     Class for the (rotating) compressible Euler equations, which evolve the
     velocity 'u', the pressure 'p' and the buoyancy 'b',
-    solving:                                                                  \n
+    solving:                                                         \n
     ∂u/∂t + 2Ω×u + ∇p + bz = 0,                                      \n
     ∂p/∂t + c_s∇.u = 0,                                              \n
-    ∂b/∂t + Nsq w = 0,                                                       \n
+    ∂b/∂t + Nsq w = 0,                                               \n
     where z is the unit vertical vector, Ω is the planet's rotation vector
     and c_s is the speed of sound.
 
@@ -1042,6 +1047,7 @@ class LinearCompressibleBoussinesqEquations(CompressibleBoussinesqEquations):
     """
 
     def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 space_names=None,
                  extra_terms=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
@@ -1057,10 +1063,11 @@ class LinearCompressibleBoussinesqEquations(CompressibleBoussinesqEquations):
             # Coriolis and transport term from depth equation
             linearisation_map = lambda t: \
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) == "D" and t.has_label(transport)))
+                 or (t.get(prognostic) == "p" and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          Omega=Omega, sponge=sponge,
+                         space_names=space_names,
                          extra_terms=extra_terms,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
