@@ -7,7 +7,6 @@ from gusto.coord_transforms import lonlatr_from_xyz, rotated_lonlatr_coords
 from gusto.logging import logger
 from firedrake import (SpatialCoordinate, Function)
 import numpy as np
-import pandas as pd
 
 
 class Coordinates(object):
@@ -168,6 +167,8 @@ class Coordinates(object):
                 columns, and the data pairing the indices of the data with the
                 ordered column data.
         """
+
+        import pandas as pd
 
         space_name = field.function_space().name
         coords = self.chi_coords[space_name]

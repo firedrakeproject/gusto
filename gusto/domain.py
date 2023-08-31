@@ -4,6 +4,7 @@ the set of compatible function spaces defined upon it. It also contains the
 model's time interval.
 """
 
+from gusto.logging import logger
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from gusto.perp import perp
@@ -181,8 +182,8 @@ class Domain(object):
             height_above_surface_data = columnwise_height - surface_height_1d[:, None]
 
             self.coords.set_field_from_column_data(height_above_surface,
-                                                height_above_surface_data,
-                                                index_data)
+                                                   height_above_surface_data,
+                                                   index_data)
         except ModuleNotFoundError:
             # If no pandas, then don't take orography into account
             logger.warning(

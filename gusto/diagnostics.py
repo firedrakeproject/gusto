@@ -235,6 +235,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
 class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
+
     def __init__(self, velocity='u', component='whole', name=None, to_dump=True,
                  space=None, method='interpolate', required_fields=()):
         """
@@ -337,7 +338,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        self.expr = self.cell_flux *domain.dt / cell_volume
+        self.expr = self.cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
 
@@ -942,6 +943,7 @@ class Exner(DiagnosticField):
 class BruntVaisalaFrequencySquared(DiagnosticField):
     """The diagnostic for the Brunt-Väisälä frequency."""
     name = "Brunt-Vaisala_squared"
+
     def __init__(self, equations, space=None, method='interpolate'):
         """
         Args:
@@ -981,6 +983,7 @@ class BruntVaisalaFrequencySquared(DiagnosticField):
         theta = state_fields('theta')
         self.expr = self.parameters.g/theta * dot(domain.k, grad(theta))
         super().setup(domain, state_fields)
+
 
 class Sum(DiagnosticField):
     """Base diagnostic for computing the sum of two fields."""

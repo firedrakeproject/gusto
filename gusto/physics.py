@@ -574,7 +574,7 @@ class Coalescence(PhysicsParametrisation):
         equation.residual += self.label(subject(test_cl * self.source * dx
                                                 - test_r * self.source * dx,
                                                 equation.X),
-                                         self.evaluate)
+                                        self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -877,7 +877,7 @@ class InstantRain(PhysicsParametrisation):
         if convective_feedback:
             equation.residual += self.label(
                 subject(test_D * beta1 * self.source * dx, equation.X),
-                                            self.evaluate)
+                self.evaluate)
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(

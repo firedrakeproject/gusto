@@ -42,7 +42,6 @@ class DynamicsLabel(Label):
             super().__call__(new_target, value)
 
 
-
 class PhysicsLabel(Label):
     """A label for a physics parametrisation term."""
     def __init__(self, label, *, value=True, validator=lambda value: type(value) == MethodType):
