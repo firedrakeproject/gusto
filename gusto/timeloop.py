@@ -9,7 +9,7 @@ from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
 from gusto.labels import (
     transport, diffusion, time_derivative, linearisation, prognostic,
-    physics, transporting_velocity
+    physics_label, transporting_velocity
 )
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.logging import logger
@@ -249,9 +249,10 @@ class Timestepper(BaseTimestepper):
                 in which case the terms follow the original discretisation in
                 the equation.
             physics_parametrisations: (iter, optional): an iterable of
-                :class:`Physics` objects that describe physical parametrisations to be included
-                to add to the equation. They can only be used when the time
-                discretisation `scheme` is explicit. Defaults to None.
+                :class:`PhysicsParametrisation` objects that describe physical
+                parametrisations to be included to add to the equation. They can
+                only be used when the time discretisation `scheme` is explicit.
+                Defaults to None.
         """
         self.scheme = scheme
         if spatial_methods is not None:
@@ -333,12 +334,12 @@ class SplitPhysicsTimestepper(Timestepper):
         else:
             self.physics_schemes = []
 
-        for _, phys_scheme in self.physics_schemes:
+        for parametrisation, phys_scheme in self.physics_schemes:
             # check that the supplied schemes for physics are explicit
             # assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
             #     "Only explicit time discretisations can be used for physics"
             apply_bcs = False
-            phys_scheme.setup(equation, apply_bcs, physics)
+            phys_scheme.setup(equation, apply_bcs, parametrisation.label)
 
     @property
     def transporting_velocity(self):
@@ -348,7 +349,7 @@ class SplitPhysicsTimestepper(Timestepper):
         self.setup_equation(self.equation)
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
-        self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics)), dynamics)
+        self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
         self.setup_transporting_velocity(self.scheme)
@@ -528,9 +529,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
-        for _, scheme in self.physics_schemes:
+        for parametrisation, scheme in self.physics_schemes:
             apply_bcs = True
-            scheme.setup(self.equation, apply_bcs, physics)
+            scheme.setup(self.equation, apply_bcs, parametrisation.label)
 
     def copy_active_tracers(self, x_in, x_out):
         """

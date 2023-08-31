@@ -38,7 +38,7 @@ def run_sw_cond_evap(dirname, process):
     degree = 1
     domain = Domain(mesh, dt, 'BDM', degree)
     x = SpatialCoordinate(mesh)
-    theta, lamda = latlon_coords(mesh)
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
     # saturation field (constant everywhere)
     sat = 100

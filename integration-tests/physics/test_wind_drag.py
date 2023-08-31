@@ -4,8 +4,8 @@ This tests the physics routine to apply drag to the wind.
 
 from gusto import *
 import gusto.thermodynamics as td
-from gusto.labels import physics
-from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector,
+from gusto.labels import physics_label
+from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector, dot,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
 import pytest
 
@@ -51,7 +51,7 @@ def run_wind_drag(dirname, implicit_formulation):
     physics_schemes = [(physics_parametrisation, time_discretisation)]
 
     # Only want time derivatives and physics terms in equation, so drop the rest
-    eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics)),
+    eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
                                           map_if_true=identity, map_if_false=drop)
 
     # Time stepper

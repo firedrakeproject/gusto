@@ -169,6 +169,7 @@ class LabelledForm(object):
             self.terms = terms[0].terms
         else:
             if any([type(term) is not Term for term in list(terms)]):
+                import pdb; pdb.set_trace()
                 raise TypeError('Can only pass terms or a LabelledForm to LabelledForm')
             self.terms = list(terms)
 

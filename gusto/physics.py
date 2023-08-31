@@ -1,7 +1,7 @@
 """
 Objects to perform parametrisations of physical processes, or "physics".
 
-"Physics" schemes are routines to compute updates to prognostic fields that
+"PhysicsParametrisation" schemes are routines to compute updates to prognostic fields that
 represent the action of non-fluid processes, or those fluid processes that are
 unresolved. This module contains a set of these processes in the form of classes
 with "evaluate" methods.
@@ -13,7 +13,7 @@ from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
-from gusto.labels import physics, transporting_velocity, transport, prognostic
+from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
                        min_value, max_value, Constant, pi, Projector,
@@ -30,10 +30,10 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
            "SourceSink", "SurfaceFluxes", "WindDrag"]
 
 
-class Physics(object, metaclass=ABCMeta):
+class PhysicsParametrisation(object, metaclass=ABCMeta):
     """Base class for the parametrisation of physical processes for Gusto."""
 
-    def __init__(self, equation, parameters=None):
+    def __init__(self, equation, label_name, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -42,6 +42,7 @@ class Physics(object, metaclass=ABCMeta):
                 parameters are obtained from the equation.
         """
 
+        self.label = PhysicsLabel(label_name)
         self.equation = equation
         if parameters is None and hasattr(equation, 'parameters'):
             self.parameters = equation.parameters
@@ -56,7 +57,7 @@ class Physics(object, metaclass=ABCMeta):
         pass
 
 
-class SourceSink(Physics):
+class SourceSink(PhysicsParametrisation):
     """
     The source or sink of some variable, described through a UFL expression.
 
@@ -88,12 +89,14 @@ class SourceSink(Physics):
                 Default is 'interpolate'.
         """
 
-        super().__init__(equation, parameters=None)
+        label_name = f'source_sink_{variable_name}'
+        super().__init__(equation, label_name, parameters=None)
 
-        assert method in ['interpolate', 'project'], \
-            f'Method {method} for source/sink evaluation not valid'
+        if method not in ['interpolate', 'project']:
+            raise ValueError(f'Method {method} for source/sink evaluation not valid')
         self.method = method
         self.time_varying = time_varying
+        self.variable_name = variable_name
 
         # Check the variable exists
         if hasattr(equation, "field_names"):
@@ -115,8 +118,8 @@ class SourceSink(Physics):
 
         # Make source/sink term
         self.source = Function(V)
-        equation.residual += physics(subject(test * self.source * dx, equation.X),
-                                     self.evaluate)
+        equation.residual += self.label(subject(test * self.source * dx, equation.X),
+                                        self.evaluate)
 
         # Handle whether the expression is time-varying or not
         if self.time_varying:
@@ -155,7 +158,7 @@ class SourceSink(Physics):
             pass
 
 
-class SaturationAdjustment(Physics):
+class SaturationAdjustment(PhysicsParametrisation):
     """
     Represents the phase change between water vapour and cloud liquid.
 
@@ -191,7 +194,8 @@ class SaturationAdjustment(Physics):
                 CompressibleEulerEquations.
         """
 
-        super().__init__(equation, parameters=parameters)
+        label_name = 'saturation_adjustment'
+        super().__init__(equation, label_name, parameters=parameters)
 
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
@@ -199,8 +203,10 @@ class SaturationAdjustment(Physics):
         # active tracer metadata corresponding to variable names
 
         # Check that fields exist
-        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
-        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
+        if vapour_name not in equation.field_names:
+            raise ValueError(f"Field {vapour_name} does not exist in the equation set")
+        if cloud_name not in equation.field_names:
+            raise ValueError(f"Field {cloud_name} does not exist in the equation set")
 
         # Make prognostic for physics scheme
         parameters = self.parameters
@@ -304,8 +310,8 @@ class SaturationAdjustment(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -338,7 +344,7 @@ class AdvectedMoments(Enum):
     M3 = 1  # advect the mass of the distribution
 
 
-class Fallout(Physics):
+class Fallout(PhysicsParametrisation):
     """
     Represents the fallout process of hydrometeors.
 
@@ -373,8 +379,13 @@ class Fallout(Physics):
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
         """
+
+        label_name = f'fallout_{rain_name}'
+        super().__init__(equation, label_name, parameters=None)
+
         # Check that fields exist
-        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
+        if rain_name not in equation.field_names:
+            raise ValueError(f"Field {rain_name} does not exist in the equation set")
 
         # Check if variable is a mixing ratio
         rain_tracer = equation.get_active_tracer(rain_name)
@@ -410,7 +421,7 @@ class Fallout(Physics):
         adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
-        equation.residual += physics(adv_term, self.evaluate)
+        equation.residual += self.label(adv_term, self.evaluate)
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -472,7 +483,7 @@ class Fallout(Physics):
             self.determine_v.project()
 
 
-class Coalescence(Physics):
+class Coalescence(PhysicsParametrisation):
     """
     Represents the coalescence of cloud droplets to form rain droplets.
 
@@ -500,9 +511,19 @@ class Coalescence(Physics):
             accumulation (bool, optional): whether to include the accumulation
                 process in the parametrisation. Defaults to True.
         """
+
+        label_name = "coalescence"
+        if self.accretion:
+            label_name += "_accretion"
+        if self.accumulation:
+            label_name += "_accumulation"
+        super().__init__(equation, label_name, parameters=None)
+
         # Check that fields exist
-        assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
-        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
+        if cloud_name not in equation.field_names:
+            raise ValueError(f"Field {cloud_name} does not exist in the equation set")
+        if rain_name not in equation.field_names:
+            raise ValueError(f"Field {rain_name} does not exist in the equation set")
 
         self.cloud_idx = equation.field_names.index(cloud_name)
         self.rain_idx = equation.field_names.index(rain_name)
@@ -550,10 +571,10 @@ class Coalescence(Physics):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += physics(subject(test_cl * self.source * dx
-                                             - test_r * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
+        equation.residual += self.label(subject(test_cl * self.source * dx
+                                                - test_r * self.source * dx,
+                                                equation.X),
+                                         self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -571,7 +592,7 @@ class Coalescence(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class EvaporationOfRain(Physics):
+class EvaporationOfRain(PhysicsParametrisation):
     """
     Represents the evaporation of rain into water vapour.
 
@@ -585,7 +606,7 @@ class EvaporationOfRain(Physics):
     """
 
     def __init__(self, equation, rain_name='rain', vapour_name='water_vapour',
-                 latent_heat=True, parameters=None):
+                 latent_heat=True):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
@@ -595,16 +616,14 @@ class EvaporationOfRain(Physics):
                 Defaults to 'water_vapour'.
             latent_heat (bool, optional): whether to have latent heat exchange
                 feeding back from the phase change. Defaults to True.
-            parameters (:class:`Configuration`, optional): parameters containing
-                the values of gas constants. Defaults to None, in which case the
-                parameters are obtained from the equation.
 
         Raises:
             NotImplementedError: currently this is only implemented for the
                 CompressibleEulerEquations.
         """
 
-        super().__init__(equation, parameters=parameters)
+        label_name = 'evaporation_of_rain'
+        super().__init__(equation, label_name, parameters=None)
 
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
@@ -612,8 +631,10 @@ class EvaporationOfRain(Physics):
         # active tracer metadata corresponding to variable names
 
         # Check that fields exist
-        assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
-        assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
+        if vapour_name not in equation.field_names:
+            raise ValueError(f"Field {vapour_name} does not exist in the equation set")
+        if rain_name not in equation.field_names:
+            raise ValueError(f"Field {rain_name} does not exist in the equation set")
 
         # Make prognostic for physics scheme
         self.X = Function(equation.X.function_space())
@@ -719,8 +740,8 @@ class EvaporationOfRain(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -740,7 +761,7 @@ class EvaporationOfRain(Physics):
             interpolator.interpolate()
 
 
-class InstantRain(Physics):
+class InstantRain(PhysicsParametrisation):
     """
     The process of converting vapour above the saturation curve to rain.
 
@@ -784,7 +805,8 @@ class InstantRain(Physics):
                 parameters are obtained from the equation.
         """
 
-        super().__init__(equation, parameters=None)
+        label_name = 'instant_rain'
+        super().__init__(equation, label_name, parameters=None)
 
         self.convective_feedback = convective_feedback
         self.time_varying_saturation = time_varying_saturation
@@ -838,25 +860,24 @@ class InstantRain(Physics):
             self.saturation_curve = saturation_curve
 
         # lose proportion of vapour above the saturation curve
-        equation.residual += physics(subject(test_v * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
+        equation.residual += self.label(subject(test_v * self.source * dx,
+                                                equation.X),
+                                        self.evaluate)
 
         # if rain is not none then the excess vapour is being tracked and is
         # added to rain
         if rain_name is not None:
             Vr_idx = equation.field_names.index(rain_name)
             test_r = equation.tests[Vr_idx]
-            equation.residual -= physics(subject(test_r * self.source * dx,
-                                                 equation.X),
-                                         self.evaluate)
+            equation.residual -= self.label(subject(test_r * self.source * dx,
+                                                    equation.X),
+                                            self.evaluate)
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            equation.residual += physics(subject
-                                         (test_D * beta1 * self.source * dx,
-                                          equation.X),
-                                         self.evaluate)
+            equation.residual += self.label(
+                subject(test_D * beta1 * self.source * dx, equation.X),
+                                            self.evaluate)
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
@@ -886,7 +907,7 @@ class InstantRain(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class SWSaturationAdjustment(Physics):
+class SWSaturationAdjustment(PhysicsParametrisation):
     """
     Represents the process of adjusting water vapour and cloud water according
     to a saturation function, via condensation and evaporation processes.
@@ -950,7 +971,8 @@ class SWSaturationAdjustment(Physics):
                 parameters are obtained from the equation.
         """
 
-        super().__init__(equation, parameters=None)
+        label_name = 'saturation_adjustment'
+        super().__init__(equation, label_name, parameters=None)
 
         self.time_varying_saturation = time_varying_saturation
         self.convective_feedback = convective_feedback
@@ -1052,8 +1074,8 @@ class SWSaturationAdjustment(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1084,7 +1106,7 @@ class SWSaturationAdjustment(Physics):
             interpolator.interpolate()
 
 
-class SurfaceFluxes(Physics):
+class SurfaceFluxes(PhysicsParametrisation):
     """
     Prescribed surface temperature and moisture fluxes, to be used in aquaplanet
     simulations as Sea Surface Temperature fluxes. This formulation is taken
@@ -1117,17 +1139,18 @@ class SurfaceFluxes(Physics):
         # -------------------------------------------------------------------- #
         # Check arguments and generic initialisation
         # -------------------------------------------------------------------- #
-        assert isinstance(equation, CompressibleEulerEquations), \
-            "Surface fluxes can only be used with Compressible Euler equations"
+        if not isinstance(equation, CompressibleEulerEquations):
+            raise ValueError("Surface fluxes can only be used with Compressible Euler equations")
 
         if vapour_name is not None:
-            assert vapour_name in equation.field_names, \
-                f"Field {vapour_name} does not exist in the equation set"
+            if vapour_name not in equation.field_names:
+                raise ValueError(f"Field {vapour_name} does not exist in the equation set")
 
         if parameters is None:
             parameters = BoundaryLayerParameters()
 
-        super().__init__(equation, parameters=None)
+        label_name = 'surface_flux'
+        super().__init__(equation, label_name, parameters=None)
 
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
@@ -1203,8 +1226,8 @@ class SurfaceFluxes(Physics):
                 source_mv_expr = test_m_v * source_mv * dx
 
                 self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
-                equation.residual -= physics(subject(prognostic(source_mv_expr, vapour_name),
-                                                     X), self.evaluate)
+                equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
+                                                        X), self.evaluate)
 
                 # Moisture needs including in theta_vd expression
                 # NB: still using old pressure here, which implies constant p?
@@ -1219,8 +1242,8 @@ class SurfaceFluxes(Physics):
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * source_theta_vd * dx
             self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
-            equation.residual -= physics(subject(prognostic(source_theta_expr, 'theta'),
-                                                 X), self.evaluate)
+            equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
+                                                    X), self.evaluate)
 
         # General formulation ------------------------------------------------ #
         else:
@@ -1232,7 +1255,7 @@ class SurfaceFluxes(Physics):
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
                 dmv_dt = surface_expr * C_E * u_hori_mag * (mv_sat - m_v) / z_a
                 source_mv_expr = test_m_v * dmv_dt * dx
-                equation.residual -= physics(
+                equation.residual -= self.label(
                     prognostic(subject(source_mv_expr, X),
                                vapour_name), self.evaluate)
 
@@ -1245,7 +1268,7 @@ class SurfaceFluxes(Physics):
 
             source_theta_expr = test_theta * dtheta_vd_dt * dx
 
-            equation.residual -= physics(
+            equation.residual -= self.label(
                 subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
@@ -1267,7 +1290,7 @@ class SurfaceFluxes(Physics):
                 source_interpolator.interpolate()
 
 
-class WindDrag(Physics):
+class WindDrag(PhysicsParametrisation):
     """
     A simple surface wind drag scheme. This formulation is taken from the DCMIP
     (2016) test case document.
@@ -1293,13 +1316,14 @@ class WindDrag(Physics):
         # -------------------------------------------------------------------- #
         # Check arguments and generic initialisation
         # -------------------------------------------------------------------- #
-        assert isinstance(equation, CompressibleEulerEquations), \
-            "Surface fluxes can only be used with Compressible Euler equations"
+        if not isinstance(equation, CompressibleEulerEquations):
+            raise ValueError("Surface fluxes can only be used with Compressible Euler equations")
 
         if parameters is None:
             parameters = BoundaryLayerParameters()
 
-        super().__init__(equation, parameters=None)
+        label_name = 'wind_drag'
+        super().__init__(equation, label_name, parameters=None)
 
         k = equation.domain.k
         self.implicit_formulation = implicit_formulation
@@ -1346,8 +1370,8 @@ class WindDrag(Physics):
             self.source_projector = Projector(du_expr, source_u)
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
-            equation.residual -= physics(subject(prognostic(source_expr, 'u'),
-                                                 X), self.evaluate)
+            equation.residual -= self.label(subject(prognostic(source_expr, 'u'),
+                                                    X), self.evaluate)
 
         # General formulation ------------------------------------------------ #
         else:
@@ -1356,7 +1380,7 @@ class WindDrag(Physics):
 
             source_expr = inner(test, du_dt) * dx
 
-            equation.residual -= physics(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+            equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
