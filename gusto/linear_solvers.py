@@ -371,12 +371,15 @@ class CompressibleSolver(TimesteppingSolver):
 
         # TODO: can we avoid computing these each time the solver is called?
         with timed_region("Gusto:HybridProjectRhobar"):
+            logger.info('Linear solver: Rho-averaging pre-solve')
             self.rho_avg_solver.solve()
 
         with timed_region("Gusto:HybridProjectExnerbar"):
+            logger.info('Linear solver: Exner-averaging pre-solve')
             self.exner_avg_solver.solve()
 
         # Solve the hybridized system
+        logger.info('Linear solver: Compressible mixed hybrid solve')
         self.hybridized_solver.solve()
 
         broken_u, rho1, _ = self.urhol0.subfunctions
@@ -386,6 +389,7 @@ class CompressibleSolver(TimesteppingSolver):
         u1.assign(0.0)
 
         with timed_region("Gusto:HybridProjectHDiv"):
+            logger.info('Linear solver: restore u continuity')
             self._average_kernel.apply(u1, self._weight, broken_u)
 
         # Reapply bcs to ensure they are satisfied
@@ -399,6 +403,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Reconstruct theta
         with timed_region("Gusto:ThetaRecon"):
+            logger.info('Linear solver: back-substitute theta')
             self.theta_solver.solve()
 
         # Copy into theta cpt of dy

@@ -14,6 +14,7 @@ from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
+from gusto.logging import logger
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -216,6 +217,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
     def compute(self):
         """Compute the diagnostic field from the current state."""
+
+        logger.info(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
             self.evaluator.interpolate()

@@ -17,7 +17,8 @@ from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognos
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
                        min_value, max_value, Constant, pi, Projector,
-                       TestFunctions, split, inner)
+                       TestFunctions, split, inner, TestFunction,
+                       NonlinearVariationalProblem, NonlinearVariationalSolver)
 from gusto import thermodynamics
 import ufl
 import math
@@ -150,6 +151,7 @@ class SourceSink(PhysicsParametrisation):
                 interval for the scheme. Unused.
         """
         if self.time_varying:
+            logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
                 self.source.assign(self.source_interpolator.interpolate())
             else:
@@ -321,6 +323,7 @@ class SaturationAdjustment(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
         self.dt.assign(dt)
         self.X.assign(x_in)
@@ -468,7 +471,12 @@ class Fallout(PhysicsParametrisation):
                 + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            self.determine_v = Projector(-v_expression*domain.k, v)
+            # TODO: introduce reduced projector
+            test = TestFunction(Vu)
+            dx_reduced = dx(degree=4)
+            proj_eqn = inner(test, v + v_expression*domain.k)*dx_reduced
+            proj_prob = NonlinearVariationalProblem(proj_eqn, v)
+            self.determine_v = NonlinearVariationalSolver(proj_prob)
 
     def evaluate(self, x_in, dt):
         """
@@ -478,9 +486,10 @@ class Fallout(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
-            self.determine_v.project()
+            self.determine_v.solve()
 
 
 class Coalescence(PhysicsParametrisation):
@@ -584,6 +593,8 @@ class Coalescence(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
         # Update the values of internal variables
         self.dt.assign(dt)
         self.rain.assign(x_in.subfunctions[self.rain_idx])
@@ -751,6 +762,8 @@ class EvaporationOfRain(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
         # Update the values of internal variables
         self.dt.assign(dt)
         self.X.assign(x_in)
@@ -897,6 +910,8 @@ class InstantRain(PhysicsParametrisation):
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
         if self.convective_feedback:
             self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.time_varying_saturation:
@@ -1089,6 +1104,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
@@ -1282,6 +1298,8 @@ class SurfaceFluxes(PhysicsParametrisation):
                 interval for the scheme.
         """
 
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
         if self.implicit_formulation:
             self.X.assign(x_in)
             self.dt.assign(dt)
@@ -1367,7 +1385,13 @@ class WindDrag(PhysicsParametrisation):
             u_np1_expr = u_hori / (1 + C_D*u_hori_mag*self.dt/z_a)
 
             du_expr = surface_expr * (u_np1_expr - u_hori) / self.dt
-            self.source_projector = Projector(du_expr, source_u)
+
+            # TODO: introduce reduced projector
+            test_Vu = TestFunction(Vu)
+            dx_reduced = dx(degree=4)
+            proj_eqn = inner(test_Vu, source_u - du_expr)*dx_reduced
+            proj_prob = NonlinearVariationalProblem(proj_eqn, source_u)
+            self.source_projector = NonlinearVariationalSolver(proj_prob)
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
             equation.residual -= self.label(subject(prognostic(source_expr, 'u'),
@@ -1393,7 +1417,9 @@ class WindDrag(PhysicsParametrisation):
                 interval for the scheme.
         """
 
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
         if self.implicit_formulation:
             self.X.assign(x_in)
             self.dt.assign(dt)
-            self.source_projector.project()
+            self.source_projector.solve()
