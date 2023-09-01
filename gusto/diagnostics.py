@@ -1589,7 +1589,7 @@ class TracerDensity(DiagnosticField):
     computed as the product of a mixing ratio and dry density"""
 
     name = "TracerDensity"
-    
+
     def __init__(self, m_X, rho_d):
         """
         Args:
