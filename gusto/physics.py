@@ -989,8 +989,8 @@ class TerminatorToy(Physics):
   as specified in 'The terminator toy chemisty test ...'
   Lauritzen et. al. (2014).
   """
-  def __init__(self, equation, k1=1, k2=1, species1_name='X',
-                species2_name='X2', accumulation=True):
+  def __init__(self, equation, k1=1, k2=1, 
+               species1_name='X', species2_name='X2'):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
@@ -1006,8 +1006,10 @@ class TerminatorToy(Physics):
         """
                  
                  
-        assert species_1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
-        assert rain_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
+        assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
+        assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
+        
+        self.dt = Constant(0.0)
         
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
@@ -1023,7 +1025,7 @@ class TerminatorToy(Physics):
         self.source2 = Function(Vs2)
         
         s1_expr = 2*k1*self.species2 - 2*k2*(self.species1**2)
-        s2_expr = -k1*species2 + k2*()self.species1**2)
+        s2_expr = -k1*self.species2 + k2*(self.species1**2)
                  
         self.source1_interpolator = Interpolator(s1_expr, self.source1)
         self.source2_interpolator = Interpolator(s2_expr, self.source2)
@@ -1035,6 +1037,20 @@ class TerminatorToy(Physics):
                                              + test_2 * self.source2 * dx,
                                              equation.X),
                                      self.evaluate)         
-                 
-                 
+                                     
+  def evaluate(self, x_in, dt):
+        """
+        Evaluates the source/sink for the coalescence process.
+
+        Args:
+            x_in (:class:`Function`): the (mixed) field to be evolved.
+            dt (:class:`Constant`): the time interval for the scheme.
+        """
+        # Update the values of internal variables
+        self.dt.assign(dt)
+        self.species1.assign(x_in.subfunctions[self.species1_idx])
+        self.species2.assign(x_in.subfunctions[self.species2_idx])
+        # Evaluate the source
+        self.source1.assign(self.source1_interpolator.interpolate())
+        self.source2.assign(self.source2_interpolator.interpolate())
                  
