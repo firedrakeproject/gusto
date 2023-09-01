@@ -522,9 +522,9 @@ class Coalescence(PhysicsParametrisation):
         """
 
         label_name = "coalescence"
-        if self.accretion:
+        if accretion:
             label_name += "_accretion"
-        if self.accumulation:
+        if accumulation:
             label_name += "_accumulation"
         super().__init__(equation, label_name, parameters=None)
 
