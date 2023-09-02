@@ -380,6 +380,9 @@ class IO(object):
 
         # make dump counter
         self.dumpcount = itertools.count()
+        # if picking-up, don't do initial dump
+        if pick_up:
+            next(self.dumpcount)
 
         if self.output.dump_vtus:
             # setup pvd output file
@@ -448,6 +451,9 @@ class IO(object):
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.pddumpcount)
 
             # set frequency of point data output - defaults to
             # dumpfreq if not set by user
@@ -472,6 +478,9 @@ class IO(object):
 
             # make a checkpoint counter
             self.chkptcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.chkptcount)
 
         # dump initial fields
         if not pick_up:
