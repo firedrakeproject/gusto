@@ -186,7 +186,6 @@ def update_logfile_location(new_path, comm):
         fh.close()
         logger.removeHandler(fh)
 
-        os.makedirs(new_path, exist_ok=True)
         if parallel_log in ["FILE", "BOTH"]:
             # If all ranks are logging wait here in case a directory is being created
             comm.Barrier()
