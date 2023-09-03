@@ -7,7 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+                       NonlinearVariationalSolver, DirichletBC, split)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
@@ -23,7 +23,7 @@ import numpy as np
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4",
            "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog",
-           "AdamsMoulton", "AdamsBashforth"]
+           "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint"]
 
 
 def wrapper_apply(original_apply):
@@ -1340,4 +1340,45 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         for n in range(self.nlevels):
             self.x[n].assign(x_in[n])
         solver.solve()
+        x_out.assign(self.x_out)
+
+
+class ImplicitMidpoint(TimeDiscretisation):
+
+    def lhs(self):
+        return super().lhs
+    
+    def rhs(self):
+        return super().rhs
+
+    @property
+    def new_subject(self):
+        if self.idx is None and len(self.fs) > 1:
+            xnph = tuple([0.5*self.dt*(a + b) for a, b in zip(split(self.x_out), split(self.x1))])
+        else:
+            xnph = 0.5*self.dt*(self.x_out + self.x1)
+        return xnph
+    
+    @cached_property
+    def solver(self):
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.new_subject),
+        )
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual += mass_form.label_map(all_terms,
+                                        replace_subject(self.x_out))
+        residual -= mass_form.label_map(all_terms,
+                                        replace_subject(self.x1))
+        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
+                                          options_prefix=solver_name)
+
+    def apply(self, x_out, x_in):
+        self.x1.assign(x_in)
+        self.solver.solve()
         x_out.assign(self.x_out)

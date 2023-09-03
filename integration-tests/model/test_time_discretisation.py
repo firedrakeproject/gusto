@@ -9,7 +9,9 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
-                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton"])
+                                    "RK4", "Heun", "BDF2", "TR_BDF2",
+                                    "AdamsBashforth", "Leapfrog",
+                                    "AdamsMoulton"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints

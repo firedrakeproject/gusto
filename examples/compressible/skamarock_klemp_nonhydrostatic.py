@@ -50,7 +50,7 @@ eqns = CompressibleEulerEquations(domain, parameters)
 points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
-dirname = 'skamarock_klemp_nonlinear'
+dirname = 'skamarock_klemp_nonlinear_IM'
 output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,
@@ -76,9 +76,11 @@ transport_methods = [DGUpwind(eqns, "u"),
 linear_solver = CompressibleSolver(eqns)
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                  transport_methods,
-                                  linear_solver=linear_solver)
+# stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+#                                   transport_methods,
+#                                   linear_solver=linear_solver)
+
+stepper = Timestepper(eqns, ImplicitMidpoint(domain), io, spatial_methods=transport_methods)
 
 # ---------------------------------------------------------------------------- #
 # Initial conditions
