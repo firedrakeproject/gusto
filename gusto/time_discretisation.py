@@ -1364,15 +1364,35 @@ class ImplicitMidpoint(TimeDiscretisation):
         residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=replace_subject(self.new_subject),
+            map_if_false=replace_subject(self.new_subject, old_idx=self.idx),
         )
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
         residual += mass_form.label_map(all_terms,
-                                        replace_subject(self.x_out))
+                                        replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
-                                        replace_subject(self.x1))
+                                        replace_subject(self.x1, old_idx=self.idx))
+        if len(self.fs) > 1:
+            # set up timestepper
+            self.solver_parameters = {
+                "snes_converged_reason": None,
+                "mat_type": "matfree",
+                "ksp_type": "gmres",
+                "ksp_converged_reason": None,
+                "ksp_atol": 1e-8,
+                "ksp_rtol": 1e-8,
+                "ksp_max_it": 400,
+                "pc_type": "python",
+                "pc_python_type": "firedrake.AssembledPC",
+                "assembled_pc_type": "python",
+                "assembled_pc_python_type": "firedrake.ASMStarPC",
+                "assembled_pc_star_construct_dim": 0,
+                "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+                "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+                "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+                "assembled_pc_star_sub_sub_pc_factor_fill": 1.2,
+            }
         problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
