@@ -162,9 +162,11 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
-            t, reference_profiles, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
+            t, reference_profiles, self.step, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
             self.set_reference_profiles(reference_profiles)
             self.set_initial_timesteps(initial_timesteps)
+        else:
+            self.step = 1
 
         # Set up dump, which may also include an initial dump
         with timed_stage("Dump output"):
@@ -174,7 +176,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Time loop
         while float(self.t) < tmax - 0.5*float(self.dt):
-            logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
+            logger.info('*'*80)
+            logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
             self.x.update()
 
@@ -186,9 +189,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.timestep()
 
             self.t.assign(self.t + self.dt)
+            self.step += 1
 
             with timed_stage("Dump output"):
-                self.io.dump(self.fields, float(self.t), self.get_initial_timesteps())
+                self.io.dump(self.fields, float(self.t), self.step, self.get_initial_timesteps())
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()

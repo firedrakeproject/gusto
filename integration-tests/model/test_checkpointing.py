@@ -100,7 +100,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     # Set up mesh
     nlayers = 5   # horizontal layers
-    columns = 15  # number of columns
+    columns = 5   # number of columns
     L = 3.e5
     m = PeriodicIntervalMesh(columns, L)
     dt = 0.2
@@ -176,16 +176,6 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
             f'Checkpointed and picked up field {field_name} is not equal'
 
     # ------------------------------------------------------------------------ #
-    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
-    # ------------------------------------------------------------------------ #
-
-    # Wipe fields from second time stepper
-    if checkpoint_method == 'dumbcheckpoint':
-        # Get an error when picking up fields with the same stepper with new method
-        initialise_fields(eqns_2, stepper_2)
-        stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
-
-    # ------------------------------------------------------------------------ #
     # Run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
@@ -200,6 +190,16 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         mesh = pick_up_mesh(output_3, mesh_name)
     stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
     stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
+
+    # ------------------------------------------------------------------------ #
+    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
+    # ------------------------------------------------------------------------ #
+    # Done after stepper_3, as we don't want to checkpoint again
+    # Wipe fields from second time stepper
+    if checkpoint_method == 'dumbcheckpoint':
+        # Get an error when picking up fields with the same stepper with new method
+        initialise_fields(eqns_2, stepper_2)
+        stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
 
     # ------------------------------------------------------------------------ #
     # Compare fields against saved values for run without checkpointing

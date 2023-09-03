@@ -135,10 +135,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 map_if_false=drop)
 
         self.evaluate_source = []
+        self.physics_names = []
         for t in self.residual:
             if t.has_label(physics_label):
                 physics_name = t.get(physics_label)
-                self.evaluate_source.append(t.labels[physics_name])
+                if t.labels[physics_name] not in self.physics_names:
+                    self.evaluate_source.append(t.labels[physics_name])
+                    self.physics_names.append(t.labels[physics_name])
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers
