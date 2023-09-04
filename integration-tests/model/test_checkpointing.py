@@ -225,4 +225,3 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         error = np.linalg.norm(diff_array) / np.linalg.norm(stepper_1.fields(field_name).dat.data)
         assert error < 1e-8, \
             f'Checkpointed field {field_name} with new time stepper is not equal to non-checkpointed field'
-
