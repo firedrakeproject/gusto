@@ -334,8 +334,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            for evaluate in self.evaluate_source:
-                evaluate(x_in, self.dt)
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
