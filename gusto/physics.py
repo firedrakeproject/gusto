@@ -28,7 +28,7 @@ from types import FunctionType
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
-           "SourceSink", "SurfaceFluxes", "WindDrag"]
+           "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -259,7 +259,7 @@ class SaturationAdjustment(PhysicsParametrisation):
                 liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
-        self.dt = Constant(0.0)
+        self.dt = Constant(1.0)
         R_d = parameters.R_d
         cp = parameters.cp
         cv = parameters.cv
@@ -546,7 +546,7 @@ class Coalescence(PhysicsParametrisation):
         self.source = Function(Vt)
 
         # define some parameters as attributes
-        self.dt = Constant(0.0)
+        self.dt = Constant(1.0)
         # TODO: should these parameters be hard-coded or configurable?
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
@@ -692,7 +692,7 @@ class EvaporationOfRain(PhysicsParametrisation):
                 liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
-        self.dt = Constant(0.0)
+        self.dt = Constant(1.0)
         R_d = parameters.R_d
         cp = parameters.cp
         cv = parameters.cv
@@ -1170,7 +1170,7 @@ class SurfaceFluxes(PhysicsParametrisation):
 
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
-        self.dt = equation.domain.dt
+        self.dt = Constant(1.0)
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1335,7 +1335,7 @@ class WindDrag(PhysicsParametrisation):
         # Check arguments and generic initialisation
         # -------------------------------------------------------------------- #
         if not isinstance(equation, CompressibleEulerEquations):
-            raise ValueError("Surface fluxes can only be used with Compressible Euler equations")
+            raise ValueError("Wind drag can only be used with Compressible Euler equations")
 
         if parameters is None:
             parameters = BoundaryLayerParameters()
@@ -1346,7 +1346,7 @@ class WindDrag(PhysicsParametrisation):
         k = equation.domain.k
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
-        self.dt = equation.domain.dt
+        self.dt = Constant(1.0)
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1423,3 +1423,99 @@ class WindDrag(PhysicsParametrisation):
             self.X.assign(x_in)
             self.dt.assign(dt)
             self.source_projector.solve()
+
+
+class StaticAdjustment(PhysicsParametrisation):
+    """
+    A scheme to provide static adjustment, by sorting the potential temperature
+    values in a column so that they are increasing with height.
+    """
+
+    def __init__(self, equation, theta_variable='theta_vd'):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            theta_variable (str, optional): which theta variable to sort the
+                profile for. Valid options are "theta" or "theta_vd". Defaults
+                to "theta_vd".
+        """
+
+        from functools import partial
+
+        # -------------------------------------------------------------------- #
+        # Check arguments and generic initialisation
+        # -------------------------------------------------------------------- #
+        if not isinstance(equation, CompressibleEulerEquations):
+            raise ValueError("Static adjustment can only be used with Compressible Euler equations")
+
+        if theta_variable not in ['theta', 'theta_vd']:
+            raise ValueError('Static adjustment: theta variable '
+                             + f'{theta_variable} not valid')
+
+        label_name = 'static_adjustment'
+        super().__init__(equation, label_name, parameters=equation.parameters)
+
+        self.X = Function(equation.X.function_space())
+        self.dt = Constant(1.0)
+
+        # -------------------------------------------------------------------- #
+        # Extract prognostic variables
+        # -------------------------------------------------------------------- #
+
+        theta_idx = equation.field_names.index('theta')
+        Vt = equation.spaces[theta_idx]
+        self.theta_to_sort = Function(Vt)
+        sorted_theta = Function(Vt)
+        theta = self.X.subfunctions[theta_idx]
+
+        if theta_variable == 'theta' and 'water_vapour' in equation.field_names:
+            Rv = equation.parameters.R_v
+            Rd = equation.parameters.R_d
+            mv_idx = equation.field_names.index('water_vapour')
+            mv = self.X.subfunctions[mv_idx]
+            self.get_theta_variable = Interpolator(theta / (1 + mv*Rv/Rd), self.theta_to_sort)
+            self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), sorted_theta)
+        else:
+            self.get_theta_variable = Interpolator(theta, self.theta_to_sort)
+            self.set_theta_variable = Interpolator(self.theta_to_sort, sorted_theta)
+
+        # -------------------------------------------------------------------- #
+        # Set up routines to reshape data
+        # -------------------------------------------------------------------- #
+
+        self.get_column_data = partial(equation.domain.coords.get_column_data, field=self.theta_to_sort)
+        self.set_column_data = equation.domain.coords.set_field_from_column_data
+
+        # -------------------------------------------------------------------- #
+        # Set source term
+        # -------------------------------------------------------------------- #
+
+        tests = TestFunctions(self.X.function_space())
+        test = tests[theta_idx]
+
+        source_expr = inner(test, sorted_theta - theta) / self.dt * dx
+
+        equation.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source term generated by the physics. This does nothing if
+        the implicit formulation is not used.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
+        self.X.assign(x_in)
+        self.dt.assign(dt)
+
+        self.get_theta_variable.interpolate()
+        theta_column_data, index_data = self.get_column_data()
+        for col in range(theta_column_data.shape[0]):
+            theta_column_data[col].sort()
+        self.set_column_data(self.theta_to_sort, theta_column_data, index_data)
+        self.set_theta_variable.interpolate()

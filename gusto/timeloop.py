@@ -140,6 +140,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
 
+    def log_timestep(self):
+        """
+        Logs the start of a time step.
+        """
+        logger.info('')
+        logger.info('*'*80)
+        logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
+
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
@@ -176,8 +184,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Time loop
         while float(self.t) < tmax - 0.5*float(self.dt):
-            logger.info('*'*80)
-            logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
+            self.log_timestep()
 
             self.x.update()
 
@@ -588,7 +595,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs_phys = self.xrhs_phys
         dy = self.dy
 
-
         x_after_slow(self.field_name).assign(xn(self.field_name))
         if len(self.slow_physics_schemes) > 0:
             with timed_stage("Slow physics"):
@@ -598,8 +604,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
-                # TODO: check if forcing is applied to x_after_slow or xn
-                # Put explicit forcing into xstar
+            # TODO: check if forcing is applied to x_after_slow or xn
+            # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, x_after_slow, xstar(self.field_name), "explicit")
 
         xp(self.field_name).assign(xstar(self.field_name))

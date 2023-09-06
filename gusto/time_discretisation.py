@@ -7,7 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+                       NonlinearVariationalSolver, DirichletBC, Constant)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
@@ -418,6 +418,18 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
             map_if_false=lambda t: -1*t)
+
+        # If there are no active labels, we may have no terms at this point
+        # So that we can still do xnp1 = xn, put in a zero term here
+        if len(r.terms) == 0:
+            logger.warning('No terms detected for RHS of explicit problem. '
+                           + 'Adding a zero term to avoid failure.')
+            null_term = Constant(0.0)*self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                # Drop label from this
+                map_if_true=lambda t: time_derivative.remove(t),
+                map_if_false=drop)
+            r += null_term
 
         return r.form
 

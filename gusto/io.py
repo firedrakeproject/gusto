@@ -645,7 +645,6 @@ class IO(object):
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
-            logger.info(f'Just checkpointed, count {self.chkptcount}')
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:

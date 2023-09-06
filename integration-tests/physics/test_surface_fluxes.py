@@ -23,8 +23,8 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     # declare grid shape, with length L and height H
     L = 500.
     H = 500.
-    nlayers = int(H / 5.)
-    ncolumns = int(L / 5.)
+    nlayers = 5
+    ncolumns = 5
 
     # make mesh and domain
     m = PeriodicIntervalMesh(ncolumns, L)
