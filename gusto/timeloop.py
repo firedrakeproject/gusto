@@ -423,11 +423,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 parametrisations and timestepping schemes to use for each.
                 Timestepping schemes for physics must be explicit. These schemes
                 are all evaluated at the end of the time step. Defaults to None.
-            alpha (float, optional): the
-
-        :kwargs: maxk is the number of outer iterations, maxi is the number
-            of inner iterations and alpha is the offcentering parameter
-    """
+            alpha (`ufl.Constant`, optional): the semi-implicit off-centering
+                parameter. A value of 1 corresponds to fully implicit, while 0
+                corresponds to fully explicit. Defaults to Constant(0.5).
+            num_outer (int, optional): number of outer iterations in the semi-
+                implicit algorithm. The outer loop includes transport and any
+                fast physics schemes. Defaults to 4. Note that default used by
+                the Met Office's ENDGame and GungHo models is 2.
+            num_inner (int, optional): number of inner iterations in the semi-
+                implicit algorithm. The inner loop includes the evaluation of
+                implicit forcing (pressure gradient and Coriolis) terms, and the
+                linear solve. Defaults to 1. Note that default used by the Met
+                Office's ENDGame and GungHo models is 2.
+        """
 
         self.num_outer = num_outer
         self.num_inner = num_inner
