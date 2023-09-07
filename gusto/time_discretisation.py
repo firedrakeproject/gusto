@@ -7,7 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC)
+                       NonlinearVariationalSolver, DirichletBC, split)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
