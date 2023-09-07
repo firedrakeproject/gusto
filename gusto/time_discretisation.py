@@ -21,8 +21,8 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage", 
-           "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", 
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage",
+           "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2",
            "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang"]
 
 
@@ -239,7 +239,7 @@ class ImplicitMultistage(TimeDiscretisation):
     A class for implementing general diagonally implicit multistage (Runge-Kutta)
     methods based on its Butcher tableau.
 
-    A Butcher tableau is formed in the following way for a s-th order 
+    A Butcher tableau is formed in the following way for a s-th order
     diagonally implicit scheme:
 
     c_0 | a_00 a_01  .    a_0s
@@ -297,10 +297,10 @@ class ImplicitMultistage(TimeDiscretisation):
 
     def lhs(self):
         return super().lhs
-    
+
     def rhs(self):
         return super().rhs
-    
+
     def solvers(self, stage):
         residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
@@ -314,37 +314,37 @@ class ImplicitMultistage(TimeDiscretisation):
                                         replace_subject(self.x_out, self.idx))
 
         problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
-        
-        solver_name = self.field_name+self.__class__.__name__+"%s"%(stage)
+
+        solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         for i in range(stage):
-            self.x1.assign(self.x1 + self.butcher_matrix[stage,i]*self.dt*self.k[i])
-        
+            self.x1.assign(self.x1 + self.butcher_matrix[stage, i]*self.dt*self.k[i])
+
         if self.limiter is not None:
             self.limiter.apply(self.x1)
 
         if self.idx is None and len(self.fs) > 1:
-            self.xnph = tuple([ self.dt*self.butcher_matrix[stage,stage]*a + b for a, b in zip(split(self.x_out), split(self.x1))])
+            self.xnph = tuple([self.dt*self.butcher_matrix[stage, stage]*a + b for a, b in zip(split(self.x_out), split(self.x1))])
         else:
-            self.xnph = self.x1 + self.butcher_matrix[stage,stage]*self.dt*self.x_out
-        
+            self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
+
         self.solvers(stage).solve()
 
         self.k[stage].assign(self.x_out)
 
     def apply(self, x_out, x_in):
-        
+
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
 
         x_out.assign(x_in)
         for i in range(self.nStages):
-            x_out.assign(x_out + self.butcher_matrix[self.nStages,i]*self.dt*self.k[i])
-        
+            x_out.assign(x_out + self.butcher_matrix[self.nStages, i]*self.dt*self.k[i])
+
         if self.limiter is not None:
             self.limiter.apply(x_out)
 
@@ -1474,7 +1474,7 @@ class ImplicitMidpoint(ImplicitMultistage):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[0.5],[1.]])
+        self.butcher_matrix = np.array([[0.5], [1.]])
         self.nStages = int(np.shape(self.butcher_matrix)[1])
 
 
@@ -1493,5 +1493,5 @@ class QinZhang(ImplicitMultistage):
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[0.25, 0],[0.5, 0.25],[0.5, 0.5]])
+        self.butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
         self.nStages = int(np.shape(self.butcher_matrix)[1])
