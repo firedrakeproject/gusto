@@ -374,7 +374,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
                  auxiliary_equations_and_schemes=None, linear_solver=None,
-                 diffusion_schemes=None, physics_schemes=None, **kwargs):
+                 diffusion_schemes=None, physics_schemes=None, alpha = 0.5,
+                 **kwargs):
 
         """
         Args:
@@ -399,6 +400,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 parametrisations and timestepping schemes to use for each.
                 Timestepping schemes for physics must be explicit. Defaults to
                 None.
+            alpha: (:int), optional. Implicit to explicit ratio, 0.5 is the 
+                deault with alpha = 1 being a fully implicit scheme
 
         :kwargs: maxk is the number of outer iterations, maxi is the number
             of inner iterations and alpha is the offcentering parameter
@@ -406,7 +409,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         self.maxk = kwargs.pop("maxk", 4)
         self.maxi = kwargs.pop("maxi", 1)
-        self.alpha = kwargs.pop("alpha", 0.5)
+        self.alpha = alpha
         if kwargs:
             raise ValueError("unexpected kwargs: %s" % list(kwargs.keys()))
 
