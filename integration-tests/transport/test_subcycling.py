@@ -13,18 +13,18 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
-def test_subcyling(tmpdir, equation_form, tracer_setup):
+@pytest.mark.parametrize("subcycling", ["fixed", "adaptive"])
+def test_subcyling(tmpdir, subcycling, tracer_setup):
     geometry = "slice"
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
     V = domain.spaces("DG")
-    if equation_form == "advective":
-        eqn = AdvectionEquation(domain, V, "f")
-    else:
-        eqn = ContinuityEquation(domain, V, "f")
+    eqn = AdvectionEquation(domain, V, "f")
 
-    transport_scheme = SSPRK3(domain, subcycles=2)
+    if subcycling == "fixed":
+        transport_scheme = SSPRK3(domain, subcycles=2)
+    elif subcycling == "adaptive":
+        transport_scheme = SSPRK3(domain, subcycle_by=0.25)
     transport_method = DGUpwind(eqn, "f")
 
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
