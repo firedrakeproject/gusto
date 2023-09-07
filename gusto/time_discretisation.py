@@ -21,9 +21,9 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4",
-           "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog",
-           "AdamsMoulton", "AdamsBashforth"]
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage", 
+           "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", 
+           "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang"]
 
 
 def wrapper_apply(original_apply):
@@ -234,6 +234,121 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         pass
 
 
+class ImplicitMultistage(TimeDiscretisation):
+    """
+    A class for implementing general diagonally implicit multistage (Runge-Kutta)
+    methods based on its Butcher tableau.
+
+    A Butcher tableau is formed in the following way for a s-th order 
+    diagonally implicit scheme:
+
+    c_0 | a_00 a_01  .    a_0s
+    c_1 | a_10 a_11       a_1s
+     .  |   .   .    .    .
+     .  |   .   .    .    .
+    c_s | a_s0 a_s1  .    a_ss
+     -------------------------
+        |  b_1  b_2  ...  b_s
+
+    The gradient function has no time-dependence, so c elements are not needed.
+    A square 'butcher_matrix' is defined in each class that uses
+    the ImplicitMultiStage structure,
+
+    [a_00   0   .       0  ]
+    [a_10 a_11  .       0  ]
+    [  .    .   .       .  ]
+    [ b_0  b_1  .       b_s]
+
+    Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
+
+    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
+
+    For an s stage method,
+      At iteration i (from 0 to s-1)
+        An intermediate location is computed as y_i = y^n + sum{over j less than or equal to i} (dt*a_ij*k_i)
+        Compute the gradient at the intermediate location, k_i = F(y_i)
+
+    At the last stage, compute the new solution by:
+    y^{n+1} = y^n + sum_{j from 0 to s} (dt*b_i*k_i)
+
+    """
+
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+        super().__init__(domain, field_name=field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        if butcher_matrix is not None:
+            self.butcher_matrix = butcher_matrix
+            self.nStages = int(np.shape(self.butcher_matrix)[1])
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+
+        super().setup(equation, apply_bcs, *active_labels)
+
+        self.k = [Function(self.fs) for i in range(self.nStages)]
+
+    def lhs(self):
+        return super().lhs
+    
+    def rhs(self):
+        return super().rhs
+    
+    def solvers(self, stage):
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.xnph, self.idx),
+        )
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual += mass_form.label_map(all_terms,
+                                        replace_subject(self.x_out, self.idx))
+
+        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
+        
+        solver_name = self.field_name+self.__class__.__name__+"%s"%(stage)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
+                                          options_prefix=solver_name)
+
+    def solve_stage(self, x0, stage):
+        self.x1.assign(x0)
+        for i in range(stage):
+            self.x1.assign(self.x1 + self.butcher_matrix[stage,i]*self.dt*self.k[i])
+        
+        if self.limiter is not None:
+            self.limiter.apply(self.x1)
+
+        if self.idx is None and len(self.fs) > 1:
+            self.xnph = tuple([ self.dt*self.butcher_matrix[stage,stage]*a + b for a, b in zip(split(self.x_out), split(self.x1))])
+        else:
+            self.xnph = self.x1 + self.butcher_matrix[stage,stage]*self.dt*self.x_out
+        
+        self.solvers(stage).solve()
+
+        self.k[stage].assign(self.x_out)
+
+    def apply(self, x_out, x_in):
+        
+        for i in range(self.nStages):
+            self.solve_stage(x_in, i)
+
+        x_out.assign(x_in)
+        for i in range(self.nStages):
+            x_out.assign(x_out + self.butcher_matrix[self.nStages,i]*self.dt*self.k[i])
+        
+        if self.limiter is not None:
+            self.limiter.apply(x_out)
+
+
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
@@ -342,23 +457,25 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
     A Butcher tableau is formed in the following way for a s-th order explicit scheme:
 
-    c_0 | a_00
-    c_1 | a_10 a_11
-     .  | a_20 a_21 a_22
+    c_0 | a_00 a_01  .    a_0s
+    c_1 | a_10 a_11       a_1s
      .  |   .   .    .    .
+     .  |   .   .    .    .
+    c_s | a_s0 a_s1  .    a_ss
      -------------------------
-    c_s |  b_1  b_2  ...  b_s
+        |  b_1  b_2  ...  b_s
 
     The gradient function has no time-dependence, so c elements are not needed.
     A square 'butcher_matrix' is defined in each class that uses
     the ExplicitMultiStage structure,
 
-    [a_00   0   .       0  ]
-    [a_10 a_11  .       0  ]
+    [a_10   0   .       0  ]
+    [a_20 a_21  .       0  ]
     [  .    .   .       .  ]
-    [ b_0  b_1  .   b_{s-1}]
+    [ b_0  b_1  .       b_s]
 
-    All upper diagonal a_ij elements are zero for explicit methods.
+    All upper diagonal a_ij elements are zero for explicit methods. We exclude the first
+    row of the butcher tableau from our butcher matrix as the row is always zeros.
 
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
 
@@ -1341,3 +1458,40 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
             self.x[n].assign(x_in[n])
         solver.solve()
         x_out.assign(self.x_out)
+
+
+class ImplicitMidpoint(ImplicitMultistage):
+    u"""
+    Implements the Implicit Midpoint method as a 1-stage Runge Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.5*dt*k0]
+    y^(n+1) = y^n + dt*k0
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_matrix = np.array([[0.5],[1.]])
+        self.nStages = int(np.shape(self.butcher_matrix)[1])
+
+
+class QinZhang(ImplicitMultistage):
+    u"""
+    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.25*dt*k0]
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_matrix = np.array([[0.25, 0],[0.5, 0.25],[0.5, 0.5]])
+        self.nStages = int(np.shape(self.butcher_matrix)[1])
