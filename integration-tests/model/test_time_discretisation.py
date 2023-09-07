@@ -30,9 +30,9 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":
-      transport_scheme = ImplicitMidpoint(domain)
+        transport_scheme = ImplicitMidpoint(domain)
     elif scheme == "QinZhang":
-       transport_scheme = QinZhang(domain)
+        transport_scheme = QinZhang(domain)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":
