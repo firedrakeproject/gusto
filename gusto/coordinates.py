@@ -155,12 +155,14 @@ class Coordinates(object):
                     (low_lim, up_lim) = self.parallel_array_lims[space_name][procid][:]
                     self.global_chi_coords[space_name][i, low_lim:up_lim+1] = new_coords
 
-    def get_column_data(self, field):
+    def get_column_data(self, field, domain):
         """
         Reshapes a field's data into columns.
 
         Args:
             field (:class:`Function`): the field whose data needs sorting.
+            domain (:class:`Domain`): the domain used to register coordinates
+                if this hasn't already been done.
 
         Returns:
             tuple of :class:`numpy.ndarray`: a 2D array of data, arranged in
@@ -171,6 +173,8 @@ class Coordinates(object):
         import pandas as pd
 
         space_name = field.function_space().name
+        if space_name not in self.chi_coords.keys():
+            self.register_space(domain, space_name)
         coords = self.chi_coords[space_name]
 
         data_is_3d = (len(coords) == 3)

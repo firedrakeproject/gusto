@@ -16,8 +16,9 @@ from gusto.fml import identity, Term, subject
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
-                       min_value, max_value, Constant, pi, Projector,
-                       TestFunctions, split, inner, TestFunction,
+                       min_value, max_value, Constant, pi, Projector, grad,
+                       TestFunctions, split, inner, TestFunction, exp, avg,
+                       outer, FacetNormal, SpatialCoordinate, dS_v,
                        NonlinearVariationalProblem, NonlinearVariationalSolver)
 from gusto import thermodynamics
 import ufl
@@ -29,7 +30,7 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind"]
+           "SuppressVerticalWind", "BoundaryLayerMixing"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1283,7 +1284,8 @@ class SurfaceFluxes(PhysicsParametrisation):
             else:
                 dtheta_vd_dt = dT_dt * (1 / exner - kappa * theta_vd / (rho * T))
 
-            source_theta_expr = test_theta * dtheta_vd_dt * dx
+            dx_reduced = dx(degree=4)
+            source_theta_expr = test_theta * dtheta_vd_dt * dx_reduced
 
             equation.residual -= self.label(
                 subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
@@ -1403,7 +1405,8 @@ class WindDrag(PhysicsParametrisation):
             # Construct underlying expressions
             du_dt = -surface_expr * C_D * u_hori_mag * u_hori / z_a
 
-            source_expr = inner(test, du_dt) * dx
+            dx_reduced = dx(degree=4)
+            source_expr = inner(test, du_dt) * dx_reduced
 
             equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
@@ -1484,8 +1487,11 @@ class StaticAdjustment(PhysicsParametrisation):
         # Set up routines to reshape data
         # -------------------------------------------------------------------- #
 
-        self.get_column_data = partial(equation.domain.coords.get_column_data, field=self.theta_to_sort)
-        self.set_column_data = equation.domain.coords.set_field_from_column_data
+        domain = equation.domain
+        self.get_column_data = partial(domain.coords.get_column_data,
+                                       field=self.theta_to_sort,
+                                       domain=domain)
+        self.set_column_data = domain.coords.set_field_from_column_data
 
         # -------------------------------------------------------------------- #
         # Set source term
@@ -1596,3 +1602,142 @@ class SuppressVerticalWind(PhysicsParametrisation):
         elif not self.spin_up_done:
             self.strength.assign(0.0)
             self.spin_up_done = True
+
+
+class BoundaryLayerMixing(PhysicsParametrisation):
+    """
+    A simple boundary layer mixing scheme. This acts like a vertical diffusion,
+    using an interior penalty method.
+    """
+
+    def __init__(self, equation, field_name, parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation.
+            field_name (str): name of the field to apply the diffusion to.
+            ibp (:class:`IntegrateByParts`, optional): how many times to
+                integrate the term by parts. Defaults to IntegrateByParts.ONCE.
+            parameters (:class:`BoundaryLayerParameters`): configuration object
+                giving the parameters for boundary and surface level schemes.
+                Defaults to None, in which case default values are used.
+        """
+
+        # -------------------------------------------------------------------- #
+        # Check arguments and generic initialisation
+        # -------------------------------------------------------------------- #
+
+        if not isinstance(equation, CompressibleEulerEquations):
+            raise ValueError("Boundary layer mixing can only be used with Compressible Euler equations")
+
+        if field_name not in equation.field_names:
+            raise ValueError(f'field {field_name} not found in equation')
+
+        if parameters is None:
+            parameters = BoundaryLayerParameters()
+
+        label_name = f'boundary_layer_mixing_{field_name}'
+        super().__init__(equation, label_name, parameters=None)
+
+        self.X = Function(equation.X.function_space())
+
+        # -------------------------------------------------------------------- #
+        # Extract prognostic variables
+        # -------------------------------------------------------------------- #
+
+        u_idx = equation.field_names.index('u')
+        T_idx = equation.field_names.index('theta')
+        rho_idx = equation.field_names.index('rho')
+
+        u = split(self.X)[u_idx]
+        rho = split(self.X)[rho_idx]
+        theta_vd = split(self.X)[T_idx]
+
+        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
+        rho_averaged = Function(equation.function_space.sub(T_idx))
+        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
+        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, theta_vd)
+
+        # Alternative variables
+        p = thermodynamics.p(equation.parameters, exner)
+        p_top = Constant(85000.)
+        p_strato = Constant(10000.)
+
+        # -------------------------------------------------------------------- #
+        # Expressions for diffusivity coefficients
+        # -------------------------------------------------------------------- #
+        z_a = parameters.height_surface_layer
+
+        domain = equation.domain
+        u_hori = u - domain.k*dot(u, domain.k)
+        u_hori_mag = sqrt(dot(u_hori, u_hori))
+
+        if field_name == 'u':
+            C_D0 = parameters.coeff_drag_0
+            C_D1 = parameters.coeff_drag_1
+            C_D2 = parameters.coeff_drag_2
+
+            C_D = conditional(u_hori_mag < 20.0, C_D0 + C_D1*u_hori_mag, C_D2)
+            K = conditional(p > p_top,
+                            C_D*u_hori_mag*z_a,
+                            C_D*u_hori_mag*z_a*exp(-((p_top - p)/p_strato)**2))
+
+        else:
+            C_E = parameters.coeff_evap
+            K = conditional(p > p_top,
+                            C_E*u_hori_mag*z_a,
+                            C_E*u_hori_mag*z_a*exp(-((p_top - p)/p_strato)**2))
+
+        # -------------------------------------------------------------------- #
+        # Make source expression
+        # -------------------------------------------------------------------- #
+
+        dx_reduced = dx(degree=4)
+        dS_v_reduced = dS_v(degree=4)
+        d_dz = lambda q: outer(domain.k, dot(domain.k, grad(q)))
+        n = FacetNormal(domain.mesh)
+        # Work out vertical height
+        xyz = SpatialCoordinate(domain.mesh)
+        Vr = domain.spaces('L2')
+        dz = Function(Vr)
+        dz.interpolate(dot(domain.k, d_dz(dot(domain.k, xyz))))
+        mu = parameters.mu
+
+        X = self.X
+        tests = equation.tests
+
+        idx = equation.field_names.index(field_name)
+        test = tests[idx]
+        field = X.subfunctions[idx]
+
+        if field_name == 'u':
+            # Horizontal diffusion only
+            field = field - domain.k*dot(field, domain.k)
+
+        # Interior penalty discretisation of vertical diffusion
+        source_expr = (
+            # Volume term
+            inner(d_dz(test/rho_averaged), d_dz(rho_averaged*K*field))*dx_reduced
+            # Interior penalty surface term
+            - 2*inner(avg(outer(K*field, n)), avg(d_dz(test)))*dS_v_reduced
+            - 2*inner(avg(outer(test, n)), avg(d_dz(K*field)))*dS_v_reduced
+            + 4*mu*avg(dz)*inner(avg(outer(K*field, n)), avg(outer(test, n)))*dS_v_reduced
+        )
+
+        equation.residual += self.label(
+            subject(prognostic(source_expr, field_name), X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the source term generated by the physics. This only recovers
+        the density field.
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
+        self.X.assign(x_in)
+        self.rho_recoverer.project()

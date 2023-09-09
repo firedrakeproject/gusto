@@ -175,7 +175,7 @@ class Domain(object):
 
         # Turn height into columnwise data
         try:
-            columnwise_height, index_data = self.coords.get_column_data(CG1_height)
+            columnwise_height, index_data = self.coords.get_column_data(CG1_height, self)
 
             # Find minimum height in each column
             surface_height_1d = np.min(columnwise_height, axis=1)

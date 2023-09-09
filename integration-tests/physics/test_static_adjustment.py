@@ -101,7 +101,7 @@ def test_static_adjustment(tmpdir, theta_variable):
     else:
         theta = theta_vd
 
-    column_data, _ = domain.coords.get_column_data(theta)
+    column_data, _ = domain.coords.get_column_data(theta, domain)
 
     # Check first column
     is_increasing = all(i < j for i, j in zip(column_data[0, :], column_data[0, 1:]))

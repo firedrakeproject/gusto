@@ -601,13 +601,7 @@ class BackwardEuler(TimeDiscretisation):
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods. Defaults to None.
-
-        Raises:
-            NotImplementedError: if options is an instance of
-            EmbeddedDGOptions or RecoveryOptions
         """
-        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
-            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',

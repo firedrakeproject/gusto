@@ -198,3 +198,4 @@ class BoundaryLayerParameters(Configuration):
     coeff_heat = 1.1e-3         # Dimensionless surface sensible heat coefficient
     coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
     height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
+    mu = 100.                   # Interior penalty coefficient for vertical diffusion
