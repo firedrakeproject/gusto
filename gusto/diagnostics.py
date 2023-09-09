@@ -1590,15 +1590,23 @@ class TracerDensity(DiagnosticField):
 
     name = "TracerDensity"
 
-    def __init__(self, m_X, rho_d):
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate', required_fields=()):
         """
         Args:
-            m_X: the mixing ratio of the tracer
-            rho_d: the dry density of the tracer
+            mixing_ratio_name (str): the name of the tracer mixing ratio variable
+            density_name (str): the name of the tracer density variable
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            required_fields (): Check with Tom first.
+            
         """
-        super().__init__(method='interpolate', required_fields=(m_X, rho_d))
-        self.m_X = m_X
-        self.rho_d = rho_d
+        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        self.mixing_ratio_name = mixing_ratio_name
+        self.density_name = density_name
 
     def setup(self, domain, state_fields):
         """
@@ -1608,8 +1616,7 @@ class TracerDensity(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        m_X = state_fields(self.m_X)
-        rho_d = state_fields(self.rho_d)
-        space = m_X.function_space()
+        m_X = state_fields(self.mixing_ratio_name)
+        rho_d = state_fields(self.density_name)
         self.expr = m_X*rho_d
-        super().setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields)
