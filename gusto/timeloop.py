@@ -463,8 +463,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         for _, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert isinstance(scheme, ExplicitTimeDiscretisation), \
-                "Only explicit time discretisations can be used for physics"
+            # assert isinstance(scheme, ExplicitTimeDiscretisation), \
+            #     "Only explicit time discretisations can be used for physics"
 
         self.active_transport = []
         for scheme in transport_schemes:

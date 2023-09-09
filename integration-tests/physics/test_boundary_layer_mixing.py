@@ -113,13 +113,11 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
     return domain, stepper, initial_field
 
 
-# @pytest.mark.parametrize("field_name, recovered, semi_implicit",
-#                          [('theta', False, False),
-#                           ('theta', False, True),
-#                           ('u', False, False),
-#                           ('u', True, True)])
 @pytest.mark.parametrize("field_name, recovered, semi_implicit",
-                         [('u', True, True)])
+                         [('theta', False, False),
+                          ('theta', False, True),
+                          ('u', False, False),
+                          ('u', True, True)])
 def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
 
     dirname = str(tmpdir)
