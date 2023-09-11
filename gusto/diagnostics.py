@@ -1590,7 +1590,7 @@ class TracerDensity(DiagnosticField):
 
     name = "TracerDensity"
 
-    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate', required_fields=()):
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
         """
         Args:
             mixing_ratio_name (str): the name of the tracer mixing ratio variable
@@ -1599,10 +1599,8 @@ class TracerDensity(DiagnosticField):
                 evaluate the diagnostic field in. Defaults to None, in which
                 case a default space will be chosen for this diagnostic.
             method (str, optional): a string specifying the method of evaluation
-                for this diagnostic. Valid options are 'interpolate', 'project',
-                'assign' and 'solve'. Defaults to 'interpolate'.
-            required_fields (): Check with Tom first.
-            
+                for this diagnostic. Valid options are 'interpolate', 'project' and
+                'assign'. Defaults to 'interpolate'.
         """
         super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
         self.mixing_ratio_name = mixing_ratio_name
