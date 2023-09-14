@@ -11,6 +11,8 @@ from types import MethodType
 # ---------------------------------------------------------------------------- #
 
 time_derivative = Label("time_derivative")
+implicit = Label("implicit")
+explicit = Label("explicit")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
 physics = Label("physics", validator=lambda value: type(value) == MethodType)
