@@ -4,7 +4,7 @@ Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
 from gusto.logging import logger
-from firedrake import (SpatialCoordinate, sqrt, atan_2, asin, Function)
+from firedrake import (SpatialCoordinate, sqrt, atan2, asin, Function)
 import numpy as np
 
 
@@ -33,7 +33,7 @@ class Coordinates(object):
         if on_sphere:
             xyz = SpatialCoordinate(mesh)
             r = sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
-            lon = atan_2(xyz[1], xyz[0])
+            lon = atan2(xyz[1], xyz[0])
             lat = asin(xyz[2]/r)
 
             if mesh.extruded:
