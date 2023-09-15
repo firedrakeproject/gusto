@@ -301,7 +301,7 @@ class ImplicitMultistage(TimeDiscretisation):
     def rhs(self):
         return super().rhs
 
-    def solvers(self, stage):
+    def solver(self, stage):
         residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -319,6 +319,13 @@ class ImplicitMultistage(TimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @cached_property
+    def solvers(self):
+        solvers = []
+        for stage in range(self.nStages):
+            solvers.append(self.solver(stage))
+        return solvers
+
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         for i in range(stage):
@@ -331,8 +338,8 @@ class ImplicitMultistage(TimeDiscretisation):
             self.xnph = tuple([self.dt*self.butcher_matrix[stage, stage]*a + b for a, b in zip(split(self.x_out), split(self.x1))])
         else:
             self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
-
-        self.solvers(stage).solve()
+        solver = self.solvers[stage]
+        solver.solve()
 
         self.k[stage].assign(self.x_out)
 
