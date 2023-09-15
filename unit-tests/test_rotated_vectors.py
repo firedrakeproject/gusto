@@ -24,9 +24,15 @@ def test_rotated_lonlatr_vectors_firedrake():
 
     new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
 
+    # Do an alternative calculation based on gradients of new coordinates
     answer_e_lon = grad(new_lonlatr[0])
     answer_e_lat = grad(new_lonlatr[1])
     answer_e_r = grad(sqrt(dot(xyz, xyz)))
+
+    # Normalise
+    answer_e_lon /= sqrt(dot(answer_e_lon, answer_e_lon))
+    answer_e_lat /= sqrt(dot(answer_e_lat, answer_e_lat))
+    answer_e_r /= sqrt(dot(answer_e_r, answer_e_r))
 
     new_e_lon, new_e_lat, new_e_r = rotated_lonlatr_vectors(xyz, new_pole)
 
