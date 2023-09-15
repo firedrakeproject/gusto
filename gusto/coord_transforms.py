@@ -125,7 +125,7 @@ def lonlatr_from_xyz(x, y, z, angle_units='rad'):
 
     # Determine whether to use firedrake or numpy functions
     module, _ = firedrake_or_numpy(x)
-    atan_2 = module.atan_2 if hasattr(module, "atan_2") else module.arctan2
+    atan2 = module.atan2 if hasattr(module, "atan2") else module.arctan2
     sqrt = module.sqrt
     pi = module.pi
 
@@ -134,10 +134,10 @@ def lonlatr_from_xyz(x, y, z, angle_units='rad'):
     if angle_units == 'rad':
         unit_factor = 1.0
 
-    lon = atan_2(y, x)
+    lon = atan2(y, x)
     r = sqrt(x**2 + y**2 + z**2)
     l = sqrt(x**2 + y**2)
-    lat = atan_2(z, l)
+    lat = atan2(z, l)
 
     return lon*unit_factor, lat*unit_factor, r
 
