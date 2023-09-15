@@ -238,7 +238,8 @@ class IO(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
 
-    def setup_log_courant(self, state_fields, name='u', expression=None):
+    def setup_log_courant(self, state_fields, name='u', component="whole",
+                          expression=None):
         """
         Sets up Courant number diagnostics to be logged.
 
@@ -246,6 +247,9 @@ class IO(object):
             state_fields (:class:`StateFields`): the model's field container.
             name (str, optional): the name of the field to log the Courant
                 number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
             expression (:class:`ufl.Expr`, optional): expression of velocity
                 field to take Courant number of. Defaults to None, in which case
                 the "name" argument must correspond to an existing field.
@@ -258,15 +262,16 @@ class IO(object):
             # Set up diagnostic if it hasn't already been
             if courant_name not in diagnostic_names and 'u' in state_fields._field_names:
                 if expression is None:
-                    diagnostic = CourantNumber(to_dump=False)
+                    diagnostic = CourantNumber(to_dump=False, component=component)
                 elif expression is not None:
-                    diagnostic = CourantNumber(velocity=expression, name=courant_name, to_dump=False)
+                    diagnostic = CourantNumber(velocity=expression, component=component,
+                                               name=courant_name, to_dump=False)
 
                 self.diagnostic_fields.append(diagnostic)
                 diagnostic.setup(self.domain, state_fields)
                 self.diagnostics.register(diagnostic.name)
 
-    def log_courant(self, state_fields, name='u', message=None):
+    def log_courant(self, state_fields, name='u', component="whole", message=None):
         """
         Logs the maximum Courant number value.
 
@@ -274,6 +279,9 @@ class IO(object):
             state_fields (:class:`StateFields`): the model's field container.
             name (str, optional): the name of the field to log the Courant
                 number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
             message (str, optional): an extra message to be logged. Defaults to
                 None.
         """
@@ -281,6 +289,8 @@ class IO(object):
         if self.output.log_courant and 'u' in state_fields._field_names:
             diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
             courant_name = 'CourantNumber' if name == 'u' else 'CourantNumber_'+name
+            if component != 'whole':
+                courant_name += '_'+component
             courant_idx = diagnostic_names.index(courant_name)
             courant_diagnostic = self.diagnostic_fields[courant_idx]
             courant_diagnostic.compute()

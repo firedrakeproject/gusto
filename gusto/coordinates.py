@@ -5,7 +5,7 @@ Coordinate fields are stored in specified VectorFunctionSpaces.
 
 from gusto.coord_transforms import lonlatr_from_xyz, rotated_lonlatr_coords
 from gusto.logging import logger
-from firedrake import (SpatialCoordinate, Function)
+from firedrake import SpatialCoordinate, Function
 import numpy as np
 
 
