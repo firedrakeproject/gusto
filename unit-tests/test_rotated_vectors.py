@@ -10,7 +10,8 @@ tol = 1e-12
 def test_rotated_lonlatr_vectors_firedrake():
 
     from firedrake import (CubedSphereMesh, pi, SpatialCoordinate, Function,
-                           VectorFunctionSpace, as_vector, grad, sqrt, dot)
+                           VectorFunctionSpace, as_vector, grad, sqrt, dot,
+                           atan)
 
     new_pole = (pi/4, pi/4)
 
@@ -22,11 +23,18 @@ def test_rotated_lonlatr_vectors_firedrake():
     rot_axis, rot_angle = pole_rotation(new_pole)
     new_xyz = rodrigues_rotation(xyz, as_vector(rot_axis), rot_angle)
 
-    new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
+    # TODO: this should be
+    # new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
+    # but when atan_2 became atan2 in UFL we lost the derivative of atan2
+    # therefore define this here with atan
+    lon = atan(new_xyz[1]/new_xyz[0])
+    l = sqrt(new_xyz[0]**2 + new_xyz[1]**2)
+    lat = atan(new_xyz[2]/l)
+
 
     # Do an alternative calculation based on gradients of new coordinates
-    answer_e_lon = grad(new_lonlatr[0])
-    answer_e_lat = grad(new_lonlatr[1])
+    answer_e_lon = grad(lon)
+    answer_e_lat = grad(lat)
     answer_e_r = grad(sqrt(dot(xyz, xyz)))
 
     # Normalise
