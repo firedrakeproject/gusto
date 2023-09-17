@@ -6,8 +6,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    FunctionSpace, \
-    errornorm, zero
+    FunctionSpace, errornorm, zero
 from gusto import thermodynamics
 from gusto.logging import logger
 from gusto.recovery import Recoverer, BoundaryMethod

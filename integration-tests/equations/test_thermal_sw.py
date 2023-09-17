@@ -66,9 +66,9 @@ def set_up_initial_conditions(domain, equation, stepper):
     Omega = equation.parameters.Omega
 
     x = SpatialCoordinate(domain.mesh)
-    lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    _, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-    uexpr = lonlatr_vector_from_xyz(as_vector([u_max*cos(phi), 0, 0]), x)
+    uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
     w = Omega*R*u_max + (u_max**2)/2
     sigma = 0
     Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)

@@ -1,6 +1,5 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos,
-                       as_vector)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos
 import sys
 
 # ----------------------------------------------------------------- #
@@ -74,7 +73,7 @@ b0 = stepper.fields("b")
 
 lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-uexpr = lonlatr_vector_from_xyz(as_vector([u_max*cos(phi), 0, 0]), x)
+uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
 g = params.g
 w = Omega*R*u_max + (u_max**2)/2
 sigma = w/10

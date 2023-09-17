@@ -49,7 +49,7 @@ for ref_level, dt in ref_dt.items():
     Omega = parameters.Omega
     _, lat, _ = rotated_lonlatr_coords(x, rotated_pole)
     e_lon, _, _ = rotated_lonlatr_vectors(x, rotated_pole)
-    fexpr = 2*Omega*sin(lat)/R
+    fexpr = 2*Omega*sin(lat)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O

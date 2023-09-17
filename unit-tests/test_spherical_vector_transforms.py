@@ -56,7 +56,7 @@ def check_values(new_values, answers, config_name, routine):
     elif config_name == 'firedrake_vectors':
         # Interpolate answer into vector function space
         vector_field = fd.Function(answers.function_space())
-        vector_field.interpolate(fd.as_vector(new_values))
+        vector_field.interpolate(new_values)
 
         answer_shape = np.shape(answers.dat.data)
         new_values = [vector_field.dat.data[:, i] for i in range(answer_shape[1])]
@@ -118,8 +118,13 @@ def test_xyz_and_lonlatr_vectors(config_name, position_units):
 
     position_vector = xyz_coords if position_units == 'xyz' else llr_coords
 
-    new_llr_vectors = lonlatr_vector_from_xyz(xyz_vectors, position_vector, position_units)
-    new_xyz_vectors = xyz_vector_from_lonlatr(llr_vectors, position_vector, position_units)
+    new_llr_vectors = lonlatr_components_from_xyz(xyz_vectors, position_vector, position_units)
+    new_xyz_vectors = xyz_vector_from_lonlatr(llr_vectors[0], llr_vectors[1], llr_vectors[2],
+                                              position_vector, position_units)
 
-    check_values(new_llr_vectors, llr_vectors, config_name, 'lonlatr_vector_from_xyz')
+    if config_name != 'numpy':
+        llr_vectors = fd.as_vector(llr_vectors)
+        new_llr_vectors = fd.as_vector(new_llr_vectors)
+
+    check_values(new_llr_vectors, llr_vectors, config_name, 'lonlatr_components_from_xyz')
     check_values(new_xyz_vectors, xyz_vectors, config_name, 'xyz_vector_from_lonlatr')

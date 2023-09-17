@@ -5,11 +5,11 @@ Cartesian systems.
 
 import importlib
 import numpy as np
-from firedrake import as_vector, SpatialCoordinate
+from firedrake import SpatialCoordinate
 import ufl
 
 __all__ = ["xyz_from_lonlatr", "lonlatr_from_xyz", "xyz_vector_from_lonlatr",
-           "lonlatr_vector_from_xyz", "rodrigues_rotation", "pole_rotation",
+           "lonlatr_components_from_xyz", "rodrigues_rotation", "pole_rotation",
            "rotated_lonlatr_vectors", "rotated_lonlatr_coords",
            "periodic_distance", "great_arc_angle"]
 
@@ -125,7 +125,7 @@ def lonlatr_from_xyz(x, y, z, angle_units='rad'):
 
     # Determine whether to use firedrake or numpy functions
     module, _ = firedrake_or_numpy(x)
-    atan_2 = module.atan_2 if hasattr(module, "atan_2") else module.arctan2
+    atan2 = module.atan2 if hasattr(module, "atan2") else module.arctan2
     sqrt = module.sqrt
     pi = module.pi
 
@@ -134,23 +134,28 @@ def lonlatr_from_xyz(x, y, z, angle_units='rad'):
     if angle_units == 'rad':
         unit_factor = 1.0
 
-    lon = atan_2(y, x)
+    lon = atan2(y, x)
     r = sqrt(x**2 + y**2 + z**2)
     l = sqrt(x**2 + y**2)
-    lat = atan_2(z, l)
+    lat = atan2(z, l)
 
     return lon*unit_factor, lat*unit_factor, r
 
 
-def xyz_vector_from_lonlatr(lonlatr_vector, position_vector,
-                            position_units="xyz"):
+def xyz_vector_from_lonlatr(lon_component, lat_component, r_component,
+                            position_vector, position_units="xyz"):
     """
     Returns the Cartesian geocentric x, y and z components of a vector from a
-    vector whose components are in lon, lat and r spherical coordinates.
+    vector whose components are in lon, lat and r spherical coordinates. If
+    dealing with Firedrake, a vector expression is returned.
 
     Args:
-        lonlatr_vector (:class:`np.ndarray` or :class:`ufl.Expr`): the input
-            vector in (zonal, meridional, radial) components.
+        lon_component (:class:`np.ndarray` or :class:`ufl.Expr`): the zonal
+            component of the input vector.
+        lat_component (:class:`np.ndarray` or :class:`ufl.Expr`): the meridional
+            component of the input vector.
+        r_component (:class:`np.ndarray` or :class:`ufl.Expr`): the radial
+            component of the input vector.
         position_vector (:class:`np.ndarray` or :class:`ufl.Expr`): the position
             vector, either as (x, y, z) or (lon, lat, radius) coordinates,
             subject to the `position_units` argument. Should match the shape of
@@ -160,7 +165,7 @@ def xyz_vector_from_lonlatr(lonlatr_vector, position_vector,
             Defaults to "xyz".
 
     Returns:
-        :class:`np.ndarray` or :class:`ufl.Expr`: (x, y, z) components of the
+        :class:`np.ndarray` or :class:`ufl.as_vector`: (x, y, z) components of the
             input vector.
     """
 
@@ -171,7 +176,7 @@ def xyz_vector_from_lonlatr(lonlatr_vector, position_vector,
                          + f'but {position_units} was provided')
 
     # Determine whether to use firedrake or numpy functions
-    module, _ = firedrake_or_numpy(position_vector[0])
+    module, module_name = firedrake_or_numpy(position_vector[0])
     pi = module.pi
     cos = module.cos
     sin = module.sin
@@ -191,25 +196,28 @@ def xyz_vector_from_lonlatr(lonlatr_vector, position_vector,
 
     # f_x = dot(f, e_x)
     # e_x = cos(lon)*cos(lat) * e_r - sin(lon) * e_lon - cos(lon)*sin(lat) * e_lat
-    x_component = (cos(lon)*cos(lat) * lonlatr_vector[2]
-                   - sin(lon) * lonlatr_vector[0]
-                   - cos(lon)*sin(lat) * lonlatr_vector[1])
+    x_component = (cos(lon)*cos(lat) * r_component
+                   - sin(lon) * lon_component
+                   - cos(lon)*sin(lat) * lat_component)
 
     # f_y = dot(f, e_y)
     # e_y = sin(lon)*cos(lat) * e_r + cos(lon) * e_lon - sin(lon)*sin(lat) * e_lat
-    y_component = (sin(lon)*cos(lat) * lonlatr_vector[2]
-                   + cos(lon) * lonlatr_vector[0]
-                   - sin(lon)*sin(lat) * lonlatr_vector[1])
+    y_component = (sin(lon)*cos(lat) * r_component
+                   + cos(lon) * lon_component
+                   - sin(lon)*sin(lat) * lat_component)
 
     # f_z = dot(f, e_z)
     # e_z = sin(lat) * e_r + cos(lat) * e_lat
-    z_component = (sin(lat) * lonlatr_vector[2]
-                   + cos(lat) * lonlatr_vector[1])
+    z_component = (sin(lat) * r_component
+                   + cos(lat) * lat_component)
 
-    return (x_component, y_component, z_component)
+    if module_name == 'firedrake':
+        return module.as_vector((x_component, y_component, z_component))
+    else:
+        return (x_component, y_component, z_component)
 
 
-def lonlatr_vector_from_xyz(xyz_vector, position_vector, position_units='xyz'):
+def lonlatr_components_from_xyz(xyz_vector, position_vector, position_units='xyz'):
     """
     Returns the spherical (zonal, meridional, radial) components of a vector-
     valued field from a vector which is expressed in geocentric Cartesian
@@ -321,7 +329,6 @@ def rodrigues_rotation(old_vector, rot_axis, rot_angle):
     else:
         dot = module.dot
 
-    # import pdb; pdb.set_trace()
     new_vector = (old_vector * cos(rot_angle)
                   + cross(rot_axis, old_vector) * sin(rot_angle)
                   + rot_axis * dot(rot_axis, old_vector) * (1 - cos(rot_angle)))
@@ -341,8 +348,8 @@ def pole_rotation(new_pole):
 
     Returns:
         tuple: (rot_axis, rot_angle). This describes the rotation axis (a tuple
-            of (x, y, z) components of the rotation axis, and a float describing
-            the rotation angle.
+            or :class:`as_vector` of (x, y, z) components of the rotation axis,
+            and a float describing the rotation angle.
     """
 
     import numpy as np
@@ -361,7 +368,7 @@ def pole_rotation(new_pole):
 
     # Turn rotation axis into a vector
     # it points in the radial direction and has a length of one
-    rot_axis = xyz_vector_from_lonlatr((0, 0, 1), (lon_rot, lat_rot, 1),
+    rot_axis = xyz_vector_from_lonlatr(0, 0, 1, (lon_rot, lat_rot, 1),
                                        position_units='lonlatr_rad')
 
     return rot_axis, rot_angle
@@ -384,16 +391,22 @@ def rotated_lonlatr_vectors(xyz, new_pole):
         tuple of :class:`ufl.Expr`: the rotated basis vectors (e_lon, e_lat, e_r).
     """
 
-    from firedrake import grad, sqrt, dot, as_vector
+    from firedrake import sqrt, dot, as_vector, Constant
 
     rot_axis, rot_angle = pole_rotation(new_pole)
+    rot_axis = as_vector(rot_axis)
+    new_xyz = rodrigues_rotation(xyz, rot_axis, rot_angle)
 
-    new_xyz = rodrigues_rotation(xyz, as_vector(rot_axis), rot_angle)
-    new_lonlatr = lonlatr_from_xyz(new_xyz[0], new_xyz[1], new_xyz[2])
+    # Compute e_lon, e_lat vectors in terms of new (x,y,z) components
+    e_lon_new_xyz = xyz_vector_from_lonlatr(Constant(1.0), Constant(0.0), Constant(0.0), new_xyz)
+    e_lat_new_xyz = xyz_vector_from_lonlatr(Constant(0.0), Constant(1.0), Constant(0.0), new_xyz)
 
-    new_e_lon = grad(new_lonlatr[0])
-    new_e_lat = grad(new_lonlatr[1])
-    new_e_r = grad(sqrt(dot(xyz, xyz)))
+    # Rotate back to original (x,y,z) components
+    new_e_lon = rodrigues_rotation(e_lon_new_xyz, rot_axis, -rot_angle)
+    new_e_lat = rodrigues_rotation(e_lat_new_xyz, rot_axis, -rot_angle)
+
+    # e_r isn't rotated
+    new_e_r = xyz_vector_from_lonlatr(Constant(0.0), Constant(0.0), Constant(1.0), xyz)
 
     # Normalise
     new_e_lon /= sqrt(dot(new_e_lon, new_e_lon))
@@ -422,14 +435,14 @@ def rotated_lonlatr_coords(xyz, new_pole):
     rot_axis, rot_angle = pole_rotation(new_pole)
 
     # If numpy, shape (x,y,z) array as a vector
-    _, module_name = firedrake_or_numpy(xyz[0])
+    module, module_name = firedrake_or_numpy(xyz[0])
     if module_name == 'numpy':
         old_xyz_vector = np.transpose(xyz)
     else:
         assert isinstance(xyz, SpatialCoordinate), 'Rotated lonlatr ' \
             + 'coordinates require xyz to be a SpatialCoordinate object'
         old_xyz_vector = xyz
-        rot_axis = as_vector(rot_axis)
+        rot_axis = module.as_vector(rot_axis)
 
     # Do rotations to get new coordinates
     new_xyz_vector = rodrigues_rotation(old_xyz_vector, rot_axis, rot_angle)
