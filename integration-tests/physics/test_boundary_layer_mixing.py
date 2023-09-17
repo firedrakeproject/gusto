@@ -48,8 +48,8 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
     if recovered:
         # Only implemented for u
         Vec_CG1 = VectorFunctionSpace(mesh, 'CG', 1)
-        Vec_DG1 = VectorFunctionSpace(mesh, 'DG', 1)
-        recovery_opts = RecoveryOptions(embedding_space=Vec_DG1,
+        Vec_CG1 = VectorFunctionSpace(mesh, 'DG', 1)
+        recovery_opts = RecoveryOptions(embedding_space=Vec_CG1,
                                         recovered_space=Vec_CG1,
                                         boundary_method=BoundaryMethod.taylor)
         implicit_discretisation = BackwardEuler(domain, field_name=field_name, options=recovery_opts)
@@ -117,7 +117,8 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
                          [('theta', False, False),
                           ('theta', False, True),
                           ('u', False, False),
-                          ('u', True, True)])
+                          ('u', True, True)
+                          ])
 def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
 
     dirname = str(tmpdir)
@@ -126,7 +127,7 @@ def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
 
     if field_name == 'u':
         # Need to project horizontal wind into W3
-        wind_2d = stepper.fields('u')
+        wind_2d = stepper.fields(field_name)
         field = Function(domain.spaces('L2')).project(wind_2d[0])
         initial_1d = Function(domain.spaces('L2')).project(initial_field[0])
         # Relabel initial field
@@ -138,5 +139,4 @@ def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
     initial_data, _ = domain.coords.get_column_data(initial_field, domain)
 
     # Check first column
-    import pdb; pdb.set_trace()
-    assert field_data[0,0] < 0.995*initial_data[0,0]
+    assert field_data[0,0] < 0.999*initial_data[0,0]

@@ -1693,7 +1693,9 @@ class BoundaryLayerMixing(PhysicsParametrisation):
 
         dx_reduced = dx(degree=4)
         dS_v_reduced = dS_v(degree=4)
-        d_dz = lambda q: outer(domain.k, dot(domain.k, grad(q)))
+        # Need to be careful with order of operations here, to correctly index
+        # when the field is vector-valued
+        d_dz = lambda q: outer(domain.k, dot(grad(q), domain.k))
         n = FacetNormal(domain.mesh)
         # Work out vertical height
         xyz = SpatialCoordinate(domain.mesh)
@@ -1716,7 +1718,7 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         # Interior penalty discretisation of vertical diffusion
         source_expr = (
             # Volume term
-            inner(d_dz(test/rho_averaged), d_dz(rho_averaged*K*field))*dx_reduced
+            rho_averaged*K*inner(d_dz(test/rho_averaged), d_dz(field))*dx_reduced
             # Interior penalty surface term
             - 2*inner(avg(outer(K*field, n)), avg(d_dz(test)))*dS_v_reduced
             - 2*inner(avg(outer(test, n)), avg(d_dz(K*field)))*dS_v_reduced
