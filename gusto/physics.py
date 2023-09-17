@@ -12,7 +12,7 @@ from gusto.active_tracers import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.fml import identity, Term, subject
-from gusto.labels import physics, transporting_velocity, transport, prognostic
+from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from firedrake import (Interpolator, conditional, Function, dx,
                        min_value, max_value, Constant, pi, Projector)
@@ -27,18 +27,20 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment"]
 
 
-class Physics(object, metaclass=ABCMeta):
+class PhysicsParametrisation(object, metaclass=ABCMeta):
     """Base class for the parametrisation of physical processes for Gusto."""
 
-    def __init__(self, equation, parameters=None):
+    def __init__(self, equation, label_name, parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
+            label_name (str): name of physics scheme, to be passed to its label.
             parameters (:class:`Configuration`, optional): parameters containing
                 the values of gas constants. Defaults to None, in which case the
                 parameters are obtained from the equation.
         """
 
+        self.label = PhysicsLabel(label_name)
         self.equation = equation
         if parameters is None and hasattr(equation, 'parameters'):
             self.parameters = equation.parameters
@@ -53,7 +55,7 @@ class Physics(object, metaclass=ABCMeta):
         pass
 
 
-class SaturationAdjustment(Physics):
+class SaturationAdjustment(PhysicsParametrisation):
     """
     Represents the phase change between water vapour and cloud liquid.
 
@@ -89,7 +91,8 @@ class SaturationAdjustment(Physics):
                 CompressibleEulerEquations.
         """
 
-        super().__init__(equation, parameters=parameters)
+        label_name = 'saturation_adjustment'
+        super().__init__(equation, label_name, parameters=parameters)
 
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
@@ -202,8 +205,8 @@ class SaturationAdjustment(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -236,7 +239,7 @@ class AdvectedMoments(Enum):
     M3 = 1  # advect the mass of the distribution
 
 
-class Fallout(Physics):
+class Fallout(PhysicsParametrisation):
     """
     Represents the fallout process of hydrometeors.
 
@@ -271,6 +274,10 @@ class Fallout(Physics):
                 representing the number of moments of the size distribution of
                 raindrops to be transported. Defaults to `AdvectedMoments.M3`.
         """
+
+        label_name = f'fallout_{rain_name}'
+        super().__init__(equation, label_name, parameters=None)
+
         # Check that fields exist
         assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
 
@@ -308,7 +315,7 @@ class Fallout(Physics):
         adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
-        equation.residual += physics(adv_term, self.evaluate)
+        equation.residual += self.label(adv_term, self.evaluate)
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -370,7 +377,7 @@ class Fallout(Physics):
             self.determine_v.project()
 
 
-class Coalescence(Physics):
+class Coalescence(PhysicsParametrisation):
     """
     Represents the coalescence of cloud droplets to form rain droplets.
 
@@ -398,6 +405,14 @@ class Coalescence(Physics):
             accumulation (bool, optional): whether to include the accumulation
                 process in the parametrisation. Defaults to True.
         """
+
+        label_name = "coalescence"
+        if accretion:
+            label_name += "_accretion"
+        if accumulation:
+            label_name += "_accumulation"
+        super().__init__(equation, label_name, parameters=None)
+
         # Check that fields exist
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
         assert rain_name in equation.field_names, f"Field {rain_name} does not exist in the equation set"
@@ -448,10 +463,10 @@ class Coalescence(Physics):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += physics(subject(test_cl * self.source * dx
-                                             - test_r * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
+        equation.residual += self.label(subject(test_cl * self.source * dx
+                                                - test_r * self.source * dx,
+                                                equation.X),
+                                        self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -469,7 +484,7 @@ class Coalescence(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class EvaporationOfRain(Physics):
+class EvaporationOfRain(PhysicsParametrisation):
     """
     Represents the evaporation of rain into water vapour.
 
@@ -502,7 +517,8 @@ class EvaporationOfRain(Physics):
                 CompressibleEulerEquations.
         """
 
-        super().__init__(equation, parameters=parameters)
+        label_name = 'evaporation_of_rain'
+        super().__init__(equation, label_name, parameters=parameters)
 
         # TODO: make a check on the variable type of the active tracers
         # if not a mixing ratio, we need to convert to mixing ratios
@@ -617,8 +633,8 @@ class EvaporationOfRain(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -638,7 +654,7 @@ class EvaporationOfRain(Physics):
             interpolator.interpolate()
 
 
-class InstantRain(Physics):
+class InstantRain(PhysicsParametrisation):
     """
     The process of converting vapour above the saturation curve to rain.
 
@@ -682,7 +698,8 @@ class InstantRain(Physics):
                 parameters are obtained from the equation.
         """
 
-        super().__init__(equation, parameters=None)
+        label_name = 'instant_rain'
+        super().__init__(equation, label_name, parameters=parameters)
 
         self.convective_feedback = convective_feedback
         self.time_varying_saturation = time_varying_saturation
@@ -736,25 +753,24 @@ class InstantRain(Physics):
             self.saturation_curve = saturation_curve
 
         # lose proportion of vapour above the saturation curve
-        equation.residual += physics(subject(test_v * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
+        equation.residual += self.label(subject(test_v * self.source * dx,
+                                                equation.X),
+                                        self.evaluate)
 
         # if rain is not none then the excess vapour is being tracked and is
         # added to rain
         if rain_name is not None:
             Vr_idx = equation.field_names.index(rain_name)
             test_r = equation.tests[Vr_idx]
-            equation.residual -= physics(subject(test_r * self.source * dx,
-                                                 equation.X),
-                                         self.evaluate)
+            equation.residual -= self.label(subject(test_r * self.source * dx,
+                                                    equation.X),
+                                            self.evaluate)
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            equation.residual += physics(subject
-                                         (test_D * beta1 * self.source * dx,
-                                          equation.X),
-                                         self.evaluate)
+            equation.residual += self.label(subject(test_D * beta1 * self.source * dx,
+                                                    equation.X),
+                                            self.evaluate)
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
@@ -784,7 +800,7 @@ class InstantRain(Physics):
         self.source.assign(self.source_interpolator.interpolate())
 
 
-class SWSaturationAdjustment(Physics):
+class SWSaturationAdjustment(PhysicsParametrisation):
     """
     Represents the process of adjusting water vapour and cloud water according
     to a saturation function, via condensation and evaporation processes.
@@ -848,7 +864,8 @@ class SWSaturationAdjustment(Physics):
                 parameters are obtained from the equation.
         """
 
-        super().__init__(equation, parameters=None)
+        label_name = 'saturation_adjustment'
+        super().__init__(equation, label_name, parameters=parameters)
 
         self.time_varying_saturation = time_varying_saturation
         self.convective_feedback = convective_feedback
@@ -950,8 +967,8 @@ class SWSaturationAdjustment(Physics):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += physics(subject(test * source * dx,
-                                                 equation.X), self.evaluate)
+            equation.residual += self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
