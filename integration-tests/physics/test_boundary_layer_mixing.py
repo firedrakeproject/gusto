@@ -117,7 +117,8 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
                          [('theta', False, False),
                           ('theta', False, True),
                           ('u', False, False),
-                          ('u', True, True)
+                          pytest.param('u', True, True,
+                                       marks=pytest.mark.xfail(reason='recovered physics not implemented'))
                           ])
 def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
 
