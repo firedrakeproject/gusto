@@ -216,6 +216,7 @@ class SaturationAdjustment(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
         self.dt.assign(dt)
         self.X.assign(x_in)
@@ -372,6 +373,7 @@ class Fallout(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
@@ -476,6 +478,7 @@ class Coalescence(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
         self.dt.assign(dt)
         self.rain.assign(x_in.subfunctions[self.rain_idx])
@@ -644,6 +647,7 @@ class EvaporationOfRain(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
         self.dt.assign(dt)
         self.X.assign(x_in)
@@ -790,6 +794,7 @@ class InstantRain(PhysicsParametrisation):
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
         """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
             self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.time_varying_saturation:
@@ -982,7 +987,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
         """
-
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
         if self.thermal_feedback:
