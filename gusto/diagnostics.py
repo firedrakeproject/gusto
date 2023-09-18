@@ -24,7 +24,8 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
+           "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -1756,3 +1757,39 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class TracerDensity(DiagnosticField):
+    """Diagnostic for computing the density of a tracer. This is
+    computed as the product of a mixing ratio and dry density"""
+
+    name = "TracerDensity"
+
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
+        """
+        Args:
+            mixing_ratio_name (str): the name of the tracer mixing ratio variable
+            density_name (str): the name of the tracer density variable
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project' and
+                'assign'. Defaults to 'interpolate'.
+        """
+        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        self.mixing_ratio_name = mixing_ratio_name
+        self.density_name = density_name
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        m_X = state_fields(self.mixing_ratio_name)
+        rho_d = state_fields(self.density_name)
+        self.expr = m_X*rho_d
+        super().setup(domain, state_fields)
