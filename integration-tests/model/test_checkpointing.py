@@ -116,12 +116,14 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     output_1 = OutputParameters(
         dirname=dirname_1,
         dumpfreq=1,
+        checkpoint=True,
         checkpoint_method=checkpoint_method,
         chkptfreq=4,
     )
     output_2 = OutputParameters(
         dirname=dirname_2,
         dumpfreq=1,
+        checkpoint=True,
         checkpoint_method=checkpoint_method,
         chkptfreq=2,
     )
@@ -154,6 +156,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         dirname=dirname_3,
         dumpfreq=1,
         chkptfreq=2,
+        checkpoint=True,
         checkpoint_method=checkpoint_method,
         checkpoint_pickup_filename=chkpt_2_path,
     )
@@ -193,6 +196,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         dirname=dirname_3,
         dumpfreq=1,
         chkptfreq=2,
+        checkpoint=True,
         checkpoint_method=checkpoint_method,
         checkpoint_pickup_filename=chkpt_2_path
     )
