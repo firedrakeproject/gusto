@@ -6,9 +6,8 @@ model's time interval.
 
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
-from gusto.perp import perp
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, grad, VectorFunctionSpace, Function)
+                       inner, grad, VectorFunctionSpace, Function, perp)
 import numpy as np
 
 
