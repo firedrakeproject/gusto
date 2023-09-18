@@ -21,10 +21,10 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage", "IMEXMultistage",
            "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2",
            "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang", "IMEX_Euler",
-           "IMEX_Euler2","IMEX_Euler3"]
+           "ARS3","ARK2"]
 
 
 def wrapper_apply(original_apply):
@@ -234,184 +234,20 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         pass
 
-
 class IMEXMultistage(TimeDiscretisation):
-    """
-    A class for implementing general diagonally implicit multistage (Runge-Kutta)
-    methods based on its Butcher tableau.
 
-    A Butcher tableau is formed in the following way for a s-th order
-    diagonally implicit scheme:
-
-    c_0 | a_00 a_01  .    a_0s
-    c_1 | a_10 a_11       a_1s
-     .  |   .   .    .    .
-     .  |   .   .    .    .
-    c_s | a_s0 a_s1  .    a_ss
-     -------------------------
-        |  b_1  b_2  ...  b_s
-
-    The gradient function has no time-dependence, so c elements are not needed.
-    A square 'butcher_matrix' is defined in each class that uses
-    the ImplicitMultiStage structure,
-
-    [a_00   0   .       0  ]
-    [a_10 a_11  .       0  ]
-    [  .    .   .       .  ]
-    [ b_0  b_1  .       b_s]
-
-    Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
-
-    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
-
-    For an s stage method,
-      At iteration i (from 0 to s-1)
-        An intermediate location is computed as y_i = y^n + sum{over j less than or equal to i} (dt*a_ij*k_i)
-        Compute the gradient at the intermediate location, k_i = F(y_i)
-
-    At the last stage, compute the new solution by:
-    y^{n+1} = y^n + sum_{j from 0 to s} (dt*b_i*k_i)
-
-    """
-
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, 
+                options=None, butcher_imp=None, butcher_exp=None):
         super().__init__(domain, field_name=field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                            solver_parameters=solver_parameters,
+                            limiter=limiter, options=options)
         if butcher_imp is not None:
             self.butcher_imp = butcher_imp
             self.nStages = int(np.shape(self.butcher_imp)[1])
+        
         if butcher_exp is not None:
             self.butcher_exp = butcher_exp
             self.nStages = int(np.shape(self.butcher_exp)[1])
-
-    def setup(self, equation, apply_bcs=True, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-
-        super().setup(equation, apply_bcs, *active_labels)
-
-        self.xs = [Function(self.fs) for i in range(self.nStages)]
-
-    def lhs(self):
-        return super().lhs
-
-    def rhs(self):
-        return super().rhs
-
-    def solvers(self, stage):
-        
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       replace_subject(self.x_out, self.idx))
-        residual =residual -  mass_form.label_map(all_terms,
-                                        replace_subject(self.x1, self.idx))
-        for i in range(stage):
-            # r_imp = self.residual.label_map(
-            # lambda t: any(t.has_label(time_derivative, transport)),
-            # map_if_true=drop,
-            # map_if_false=replace_subject(self.xs[i], self.idx),
-            # )
-            r_exp = self.residual.label_map(
-                lambda t: t.has_label(transport),
-                map_if_true=replace_subject(self.x1, self.idx),
-                map_if_false=drop,
-            )
-            print("imp1",self.butcher_imp[stage, i])
-
-            print("exp1",self.butcher_exp[stage, i])
-            # residual = residual + r_exp.label_map(
-            #         all_terms,
-            #         lambda t: self.dt*t)
-
-            print("exp1",self.butcher_exp[stage, i])
-            residual = residual + r_exp.label_map(
-                    all_terms,
-                    lambda t: self.dt*t)
-            print("imp2",self.butcher_imp[stage, stage])
-            r_imp = self.residual.label_map(
-                lambda t: t.has_label(time_derivative, transport),
-                map_if_true=drop,
-                map_if_false=replace_subject(self.x_out, self.idx),
-                )
-            residual = residual + r_imp.label_map(
-                    all_terms,
-                    map_if_true=lambda t: self.dt*t)
-
-        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
-
-        solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                          options_prefix=solver_name)
-    @cached_property
-    def solverf(self):
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       replace_subject(self.x_out, self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        replace_subject(self.x1, self.idx))
-        for i in range(self.nStages):
-            r_exp = self.residual.label_map(
-                lambda t: t.has_label(transport),
-                map_if_true=replace_subject(self.xs[i], self.idx),
-                map_if_false=drop,
-            )
-            # residual = residual + r_exp.label_map(
-            #         all_terms,
-            #         lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
-
-            r_imp = self.residual.label_map(
-                lambda t: t.has_label(time_derivative, transport),
-                map_if_true=drop,
-                map_if_false=replace_subject(self.xs[i], self.idx),
-                )
-            residual = residual + r_imp.label_map(
-                    all_terms,
-                    map_if_true=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
-        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
-
-        solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                          options_prefix=solver_name)
-
-    def solve_stage(self, x0, stage):
-        self.x1.assign(x0)
-
-        self.solvers(stage).solve()
-
-        self.xs[stage].assign(self.x_out)
-
-        print(np.max(self.xs[stage].dat.data[:]), np.min(self.xs[stage].dat.data[:]))
-        print(np.max(self.x1.dat.data[:]), np.min(self.x1.dat.data[:]))
-
-        if self.limiter is not None:
-            self.limiter.apply(self.xs[stage])
-
-    def apply(self, x_out, x_in):
-        self.xs[0].assign(x_in)
-        for i in range(1,self.nStages):
-            print("stage:", i)
-            self.solve_stage(x_in, i)
-        print("final_solve")
-        self.x1.assign(x_in)
-        self.solverf.solve()
-        x_out.assign(self.x_out)
-
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
-
-
-class IMEX_Euler3(TimeDiscretisation):
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -432,29 +268,6 @@ class IMEX_Euler3(TimeDiscretisation):
         self.residual = self.residual.label_map(
             lambda t: t.has_label(transport),
             map_if_true=lambda t: explicit(t))
-
-        self.butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
-        self.butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
-
-        self.butcher_imp = np.array([[0., 0.], [0.5, 0.5], [0.5, 0.5]])
-        self.butcher_exp = np.array([[0., 0.], [1., 0.], [0.5, 0.5]])
-        
-        # ARS3
-        g = (3. + np.sqrt(3.))/6.
-
-        self.butcher_imp = np.array([[0., 0., 0.], [0., g, 0.], [0., 1-2.*g, g], [0., 0.5, 0.5]])
-        self.butcher_exp = np.array([[0., 0., 0.], [g, 0., 0.], [g-1., 2.*(1.-g), 0.], [0., 0.5, 0.5]])
-
-        # Trap2
-        self.butcher_imp = np.array([[0., 0., 0.], [0.5, 0.5, 0.], [0.5, 0., 0.5], [0.5, 0., 0.5]])
-        self.butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.5, 0.5, 0.], [0.5, 0.5, 0.]])
-
-        # ARK2
-        g = 1. - 1./np.sqrt(2.)
-        d = 1./(2.*np.sqrt(2.))
-        a = 1./6.*(3. + 2.*np.sqrt(2.))
-        self.butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
-        self.butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
 
         self.nStages = int(np.shape(self.butcher_imp)[1])
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -482,46 +295,7 @@ class IMEX_Euler3(TimeDiscretisation):
 
         return r.form
 
-    @property
-    def resval0(self):
-        stage =0
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        res = mass_form.label_map(all_terms,
-                                  map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        res -= mass_form.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        for i in range(stage):
-            r_exp = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp = r_exp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
-            r_imp = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp = r_imp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
-            res += r_imp
-            res +=r_exp
-        r_imp = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-                map_if_false=drop)
-        r_imp = r_imp.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
-        res += r_imp
-        return res.form
-
     def resval(self, stage):
-        #stage =1
-        print("stage:", stage)
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -534,11 +308,9 @@ class IMEX_Euler3(TimeDiscretisation):
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
                 map_if_false=drop)
-            print("stage, i, a_exp:", stage, i, self.butcher_exp[stage, i])
             r_exp = r_exp.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
-            print("stage, i, a_imp:", stage, i, self.butcher_imp[stage, i])
             r_imp = self.residual.label_map(
                 lambda t: t.has_label(implicit),
                 map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
@@ -548,7 +320,6 @@ class IMEX_Euler3(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
             res += r_imp
             res +=r_exp
-        print("stage, i, a_imp:", stage, stage, self.butcher_imp[stage, stage])
         r_imp = self.residual.label_map(
                 lambda t: t.has_label(implicit),
                 map_if_true=replace_subject(self.x_out, old_idx=self.idx),
@@ -622,135 +393,6 @@ class IMEX_Euler3(TimeDiscretisation):
 
         self.solver_fin.solve()
         x_out.assign(self.x_out)
-
-
-class IMEX_Euler2(TimeDiscretisation):
-    """
-    A class for implementing general diagonally implicit multistage (Runge-Kutta)
-    methods based on its Butcher tableau.
-
-    A Butcher tableau is formed in the following way for a s-th order
-    diagonally implicit scheme:
-
-    c_0 | a_00 a_01  .    a_0s
-    c_1 | a_10 a_11       a_1s
-     .  |   .   .    .    .
-     .  |   .   .    .    .
-    c_s | a_s0 a_s1  .    a_ss
-     -------------------------
-        |  b_1  b_2  ...  b_s
-
-    The gradient function has no time-dependence, so c elements are not needed.
-    A square 'butcher_matrix' is defined in each class that uses
-    the ImplicitMultiStage structure,
-
-    [a_00   0   .       0  ]
-    [a_10 a_11  .       0  ]
-    [  .    .   .       .  ]
-    [ b_0  b_1  .       b_s]
-
-    Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
-
-    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
-
-    For an s stage method,
-      At iteration i (from 0 to s-1)
-        An intermediate location is computed as y_i = y^n + sum{over j less than or equal to i} (dt*a_ij*k_i)
-        Compute the gradient at the intermediate location, k_i = F(y_i)
-
-    At the last stage, compute the new solution by:
-    y^{n+1} = y^n + sum_{j from 0 to s} (dt*b_i*k_i)
-
-    """
-      
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
-        super().__init__(domain, field_name=field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-
-    def setup(self, equation, apply_bcs=True, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-
-        super().setup(equation, apply_bcs, *active_labels)
-
-    def lhs(self):
-        return super().lhs
-
-    def rhs(self):
-        return super().rhs
-
-    @cached_property
-    def solver(self):
-
-        r_exp = self.residual.label_map(
-            lambda t: any(t.has_label(transport, time_derivative)),
-            map_if_true=replace_subject(self.x1, self.idx),
-            map_if_false=drop,
-        )
-        r_exp = r_exp.label_map(
-                lambda t: t.has_label(transport),
-                map_if_true=lambda t: -self.dt*t)
-        r_imp = self.residual.label_map(
-            lambda t: t.has_label(transport),
-            map_if_true=drop,
-            map_if_false=replace_subject(self.x_out, self.idx),
-            )
-        r_imp=  r_imp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: self.dt*t)
-
-        problem = NonlinearVariationalProblem(r_imp.form - r_exp.form, self.x_out, bcs=self.bcs)
-
-        solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                          options_prefix=solver_name)
-
-    def solvers(self, stage):
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       replace_subject(self.x_out, self.idx))
-        residual =residual -  mass_form.label_map(all_terms,
-                                        replace_subject(self.x1, self.idx))
-
-        r_exp = self.residual.label_map(
-            lambda t: t.has_label(transport),
-            map_if_true=replace_subject(self.x1, self.idx),
-            map_if_false=drop,
-        )
-        residual = residual + r_exp.label_map(
-                all_terms,
-                lambda t: self.dt*t)
-        r_imp = self.residual.label_map(
-            lambda t: any(t.has_label(time_derivative, transport)),
-            map_if_true=drop,
-            map_if_false=replace_subject(self.x_out, self.idx),
-            )
-        residual = residual + r_imp.label_map(
-                all_terms,
-                map_if_true=lambda t: self.dt*t)
-
-        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
-
-        solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                          options_prefix=solver_name)
-
-    def apply(self, x_out, x_in):
-        self.x1.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.x_out)
-
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
 
 
 class ImplicitMultistage(TimeDiscretisation):
@@ -2032,4 +1674,50 @@ class IMEX_Euler(IMEXMultistage):
                          limiter=limiter, options=options)
         self.butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
         self.butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
+        self.nStages = int(np.shape(self.butcher_imp)[1])
+
+class ARS3(IMEXMultistage):
+    u"""
+    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.25*dt*k0]
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        # ARS3
+        g = (3. + np.sqrt(3.))/6.
+
+        self.butcher_imp = np.array([[0., 0., 0.], [0., g, 0.], [0., 1-2.*g, g], [0., 0.5, 0.5]])
+        self.butcher_exp = np.array([[0., 0., 0.], [g, 0., 0.], [g-1., 2.*(1.-g), 0.], [0., 0.5, 0.5]])
+
+        self.nStages = int(np.shape(self.butcher_imp)[1])
+
+class ARK2(IMEXMultistage):
+    u"""
+    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.25*dt*k0]
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        # ARK2
+        g = 1. - 1./np.sqrt(2.)
+        d = 1./(2.*np.sqrt(2.))
+        a = 1./6.*(3. + 2.*np.sqrt(2.))
+        self.butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
+        self.butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
         self.nStages = int(np.shape(self.butcher_imp)[1])
