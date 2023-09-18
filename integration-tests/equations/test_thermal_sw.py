@@ -8,8 +8,7 @@ are checked against these.
 
 from os import path
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       pi, sin, cos, as_vector)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, pi, sin, cos
 from netCDF4 import Dataset
 
 R = 6371220.

@@ -31,7 +31,6 @@ def test_rotated_lonlatr_vectors_firedrake():
     l = sqrt(new_xyz[0]**2 + new_xyz[1]**2)
     lat = atan(new_xyz[2]/l)
 
-
     # Do an alternative calculation based on gradients of new coordinates
     answer_e_lon = grad(lon)
     answer_e_lat = grad(lat)
