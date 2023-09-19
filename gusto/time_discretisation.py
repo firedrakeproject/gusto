@@ -24,7 +24,7 @@ import numpy as np
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage", "IMEXMultistage",
            "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2",
            "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang", "IMEX_Euler",
-           "ARS3","ARK2"]
+           "ARS3","ARK2", "Trap2", "SSP3"]
 
 
 def wrapper_apply(original_apply):
@@ -1720,4 +1720,46 @@ class ARK2(IMEXMultistage):
         a = 1./6.*(3. + 2.*np.sqrt(2.))
         self.butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
         self.butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
+        self.nStages = int(np.shape(self.butcher_imp)[1])
+
+class SSP3(IMEXMultistage):
+    u"""
+    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.25*dt*k0]
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        # SSP3(3,3,2)
+        g = 1. - (1./np.sqrt(2.))
+        self.butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.),(1./6.), (2./6.)]])
+        self.butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.),(1./6.), (2./6.)]])
+        self.nStages = int(np.shape(self.butcher_imp)[1])
+
+class Trap2(IMEXMultistage):
+    u"""
+    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+
+    The method, for solving
+    ∂y/∂t = F(y), can be written as:
+
+    k0 = F[y^n + 0.25*dt*k0]
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    """
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
+        super().__init__(domain, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        # Trap2(2+e,3,2)
+        e = 0.
+        self.butcher_imp = np.array([[0., 0., 0.,0,], [e, 0., 0.,0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0., 0.5], [0.5, 0., 0., 0.5]])
+        self.butcher_exp= np.array([[0., 0., 0.,0,], [1., 0., 0.,0.], [0.5, 0.5, 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0.5, 0.]])
         self.nStages = int(np.shape(self.butcher_imp)[1])

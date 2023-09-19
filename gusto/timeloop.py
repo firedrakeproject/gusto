@@ -152,13 +152,13 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Set up diagnostics, which may set up some fields necessary to pick up
         self.io.setup_diagnostics(self.fields)
-        # self.io.setup_log_courant(self.fields)
-        # if self.equation.domain.mesh.extruded:
-        #     self.io.setup_log_courant(self.fields, component='horizontal')
-        #     self.io.setup_log_courant(self.fields, component='vertical')
-        # if self.transporting_velocity != "prognostic":
-        #     self.io.setup_log_courant(self.fields, name='transporting_velocity',
-        #                               expression=self.transporting_velocity)
+        self.io.setup_log_courant(self.fields)
+        if self.equation.domain.mesh.extruded:
+            self.io.setup_log_courant(self.fields, component='horizontal')
+            self.io.setup_log_courant(self.fields, component='vertical')
+        if self.transporting_velocity != "prognostic":
+            self.io.setup_log_courant(self.fields, name='transporting_velocity',
+                                      expression=self.transporting_velocity)
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
@@ -178,10 +178,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.x.update()
 
-            # self.io.log_courant(self.fields)
-            # if self.equation.domain.mesh.extruded:
-            #     self.io.log_courant(self.fields, component='horizontal', message='horizontal')
-            #     self.io.log_courant(self.fields, component='vertical', message='vertical')
+            self.io.log_courant(self.fields)
+            if self.equation.domain.mesh.extruded:
+                self.io.log_courant(self.fields, component='horizontal', message='horizontal')
+                self.io.log_courant(self.fields, component='vertical', message='vertical')
 
             self.timestep()
 
@@ -563,8 +563,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for k in range(self.maxk):
 
             with timed_stage("Transport"):
-                # self.io.log_courant(self.fields, 'transporting_velocity',
-                #                     message=f'transporting velocity, outer iteration {k}')
+                self.io.log_courant(self.fields, 'transporting_velocity',
+                                    message=f'transporting velocity, outer iteration {k}')
                 for name, scheme in self.active_transport:
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
