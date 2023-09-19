@@ -1585,7 +1585,7 @@ class ImplicitMidpoint(ImplicitMultistage):
                 recovery method. Defaults to None.
         """
         butcher_matrix = np.array([[0.5], [1.]])
-        super().__init__(domain, field_name, butcher_matrix=butcher_matrix,
+        super().__init__(domain, butcher_matrix, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -1619,6 +1619,6 @@ class QinZhang(ImplicitMultistage):
                 recovery method. Defaults to None.
         """
         butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
-        super().__init__(domain, field_name, butcher_matrix=butcher_matrix,
+        super().__init__(domain, butcher_matrix, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
