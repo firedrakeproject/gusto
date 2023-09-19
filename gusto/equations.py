@@ -10,7 +10,8 @@ from gusto.fields import PrescribedFields
 from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
                        replace_subject, replace_trial_function)
 from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
-                          linearisation, pressure_gradient, coriolis)
+                          linearisation, pressure_gradient, coriolis,
+                          transporting_velocity)
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (advection_form, continuity_form,
                                 vector_invariant_form, kinetic_energy_form,
@@ -236,6 +237,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         # Make the full mixed function space
         W = MixedFunctionSpace(self.spaces)
+        self.W = W
 
         # Can now call the underlying PrognosticEquation
         full_field_name = "_".join(self.field_names)
@@ -668,14 +670,29 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Transport Terms
         # -------------------------------------------------------------------- #
+
+        # Mesh movement requires the circulation form, and an
+        # additional modification
+        if domain.move_mesh:
+            assert u_transport_option == "vector_invariant_form"
+
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(domain, w, u, u), 'u')
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
+            if domain.move_mesh:
+                ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
+                ke_form = transport.remove(ke_form)
+                ke_form = ke_form.label_map(
+                    lambda t: t.has_label(transporting_velocity),
+                    lambda t: Term(ufl.replace(
+                        t.form, {t.get(transporting_velocity): u}), t.labels))
+                ke_form = transporting_velocity.remove(ke_form)
+                u_adv -= ke_form
         elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), 'u') + ke_form
+            ke_form = prognostic(kinetic_energy_form(w, u, u), "u")
+            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), "u") + ke_form
         else:
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 

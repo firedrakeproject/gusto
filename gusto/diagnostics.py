@@ -1495,7 +1495,7 @@ class Vorticity(DiagnosticField):
                 f = state_fields("coriolis")
                 L += gamma*f*dx
 
-            problem = LinearVariationalProblem(a, L, self.field)
+            problem = LinearVariationalProblem(a, L, self.field, constant_jacobian=False)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
 

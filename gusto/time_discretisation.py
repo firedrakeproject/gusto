@@ -1332,7 +1332,6 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """
         if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
-            print(self.initial_timesteps)
             solver = self.solver0
         else:
             solver = self.solver

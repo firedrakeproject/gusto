@@ -1,24 +1,27 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant, split
+from firedrake import Function, Projector, Constant, TrialFunction, \
+    TestFunction, assemble, inner, dx, split
+from firedrake.petsc import PETSc
 from pyop2.profiling import timed_stage
-from gusto.equations import PrognosticEquationSet
-from gusto.fml import drop, Label, Term
+from gusto.equations import PrognosticEquationSet, ShallowWaterEquations
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
+from gusto.fml import drop, Label, Term
 from gusto.labels import (
     transport, diffusion, time_derivative, linearisation, prognostic,
     physics, transporting_velocity
 )
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.logging import logger
+from gusto.moving_mesh.utility_functions import spherical_logarithm
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 from gusto.transport_methods import TransportMethod
 import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
-           "PrescribedTransport"]
+           "PrescribedTransport", "MeshMovement"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -674,3 +677,209 @@ class PrescribedTransport(Timestepper):
             self.velocity_projection.project()
 
         super().timestep()
+
+
+class MeshMovement(SemiImplicitQuasiNewton):
+
+    def __init__(self, equation_set, io, transport_schemes,
+                 spatial_methods,
+                 auxiliary_equations_and_schemes=None,
+                 linear_solver=None,
+                 diffusion_schemes=None,
+                 physics_schemes=None,
+                 mesh_generator=None,
+                 **kwargs):
+
+        Vu = equation_set.domain.spaces("HDiv")
+        self.uadv = Function(Vu)
+
+        assert isinstance(equation_set, ShallowWaterEquations), \
+            'Mesh movement only works with the shallow water equation set'
+
+        super().__init__(equation_set=equation_set,
+                         io=io,
+                         transport_schemes=transport_schemes,
+                         spatial_methods=spatial_methods,
+                         auxiliary_equations_and_schemes=auxiliary_equations_and_schemes,
+                         linear_solver=linear_solver,
+                         diffusion_schemes=diffusion_schemes,
+                         physics_schemes=physics_schemes,
+                         **kwargs)
+
+        self.mesh_generator = mesh_generator
+        mesh = self.equation.domain.mesh
+        self.mesh = mesh
+        self.X0 = Function(mesh.coordinates)
+        self.X1 = Function(mesh.coordinates)
+        from firedrake import File, FunctionSpace
+        Vf = FunctionSpace(mesh, "DG", 1)
+        f = Function(Vf)
+        coords_out = File("out.pvd")
+        mesh.coordinates.assign(self.X0)
+        coords_out.write(f)
+        mesh.coordinates.assign(self.X1)
+        coords_out.write(f)
+
+        self.on_sphere = self.equation.domain.on_sphere
+
+        self.v = Function(mesh.coordinates.function_space())
+        self.v_V1 = Function(Vu)
+        self.v1 = Function(mesh.coordinates.function_space())
+        self.v1_V1 = Function(Vu)
+
+        # Set up diagnostics - also called in the run method, is it ok
+        # to do this twice (I suspect not)
+        self.io.setup_diagnostics(self.fields)
+
+        mesh_generator.monitor.setup(self.fields)
+        mesh_generator.setup()
+
+        self.tests = {}
+        for name in self.equation.field_names:
+            self.tests[name] = TestFunction(self.x.n(name).function_space())
+        self.trials = {}
+        for name in self.equation.field_names:
+            self.trials[name] = TrialFunction(self.x.n(name).function_space())
+        self.ksp = {}
+        for name in self.equation.field_names:
+            self.ksp[name] = PETSc.KSP().create()
+        self.Lvec = {}
+
+    def setup_fields(self):
+        super().setup_fields()
+        self.x.add_fields(self.equation, levels=("mid",))
+
+    @property
+    def transporting_velocity(self):
+        return self.uadv
+
+    def timestep(self):
+        """Defines the timestep"""
+        xn = self.x.n
+        xnp1 = self.x.np1
+        xstar = self.x.star
+        xmid = self.x.mid
+        xp = self.x.p
+        xrhs = self.xrhs
+        dy = self.dy
+        un = xn("u")
+        unp1 = xnp1("u")
+        X0 = self.X0
+        X1 = self.X1
+
+        # both X0 and X1 hold the mesh coordinates at the start of the timestep
+        X1.assign(self.mesh.coordinates)
+        X0.assign(X1)
+
+        # this recomputes the fields that the monitor function depends on
+        self.mesh_generator.pre_meshgen_callback()
+
+        # solve for new mesh and store this in X1
+        with timed_stage("Mesh generation"):
+            X1.assign(self.mesh_generator.get_new_mesh())
+
+        # still on the old mesh, compute explicit forcing from xn and
+        # store in xstar
+        with timed_stage("Apply forcing terms"):
+            self.forcing.apply(xn, xn, xstar(self.field_name), "explicit")
+
+        # set xp to xstar
+        xp(self.field_name).assign(xstar(self.field_name))
+
+        # Compute v (mesh velocity w.r.t. initial mesh) and
+        # v1 (mesh velocity w.r.t. final mesh)
+        # TODO: use Projectors below!
+        if self.on_sphere:
+            spherical_logarithm(X0, X1, self.v, self.mesh._radius)
+            self.v /= self.dt
+            spherical_logarithm(X1, X0, self.v1, self.mesh._radius)
+            self.v1 /= -self.dt
+
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project(self.v)
+
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(self.v1)
+
+        else:
+            self.mesh.coordinates.assign(X0)
+            self.v_V1.project((X1 - X0)/self.dt)
+
+            self.mesh.coordinates.assign(X1)
+            self.v1_V1.project(-(X0 - X1)/self.dt)
+
+        with timed_stage("Transport"):
+            for name, scheme in self.active_transport:
+                # transport field from xstar to xmid on old mesh
+                self.mesh.coordinates.assign(X0)
+                self.uadv.assign(0.5*(un - self.v_V1))
+                scheme.apply(xmid(name), xstar(name))
+
+                # assemble the rhs of the projection operator on the
+                # old mesh
+                # TODO this should only be for fields that are in the HDiv
+                # space or are transported using the conservation form
+                rhs = inner(xmid(name), self.tests[name])*dx
+                with assemble(rhs).dat.vec as v:
+                    self.Lvec[name] = v
+
+            # put mesh_new into mesh
+            self.mesh.coordinates.assign(X1)
+
+            # this should reinterpolate any necessary fields
+            # (e.g. Coriolis and cell normals)
+            self.mesh_generator.post_meshgen_callback()
+
+            # now create the matrix for the projection and solve
+            # TODO this should only be for fields that are in the HDiv
+            # space or are transported using the conservation form
+            for name, scheme in self.active_transport:
+                lhs = inner(self.trials[name], self.tests[name])*dx
+                amat = assemble(lhs)
+                a = amat.M.handle
+                self.ksp[name].setOperators(a)
+                self.ksp[name].setFromOptions()
+
+                with xmid(name).dat.vec as x_:
+                    self.ksp[name].solve(self.Lvec[name], x_)
+
+        for k in range(self.maxk):
+
+            for name, scheme in self.active_transport:
+                # transport field from xmid to xp on new mesh
+                self.uadv.assign(0.5*(unp1 - self.v1_V1))
+                scheme.apply(xp(name), xmid(name))
+
+            # xrhs is the residual which goes in the linear solve
+            xrhs.assign(0.)
+
+            for i in range(self.maxi):
+
+                with timed_stage("Apply forcing terms"):
+                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
+
+                xrhs -= xnp1(self.field_name)
+
+                with timed_stage("Implicit solve"):
+                    # solves linear system and places result in dy
+                    self.linear_solver.solve(xrhs, dy)
+
+                xnp1X = xnp1(self.field_name)
+                xnp1X += dy
+
+            # Update xnp1 values for active tracers not included in the linear solve
+            self.copy_active_tracers(xp, xnp1)
+
+            self._apply_bcs()
+
+        for name, scheme in self.auxiliary_schemes:
+            # transports a field from xn and puts result in xnp1
+            scheme.apply(xnp1(name), xn(name))
+
+        with timed_stage("Diffusion"):
+            for name, scheme in self.diffusion_schemes:
+                scheme.apply(xnp1(name), xnp1(name))
+
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))

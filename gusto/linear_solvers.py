@@ -599,7 +599,8 @@ class LinearTimesteppingSolver(object):
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
-                                           self.dy, bcs=bcs)
+                                           self.dy, bcs=bcs,
+                                           constant_jacobian=False)
 
         self.solver = LinearVariationalSolver(problem,
                                               solver_parameters=self.solver_parameters,
