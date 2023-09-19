@@ -33,7 +33,7 @@ class Coordinates(object):
         if on_sphere:
             xyz = SpatialCoordinate(mesh)
             r = sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)           
-            lon = atan(xyz[1] / zyx[0])
+            lon = atan(xyz[1] / xyz[0])
             lat = asin(xyz[2]/r)
 
             if mesh.extruded:
