@@ -523,6 +523,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 a butcher tableau defining a given Runge Kutta time discretisation.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -628,6 +630,8 @@ class ForwardEuler(ExplicitMultistage):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -661,6 +665,8 @@ class SSPRK3(ExplicitMultistage):
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
@@ -700,6 +706,8 @@ class RK4(ExplicitMultistage):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -736,6 +744,8 @@ class Heun(ExplicitMultistage):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -747,7 +757,8 @@ class Heun(ExplicitMultistage):
         """
         butcher_matrix = np.array([[1., 0.], [0.5, 0.5]])
         super().__init__(domain, butcher_matrix=butcher_matrix,
-                         field_name=field_name, solver_parameters=solver_parameters,
+                         field_name=field_name, subcycles=subcycles,
+                         solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
 
