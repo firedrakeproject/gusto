@@ -75,11 +75,13 @@ def test_de_rham_spaces(domain, family):
     # Work out correct CG degree
     if family in ['BDM', 'BDME', 'BDMF']:
         if domain in ['vertical_slice', 'extruded_plane']:
-            cg_degree = (degree[0]+2, degree[1]+2)
+            cg_degree = (degree[0]+2, degree[1]+1)
         else:
             cg_degree = degree + 2
     elif domain in ['vertical_slice', 'extruded_plane']:
         cg_degree = (degree[0]+1, degree[1]+1)
+    elif family == 'BDFM':
+        cg_degree = degree + 2
     else:
         cg_degree = degree + 1
 
