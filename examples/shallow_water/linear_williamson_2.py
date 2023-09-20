@@ -45,15 +45,16 @@ fexpr = 2*Omega*x[2]/R
 eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O
-output = OutputParameters(dirname='linear_williamson_2',
-                          dumpfreq=dumpfreq,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname='linear_williamson_2',
+    dumpfreq=dumpfreq,
+)
 diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transport_schemes = [ForwardEuler(domain, "D")]
-transport_methods = [DGUpwind(eqns, "D")]
+transport_methods = [DefaultTransport(eqns, "D")]
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)

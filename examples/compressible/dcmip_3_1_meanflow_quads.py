@@ -8,22 +8,23 @@ This uses a cubed-sphere mesh.
 from gusto import *
 from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
                        Function, SpatialCoordinate, as_vector)
-from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan_2
+from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan2
 import sys
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-nlayers = 10           # Number of vertical layers
-refinements = 3        # Number of horiz. refinements
-
 dt = 100.0             # Time-step size (s)
 
 if '--running-tests' in sys.argv:
+    nlayers = 4           # Number of vertical layers
+    refinements = 2        # Number of horiz. refinements
     tmax = dt
     dumpfreq = 1
 else:
+    nlayers = 10           # Number of vertical layers
+    refinements = 3        # Number of horiz. refinements
     tmax = 3600.0
     dumpfreq = int(tmax / (4*dt))
 
@@ -70,21 +71,22 @@ z_expr = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a
 z = Function(W_Q1).interpolate(z_expr)
 lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
-lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
+lon = Function(W_Q1).interpolate(atan2(x[1], x[0]))
 
 # Equation
 eqns = CompressibleEulerEquations(domain, parameters)
 
 # I/O
 dirname = 'dcmip_3_1_meanflow'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=dumpfreq,
+)
 diagnostic_fields = [Perturbation('theta'), Perturbation('rho'), CompressibleKineticEnergy()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "rho", subcycles=2),
                       SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
 transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]

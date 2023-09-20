@@ -5,12 +5,12 @@ import itertools
 from netCDF4 import Dataset
 import sys
 import time
-from gusto.diagnostics import Diagnostics
+from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 import numpy as np
-from gusto.configuration import logger, set_log_handler
+from gusto.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
 
@@ -32,6 +32,7 @@ def pick_up_mesh(output, mesh_name):
     """
 
     # Open the checkpointing file for writing
+    dumpdir = None
     if output.checkpoint_pickup_filename is not None:
         chkfile = output.checkpoint_pickup_filename
     else:
@@ -39,6 +40,9 @@ def pick_up_mesh(output, mesh_name):
         chkfile = path.join(dumpdir, "chkpt.h5")
     with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
+
+    if dumpdir:
+        update_logfile_location(dumpdir, mesh.comm)
 
     return mesh
 
@@ -222,10 +226,6 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
-        # setup logger
-        logger.setLevel(output.log_level)
-        set_log_handler(self.mesh.comm)
-
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -237,6 +237,70 @@ class IO(object):
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
+
+    def setup_log_courant(self, state_fields, name='u', component="whole",
+                          expression=None):
+        """
+        Sets up Courant number diagnostics to be logged.
+
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+            name (str, optional): the name of the field to log the Courant
+                number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
+            expression (:class:`ufl.Expr`, optional): expression of velocity
+                field to take Courant number of. Defaults to None, in which case
+                the "name" argument must correspond to an existing field.
+        """
+
+        if self.output.log_courant:
+            diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+            courant_name = None if name == 'u' else name
+
+            # Set up diagnostic if it hasn't already been
+            if courant_name not in diagnostic_names and 'u' in state_fields._field_names:
+                if expression is None:
+                    diagnostic = CourantNumber(to_dump=False, component=component)
+                elif expression is not None:
+                    diagnostic = CourantNumber(velocity=expression, component=component,
+                                               name=courant_name, to_dump=False)
+
+                self.diagnostic_fields.append(diagnostic)
+                diagnostic.setup(self.domain, state_fields)
+                self.diagnostics.register(diagnostic.name)
+
+    def log_courant(self, state_fields, name='u', component="whole", message=None):
+        """
+        Logs the maximum Courant number value.
+
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+            name (str, optional): the name of the field to log the Courant
+                number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
+            message (str, optional): an extra message to be logged. Defaults to
+                None.
+        """
+
+        if self.output.log_courant and 'u' in state_fields._field_names:
+            diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+            courant_name = 'CourantNumber' if name == 'u' else 'CourantNumber_'+name
+            if component != 'whole':
+                courant_name += '_'+component
+            courant_idx = diagnostic_names.index(courant_name)
+            courant_diagnostic = self.diagnostic_fields[courant_idx]
+            courant_diagnostic.compute()
+            courant_field = state_fields(courant_name)
+            courant_max = self.diagnostics.max(courant_field)
+
+            if message is None:
+                logger.info(f'Max Courant: {courant_max:.2e}')
+            else:
+                logger.info(f'Max Courant {message}: {courant_max:.2e}')
 
     def setup_diagnostics(self, state_fields):
         """
@@ -307,6 +371,8 @@ class IO(object):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
                     raise IOError(f'results directory {self.dumpdir} already exists')
+
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         if self.output.dump_vtus or self.output.dump_nc:
             # make list of fields to dump
@@ -433,6 +499,7 @@ class IO(object):
         # Set dumpdir if has not been done already
         if self.dumpdir is None:
             self.dumpdir = path.join("results", self.output.dirname)
+            update_logfile_location(self.dumpdir, self.mesh.comm)
 
         # Need to pick up reference profiles, but don't know which are stored
         possible_ref_profiles = []
@@ -626,8 +693,8 @@ class IO(object):
                     # TODO: we should fail here, but currently there are some spaces
                     # that we can't output for so instead just skip outputting
                     logger.warning(f'netCDF outputting for space {space_name} '
-                                   + 'not yet implemented, so unable to output'
-                                   + '{field_name} field')
+                                   + 'not yet implemented, so unable to output '
+                                   + f'{field_name} field')
                 else:
                     nc_field_file.createGroup(field_name)
                     nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))

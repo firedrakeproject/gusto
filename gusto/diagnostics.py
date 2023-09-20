@@ -1,9 +1,9 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, FunctionSpace, Function, sqrt, \
+from firedrake import op2, assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_v, div, avg, jump, \
+    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator
 from firedrake.assign import Assigner
@@ -23,7 +23,8 @@ __all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY"
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
+           "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -156,6 +157,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         self.space = space
         self.method = method
         self.expr = None
+        self.to_dump = True
 
         # Property to allow graceful failures if solve method not valid
         if not hasattr(self, "solve_implemented"):
@@ -195,7 +197,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
                 f'Diagnostics {self.name} is using a function space which does not have a name'
             domain.spaces(space.name, V=space)
 
-            self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
+            self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
 
             if self.method != 'solve':
                 assert self.expr is not None, \
@@ -233,6 +235,62 @@ class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
 
+    def __init__(self, velocity='u', component='whole', name=None, to_dump=True,
+                 space=None, method='interpolate', required_fields=()):
+        """
+        Args:
+            velocity (str or :class:`ufl.Expr`, optional): the velocity field to
+                take the Courant number of. Can be a string referring to an
+                existing field, or an expression. If it is an expression, the
+                name argument is required. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
+            name (str, optional): the name to append to "CourantNumber" to form
+                the name of this diagnostic. This argument must be provided if
+                the velocity is an expression (rather than a string). Defaults
+                to None.
+            to_dump (bool, optional): whether this diagnostic should be dumped.
+                Defaults to True.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            required_fields (tuple, optional): tuple of names of the fields that
+                are required for the computation of this diagnostic field.
+                Defaults to ().
+        """
+        if component not in ["whole", "horizontal", "vertical"]:
+            raise ValueError(f'component arg {component} not valid. Allowed '
+                             + 'values are "whole", "horizontal" and "vertical"')
+        self.component = component
+
+        # Work out whether to take Courant number from field or expression
+        if type(velocity) is str:
+            # Default name should just be CourantNumber
+            if velocity == 'u':
+                self.name = 'CourantNumber'
+            elif name is None:
+                self.name = 'CourantNumber_'+velocity
+            else:
+                self.name = 'CourantNumber_'+name
+            if component != 'whole':
+                self.name += '_'+component
+        else:
+            if name is None:
+                raise ValueError('CourantNumber diagnostic: if provided '
+                                 + 'velocity is an expression then the name '
+                                 + 'argument must be provided')
+            self.name = 'CourantNumber_'+name
+
+        self.velocity = velocity
+        super().__init__(space=space, method=method, required_fields=required_fields)
+
+        # Done after super init to ensure that it is not always set to True
+        self.to_dump = to_dump
+
     def setup(self, domain, state_fields):
         """
         Sets up the :class:`Function` for the diagnostic field.
@@ -242,16 +300,52 @@ class CourantNumber(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
 
-        # set up area computation
         V = domain.spaces("DG0", "DG", 0)
         test = TestFunction(V)
-        self.area = Function(V)
-        assemble(test*dx, tensor=self.area)
-        u = state_fields("u")
+        cell_volume = Function(V)
+        self.cell_flux = Function(V)
 
-        self.expr = sqrt(dot(u, u))/sqrt(self.area)*domain.dt
+        # Calculate cell volumes
+        One = Function(V).assign(1)
+        assemble(One*test*dx, tensor=cell_volume)
+
+        # Get the velocity that is being used
+        if type(self.velocity) is str:
+            u = state_fields(self.velocity)
+        else:
+            u = self.velocity
+
+        # Determine the component of the velocity
+        if self.component == "whole":
+            u_expr = u
+        elif self.component == "vertical":
+            u_expr = dot(u, domain.k)*domain.k
+        elif self.component == "horizontal":
+            u_expr = u - dot(u, domain.k)*domain.k
+
+        # Work out which facet integrals to use
+        if domain.mesh.extruded:
+            dS_calc = dS_v + dS_h
+            ds_calc = ds_v + ds_t + ds_b
+        else:
+            dS_calc = dS
+            ds_calc = ds
+
+        # Set up form for DG flux
+        n = FacetNormal(domain.mesh)
+        un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
+        self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
+
+        # Final Courant number expression
+        self.expr = self.cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
+
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
+
+        assemble(self.cell_flux_form, tensor=self.cell_flux)
+        super().compute()
 
 
 # TODO: unify all component diagnostics
@@ -1368,13 +1462,7 @@ class Vorticity(DiagnosticField):
         vorticity_types = ["relative", "absolute", "potential"]
         if vorticity_type not in vorticity_types:
             raise ValueError(f"vorticity type must be one of {vorticity_types}, not {vorticity_type}")
-        try:
-            space = domain.spaces("CG")
-        except ValueError:
-            dgspace = domain.spaces("DG")
-            # TODO: should this be degree + 1?
-            cg_degree = dgspace.ufl_element().degree() + 2
-            space = FunctionSpace(domain.mesh, "CG", cg_degree, name=f"CG{cg_degree}")
+        space = domain.spaces("H1")
 
         u = state_fields("u")
         if vorticity_type in ["absolute", "potential"]:
@@ -1494,3 +1582,39 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class TracerDensity(DiagnosticField):
+    """Diagnostic for computing the density of a tracer. This is
+    computed as the product of a mixing ratio and dry density"""
+
+    name = "TracerDensity"
+
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
+        """
+        Args:
+            mixing_ratio_name (str): the name of the tracer mixing ratio variable
+            density_name (str): the name of the tracer density variable
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project' and
+                'assign'. Defaults to 'interpolate'.
+        """
+        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        self.mixing_ratio_name = mixing_ratio_name
+        self.density_name = density_name
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        m_X = state_fields(self.mixing_ratio_name)
+        rho_d = state_fields(self.density_name)
+        self.expr = m_X*rho_d
+        super().setup(domain, state_fields)

@@ -4,9 +4,17 @@ import numpy as np
 class NumericalIntegral(object):
     """
     A class for numerically evaluating and tabulating some 1D integral.
+<<<<<<< HEAD
     :arg lower_bound: lower bound of integral
     :arg upper_bound: upper_bound of integral
     :arg num_points:  number of points to tabulate integral at
+=======
+    Args:
+        lower_bound(float): lower bound of integral
+        upper_bound(float): upper bound of integral
+        num_points(float): number of points to tabulate integral at
+
+>>>>>>> f9879614b0b70bf94fa58fdee523a2d5db1f2253
     """
     def __init__(self, lower_bound, upper_bound, num_points=500):
 
@@ -22,8 +30,14 @@ class NumericalIntegral(object):
     def tabulate(self, expression):
         """
         Tabulate some integral expression using Simpson's rule.
+<<<<<<< HEAD
         :arg expression: a function representing the integrand to be evaluated.
                          Should take a numpy array as an argument.
+=======
+        Args:
+            expression (func): a function representing the integrand to be
+                evaluated. should take a numpy array as an argument.
+>>>>>>> f9879614b0b70bf94fa58fdee523a2d5db1f2253
         """
 
         self.cumulative = np.zeros_like(self.x)
@@ -45,8 +59,17 @@ class NumericalIntegral(object):
     def evaluate_at(self, points):
         """
         Evaluates the integral at some point using linear interpolation.
+<<<<<<< HEAD
         :arg points: the point value, or array of point values to evaluate
                      the integral at.
+=======
+        Args:
+            points (float or iter) the point value, or array of point values to
+                evaluate the integral at.
+        Return:
+            returns the numerical approximation of the integral from lower
+            bound to point(s)
+>>>>>>> f9879614b0b70bf94fa58fdee523a2d5db1f2253
         """
         # Do linear interpolation from tabulated values
         if not self.tabulated:
