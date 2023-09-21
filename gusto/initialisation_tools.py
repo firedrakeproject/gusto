@@ -6,7 +6,7 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan, atan2, as_vector, min_value, max_value, FunctionSpace, \
+    sin, cos, sqrt, asin, atan, as_vector, min_value, max_value, FunctionSpace, \
     errornorm, zero
 from gusto import thermodynamics
 from gusto.logging import logger
