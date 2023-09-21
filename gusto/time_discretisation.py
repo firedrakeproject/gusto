@@ -240,36 +240,34 @@ class ImplicitMultistage(TimeDiscretisation):
     methods based on its Butcher tableau.
 
     A Butcher tableau is formed in the following way for a s-th order
-    diagonally implicit scheme:
-
-    c_0 | a_00 a_01  .    a_0s                                                /n
-    c_1 | a_10 a_11       a_1s                                                /n
-     .  |   .   .    .    .                                                   /n
-     .  |   .   .    .    .                                                   /n
-    c_s | a_s0 a_s1  .    a_ss                                                /n
-     -------------------------                                                /n
-        |  b_1  b_2  ...  b_s                                                 /n
-
+    diagonally implicit scheme:                                               \n
+    c_0 | a_00 a_01  .    a_0s                                                \n
+    c_1 | a_10 a_11       a_1s                                                \n
+     .  |   .   .    .    .                                                   \n
+     .  |   .   .    .    .                                                   \n
+    c_s | a_s0 a_s1  .    a_ss                                                \n
+     -------------------------                                                \n
+        |  b_1  b_2  ...  b_s                                                 \n
+    
     The gradient function has no time-dependence, so c elements are not needed.
     A square 'butcher_matrix' is defined in each class that uses
-    the ImplicitMultiStage structure,
-
-    [a_00   0   .       0  ]                                                  /n
-    [a_10 a_11  .       0  ]                                                  /n
-    [  .    .   .       .  ]                                                  /n
-    [ b_0  b_1  .       b_s]                                                  /n
+    the ImplicitMultiStage structure,                                         \n
+    [a_00   0   .       0  ]                                                  \n
+    [a_10 a_11  .       0  ]                                                  \n
+    [  .    .   .       .  ]                                                  \n
+    [ b_0  b_1  .       b_s]                                                  \n
 
     Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
 
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
 
     For each i = 1, s  in an s stage method
-    we have the intermediate solutions:
-    y_i = y^n +  dt*(a_i1*k_1 + a_i2*k_2 + ... + a_ii*k_i)                    /n
-    We compute the gradient at the intermediate location, k_i = F(y_i)        /n
+    we have the intermediate solutions:                                       \n
+    y_i = y^n +  dt*(a_i1*k_1 + a_i2*k_2 + ... + a_ii*k_i)                    \n
+    We compute the gradient at the intermediate location, k_i = F(y_i)        \n
 
-    At the last stage, compute the new solution by:
-    y^{n+1} = y^n + dt*(b_1*k_1 + b_2*k_2 + .... + b_s*k_s)                   /n
+    At the last stage, compute the new solution by:                           \n
+    y^{n+1} = y^n + dt*(b_1*k_1 + b_2*k_2 + .... + b_s*k_s)                   \n
 
     """
 
@@ -479,24 +477,24 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     A class for implementing general explicit multistage (Runge-Kutta)
     methods based on its Butcher tableau.
 
-    A Butcher tableau is formed in the following way for a s-th order explicit scheme:
+    A Butcher tableau is formed in the following way for a s-th order explicit scheme: \n
 
-    c_0 | a_00 a_01  .    a_0s                                                /n
-    c_1 | a_10 a_11       a_1s                                                /n
-     .  |   .   .    .    .                                                   /n
-     .  |   .   .    .    .                                                   /n
-    c_s | a_s0 a_s1  .    a_ss                                                /n
-     -------------------------                                                /n
-        |  b_1  b_2  ...  b_s                                                 /n
+    c_0 | a_00 a_01  .    a_0s                                                \n
+    c_1 | a_10 a_11       a_1s                                                \n
+     .  |   .   .    .    .                                                   \n
+     .  |   .   .    .    .                                                   \n
+    c_s | a_s0 a_s1  .    a_ss                                                \n
+     -------------------------                                                \n
+        |  b_1  b_2  ...  b_s                                                 \n
 
     The gradient function has no time-dependence, so c elements are not needed.
     A square 'butcher_matrix' is defined in each class that uses
-    the ExplicitMultiStage structure,
+    the ExplicitMultiStage structure, \n
 
-    [a_10   0   .       0  ]                                                  /n
-    [a_20 a_21  .       0  ]                                                  /n
-    [  .    .   .       .  ]                                                  /n
-    [ b_0  b_1  .       b_s]                                                  /n
+    [a_10   0   .       0  ]                                                  \n
+    [a_20 a_21  .       0  ]                                                  \n
+    [  .    .   .       .  ]                                                  \n
+    [ b_0  b_1  .       b_s]                                                  \n
 
     All upper diagonal a_ij elements are zero for explicit methods. We exclude the first
     row of the butcher tableau from our butcher matrix as the row is always zeros.
@@ -504,12 +502,12 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
 
     For each i = 1, s  in an s stage method
-    we have the intermediate solutions:
-    y_i = y^n +  dt*(a_i1*k_1 + a_i2*k_2 + ... + a_i{i-1}*k_{i-1})            /n
-    We compute the gradient at the intermediate location, k_i = F(y_i)        /n
+    we have the intermediate solutions:                                       \n
+    y_i = y^n +  dt*(a_i1*k_1 + a_i2*k_2 + ... + a_i{i-1}*k_{i-1})            \n
+    We compute the gradient at the intermediate location, k_i = F(y_i)        \n
 
     At the last stage, compute the new solution by:
-    y^{n+1} = y^n + dt*(b_1*k_1 + b_2*k_2 + .... + b_s*k_s)                   /n
+    y^{n+1} = y^n + dt*(b_1*k_1 + b_2*k_2 + .... + b_s*k_s)                   \n
 
     """
 
@@ -618,9 +616,9 @@ class ForwardEuler(ExplicitMultistage):
     """
     Implements the forward Euler timestepping scheme.
 
-    The forward Euler method for operator F is the most simple explicit scheme:
-    k0 = F[y^n]                                                               /n
-    y^(n+1) = y^n + dt*k0                                                     /n
+    The forward Euler method for operator F is the most simple explicit scheme: \n
+    k0 = F[y^n]                                                                 \n
+    y^(n+1) = y^n + dt*k0                                                       \n
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None,
                  limiter=None, options=None):
@@ -651,12 +649,12 @@ class ForwardEuler(ExplicitMultistage):
 class SSPRK3(ExplicitMultistage):
     u"""
     Implements the 3-stage Strong-Stability-Preserving Runge-Kutta method
-    for solving ∂y/∂t = F(y). It can be written as:
+    for solving ∂y/∂t = F(y). It can be written as:                           \n
 
-    k0 = F[y^n]                                                               /n
-    k1 = F[y^n + dt*k1]                                                       /n
-    k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            /n
-    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 /n
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + dt*k1]                                                       \n
+    k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            \n
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None,
                  limiter=None, options=None):
@@ -688,15 +686,15 @@ class RK4(ExplicitMultistage):
     Implements the classic 4-stage Runge-Kutta method.
 
     The classic 4-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
-    written as:
+    written as:                                                               \n
 
-    k0 = F[y^n]                                                               /n
-    k1 = F[y^n + 1/2*dt*k1]                                                   /n
-    k2 = F[y^n + 1/2*dt*k2]                                                   /n
-    k3 = F[y^n + dt*k3]                                                       /n
-    y^(n+1) = y^n + (1/6) * dt * (k0 + 2*k1 + 2*k2 + k3)                      /n
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + 1/2*dt*k1]                                                   \n
+    k2 = F[y^n + 1/2*dt*k2]                                                   \n
+    k3 = F[y^n + dt*k3]                                                       \n
+    y^(n+1) = y^n + (1/6) * dt * (k0 + 2*k1 + 2*k2 + k3)                      \n
 
-    where superscripts indicate the time-level.                               /n
+    where superscripts indicate the time-level.                               \n
     """
     def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None,
                  limiter=None, options=None):
@@ -728,10 +726,10 @@ class Heun(ExplicitMultistage):
     Implements Heun's method.
 
     The 2-stage Runge-Kutta scheme known as Heun's method,for solving
-    ∂y/∂t = F(y). It can be written as:
+    ∂y/∂t = F(y). It can be written as:                                       \n
 
-    y_1 = F[y^n]                                                              /n
-    y^(n+1) = (1/2)y^n + (1/2)F[y_1]                                          /n
+    y_1 = F[y^n]                                                              \n
+    y^(n+1) = (1/2)y^n + (1/2)F[y_1]                                          \n
 
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
@@ -766,8 +764,8 @@ class BackwardEuler(TimeDiscretisation):
     """
     Implements the backward Euler timestepping scheme.
 
-    The backward Euler method for operator F is the most simple implicit scheme:
-    y^(n+1) = y^n + dt*F[y^(n+1)].
+    The backward Euler method for operator F is the most simple implicit scheme: \n
+    y^(n+1) = y^n + dt*F[y^(n+1)].                                               \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
@@ -841,9 +839,9 @@ class ThetaMethod(TimeDiscretisation):
     Implements the theta implicit-explicit timestepping method, which can
     be thought as a generalised trapezium rule.
 
-    The theta implicit-explicit timestepping method for operator F is written as
-    y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]                 /n
-    for off-centring parameter theta.
+    The theta implicit-explicit timestepping method for operator F is written as: \n
+    y^(n+1) = y^n + dt*(1-theta)*F[y^n] + dt*theta*F[y^(n+1)]                     \n
+    for off-centring parameter theta.                                             \n
     """
 
     def __init__(self, domain, theta, field_name=None,
@@ -923,9 +921,9 @@ class TrapeziumRule(ThetaMethod):
     Implements the trapezium rule timestepping method, also commonly known as
     Crank Nicholson.
 
-    The trapezium rule timestepping method for operator F is written as
-    y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].
-    It is equivalent to the "theta" method with theta = 1/2.
+    The trapezium rule timestepping method for operator F is written as:      \n
+    y^(n+1) = y^n + dt/2*F[y^n] + dt/2*F[y^(n+1)].                            \n
+    It is equivalent to the "theta" method with theta = 1/2.                  \n
     """
 
     def __init__(self, domain, field_name=None, solver_parameters=None,
@@ -987,10 +985,10 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
 
 class BDF2(MultilevelTimeDiscretisation):
     """
-    Implements the implicit multistep BDF2 timestepping method
+    Implements the implicit multistep BDF2 timestepping method.
 
-    The BDF2 timestepping method for operator F is written as
-    y^(n+1) = (4/3)*y^n - (1/3)*y^(n-1) + (2/3)*dt*F[y^(n+1)]                 /n
+    The BDF2 timestepping method for operator F is written as:                \n
+    y^(n+1) = (4/3)*y^n - (1/3)*y^(n-1) + (2/3)*dt*F[y^(n+1)]                 \n
     """
 
     @property
@@ -1088,10 +1086,10 @@ class TR_BDF2(TimeDiscretisation):
     Implements the two stage implicit TR-BDF2 time stepping method, with a
     trapezoidal stage (TR) followed by a second order backwards difference stage (BDF2).
 
-    The TR-BDF2 time stepping method for operator F is written as
-    y^(n+g) = y^n + dt*g/2*F[y^n] + dt*g/2*F[y^(n+g)] (TR stage)                                    /n
-    y^(n+1) = 1/(g(2-g))*y^(n+g) - (1-g)**2/(g(2-g))*y^(n) + (1-g)/(2-g)*dt*F[y^(n+1)] (BDF2 stage) /n
-    for an off-centring parameter g (gamma).                                                        /n
+    The TR-BDF2 time stepping method for operator F is written as:                                  \n
+    y^(n+g) = y^n + dt*g/2*F[y^n] + dt*g/2*F[y^(n+g)] (TR stage)                                    \n
+    y^(n+1) = 1/(g(2-g))*y^(n+g) - (1-g)**2/(g(2-g))*y^(n) + (1-g)/(2-g)*dt*F[y^(n+1)] (BDF2 stage) \n
+    for an off-centring parameter g (gamma).                                                        \n
     """
     def __init__(self, domain, gamma, field_name=None,
                  solver_parameters=None, options=None):
@@ -1216,8 +1214,8 @@ class Leapfrog(MultilevelTimeDiscretisation):
     """
     Implements the multistep Leapfrog timestepping method.
 
-    The Leapfrog timestepping method for operator F is written as
-    y^(n+1) = y^(n-1)  + 2*dt*F[y^n]
+    The Leapfrog timestepping method for operator F is written as:            \n
+    y^(n+1) = y^(n-1)  + 2*dt*F[y^n]                                          \n
     """
     @property
     def nlevels(self):
@@ -1291,10 +1289,11 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
 class AdamsBashforth(MultilevelTimeDiscretisation):
     """
-    Implements the explicit multistep Adams-Bashforth timestepping method of general order up to 5
+    Implements the explicit multistep Adams-Bashforth timestepping 
+    method of general order up to 5.
 
-    The general AB timestepping method for operator F is written as
-    y^(n+1) = y^n + dt*(b_0*F[y^(n)] + b_1*F[y^(n-1)] + b_2*F[y^(n-2)] + b_3*F[y^(n-3)] + b_4*F[y^(n-4)]) /n
+    The general AB timestepping method for operator F is written as:                                      \n
+    y^(n+1) = y^n + dt*(b_0*F[y^(n)] + b_1*F[y^(n-1)] + b_2*F[y^(n-2)] + b_3*F[y^(n-3)] + b_4*F[y^(n-4)]) \n
     """
     def __init__(self, domain, order, field_name=None,
                  solver_parameters=None, options=None):
@@ -1421,10 +1420,11 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
 class AdamsMoulton(MultilevelTimeDiscretisation):
     """
-    Implements the implicit multistep Adams-Moulton timestepping method of general order up to 5
+    Implements the implicit multistep Adams-Moulton 
+    timestepping method of general order up to 5
 
-    The general AM timestepping method for operator F is written as
-    y^(n+1) = y^n + dt*(b_0*F[y^(n+1)] + b_1*F[y^(n)] + b_2*F[y^(n-1)] + b_3*F[y^(n-2)]) /n
+    The general AM timestepping method for operator F is written as                      \n
+    y^(n+1) = y^n + dt*(b_0*F[y^(n+1)] + b_1*F[y^(n)] + b_2*F[y^(n-1)] + b_3*F[y^(n-2)]) \n
     """
     def __init__(self, domain, order, field_name=None,
                  solver_parameters=None, options=None):
@@ -1573,10 +1573,10 @@ class ImplicitMidpoint(ImplicitMultistage):
     Implements the Implicit Midpoint method as a 1-stage Runge Kutta method.
 
     The method, for solving
-    ∂y/∂t = F(y), can be written as:                                          /n
+    ∂y/∂t = F(y), can be written as:                                          \n
 
-    k0 = F[y^n + 0.5*dt*k0]                                                   /n
-    y^(n+1) = y^n + dt*k0                                                     /n
+    k0 = F[y^n + 0.5*dt*k0]                                                   \n
+    y^(n+1) = y^n + dt*k0                                                     \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
@@ -1606,11 +1606,11 @@ class QinZhang(ImplicitMultistage):
     Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
 
     The method, for solving
-    ∂y/∂t = F(y), can be written as:                                          /n
+    ∂y/∂t = F(y), can be written as:                                          \n
 
-    k0 = F[y^n + 0.25*dt*k0]                                                  /n
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]                                      /n
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)                                          /n
+    k0 = F[y^n + 0.25*dt*k0]                                                  \n
+    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]                                      \n
+    y^(n+1) = y^n + 0.5*dt*(k0 + k1)                                          \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
                  limiter=None, options=None):
