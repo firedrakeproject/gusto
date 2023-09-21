@@ -6,11 +6,12 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan, as_vector, min_value, max_value, FunctionSpace, \
+    sin, cos, sqrt, asin, atan, atan2, as_vector, min_value, max_value, FunctionSpace, \
     errornorm, zero
 from gusto import thermodynamics
 from gusto.logging import logger
 from gusto.recovery import Recoverer, BoundaryMethod
+from gusto.hack_atan2 import atan2_hack
 
 
 __all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
@@ -34,7 +35,7 @@ def latlon_coords(mesh):
     unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)
     safe = min_value(max_value(unsafe, -1.0), 1.0)  # avoid silly roundoff errors
     theta = asin(safe)  # latitude
-    lamda = atan(y0 / x0)  # longitude
+    lamda = atan2_hack(mesh)
     return theta, lamda
 
 
