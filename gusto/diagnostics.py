@@ -1441,7 +1441,7 @@ class Precipitation(DiagnosticField):
     def compute(self):
         """Compute the diagnostic field from the current state."""
         self.solver.solve()
-        self.field.assign(self.field + assemble(self.flux * self.phi * dx))
+        self.field.assign(self.field + self.flux)
 
 
 class Vorticity(DiagnosticField):
