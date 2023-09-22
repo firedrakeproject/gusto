@@ -147,6 +147,19 @@ class Spaces(object):
                 vertical_degree = degree if vertical_degree is None else vertical_degree
 
                 # Loop through name and family combinations
+                if name in ["HDiv", "HCurl", "theta", "L2", "H1"]:
+                    # This is one of the compatible finite element spaces, so
+                    # look for the space in the de Rham dictionary
+                    degree_pair = (horizontal_degree, vertical_degree)
+                    # If the de Rham complex doesn't exist yet, create it
+                    if degree_pair not in self._de_rham_dict.keys():
+                        self._de_rham_dict[degree_pair] = \
+                            DeRhamComplex(self.mesh, hdiv_family,
+                                          horizontal_degree, vertical_degree)
+
+                    de_rham_complex = self._de_rham_dict[degree_pair]
+                    value = de_rham_complex(name)
+
                 if name == "HDiv" and family in ["BDM", "RT", "CG", "RTCF", "RTF", "BDMF"]:
                     hdiv_family = hcurl_hdiv_dict[family]
                     value = self.build_hdiv_space(hdiv_family, horizontal_degree, vertical_degree)
@@ -496,6 +509,12 @@ class Spaces(object):
         self.base_elt_vert_dg[key] = FiniteElement("DG", interval, vertical_degree)
 
         self._initialised_base_spaces[(horizontal_degree, vertical_degree)] = True
+
+
+class DeRhamComplex(object):
+
+    def __init__(self, mesh, horizontal_degree, vertical_degree=None):
+
 
 
 def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
