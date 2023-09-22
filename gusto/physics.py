@@ -1009,8 +1009,6 @@ class TerminatorToy(Physics):
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
         
-        self.dt = Constant(0.0)
-        
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
         V1 = equation.function_space.sub(self.species1_idx)
@@ -1024,8 +1022,10 @@ class TerminatorToy(Physics):
         self.source1 = Function(Vs1)
         self.source2 = Function(Vs2)
         
-        s1_expr = 2*k1*self.species2 - 2*k2*(self.species1**2)
-        s2_expr = -k1*self.species2 + k2*(self.species1**2)
+        Kx = k1*self.species2 - k2*(self.species1**2)
+        
+        s1_expr = -2*Kx
+        s2_expr = Kx
                  
         self.source1_interpolator = Interpolator(s1_expr, self.source1)
         self.source2_interpolator = Interpolator(s2_expr, self.source2)
@@ -1047,7 +1047,6 @@ class TerminatorToy(Physics):
             dt (:class:`Constant`): the time interval for the scheme.
         """
         # Update the values of internal variables
-        self.dt.assign(dt)
         self.species1.assign(x_in.subfunctions[self.species1_idx])
         self.species2.assign(x_in.subfunctions[self.species2_idx])
         # Evaluate the source
