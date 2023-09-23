@@ -1399,7 +1399,11 @@ class HydrostaticImbalance(DiagnosticField):
 
 
 class Precipitation(DiagnosticField):
-    """The total precipitation falling through the domain's bottom surface."""
+    """
+    The total precipitation falling through the domain's bottom surface.
+
+    This is normalised by unit area, giving a result in kg / m^2.
+    """
     name = "Precipitation"
 
     def __init__(self):
@@ -1415,31 +1419,38 @@ class Precipitation(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        space = domain.spaces("DG0", "DG", 0)
-        assert space.extruded, 'Cannot compute precipitation on a non-extruded mesh'
+        DG0 = domain.spaces("DG0", "DG", 0)
+        assert DG0.extruded, 'Cannot compute precipitation on a non-extruded mesh'
+        self.space = DG0
+
+        # Gather fields
         rain = state_fields('rain')
         rho = state_fields('rho')
         v = state_fields('rainfall_velocity')
         # Set up problem
-        self.phi = TestFunction(space)
-        flux = TrialFunction(space)
-        n = FacetNormal(domain.mesh)
-        un = 0.5 * (dot(v, n) + abs(dot(v, n)))
-        self.flux = Function(space)
+        self.phi = TestFunction(DG0)
+        flux = TrialFunction(DG0)
+        self.flux = Function(DG0)  # Flux to solve for
+        area = Function(DG0)  # Need to compute normalisation (area)
 
-        a = self.phi * flux * dx
-        L = self.phi * rain * un * rho * (ds_b + ds_t + ds_v)
+        eqn_lhs = self.phi * flux * dx
+        area_rhs = self.phi * ds_b
+        eqn_rhs = domain.dt * self.phi * (rain * dot(- v, domain.k) * rho / area) * ds_b
+
+        # Compute area normalisation
+        area_prob = LinearVariationalProblem(eqn_lhs, area_rhs, area)
+        area_solver = LinearVariationalSolver(area_prob)
+        area_solver.solve()
 
         # setup solver
-        problem = LinearVariationalProblem(a, L, self.flux)
-        self.solver = LinearVariationalSolver(problem)
-        self.space = space
-        self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
-        # TODO: might we want to pick up this field? Otherwise initialise to zero
+        rain_prob = LinearVariationalProblem(eqn_lhs, eqn_rhs, self.flux)
+        self.solver = LinearVariationalSolver(rain_prob)
+        self.field = state_fields(self.name, space=DG0, dump=True, pick_up=True)
+        # Initialise field to zero, if picking up this will be overridden
         self.field.assign(0.0)
 
     def compute(self):
-        """Compute the diagnostic field from the current state."""
+        """Increment the precipitation diagnostic."""
         self.solver.solve()
         self.field.assign(self.field + self.flux)
 
