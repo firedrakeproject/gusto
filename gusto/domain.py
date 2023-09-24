@@ -73,6 +73,8 @@ class Domain(object):
         self.spaces = Spaces(mesh)
         self.spaces.build_compatible_spaces(self.family, self.horizontal_degree,
                                             self.vertical_degree)
+        if self.horizontal_degree == 0 or self.vertical_degree == 0:
+            self.spaces.build_dg1_equispaced()
 
         # -------------------------------------------------------------------- #
         # Determine some useful aspects of domain

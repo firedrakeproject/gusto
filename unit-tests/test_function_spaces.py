@@ -12,9 +12,11 @@ import pytest
 domain_family_dict = {'interval': ['CG'],
                       'vertical_slice': ['CG'],
                       'plane': ['BDM', 'BDMF', 'BDME', 'BDFM',
-                                'RT', 'RTF', 'RTE', 'RTCF', 'RTCE'],
+                                'RT', 'RTF', 'RTE', 'RTCF', 'RTCE',
+                                'BDMCE', 'BDMCF'],
                       'extruded_plane': ['BDM', 'BDMF', 'BDME', 'BDFM',
-                                         'RT', 'RTF', 'RTE', 'RTCF', 'RTCE']}
+                                         'RT', 'RTF', 'RTE', 'RTCF', 'RTCE',
+                                         'BDMCE', 'BDMCF']}
 
 reduced_domain_family_dict = {'interval': ['CG'],
                               'vertical_slice': ['CG'],
@@ -36,7 +38,7 @@ def set_up_mesh(domain, family):
 
     if family in ['BDM', 'BDMF', 'BDME', 'BDFM', 'RT', 'RTE', 'RTF']:
         quadrilateral = False
-    elif family in ['RTCF', 'RTCE']:
+    elif family in ['RTCF', 'RTCE', 'BDMCE', 'BDMCF']:
         quadrilateral = True
 
     if domain == 'interval':
@@ -73,15 +75,17 @@ def test_de_rham_spaces(domain, family):
         spaces.build_compatible_spaces(family, degree)
 
     # Work out correct CG degree
-    if family in ['BDM', 'BDME', 'BDMF']:
+    if family in ['BDM', 'BDME', 'BDMF', 'BDMCE', 'BDMCF']:
         if domain in ['vertical_slice', 'extruded_plane']:
             cg_degree = (degree[0]+2, degree[1]+1)
         else:
             cg_degree = degree + 2
-    elif domain in ['vertical_slice', 'extruded_plane']:
-        cg_degree = (degree[0]+1, degree[1]+1)
+    elif family == 'BDFM' and domain in ['vertical_slice', 'extruded_plane']:
+        cg_degree = (degree[0] + 2, degree[1]+1)
     elif family == 'BDFM':
         cg_degree = degree + 2
+    elif domain in ['vertical_slice', 'extruded_plane']:
+        cg_degree = (degree[0]+1, degree[1]+1)
     else:
         cg_degree = degree + 1
 
@@ -105,6 +109,7 @@ def test_dg_equispaced(domain, family):
 
     mesh = set_up_mesh(domain, family)
     spaces = Spaces(mesh)
+    spaces.build_dg1_equispaced()
 
     DG1 = spaces('DG1_equispaced')
     elt = DG1.ufl_element()
@@ -123,7 +128,7 @@ def test_dg0(domain, family):
     mesh = set_up_mesh(domain, family)
     spaces = Spaces(mesh)
 
-    DG0 = spaces('DG0', 'DG', degree=0)
+    DG0 = spaces.create_space('DG0', 'DG', degree=0)
     elt = DG0.ufl_element()
     assert elt.degree() in [0, (0, 0)], '"DG0" space does not seem to be' \
         + f'degree 0. Found degree {elt.degree()}'
@@ -137,14 +142,11 @@ def test_cg(domain, family):
 
     mesh = set_up_mesh(domain, family)
     spaces = Spaces(mesh)
+    degree = 3
 
-    if domain in ['vertical_slice', 'extruded_plane']:
-        degree = (1, 2)
-        CG = spaces('CG', 'CG', horizontal_degree=degree[0], vertical_degree=degree[1])
-    else:
-        degree = 3
-        CG = spaces('CG', 'CG', degree=degree)
+    CG = spaces.create_space('CG', 'CG', degree=degree)
 
     elt = CG.ufl_element()
-    assert elt.degree() == degree, '"CG" space does not seem to be degree ' \
-        + f'{degree}. Found degree {elt.degree()}'
+    assert elt.degree() == degree or elt.degree() == (degree, degree), \
+        (f'"CG" space does not seem to be degree {degree}. '
+         + f'Found degree {elt.degree()}')
