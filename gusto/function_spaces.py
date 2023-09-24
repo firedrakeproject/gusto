@@ -188,6 +188,8 @@ class Spaces(object):
         setattr(self, "L2", de_rham_complex.L2)
         # Register L2 space as DG also
         setattr(self, "DG", de_rham_complex.L2)
+        if hasattr(de_rham_complex, 'theta'):
+         setattr(self, "theta", de_rham_complex.theta)
 
     def build_dg1_equispaced(self):
         """
