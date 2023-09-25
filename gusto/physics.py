@@ -988,6 +988,14 @@ class TerminatorToy(Physics):
   Setup the Terminator Toy chemistry interaction
   as specified in 'The terminator toy chemisty test ...'
   Lauritzen et. al. (2014).
+  
+  The coupled equations for the two species are given by:
+  
+  D/Dt (X) = 2Kx
+  D/Dt (X2) = -Kx
+  
+  where Kx = k1*X2 - k2*(X**2)
+  
   """
   def __init__(self, equation, k1=1, k2=1, 
                species1_name='X', species2_name='X2'):
@@ -1000,44 +1008,48 @@ class TerminatorToy(Physics):
             over the domain.
             species1_name(str, optional): Name of the first interacting species. Defaults 
             to 'X'.
-            species2_name(str, optional): Name of the first interacting species. Defaults 
+            species2_name(str, optional): Name of the second interacting species. Defaults 
             to 'X2'.
             
         """
-                 
                  
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
         
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
-        V1 = equation.function_space.sub(self.species1_idx)
-        V2 = equation.function_space.sub(self.species2_idx)
-        self.species1 = Function(V1)
-        self.species2 = Function(V2)
-                 
-        Vs1 = self.species1.function_space()
-        Vs2 = self.species2.function_space()
+        #V1 = equation.function_space.sub(self.species1_idx)
+        #V2 = equation.function_space.sub(self.species2_idx)
         
-        self.source1 = Function(Vs1)
-        self.source2 = Function(Vs2)
+        assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), f"The function spaces for the two species need to be the same"
+        
+        V = equation.function_space.sub(self.species1_idx)
+        
+        #self.species1 = Function(V1)
+        #self.species2 = Function(V2)
+        
+        self.species1 = Function(V)
+        self.species2 = Function(V)
+                 
+        #Vs1 = self.species1.function_space()
+        #Vs2 = self.species2.function_space()
+        
+        # Declare function space and source field
+        Vs = self.species1.function_space()
+        self.source = Function(Vs)
         
         Kx = k1*self.species2 - k2*(self.species1**2)
-        
-        s1_expr = -2*Kx
-        s2_expr = Kx
                  
-        self.source1_interpolator = Interpolator(s1_expr, self.source1)
-        self.source2_interpolator = Interpolator(s2_expr, self.source2)
+        self.source_interpolator = Interpolator(Kx, self.source)
 
         # Add term to equation's residual
         test_1 = equation.tests[self.species1_idx]
         test_2 = equation.tests[self.species2_idx]
-        equation.residual += physics(subject(test_1 * self.source1 * dx
-                                             + test_2 * self.source2 * dx,
+        equation.residual += physics(subject(test_1 * -2*self.source * dx
+                                             + test_2 * self.source * dx,
                                              equation.X),
-                                     self.evaluate)         
-                                     
+                                     self.evaluate)
+
   def evaluate(self, x_in, dt):
         """
         Evaluates the source/sink for the coalescence process.
@@ -1046,10 +1058,11 @@ class TerminatorToy(Physics):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+
         # Update the values of internal variables
         self.species1.assign(x_in.subfunctions[self.species1_idx])
         self.species2.assign(x_in.subfunctions[self.species2_idx])
+
         # Evaluate the source
-        self.source1.assign(self.source1_interpolator.interpolate())
-        self.source2.assign(self.source2_interpolator.interpolate())
+        self.source_interpolator.interpolate()
                  
