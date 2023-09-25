@@ -45,7 +45,7 @@ class VerticalHybridizationPC(PCBase):
         Args:
             pc (:class:`PETSc.PC`): preconditioner object to initialize.
         """
-        from firedrake import (FunctionSpace, Function, Constant,
+        from firedrake import (FunctionSpace, Function, Constant, Cofunction,
                                FiniteElement, TensorProductElement,
                                TrialFunction, TrialFunctions, TestFunction,
                                DirichletBC, interval, MixedElement, BrokenElement)
@@ -104,7 +104,7 @@ class VerticalHybridizationPC(PCBase):
         V_d = FunctionSpace(mesh, broken_elements)
 
         # Set up relevant functions
-        self.broken_solution = Function(V_d)
+        self.broken_solution = Function(V_d.dual())
         self.broken_residual = Function(V_d)
         self.trace_solution = Function(Vv_tr)
         self.unbroken_solution = Function(V)
@@ -175,7 +175,7 @@ class VerticalHybridizationPC(PCBase):
         K = Tensor(Kform)
 
         # Assemble the Schur complement operator and right-hand side
-        self.schur_rhs = Function(Vv_tr)
+        self.schur_rhs = Cofunction(Vv_tr.dual())
         self._assemble_Srhs = OneFormAssembler(
             K * Atilde.inv * AssembledVector(self.broken_residual),
             tensor=self.schur_rhs,
