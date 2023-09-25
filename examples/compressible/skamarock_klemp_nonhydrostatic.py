@@ -9,7 +9,7 @@ PETSc.Sys.popErrorHandler()
 from gusto import *
 import itertools
 from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
-                       ExtrudedMesh, exp, sin, Function, pi)
+                       ExtrudedMesh, exp, sin, Function, pi, COMM_WORLD)
 import numpy as np
 import sys
 
@@ -51,15 +51,32 @@ print(f'Number of DOFs = {eqns.X.function_space().dim()}')
 points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
-dirname = 'skamarock_klemp_nonlinear_SUPG_Vector_advection_Test'
-output = OutputParameters(
-    dirname=dirname,
-    dumpfreq=dumpfreq,
-    pddumpfreq=dumpfreq,
-    dumplist=['u'],
-    point_data=[('theta_perturbation', points)],
-)
-diagnostic_fields = [CourantNumber()]
+dirname = 'skamarock_klemp_nonlinear'
+
+# Dumping point data using legacy PointDataOutput is not supported in parallel
+if COMM_WORLD.size == 1:
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        pddumpfreq=dumpfreq,
+        dumplist=['u'],
+        point_data=[('theta_perturbation', points)],
+    )
+else:
+    logger.warning(
+        'Dumping point data using legacy PointDataOutput is not'
+        ' supported in parallel\nDisabling PointDataOutput'
+    )
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        pddumpfreq=dumpfreq,
+        dumplist=['u'],
+    )
+
+diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
+                     Gradient("theta_perturbation"), Perturbation('rho'),
+                     RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
