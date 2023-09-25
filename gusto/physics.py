@@ -986,7 +986,7 @@ class SWSaturationAdjustment(Physics):
 class TerminatorToy(Physics):
   """
   Setup the Terminator Toy chemistry interaction
-  as specified in 'The terminator toy chemisty test ...'
+  as specified in 'The terminator toy chemistry test ...'
   Lauritzen et. al. (2014).
   
   The coupled equations for the two species are given by:
