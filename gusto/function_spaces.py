@@ -259,12 +259,6 @@ class DeRhamComplex(object):
                 vertical part of the L2 space. Defaults to None.
         """
 
-        if family == 'BDFM':
-            # Need a special implementation of base spaces here as it does not
-            # fit the same pattern as other spaces
-            build_bdfm_base_spaces(self, horizontal_degree, vertical_degree)
-            return
-
         if self.extruded_mesh:
             cell = self.mesh._base_mesh.ufl_cell().cellname()
         else:
@@ -273,14 +267,22 @@ class DeRhamComplex(object):
         hdiv_family = hcurl_hdiv_dict[family]
         hcurl_family = hdiv_hcurl_dict[family]
 
-        # horizontal base spaces
+        # Horizontal base spaces
         self.base_elt_hori_hdiv = FiniteElement(hdiv_family, cell, horizontal_degree+1)
         if hcurl_family is not None:
             self.base_elt_hori_hcurl = FiniteElement(hcurl_family, cell, horizontal_degree+1)
         self.base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree)
-        self.base_elt_hori_cg = FiniteElement("CG", cell, h1_degree(family, horizontal_degree))
 
-        # vertical base spaces
+        # Special handling of CG horizontal element based on family
+        if hdiv_family == 'BDMCF':
+            self.base_elt_hori_cg = FiniteElement("S", cell, h1_degree(family, horizontal_degree))
+        else:
+            self.base_elt_hori_cg = FiniteElement("CG", cell, h1_degree(family, horizontal_degree))
+            if hdiv_family == "BDFM":
+                # Need to enhance this element with bubble element
+                self.base_elt_hori_cg += FiniteElement("Bubble", cell, horizontal_degree+2)
+
+        # Vertical base spaces
         if vertical_degree is not None:
             self.base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree+1)
             self.base_elt_vert_dg = FiniteElement("DG", interval, vertical_degree)
@@ -452,41 +454,6 @@ class DeRhamComplex(object):
             V_elt = self.base_elt_hori_cg
 
         return FunctionSpace(self.mesh, V_elt, name='H1'+self.complex_name)
-
-
-def build_bdfm_base_spaces(de_rham_complex, horizontal_degree, vertical_degree=None):
-    """
-    Builds the :class:`FiniteElement` objects for the de Rham complex when using
-    the BDFM space.
-
-    Args:
-        de_rham_complex (:class:`DeRhamComplex`): the de Rham complex to set up
-            the spaces for.
-        horizontal_degree (int): the polynomial degree of the horizontal
-            part of the L2 space in the complex.
-        vertical_degree (int, optional): the polynomial degree of the vertical
-            part of the L2 space in the complex.
-    """
-
-    if de_rham_complex.extruded_mesh:
-        cell = de_rham_complex.mesh._base_mesh.ufl_cell().cellname()
-    else:
-        cell = de_rham_complex.mesh.ufl_cell().cellname()
-
-    hdiv_family = 'BDFM'
-
-    # horizontal base spaces
-    de_rham_complex.base_elt_hori_hdiv = FiniteElement(hdiv_family, cell, horizontal_degree+1)
-    de_rham_complex.base_elt_hori_dg = FiniteElement("DG", cell, horizontal_degree)
-
-    # Add bubble space
-    de_rham_complex.base_elt_hori_cg = FiniteElement("CG", cell, horizontal_degree+1)
-    de_rham_complex.base_elt_hori_cg += FiniteElement("Bubble", cell, horizontal_degree+2)
-
-    # vertical base spaces
-    if de_rham_complex.extruded_mesh and vertical_degree is not None:
-        de_rham_complex.base_elt_vert_cg = FiniteElement("CG", interval, vertical_degree+1)
-        de_rham_complex.base_elt_vert_dg = FiniteElement("DG", interval, vertical_degree)
 
 
 def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
