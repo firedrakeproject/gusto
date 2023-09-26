@@ -36,7 +36,7 @@ def run_moist_compressible(tmpdir):
 
     # I/O
     output = OutputParameters(dirname=tmpdir+"/moist_compressible",
-                              dumpfreq=2, chkptfreq=2)
+                              dumpfreq=2, checkpoint=True, chkptfreq=2)
     io = IO(domain, output)
 
     # Transport schemes
@@ -99,7 +99,8 @@ def run_moist_compressible(tmpdir):
     checkpoint_name = 'moist_compressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/moist_compressible",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = CompressibleEulerEquations(check_domain, parameters, active_tracers=tracers)
