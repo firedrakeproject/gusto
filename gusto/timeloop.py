@@ -613,6 +613,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
 
+            x_after_fast(self.field_name).assign(xp(self.field_name))
+            if len(self.fast_physics_schemes) > 0:
+                with timed_stage("Fast physics"):
+                    logger.info('SIQN: Fast physics')
+                    for _, scheme in self.fast_physics_schemes:
+                        scheme.apply(x_after_fast(scheme.field_name), x_after_fast(scheme.field_name))
+
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
 
@@ -623,6 +630,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
+                xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
                     logger.info(f'SIQN: Mixed solve {(outer, inner)}')
