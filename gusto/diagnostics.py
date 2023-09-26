@@ -5,7 +5,7 @@ from firedrake import op2, assemble, dot, dx, Function, sqrt, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator
+    Projector, Interpolator, FunctionSpace
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -187,7 +187,10 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             if self.space is None:
                 if space is None:
-                    space = domain.spaces("DG0", "DG", 0)
+                    if not hasattr(domain.spaces, "DG0"):
+                        space = domain.spaces.create_space("DG0", "DG", 0)
+                    else:
+                        space = domain.spaces("DG0")
                 self.space = space
             else:
                 space = self.space
@@ -195,7 +198,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
             # Add space to domain
             assert space.name is not None, \
                 f'Diagnostics {self.name} is using a function space which does not have a name'
-            domain.spaces(space.name, V=space)
+            if not hasattr(domain.spaces, space.name):
+                domain.spaces.add_space(space.name, space)
 
             self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
 
@@ -300,7 +304,7 @@ class CourantNumber(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
 
-        V = domain.spaces("DG0", "DG", 0)
+        V = FunctionSpace(domain.mesh, "DG", 0)
         test = TestFunction(V)
         cell_volume = Function(V)
         self.cell_flux = Function(V)
@@ -1419,7 +1423,10 @@ class Precipitation(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        DG0 = domain.spaces("DG0", "DG", 0)
+        if not hasattr(domain.spaces, "DG0"):
+            DG0 = domain.spaces.create_space("DG0", "DG", 0)
+        else:
+            DG0 = domain.spaces("DG0")
         assert DG0.extruded, 'Cannot compute precipitation on a non-extruded mesh'
         self.space = DG0
 

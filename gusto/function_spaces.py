@@ -161,15 +161,17 @@ class Spaces(object):
 
         if vertical_degree is not None:
             degree_key = (horizontal_degree, vertical_degree)
-            if complex_name is None:
-                if horizontal_degree != vertical_degree:
-                    complex_name = f'_{horizontal_degree}_{vertical_degree}'
-                else:
-                    complex_name = f'_{horizontal_degree}'
         else:
             degree_key = horizontal_degree
-            if complex_name is None:
-                complex_name = f'_{horizontal_degree}'
+
+        # Determine suffix to spaces
+        if complex_name is None and len(self.de_rham_complex.keys()) > 0:
+            if vertical_degree is not None and horizontal_degree != vertical_degree:
+                complex_name = f'{horizontal_degree}_{vertical_degree}'
+            else:
+                complex_name = f'{horizontal_degree}'
+        else:
+            complex_name = ''
 
         if degree_key in self.de_rham_complex.keys():
             raise RuntimeError(f'de Rham complex for degree {degree_key} has '
@@ -182,14 +184,14 @@ class Spaces(object):
 
         # Set the spaces as attributes of the space container
         self.de_rham_complex[degree_key] = de_rham_complex
-        setattr(self, "H1", de_rham_complex.H1)
-        setattr(self, "HCurl", de_rham_complex.HCurl)
-        setattr(self, "HDiv", de_rham_complex.HDiv)
-        setattr(self, "L2", de_rham_complex.L2)
+        setattr(self, "H1"+complex_name, de_rham_complex.H1)
+        setattr(self, "HCurl"+complex_name, de_rham_complex.HCurl)
+        setattr(self, "HDiv"+complex_name, de_rham_complex.HDiv)
+        setattr(self, "L2"+complex_name, de_rham_complex.L2)
         # Register L2 space as DG also
-        setattr(self, "DG", de_rham_complex.L2)
-        if hasattr(de_rham_complex, 'theta'):
-            setattr(self, "theta", de_rham_complex.theta)
+        setattr(self, "DG"+complex_name, de_rham_complex.L2)
+        if hasattr(de_rham_complex, "theta"+complex_name):
+            setattr(self, "theta"+complex_name, de_rham_complex.theta)
 
     def build_dg1_equispaced(self):
         """
