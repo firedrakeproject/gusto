@@ -74,7 +74,7 @@ class Spaces(object):
 
     def __call__(self, name):
         """
-        Returns a space, and also creates it if it is not created yet.
+        Returns a space from the space container.
 
         Args:
             name (str): the name of the space.
@@ -111,19 +111,10 @@ class Spaces(object):
 
     def create_space(self, name, family, degree, overwrite_space=False):
         """
-        Returns a space, and also creates it if it is not created yet.
-
-        If a space needs creating, it may be that more arguments (such as the
-        family and degree) need to be provided. Alternatively a space can be
-        passed in to be stored in the space container.
-
-        For extruded meshes, it is possible to seperately specify the horizontal
-        and vertical degrees of the elements. Alternatively, if these degrees
-        should be the same then this can be specified through the "degree"
-        argument.
+        Creates a space and adds it to the container..
 
         Args:
-            name (str): the name of the space.
+            name (str): the name to give to the space.
             family (str): name of the finite element family to be created.
             degree (int): the element degree used for the space.
             overwrite_space (bool, optional): Logical to allow space existing in
@@ -170,7 +161,7 @@ class Spaces(object):
                 complex_name = f'{horizontal_degree}_{vertical_degree}'
             else:
                 complex_name = f'{horizontal_degree}'
-        else:
+        elif complex_name is None:
             complex_name = ''
 
         if degree_key in self.de_rham_complex.keys():
