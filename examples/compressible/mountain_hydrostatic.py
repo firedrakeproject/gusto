@@ -66,7 +66,7 @@ output = OutputParameters(
     dumpfreq=dumpfreq,
     dumplist=['u'],
 )
-diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance(eqns),
+diagnostic_fields = [CourantNumber(), ZComponent('u'), HydrostaticImbalance(eqns),
                      Perturbation('theta'), Perturbation('rho')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
