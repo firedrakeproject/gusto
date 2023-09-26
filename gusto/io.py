@@ -465,6 +465,11 @@ class IO(object):
                                                        self.mesh.comm,
                                                        create=to_create)
 
+            # if picking-up, don't do initial dump
+            self.diagcount = itertools.count()
+            if pick_up:
+                next(self.diagcount)
+
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
@@ -638,7 +643,7 @@ class IO(object):
         for field in self.diagnostic_fields:
             field.compute()
 
-        if output.dump_diagnostics:
+        if output.dump_diagnostics and (next(self.diagcount) % output.diagfreq) == 0:
             # Output diagnostic data
             self.diagnostic_output.dump(state_fields, t)
 
