@@ -18,6 +18,7 @@ from gusto.fml import (
 from gusto.labels import time_derivative, prognostic, physics
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
+import math
 import numpy as np
 
 
@@ -71,8 +72,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        self.dt = domain.dt
-        self.original_dt = Constant(self.dt)
+        self.dt = Constant(0.0)
+        self.dt.assign(domain.dt)
+        self.original_dt = Constant(0.0)
+        self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter
         self.courant_max = None
@@ -252,7 +255,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 perform. This option cannot be specified with the
                 `subcycle_by_courant` argument. Defaults to None.
             subcycle_by_courant (float, optional): specifying this option will
-                make the scheme performing adaptive sub-cycling based on the
+                make the scheme perform adaptive sub-cycling based on the
                 Courant number. The specified argument is the maximum Courant
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
@@ -292,7 +295,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
         if self.fixed_subcycles is not None:
-            self.dt = self.dt/self.fixed_subcycles
+            self.dt.assign(self.dt/self.fixed_subcycles)
             self.ncycles = self.fixed_subcycles
         else:
             self.dt = self.dt
@@ -340,11 +343,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        import math
         # If doing adaptive subcycles, update dt and ncycles here
         if self.subcycle_by_courant is not None:
             self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by_courant)
-            self.dt = self.original_dt/self.ncycles
+            self.dt.assign(self.original_dt/self.ncycles)
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
