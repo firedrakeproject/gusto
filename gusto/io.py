@@ -406,6 +406,9 @@ class IO(object):
 
         # make dump counter
         self.dumpcount = itertools.count()
+        # if picking-up, don't do initial dump
+        if pick_up:
+            next(self.dumpcount)
 
         if self.output.dump_vtus:
             # setup pvd output file
@@ -426,6 +429,11 @@ class IO(object):
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
+                else:
+                    self.field_t_idx = None
+                # Send information to other processors
+                self.field_t_idx = self.mesh.comm.bcast(self.field_t_idx, root=0)
+
             else:
                 # File needs creating
                 self.create_nc_dump(self.nc_filename, space_names)
@@ -460,6 +468,11 @@ class IO(object):
                                                        self.mesh.comm,
                                                        create=to_create)
 
+            # if picking-up, don't do initial dump
+            self.diagcount = itertools.count()
+            if pick_up:
+                next(self.diagcount)
+
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
@@ -474,6 +487,9 @@ class IO(object):
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.pddumpcount)
 
             # set frequency of point data output - defaults to
             # dumpfreq if not set by user
@@ -498,6 +514,9 @@ class IO(object):
 
             # make a checkpoint counter
             self.chkptcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.chkptcount)
 
         # dump initial fields
         if not pick_up:
@@ -633,7 +652,7 @@ class IO(object):
         for field in self.diagnostic_fields:
             field.compute()
 
-        if output.dump_diagnostics:
+        if output.dump_diagnostics and (next(self.diagcount) % output.diagfreq) == 0:
             # Output diagnostic data
             self.diagnostic_output.dump(state_fields, t)
 
