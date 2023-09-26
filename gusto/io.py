@@ -9,10 +9,15 @@ from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, File,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+from pyop2.mpi import MPI
 import numpy as np
 from gusto.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
+
+
+class GustoIOError(IOError):
+    pass
 
 
 def pick_up_mesh(output, mesh_name):
@@ -72,6 +77,8 @@ class PointDataOutput(object):
         self.field_points = field_points
         self.tolerance = tolerance
         self.comm = comm
+        if self.comm.size > 1:
+            raise GustoIOError("PointDataOutput does not work in parallel")
         if not create:
             return
         if self.comm.rank == 0:
@@ -352,9 +359,12 @@ class IO(object):
                 state from a checkpointing file. Defaults to False.
 
         Raises:
-            IOError: if the results directory already exists, and the model is
+            GustoIOError: if the results directory already exists, and the model is
                 not picking up or running in test mode.
         """
+        # Use 0 for okay, 1 for internal exception 2 for external exception
+        raise_parallel_exception = 0
+        error = None
 
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
@@ -363,14 +373,30 @@ class IO(object):
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
+            # Raising exceptions needs to be done in parallel
             if self.mesh.comm.Get_rank() == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
-                    makedirs(self.dumpdir)
+                    try:
+                        makedirs(self.dumpdir)
+                    except OSError as e:
+                        error = e
+                        raise_parallel_exception = 2
                 elif not (running_tests or pick_up):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
-                    raise IOError(f'results directory {self.dumpdir} already exists')
+                    raise_parallel_exception = 1
+
+            # Gather errors from each rank and raise appropriate error everywhere
+            # This allreduce also ensures that all ranks are in sync wrt the results dir
+            raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            if raise_exception == 1:
+                raise GustoIOError(f'results directory {self.dumpdir} already exists')
+            elif raise_exception == 2:
+                if error:
+                    raise error
+                else:
+                    raise OSError('Check error message on rank 0')
 
             update_logfile_location(self.dumpdir, self.mesh.comm)
 
@@ -400,6 +426,11 @@ class IO(object):
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
+                else:
+                    self.field_t_idx = None
+                # Send information to other processors
+                self.field_t_idx = self.mesh.comm.bcast(self.field_t_idx, root=0)
+
             else:
                 # File needs creating
                 self.create_nc_dump(self.nc_filename, space_names)
