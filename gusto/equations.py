@@ -680,7 +680,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Depth transport term
-        D_adv = prognostic(continuity_form(phi, D, u), 'D')
+        #D_adv = prognostic(continuity_form(phi, D, u), 'D')
+        D_adv = prognostic(advection_form(phi, D, u), 'D')
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(phi, H, u_trial)
@@ -710,6 +711,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 subject(prognostic(-g*div(w)*D*dx, 'u'), self.X))
 
             residual = (mass_form + adv_form + pressure_gradient_form)
+
+        geo_grad_form = subject(prognostic(phi*D*div(u)*dx), self.X)
+
+        residual += geo_grad_form
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Topography and Thermal)
