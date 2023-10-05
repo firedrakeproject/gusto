@@ -15,6 +15,7 @@ from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.logging import logger
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 from gusto.transport_methods import TransportMethod
+import os
 import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SemiImplicitQuasiNewton",
@@ -34,7 +35,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.equation = equation
         self.io = io
         self.dt = self.equation.domain.dt
-        self.t = Constant(0.0)
+        self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
 
         self.setup_fields()
@@ -140,6 +141,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
 
+    def log_timestep(self):
+        """
+        Logs the start of a time step.
+        """
+        logger.info('')
+        logger.info('='*40)
+        logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
+
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
@@ -162,9 +171,11 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
-            t, reference_profiles, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
+            t, reference_profiles, self.step, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
             self.set_reference_profiles(reference_profiles)
             self.set_initial_timesteps(initial_timesteps)
+        else:
+            self.step = 1
 
         # Set up dump, which may also include an initial dump
         with timed_stage("Dump output"):
@@ -174,7 +185,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Time loop
         while float(self.t) < tmax - 0.5*float(self.dt):
-            logger.info(f'at start of timestep, t={float(self.t)}, dt={float(self.dt)}')
+            self.log_timestep()
 
             self.x.update()
 
@@ -186,9 +197,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.timestep()
 
             self.t.assign(self.t + self.dt)
+            self.step += 1
 
             with timed_stage("Dump output"):
-                self.io.dump(self.fields, float(self.t), self.get_initial_timesteps())
+                self.io.dump(self.fields, float(self.t), self.step, self.get_initial_timesteps())
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
@@ -724,6 +736,20 @@ class PrescribedTransport(Timestepper):
         self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
+
+    def run(self, t, tmax, pick_up=False):
+        """
+        Runs the model for the specified time, from t to tmax
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pick_up: (bool): specify whether to pick_up from a previous run
+        """
+        # It's best to have evaluated the velocity before we start
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
+
+        super().run(t, tmax, pick_up=pick_up)
 
     def timestep(self):
         if self.velocity_projection is not None:
