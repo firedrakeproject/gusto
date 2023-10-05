@@ -1739,8 +1739,8 @@ class SSP3(IMEXMultistage):
                          limiter=limiter, options=options)
         # SSP3(3,3,2)
         g = 1. - (1./np.sqrt(2.))
-        self.butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.),(1./6.), (2./6.)]])
-        self.butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.),(1./6.), (2./6.)]])
+        self.butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.),(1./6.), (2./3.)]])
+        self.butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.),(1./6.), (2./3.)]])
         self.nStages = int(np.shape(self.butcher_imp)[1])
 
 class Trap2(IMEXMultistage):
