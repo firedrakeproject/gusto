@@ -84,6 +84,7 @@ class Domain(object):
         self.spaces = Spaces(mesh)
         self.spaces.build_compatible_spaces(self.family, self.horizontal_degree,
                                             self.vertical_degree)
+        self.spaces.build_dg1_equispaced()
 
         # -------------------------------------------------------------------- #
         # Determine some useful aspects of domain

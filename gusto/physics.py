@@ -40,6 +40,7 @@ class PhysicsParametrisation(object, metaclass=ABCMeta):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
+            label_name (str): name of physics scheme, to be passed to its label.
             parameters (:class:`Configuration`, optional): parameters containing
                 the values of gas constants. Defaults to None, in which case the
                 parameters are obtained from the equation.
@@ -596,7 +597,6 @@ class Coalescence(PhysicsParametrisation):
             dt (:class:`Constant`): the time interval for the scheme.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
         # Update the values of internal variables
         self.dt.assign(dt)
         self.rain.assign(x_in.subfunctions[self.rain_idx])
@@ -765,7 +765,6 @@ class EvaporationOfRain(PhysicsParametrisation):
             dt (:class:`Constant`): the time interval for the scheme.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
         # Update the values of internal variables
         self.dt.assign(dt)
         self.X.assign(x_in)
@@ -821,7 +820,7 @@ class InstantRain(PhysicsParametrisation):
         """
 
         label_name = 'instant_rain'
-        super().__init__(equation, label_name, parameters=None)
+        super().__init__(equation, label_name, parameters=parameters)
 
         self.convective_feedback = convective_feedback
         self.time_varying_saturation = time_varying_saturation
@@ -890,9 +889,9 @@ class InstantRain(PhysicsParametrisation):
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            equation.residual += self.label(
-                subject(test_D * beta1 * self.source * dx, equation.X),
-                self.evaluate)
+            equation.residual += self.label(subject(test_D * beta1 * self.source * dx,
+                                                    equation.X),
+                                            self.evaluate)
 
         # interpolator does the conversion of vapour to rain
         self.source_interpolator = Interpolator(conditional(
@@ -913,7 +912,6 @@ class InstantRain(PhysicsParametrisation):
                 interval for the scheme.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
         if self.convective_feedback:
             self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.time_varying_saturation:
@@ -989,7 +987,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         """
 
         label_name = 'saturation_adjustment'
-        super().__init__(equation, label_name, parameters=None)
+        super().__init__(equation, label_name, parameters=parameters)
 
         self.time_varying_saturation = time_varying_saturation
         self.convective_feedback = convective_feedback
@@ -1107,7 +1105,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                 interval for the scheme.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
         if self.convective_feedback:
             self.D.assign(x_in.split()[self.VD_idx])
         if self.thermal_feedback:

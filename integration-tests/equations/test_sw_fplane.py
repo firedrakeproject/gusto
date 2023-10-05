@@ -32,6 +32,7 @@ def run_sw_fplane(tmpdir):
     output = OutputParameters(
         dirname=str(tmpdir)+"/sw_fplane",
         dumpfreq=1,
+        checkpoint=True
     )
 
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
@@ -105,7 +106,8 @@ def run_sw_fplane(tmpdir):
     checkpoint_name = 'sw_fplane_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/sw_fplane",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, 'RTCF', 1)
     check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)

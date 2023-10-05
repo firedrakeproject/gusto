@@ -320,8 +320,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        if 'snes_type' not in self.solver_parameters.keys():
-            self.solver_parameters['snes_type'] = 'ksponly'
+        self.solver_parameters.setdefault('snes_type', 'ksponly')
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 

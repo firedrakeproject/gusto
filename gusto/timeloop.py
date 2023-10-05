@@ -331,10 +331,10 @@ class SplitPhysicsTimestepper(Timestepper):
                 in which case the terms follow the original discretisation in
                 the equation.
             physics_schemes: (list, optional): a list of tuples of the form
-                (:class:`Physics`, :class:`TimeDiscretisation`), pairing physics
-                parametrisations and timestepping schemes to use for each.
-                Timestepping schemes for physics must be explicit. Defaults to
-                None.
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
+                pairing physics parametrisations and timestepping schemes to use
+                for each. Timestepping schemes for physics must be explicit.
+                Defaults to None.
         """
 
         # As we handle physics differently to the Timestepper, these are not
@@ -714,9 +714,10 @@ class PrescribedTransport(Timestepper):
                 Timestepping schemes for physics must be explicit. Defaults to
                 None.
             physics_parametrisations: (iter, optional): an iterable of
-                :class:`Physics` objects that describe physical parametrisations to be included
-                to add to the equation. They can only be used when the time
-                discretisation `scheme` is explicit. Defaults to None.
+                :class:`PhysicsParametrisation` objects that describe physical
+                parametrisations to be included to add to the equation. They can
+                only be used when the time discretisation `scheme` is explicit.
+                Defaults to None.
         """
 
         if isinstance(transport_method, TransportMethod):
