@@ -84,9 +84,8 @@ class AdvectionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -115,9 +114,8 @@ class ContinuityEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -174,9 +172,8 @@ class AdvectionDiffusionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -552,9 +549,8 @@ class CoupledTransportEquation(PrognosticEquationSet):
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         _ = self.prescribed_fields("u", V)
 
         self.tests = TestFunctions(W)

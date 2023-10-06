@@ -8,8 +8,8 @@ from firedrake import (IntervalMesh, RectangleMesh, CubedSphereMesh,
                        VectorFunctionSpace, ExtrudedMesh, SpatialCoordinate,
                        as_vector, exp)
 from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
-                   ForwardEuler, OutputParameters, VelocityX, VelocityY,
-                   VelocityZ, MeridionalComponent, ZonalComponent,
+                   ForwardEuler, OutputParameters, XComponent, YComponent,
+                   ZComponent, MeridionalComponent, ZonalComponent,
                    RadialComponent, DGUpwind)
 from netCDF4 import Dataset
 import pytest
@@ -83,13 +83,13 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
 
     # Make velocity components for this geometry
     if geometry == "interval":
-        diagnostic_fields = [VelocityX()]
+        diagnostic_fields = [XComponent('u')]
     elif geometry == "vertical_slice":
-        diagnostic_fields = [VelocityX(), VelocityZ()]
+        diagnostic_fields = [XComponent('u'), ZComponent('u')]
     elif geometry == "plane":
-        diagnostic_fields = [VelocityX(), VelocityY()]
+        diagnostic_fields = [XComponent('u'), YComponent('u')]
     elif geometry == "extruded_plane":
-        diagnostic_fields = [VelocityX(), VelocityY(), VelocityZ()]
+        diagnostic_fields = [XComponent('u'), YComponent('u'), ZComponent('u')]
     elif geometry == "spherical_shell":
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u')]
     elif geometry == "extruded_spherical_shell":
