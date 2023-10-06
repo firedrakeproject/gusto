@@ -5,7 +5,7 @@ from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
                        FunctionSpace, MixedFunctionSpace, TestFunctions,
                        TrialFunction, FacetNormal, jump, avg, dS_v, dS,
                        DirichletBC, conditional, SpatialCoordinate,
-                       split, Constant, action)
+                       split, Constant, action, as_vector)
 from gusto.fields import PrescribedFields
 from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
                        replace_subject, replace_trial_function)
@@ -1179,6 +1179,44 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         return replace_subject(new_subj)(t)
 
 
+class CompressibleEadyEquations(CompressibleEulerEquations):
+
+    def __init__(self, state, family, degree, Omega=None, sponge=None,
+                 terms_to_linearise={'u': [time_derivative],
+                                     'rho': [time_derivative, transport],
+                                     'theta': [time_derivative, transport]},
+                 u_transport_option="vector_invariant_form",
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+
+        super().__init__(state, family, degree,
+                         terms_to_linearise=terms_to_linearise,
+                         Omega=Omega, sponge=sponge,
+                         u_transport_option=u_transport_option,
+                         diffusion_options=diffusion_options,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        dthetady = state.parameters.dthetady
+        Pi0 = state.parameters.Pi0
+        cp = state.parameters.cp
+        y_vec = as_vector([0., 1., 0.])
+
+        W = self.function_space
+        w, _, gamma = TestFunctions(W)
+        X = self.X
+        u, rho, theta = split(X)
+
+        exner_pi = exner_pressure(state.parameters, rho, theta)
+
+        self.residual -= subject(prognostic(
+            cp*dthetady*(exner_pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
+
+        self.residual += subject(prognostic(
+            gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
+
+
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
     """
     Class for the incompressible Boussinesq equations, which evolve the velocity
@@ -1328,3 +1366,37 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+
+class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
+    def __init__(self, state, family, degree, Omega=None,
+                 terms_to_linearise={'u': [time_derivative],
+                                     'p': [time_derivative],
+                                     'b': [time_derivative, transport]},
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+
+        super().__init__(state, family, degree,
+                         Omega=Omega,
+                         terms_to_linearise=terms_to_linearise,
+                         u_transport_option=u_transport_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        dbdy = state.parameters.dbdy
+        H = state.parameters.H
+        _, _, z = SpatialCoordinate(state.mesh)
+        eady_exp = Function(state.spaces("DG")).interpolate(z-H/2.)
+        y_vec = as_vector([0., 1., 0.])
+
+        W = self.function_space
+        w, _, gamma = TestFunctions(W)
+        X = self.X
+        u, _, b = split(X)
+
+        self.residual += subject(prognostic(
+            dbdy*eady_exp*inner(w, y_vec)*dx, "u"), X)
+
+        self.residual += subject(prognostic(
+            gamma*dbdy*inner(u, y_vec)*dx, "b"), X)

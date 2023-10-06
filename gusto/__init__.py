@@ -9,6 +9,7 @@ from gusto.configuration import *                    # noqa
 from gusto.coord_transforms import *                 # noqa
 from gusto.domain import *                           # noqa
 from gusto.diagnostics import *                      # noqa
+from gusto.eady_diagnostics import *                 # noqa
 from gusto.diffusion_methods import *                # noqa
 from gusto.equations import *                        # noqa
 from gusto.fml import *                              # noqa

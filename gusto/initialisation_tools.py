@@ -3,7 +3,7 @@
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
-    Function, Constant, \
+    Function, Constant, SpatialCoordinate, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     FunctionSpace, errornorm, zero
@@ -14,7 +14,8 @@ from gusto.recovery import Recoverer, BoundaryMethod
 
 __all__ = ["incompressible_hydrostatic_balance",
            "compressible_hydrostatic_balance", "remove_initial_w",
-           "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
+           "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance",
+           "eady_initial_v", "compressible_eady_initial_v"]
 
 
 def incompressible_hydrostatic_balance(equation, b0, p0, top=False, params=None):
@@ -498,3 +499,62 @@ def unsaturated_hydrostatic_balance(equation, state_fields, theta_d, H,
     compressible_hydrostatic_balance(equation, theta0, rho0, top=top,
                                      exner_boundary=exner_boundary,
                                      mr_t=mr_v0, solve_for_rho=True)
+
+
+def eady_initial_v(state, p0, v):
+    f = state.parameters.f
+    x, y, z = SpatialCoordinate(state.mesh)
+
+    # get pressure gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg, g)*dx
+    L = -div(wg)*p0*dx + inner(wg, n)*p0*(ds_t + ds_b)
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    Vp = p0.function_space()
+    phi = TestFunction(Vp)
+    m = TrialFunction(Vp)
+
+    a = f*phi*m*dx
+    L = phi*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v
+
+
+def compressible_eady_initial_v(state, theta0, rho0, v):
+    f = state.parameters.f
+    cp = state.parameters.cp
+
+    # exner function
+    Vr = rho0.function_space()
+    Pi = Function(Vr).interpolate(thermodynamics.exner_pressure(state.parameters, rho0, theta0))
+
+    # get Pi gradient
+    Vu = state.spaces("HDiv")
+    g = TrialFunction(Vu)
+    wg = TestFunction(Vu)
+
+    n = FacetNormal(state.mesh)
+
+    a = inner(wg, g)*dx
+    L = -div(wg)*Pi*dx + inner(wg, n)*Pi*(ds_t + ds_b)
+    pgrad = Function(Vu)
+    solve(a == L, pgrad)
+
+    # get initial v
+    m = TrialFunction(Vr)
+    phi = TestFunction(Vr)
+
+    a = phi*f*m*dx
+    L = phi*cp*theta0*pgrad[0]*dx
+    solve(a == L, v)
+
+    return v

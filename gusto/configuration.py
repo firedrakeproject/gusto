@@ -6,9 +6,9 @@ from firedrake import sqrt, Constant
 
 __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "CompressibleParameters", "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
-    "SpongeLayerParameters", "DiffusionParameters"
+    "CompressibleParameters", "ShallowWaterParameters", "EadyParameters",
+    "CompressibleEadyParameters", "EmbeddedDGOptions", "RecoveryOptions",
+    "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"
 ]
 
 
@@ -132,6 +132,33 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+
+
+class EadyParameters(Configuration):
+
+    """
+    Physical parameters for Incompressible Eady
+    """
+    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
+    dbdy = -1.0e-07
+    H = None
+    L = None
+    f = None
+    deltax = None
+    deltaz = None
+    fourthorder = False
+
+
+class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
+
+    """
+    Physical parameters for Compressible Eady
+    """
+    g = 10.
+    N = sqrt(EadyParameters.Nsq)
+    theta_surf = 300.
+    dthetady = theta_surf/g*EadyParameters.dbdy
+    Pi0 = 0.0
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):
