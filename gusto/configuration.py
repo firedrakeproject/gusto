@@ -88,7 +88,8 @@ class OutputParameters(Configuration):
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = True
+    diagfreq = 1
+    checkpoint = False
     checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
