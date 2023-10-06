@@ -34,7 +34,7 @@ def run_incompressible(tmpdir):
 
     # I/O
     output = OutputParameters(dirname=tmpdir+"/incompressible",
-                              dumpfreq=2, chkptfreq=2)
+                              dumpfreq=2, chkptfreq=2, checkpoint=True)
     io = IO(domain, output)
 
     # Transport Schemes
@@ -87,7 +87,8 @@ def run_incompressible(tmpdir):
     checkpoint_name = 'incompressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/incompressible",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = IncompressibleBoussinesqEquations(check_domain, parameters)

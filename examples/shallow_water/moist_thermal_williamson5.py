@@ -60,7 +60,7 @@ Omega = parameters.Omega
 fexpr = 2*Omega*x[2]/R
 
 # Topography
-phi, lamda = latlon_coords(mesh)
+lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 lsq = (lamda - lamda_c)**2
 thsq = (phi - phi_c)**2
 rsq = min_value(R0sq, lsq+thsq)
