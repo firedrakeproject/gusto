@@ -27,10 +27,10 @@ if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
 else:
-    nlayers = 10
-    columns = 150
-    tmax = 3600.
-    dumpfreq = int(tmax / (2*dt))
+    nlayers = 5
+    columns = 30
+    tmax = 10*dt
+    dumpfreq = 1
 
 # ---------------------------------------------------------------------------- #
 # Set up model objects
@@ -51,7 +51,7 @@ print(f'Number of DOFs = {eqns.X.function_space().dim()}')
 points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
-dirname = 'skamarock_klemp_nonlinear'
+dirname = 'testing'
 
 # Dumping point data using legacy PointDataOutput is not supported in parallel
 if COMM_WORLD.size == 1:
@@ -59,8 +59,7 @@ if COMM_WORLD.size == 1:
         dirname=dirname,
         dumpfreq=dumpfreq,
         pddumpfreq=dumpfreq,
-        dumplist=['u'],
-        point_data=[('theta_perturbation', points)],
+        dumplist=['u']
     )
 else:
     logger.warning(
@@ -74,9 +73,7 @@ else:
         dumplist=['u'],
     )
 
-diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
-                     Gradient("theta_perturbation"), Perturbation('rho'),
-                     RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
+diagnostic_fields = [CourantNumber()]#, Pressure(eqns), SteadyStateError('Pressure_Vt')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes

@@ -984,7 +984,16 @@ class Difference(DiagnosticField):
 
 
 class SteadyStateError(Difference):
-    
+    """Base diagnostic for computing the steady-state error in a field."""
+    def __init__(self, name):
+        """
+        Args:
+            name (str): name of the field to take the steady-state error of.
+        """
+        self.field_name1 = name
+        self.field_name2 = name+'_init'
+        DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
+            
     def setup(self, domain, state_fields):
         """
         Sets up the :class:`Function` for the diagnostic field.
@@ -999,11 +1008,8 @@ class SteadyStateError(Difference):
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
             self.init_field_set = False
-            # Attach state fields to self so that we can pick it up in compute
+            # Attach state fields to self so that we can pick it up in compute    
             self.state_fields = state_fields
-            # This just assignes an empty field but is needed for initilisation, 
-            # Will be overwritten in the first compute call
-            field2.assign(field1)
         else:
             self.init_field_set = True
 
